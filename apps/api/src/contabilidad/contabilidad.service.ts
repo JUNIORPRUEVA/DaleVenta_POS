@@ -596,6 +596,21 @@ export class ContabilidadService {
     return { start, end };
   }
 
+  private parseDate(value?: string | null, fieldName = 'fecha') {
+    const raw = (value ?? '').trim();
+    if (!raw) return null;
+
+const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+      ? new Date(`${raw}T00:00:00`)
+      : new Date(raw);
+
+    if (Number.isNaN(parsed.getTime())) {
+      throw new BadRequestException(`La ${fieldName} no es válida.`);
+    }
+
+    return parsed;
+  }
+
   private normalizeTransferBank(value?: string | null) {
     const cleaned = (value ?? '').trim();
     if (cleaned.length == 0) return null;
@@ -881,11 +896,12 @@ export class ContabilidadService {
     }
 
     if (query.date) {
-      const { start, end } = this.normalizeDayRange(new Date(query.date));
+      const parsedDate = this.parseDate(query.date, 'fecha');
+      const { start, end } = this.normalizeDayRange(parsedDate);
       where.date = { gte: start, lte: end };
     } else if (query.from || query.to) {
-      const from = query.from ? new Date(query.from) : null;
-      const to = query.to ? new Date(query.to) : null;
+      const from = this.parseDate(query.from, 'from');
+      const to = this.parseDate(query.to, 'to');
       if (from || to) {
         const fromRange = from ? this.normalizeDayRange(from) : null;
         const toRange = to ? this.normalizeDayRange(to) : null;
@@ -920,13 +936,7 @@ export class ContabilidadService {
     this.ensureAdmin(actor);
 
     const parseDate = (value?: string | null) => {
-      const raw = (value ?? '').trim();
-      if (!raw) return null;
-      const parsed = new Date(raw);
-      if (Number.isNaN(parsed.getTime())) {
-        throw new BadRequestException('Rango de fechas inválido para resumen.');
-      }
-      return parsed;
+      return this.parseDate(value, 'rango de fechas');
     };
     const toNumber = (value: unknown) => {
       if (value instanceof Prisma.Decimal) return value.toNumber();
@@ -2177,8 +2187,8 @@ export class ContabilidadService {
   }
 
   async getDepositOrders(query: DepositOrdersQueryDto, actor: Actor) {
-    const from = query.from ? new Date(query.from) : null;
-    const to = query.to ? new Date(query.to) : null;
+    const from = this.parseDate(query.from, 'from');
+    const to = this.parseDate(query.to, 'to');
 
     // Temporary diagnostics for persistent 500 on deposit list.
     // eslint-disable-next-line no-console
@@ -2546,8 +2556,8 @@ export class ContabilidadService {
     }
 
     if (query.from || query.to) {
-      const from = query.from ? new Date(query.from) : null;
-      const to = query.to ? new Date(query.to) : null;
+      const from = this.parseDate(query.from, 'from');
+      const to = this.parseDate(query.to, 'to');
 
       where.invoiceDate = {
         ...(from != null ? { gte: from } : {}),
@@ -2758,9 +2768,11 @@ export class ContabilidadService {
     }
 
     if (query.from || query.to) {
+      const from = this.parseDate(query.from, 'from');
+      const to = this.parseDate(query.to, 'to');
       where.paidAt = {
-        ...(query.from ? { gte: new Date(query.from) } : {}),
-        ...(query.to ? { lte: new Date(query.to) } : {}),
+        ...(from ? { gte: from } : {}),
+        ...(to ? { lte: to } : {}),
       };
     }
 
