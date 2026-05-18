@@ -897,6 +897,9 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
 
     if (query.date) {
       const parsedDate = this.parseDate(query.date, 'fecha');
+      if (!parsedDate) {
+        throw new BadRequestException('La fecha no es válida.');
+      }
       const { start, end } = this.normalizeDayRange(parsedDate);
       where.date = { gte: start, lte: end };
     } else if (query.from || query.to) {
