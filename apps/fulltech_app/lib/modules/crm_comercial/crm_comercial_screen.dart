@@ -679,7 +679,7 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   }
 
   /// Carga inicial con caché: muestra datos cacheados al instante y sincroniza después.
-  Future<void> _loadAll() async {
+  Future<void> _loadAll({bool showLoading = true}) async {
     final repo = ref.read(crmComercialRepositoryProvider);
 
     // Paso 1: Intentar cargar datos cacheados inmediatamente
@@ -704,7 +704,7 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
       }
     } else {
       // No hay caché, mostrar loading brevemente
-      if (mounted) {
+      if (mounted && showLoading) {
         setState(() {
           _loading = true;
           _error = '';
@@ -1156,7 +1156,7 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
       );
       try {
         await _openConversation(selectedConversation.id);
-        await _loadAll();
+        await _syncWithServer();
       } catch (refreshError) {
         debugPrint(
           '[CRM][UI][_sendMessageToCurrentConversation] post-send refresh error=$refreshError',
@@ -3237,7 +3237,7 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
         _mediaCaptionCtrl.clear();
 
         _openConversation(selectedConversation.id);
-        _loadAll();
+        _syncWithServer();
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
@@ -3374,7 +3374,7 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                                 (result['conversationId'] ?? '').toString();
 
                             if (!mounted) return;
-                            await _loadAll();
+                            await _syncWithServer();
 
                             if (createdConversationId.isNotEmpty) {
                               await _openConversation(createdConversationId);
@@ -3675,7 +3675,7 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
           .read(crmComercialRepositoryProvider)
           .updateCustomer(selected.id, nextAction: _nextActionCtrl.text.trim());
       await _openCustomer(selected.id);
-      await _loadAll();
+      await _syncWithServer();
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -3690,7 +3690,7 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
           .read(crmComercialRepositoryProvider)
           .changeStatus(selected.id, status);
       await _openCustomer(selected.id);
-      await _loadAll();
+      await _syncWithServer();
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -3720,7 +3720,7 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
           .read(crmComercialRepositoryProvider)
           .updateCustomer(selected.id, responsableUserId: userId);
       await _openCustomer(selected.id);
-      await _loadAll();
+      await _syncWithServer();
     } finally {
       if (mounted) setState(() => _saving = false);
     }

@@ -23,6 +23,9 @@ class CrmComercialRepository {
   final Dio _dio;
   final CrmComercialLocalDb _localDb;
 
+  static final Options _silentRequestOptions =
+      Options(extra: {'skipLoader': true, 'silent': true});
+
   String _extractErrorMessage(dynamic data, String fallback) {
     if (data is String && data.trim().isNotEmpty) return data.trim();
     if (data is Map) {
@@ -59,6 +62,7 @@ class CrmComercialRepository {
   }) async {
     final res = await _dio.get<Map<String, dynamic>>(
       ApiRoutes.crmCommercialCustomers,
+      options: _silentRequestOptions,
       queryParameters: {
         if ((q ?? '').trim().isNotEmpty) 'q': q!.trim(),
         if ((status ?? '').trim().isNotEmpty) 'status': status,
@@ -73,6 +77,7 @@ class CrmComercialRepository {
   Future<CrmComercialCustomer> getCustomer(String id) async {
     final res = await _dio.get<Map<String, dynamic>>(
       ApiRoutes.crmCommercialCustomerById(id),
+      options: _silentRequestOptions,
     );
     return CrmComercialCustomer.fromJson(res.data ?? const {});
   }
@@ -138,7 +143,10 @@ class CrmComercialRepository {
   }
 
   Future<List<CrmComercialUserRef>> listUsers() async {
-    final res = await _dio.get<List<dynamic>>(ApiRoutes.users);
+    final res = await _dio.get<List<dynamic>>(
+      ApiRoutes.users,
+      options: _silentRequestOptions,
+    );
     final rows = (res.data ?? const [])
         .whereType<Map>()
         .map((entry) =>
@@ -203,6 +211,7 @@ class CrmComercialRepository {
   Future<CrmComercialSettings> getSettings() async {
     final res = await _dio.get<Map<String, dynamic>>(
       ApiRoutes.crmCommercialSettings,
+      options: _silentRequestOptions,
     );
     return CrmComercialSettings.fromJson(res.data ?? const {});
   }
@@ -234,6 +243,7 @@ class CrmComercialRepository {
   Future<List<CrmComercialWhatsappInstance>> listAvailableWhatsappInstances() async {
     final res = await _dio.get<List<dynamic>>(
       ApiRoutes.crmCommercialAvailableWhatsappInstances,
+      options: _silentRequestOptions,
     );
     return (res.data ?? const [])
         .whereType<Map>()
@@ -249,6 +259,7 @@ class CrmComercialRepository {
   }) async {
     final res = await _dio.get<Map<String, dynamic>>(
       ApiRoutes.crmCommercialConversations,
+      options: _silentRequestOptions,
       queryParameters: {'limit': limit},
     );
     return CrmComercialInboxConversationListResponse.fromJson(
@@ -262,6 +273,7 @@ class CrmComercialRepository {
   }) async {
     final res = await _dio.get<Map<String, dynamic>>(
       ApiRoutes.crmCommercialConversationMessages(conversationId),
+      options: _silentRequestOptions,
       queryParameters: {'limit': limit},
     );
     return CrmComercialInboxMessageListResponse.fromJson(res.data ?? const {});
@@ -457,6 +469,7 @@ class CrmComercialRepository {
   }) async {
     final res = await _dio.get<List<dynamic>>(
       ApiRoutes.crmCommercialFollowupTasks,
+      options: _silentRequestOptions,
       queryParameters: {
         if ((customerId ?? '').isNotEmpty) 'customerId': customerId,
         if (overdueOnly) 'overdueOnly': 'true',
