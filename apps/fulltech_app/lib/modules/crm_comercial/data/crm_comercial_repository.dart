@@ -279,6 +279,19 @@ class CrmComercialRepository {
     return CrmComercialInboxMessageListResponse.fromJson(res.data ?? const {});
   }
 
+  Future<void> markConversationRead(String conversationId) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) return;
+    try {
+      await _dio.post<Map<String, dynamic>>(
+        ApiRoutes.crmCommercialConversationRead(id),
+        options: _silentRequestOptions,
+      );
+    } catch (_) {
+      // Silencioso: el UI ya hace override local a unreadCount=0.
+    }
+  }
+
   /// Downloads media bytes using the authenticated backend proxy.
   /// For WhatsappMessage media, the endpoint is /whatsapp-inbox/media/:messageId.
   /// The [mediaUrl] may be a full internal path like /whatsapp-inbox/media/UUID

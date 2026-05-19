@@ -4,8 +4,8 @@
   Delete,
   Get,
   Param,
-  Patch,
   Post,
+  Patch,
   Query,
   Req,
   UnauthorizedException,
@@ -102,6 +102,12 @@ export class CrmCommercialController {
       before,
       after,
     });
+  }
+
+  @Post('conversations/:id/read')
+  @Roles(Role.ADMIN)
+  markConversationRead(@Req() req: Request, @Param('id') id: string) {
+    return this.crmCommercial.markConversationRead(this.userOrThrow(req), id);
   }
 
   @Post('conversations/start-message')

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/foundation.dart';
+﻿ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -188,8 +188,8 @@ String _sanitizeText(String? text) {
 }
 
 String _avatarFallbackText(String title, String? phone) {
-  final normalizedTitle = _sanitizeText(title)?.trim() ?? '';
-  final normalizedPhone = _sanitizeText(phone)?.trim() ?? '';
+  final normalizedTitle = _sanitizeText(title).trim();
+  final normalizedPhone = _sanitizeText(phone).trim();
   if (normalizedTitle.isNotEmpty &&
       normalizedTitle.toLowerCase() != 'nuevo contacto') {
     return _avatarInitials(normalizedTitle);
@@ -377,6 +377,7 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   final TextEditingController _conversationSearchCtrl = TextEditingController();
   final ScrollController _conversationListScrollCtrl = ScrollController();
   final ScrollController _chatScrollCtrl = ScrollController();
+  final FocusNode _chatKeyboardFocusNode = FocusNode();
   final FocusNode _sidebarSearchFocusNode = FocusNode();
   late final StateController<DesktopShellRouteActions?> _desktopShellActions;
   ProviderContainer? _providerContainer;
@@ -406,6 +407,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   bool _showSidebarSearch = false;
   bool _showConversationSearch = false;
   bool _sendingChatMessage = false;
+  bool _showScrollToBottomButton = false;
+  int _lastRenderedMessageCount = 0;
+  int _pendingNewMessages = 0;
+  String _pendingNewMessagesConversationId = '';
   String _lastShellActionsSignature = '';
   _CrmRightPanelTab _activeRightPanelTab = _CrmRightPanelTab.detail;
   _CrmDateFilter _conversationDateFilter = _CrmDateFilter.all;
@@ -453,11 +458,16 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   final LocalJsonCache _composerToolsCache = LocalJsonCache();
   List<_CrmComposerToolTemplate> _composerTools = const [];
 
+  // Local UI state: conversaciones abiertas (leídas) localmente.
+  // Evita que el badge reaparezca si el backend aún no refleja el “read”.
+  final Set<String> _locallyReadConversationIds = <String>{};
+
   @override
   void initState() {
     super.initState();
     _desktopShellActions = ref.read(desktopShellRouteActionsProvider.notifier);
     _chatComposerCtrl.addListener(_onComposerTextChanged);
+    _chatScrollCtrl.addListener(_handleChatScrollChanged);
     _loadQuickReplies();
     _loadComposerTools();
     _loadAll();
@@ -480,6 +490,7 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     _taskTitleCtrl.dispose();
     _taskDescCtrl.dispose();
     _chatComposerCtrl.removeListener(_onComposerTextChanged);
+    _chatScrollCtrl.removeListener(_handleChatScrollChanged);
     _chatComposerCtrl.dispose();
     _newChatPhoneCtrl.dispose();
     _newChatMessageCtrl.dispose();
@@ -492,6 +503,7 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     _toastEntry = null;
     _conversationListScrollCtrl.dispose();
     _chatScrollCtrl.dispose();
+    _chatKeyboardFocusNode.dispose();
     _sidebarSearchFocusNode.dispose();
     _composerFocusNode.dispose();
 
@@ -506,6 +518,68 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     });
 
     super.dispose();
+  }
+
+  void _handleChatScrollChanged() {
+    if (!_chatScrollCtrl.hasClients) return;
+    final max = _chatScrollCtrl.position.maxScrollExtent;
+    final current = _chatScrollCtrl.offset;
+    final isFarFromBottom = (max - current) > 180;
+    if (isFarFromBottom != _showScrollToBottomButton && mounted) {
+      setState(() => _showScrollToBottomButton = isFarFromBottom);
+    }
+
+    // Si el usuario volvió al final del chat, considerar que ya vio los nuevos.
+    final isAtBottom = (max - current) <= 40;
+    if (isAtBottom && _pendingNewMessages > 0 && mounted) {
+      setState(() {
+        _pendingNewMessages = 0;
+        _pendingNewMessagesConversationId = '';
+      });
+    }
+  }
+
+  void _scrollChatBy(double delta, {bool animated = true}) {
+    if (!_chatScrollCtrl.hasClients) return;
+    final max = _chatScrollCtrl.position.maxScrollExtent;
+    final target = (_chatScrollCtrl.offset + delta).clamp(0.0, max);
+    if (animated) {
+      _chatScrollCtrl.animateTo(
+        target,
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOutCubic,
+      );
+      return;
+    }
+    _chatScrollCtrl.jumpTo(target);
+  }
+
+  List<CrmComercialInboxConversation> _applyLocalReadOverrides(
+    List<CrmComercialInboxConversation> source,
+  ) {
+    if (_locallyReadConversationIds.isEmpty) return source;
+    return source
+        .map((c) => _locallyReadConversationIds.contains(c.id)
+            ? c.copyWith(unreadCount: 0)
+            : c)
+        .toList(growable: false);
+  }
+
+  void _markConversationAsReadLocally(String conversationId) {
+    _locallyReadConversationIds.add(conversationId);
+    final updated = _conversations
+        .map(
+          (item) => item.id == conversationId
+              ? item.copyWith(unreadCount: 0)
+              : item,
+        )
+        .toList(growable: false);
+    setState(() {
+      _conversations = updated;
+      if (_selectedConversation?.id == conversationId) {
+        _selectedConversation = _selectedConversation?.copyWith(unreadCount: 0);
+      }
+    });
   }
 
   void _publishDesktopShellActions({required bool enabled}) {
@@ -608,6 +682,15 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   }
 
   String _conversationPreviewText(CrmComercialInboxConversation conversation) {
+    // En la lista de chats queremos mostrar el último mensaje del CLIENTE.
+    // Si el último mensaje guardado es saliente (OUTGOING), mostramos un fallback
+    // para no dar la impresión de que el cliente fue quien escribió.
+    // Nota: Para tener el último entrante real, el backend tendría que enviar
+    // explícitamente `lastIncomingMessagePreview`.
+    if (conversation.isOutgoingLastMessage) {
+      return 'Enviado por ti';
+    }
+
     final messageType = (conversation.lastMessageType ?? 'TEXT').toUpperCase();
     switch (messageType) {
       case 'IMAGE':
@@ -785,7 +868,7 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
         _crmSettings = cachedData.settings;
         _availableWhatsappInstances = cachedData.whatsappInstances;
         _allTasks = cachedData.tasks;
-        _conversations = cachedData.conversations;
+        _conversations = _applyLocalReadOverrides(cachedData.conversations);
         _loading = false;
       });
 
@@ -890,13 +973,14 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
       ));
 
       if (!mounted) return;
+      final mergedConversations = _applyLocalReadOverrides(conversationsResponse.items);
       setState(() {
         _users = users;
         _crmSettings = crmSettings;
         _availableWhatsappInstances = availableInstances;
         _selected = selected;
         _allTasks = allTasks;
-        _conversations = conversationsResponse.items;
+        _conversations = mergedConversations;
         _selectedConversation = selectedConversation;
         _messages = messages;
         _conversationWarning = conversationsResponse.warning;
@@ -1190,6 +1274,20 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
       }
 
       if (!mounted) return;
+      _markConversationAsReadLocally(conversationId);
+      // Persistir "leído" en backend para que el contador no reaparezca al refrescar.
+      // No bloqueamos el UI: si falla, el override local evita que se muestre el badge
+      // hasta que llegue un mensaje nuevo.
+      Future<void>(() async {
+        await repo.markConversationRead(conversationId);
+      });
+      // Si había un indicador de nuevos mensajes para esta conversación, limpiarlo.
+      if (_pendingNewMessagesConversationId == conversationId && mounted) {
+        setState(() {
+          _pendingNewMessages = 0;
+          _pendingNewMessagesConversationId = '';
+        });
+      }
       // Actualizamos solo los campos necesarios, sin forzar rebuild completo
       setState(() {
         _selectedConversation = conversation;
@@ -1199,9 +1297,24 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
         _nextActionCtrl.text = linkedCustomer?.nextAction ?? '';
         _saving = false;
       });
+      final hasNewMessages = response.items.length > _lastRenderedMessageCount;
+      final newMessagesDelta = response.items.length - _lastRenderedMessageCount;
+      _lastRenderedMessageCount = response.items.length;
       _scheduleSilentCommercialSuggestion();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
+        // Si llegaron mensajes nuevos y el usuario está arriba, mostrar indicador y NO auto-bajar.
+        if (hasNewMessages && _showScrollToBottomButton) {
+          if (mounted) {
+            setState(() {
+              _pendingNewMessages = (_pendingNewMessagesConversationId == conversationId)
+                  ? (_pendingNewMessages + newMessagesDelta.clamp(1, 9999))
+                  : newMessagesDelta.clamp(1, 9999);
+              _pendingNewMessagesConversationId = conversationId;
+            });
+          }
+          return;
+        }
         _scrollChatToBottom(animated: false);
       });
     } catch (error) {
@@ -5437,6 +5550,58 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
           Expanded(
             child: Stack(
               children: [
+                // Captura teclado para permitir subir/bajar con flechas/PageUp/PageDown.
+                Positioned.fill(
+                  child: Focus(
+                    focusNode: _chatKeyboardFocusNode,
+                    autofocus: false,
+                    onKeyEvent: (node, event) {
+                      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                      const step = 120.0;
+                      const page = 420.0;
+                      final key = event.logicalKey;
+                      if (key == LogicalKeyboardKey.arrowUp) {
+                        _scrollChatBy(-step);
+                        return KeyEventResult.handled;
+                      }
+                      if (key == LogicalKeyboardKey.arrowDown) {
+                        _scrollChatBy(step);
+                        return KeyEventResult.handled;
+                      }
+                      if (key == LogicalKeyboardKey.pageUp) {
+                        _scrollChatBy(-page);
+                        return KeyEventResult.handled;
+                      }
+                      if (key == LogicalKeyboardKey.pageDown) {
+                        _scrollChatBy(page);
+                        return KeyEventResult.handled;
+                      }
+                      if (key == LogicalKeyboardKey.home) {
+                        if (_chatScrollCtrl.hasClients) {
+                          _chatScrollCtrl.animateTo(
+                            0,
+                            duration: const Duration(milliseconds: 180),
+                            curve: Curves.easeOutCubic,
+                          );
+                        }
+                        return KeyEventResult.handled;
+                      }
+                      if (key == LogicalKeyboardKey.end) {
+                        _scrollChatToBottom();
+                        return KeyEventResult.handled;
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: () {
+                        // Al tocar el chat, damos foco para que el teclado controle el scroll.
+                        _chatKeyboardFocusNode.requestFocus();
+                      },
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                ),
                 Positioned.fill(
                   child: Stack(
                     fit: StackFit.expand,
@@ -5504,10 +5669,12 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                     ),
                   )
                 else
-                  ScrollConfiguration(
-                    behavior: const MaterialScrollBehavior().copyWith(
-                      scrollbars: false,
-                    ),
+                  Scrollbar(
+                    controller: _chatScrollCtrl,
+                    thumbVisibility: true,
+                    interactive: true,
+                    thickness: 6,
+                    radius: const Radius.circular(999),
                     child: ListView.builder(
                       controller: _chatScrollCtrl,
                       physics: const BouncingScrollPhysics(),
@@ -5538,6 +5705,101 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                           ],
                         );
                       },
+                    ),
+                  ),
+                if (_showScrollToBottomButton)
+                  Positioned(
+                    right: 16,
+                    bottom: 16,
+                    child: FloatingActionButton.small(
+                      heroTag: 'crm-scroll-bottom',
+                      backgroundColor: _waGreenDark,
+                      foregroundColor: Colors.white,
+                      onPressed: () {
+                        _scrollChatToBottom();
+                        if (mounted) {
+                          setState(() {
+                            _pendingNewMessages = 0;
+                            _pendingNewMessagesConversationId = '';
+                          });
+                        }
+                      },
+                      child: const Icon(Icons.keyboard_arrow_down_rounded),
+                    ),
+                  ),
+
+                // Indicador de mensajes nuevos si el usuario está arriba.
+                if (_pendingNewMessages > 0 &&
+                    hasConversation &&
+                    _pendingNewMessagesConversationId == selectedConversation.id)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 74,
+                    child: Center(
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(999),
+                          onTap: () {
+                            _scrollChatToBottom();
+                            if (mounted) {
+                              setState(() {
+                                _pendingNewMessages = 0;
+                                _pendingNewMessagesConversationId = '';
+                              });
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 7,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withAlpha(245),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(color: _waBorder.withAlpha(160)),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withAlpha(20),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.arrow_downward_rounded,
+                                  size: 16,
+                                  color: _waGreenDark,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _pendingNewMessages == 1
+                                      ? '1 mensaje nuevo'
+                                      : '$_pendingNewMessages mensajes nuevos',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: _waText,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Bajar',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: _waGreenDark,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
               ],

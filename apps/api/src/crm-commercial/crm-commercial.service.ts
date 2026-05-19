@@ -12,6 +12,7 @@ import {
   CrmCommercialFollowupTaskStatus,
   Prisma,
   Role,
+  WhatsappMessageDirection,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChangeCrmCommercialStatusDto } from './dto/change-crm-commercial-status.dto';
@@ -969,6 +970,59 @@ export class CrmCommercialService {
       },
     });
 
+    // Para el preview del listado queremos el último mensaje del cliente (INCOMING).
+    // Cuando el último mensaje real es OUTGOING, buscamos el último INCOMING por conversación
+    // (distinct por conversationId) para evitar N+1.
+    const outgoingConversationIds: string[] = [];
+    for (const conv of conversations) {
+      const last = conv.messages[0];
+      if ((last?.direction ?? '').toString().toUpperCase() === 'OUTGOING') {
+        outgoingConversationIds.push(conv.id);
+      }
+    }
+
+    const lastIncomingByConversationId = new Map<
+      string,
+      {
+        id: string;
+        direction: string;
+        messageType: string;
+        body: string | null;
+        caption: string | null;
+        sentAt: Date | null;
+      }
+    >();
+    if (outgoingConversationIds.length > 0) {
+      const latestIncoming = await this.prisma.whatsappMessage.findMany({
+        where: {
+          conversationId: { in: outgoingConversationIds },
+          direction: WhatsappMessageDirection.INCOMING,
+        },
+        orderBy: { sentAt: 'desc' },
+        distinct: ['conversationId'],
+        select: {
+          id: true,
+          conversationId: true,
+          direction: true,
+          messageType: true,
+          body: true,
+          caption: true,
+          sentAt: true,
+        },
+      });
+
+      for (const msg of latestIncoming) {
+        lastIncomingByConversationId.set(msg.conversationId, {
+          id: msg.id,
+          direction: msg.direction,
+          messageType: msg.messageType,
+          body: msg.body,
+          caption: msg.caption,
+          sentAt: msg.sentAt,
+        });
+      }
+    }
+
     const avatarByConversationId = new Map<string, string>();
     const avatarByIdentity = new Map<string, string>();
     try {
@@ -1040,6 +1094,12 @@ export class CrmCommercialService {
       );
       const linked = phone ? customerByPhone.get(phone) : undefined;
       const last = conversation.messages[0] ?? null;
+      const lastDirection = (last?.direction ?? '').toString().toUpperCase();
+      const incomingFallback =
+        lastDirection === 'OUTGOING'
+          ? lastIncomingByConversationId.get(conversation.id) ?? null
+          : null;
+      const lastForPreview = incomingFallback ?? last;
       const contactName =
         (conversation.remoteName ?? '').trim() ||
         (conversation.remotePhone ?? '').trim() ||
@@ -1059,9 +1119,9 @@ export class CrmCommercialService {
         lastMessageAt: conversation.lastMessageAt,
         unreadCount: conversation.unreadCount,
         messageCount: conversation._count.messages,
-        lastMessagePreview: last?.body ?? last?.caption ?? null,
-        lastMessageType: last?.messageType ?? null,
-        lastMessageDirection: last?.direction ?? null,
+        lastMessagePreview: lastForPreview?.body ?? lastForPreview?.caption ?? null,
+        lastMessageType: lastForPreview?.messageType ?? null,
+        lastMessageDirection: lastForPreview?.direction ?? null,
         remoteAvatarUrl: avatarUrl,
         crmCustomerId: linked?.id ?? null,
         crmCustomerName: linked?.nombre ?? null,
@@ -1192,6 +1252,32 @@ export class CrmCommercialService {
       items: messages,
       warning: null,
     };
+  }
+
+  async markConversationRead(user: AuthUser, conversationId: string) {
+    if (!this.isAdmin(user)) {
+      throw new ForbiddenException('Solo ADMIN puede marcar conversaciones como leidas');
+    }
+
+    const selected = await this.getSelectedWhatsappInstanceForCrm();
+    if (!selected.selectedInstanceId) {
+      throw new BadRequestException('Selecciona una instancia antes de marcar como leido.');
+    }
+
+    const conversation = await this.prisma.whatsappConversation.findUnique({
+      where: { id: conversationId },
+      select: { id: true, instanceId: true },
+    });
+    if (!conversation || conversation.instanceId !== selected.selectedInstanceId) {
+      throw new NotFoundException(
+        'Conversacion no encontrada para la instancia activa del CRM Comercial',
+      );
+    }
+
+    // Reutiliza la logica centralizada del inbox (resetea unreadCount + invalida caches si aplica)
+    await this.whatsappInboxService.markRead(conversationId);
+
+    return { ok: true };
   }
 
   async startConversationMessage(

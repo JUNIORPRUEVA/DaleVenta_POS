@@ -332,6 +332,44 @@ class CrmComercialInboxConversation {
   bool get isOutgoingLastMessage =>
       (lastMessageDirection ?? '').toUpperCase() == 'OUTGOING';
 
+  CrmComercialInboxConversation copyWith({
+    String? id,
+    String? contactName,
+    String? remotePhone,
+    String? remoteJid,
+    String? remoteAvatarUrl,
+    DateTime? lastMessageAt,
+    String? lastMessagePreview,
+    String? lastMessageType,
+    String? lastMessageDirection,
+    int? unreadCount,
+    int? messageCount,
+    String? crmCustomerId,
+    String? crmCustomerName,
+    String? crmCustomerStatus,
+    bool? isNewContact,
+    bool? canConvertToCrm,
+  }) {
+    return CrmComercialInboxConversation(
+      id: id ?? this.id,
+      contactName: contactName ?? this.contactName,
+      remotePhone: remotePhone ?? this.remotePhone,
+      remoteJid: remoteJid ?? this.remoteJid,
+      remoteAvatarUrl: remoteAvatarUrl ?? this.remoteAvatarUrl,
+      lastMessageAt: lastMessageAt ?? this.lastMessageAt,
+      lastMessagePreview: lastMessagePreview ?? this.lastMessagePreview,
+      lastMessageType: lastMessageType ?? this.lastMessageType,
+      lastMessageDirection: lastMessageDirection ?? this.lastMessageDirection,
+      unreadCount: unreadCount ?? this.unreadCount,
+      messageCount: messageCount ?? this.messageCount,
+      crmCustomerId: crmCustomerId ?? this.crmCustomerId,
+      crmCustomerName: crmCustomerName ?? this.crmCustomerName,
+      crmCustomerStatus: crmCustomerStatus ?? this.crmCustomerStatus,
+      isNewContact: isNewContact ?? this.isNewContact,
+      canConvertToCrm: canConvertToCrm ?? this.canConvertToCrm,
+    );
+  }
+
   factory CrmComercialInboxConversation.fromJson(Map<String, dynamic> json) {
     return CrmComercialInboxConversation(
       id: (json['id'] ?? '').toString(),
