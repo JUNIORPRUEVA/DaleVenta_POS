@@ -1204,23 +1204,14 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   }
 
   void _onComposerTextChanged() {
+    // IA desactivada para priorizar respuesta instantánea del composer.
     _composerSpellTimer?.cancel();
-    final current = _chatComposerCtrl.text;
-    // Update AI-suggested emojis in real-time and request orthography suggestion
-    final newSuggested = _computeAiSuggestedEmojis(current);
-    if (newSuggested.join() != _aiSuggestedEmojis.join()) {
-      setState(() => _aiSuggestedEmojis = newSuggested);
+    if (_composerOrthographySuggestion != null || _aiSuggestedEmojis.isNotEmpty) {
+      setState(() {
+        _composerOrthographySuggestion = null;
+        _aiSuggestedEmojis = const [];
+      });
     }
-    if (_shouldSkipOrthographyAi(current)) {
-      if (_composerOrthographySuggestion != null) {
-        setState(() => _composerOrthographySuggestion = null);
-      }
-      return;
-    }
-
-    _composerSpellTimer = Timer(const Duration(milliseconds: 900), () async {
-      await _requestOrthographySuggestion(current);
-    });
   }
 
   // ── Emoji picker helpers ──────────────────────────────────────────────────
@@ -1609,10 +1600,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   }
 
   void _scheduleSilentCommercialSuggestion() {
+    // IA comercial desactivada para evitar trabajo extra en segundo plano.
     _commercialAiTimer?.cancel();
-    _commercialAiTimer = Timer(const Duration(milliseconds: 900), () async {
-      await _requestCommercialReplySuggestion(manual: false);
-    });
   }
 
   void _insertCommercialSuggestionInComposer() {

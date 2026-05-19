@@ -74,6 +74,18 @@ export class ContabilidadService {
     private readonly config: ConfigService,
   ) {}
 
+  private readonly roleAliases: Record<string, string> = {
+    ADMINISTRADOR: 'ADMIN',
+    ASSISTANT: 'ASISTENTE',
+    ASSISTENTE: 'ASISTENTE',
+  };
+
+  private normalizeActorRole(actor?: Actor) {
+    const normalized = (actor?.role ?? '').trim().toUpperCase();
+    if (!normalized) return '';
+    return this.roleAliases[normalized] ?? normalized;
+  }
+
   private toNullableTrimmed(value?: string | null) {
     const cleaned = (value ?? '').trim();
     return cleaned.length > 0 ? cleaned : null;
@@ -276,7 +288,7 @@ export class ContabilidadService {
 
   private ensureAdmin(actor: Actor) {
     this.normalizeRoleGuard(actor);
-    if ((actor.role ?? '').toUpperCase() !== 'ADMIN') {
+    if (this.normalizeActorRole(actor) !== 'ADMIN') {
       throw new ForbiddenException(
         'Solo administración puede realizar esta acción.',
       );
@@ -285,7 +297,7 @@ export class ContabilidadService {
 
   private ensureReviewer(actor: Actor) {
     this.normalizeRoleGuard(actor);
-    const role = (actor.role ?? '').toUpperCase();
+    const role = this.normalizeActorRole(actor);
     if (role !== 'ADMIN') {
       throw new ForbiddenException(
         'Solo administración puede aprobar o rechazar cierres.',
@@ -294,12 +306,12 @@ export class ContabilidadService {
   }
 
   private isReviewer(actor: Actor) {
-    const role = (actor.role ?? '').toUpperCase();
+    const role = this.normalizeActorRole(actor);
     return role === 'ADMIN';
   }
 
   private canReadAllCloses(actor: Actor) {
-    const role = (actor.role ?? '').toUpperCase();
+    const role = this.normalizeActorRole(actor);
     return role === 'ADMIN' || role === 'ASISTENTE';
   }
 

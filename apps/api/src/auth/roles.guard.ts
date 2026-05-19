@@ -7,6 +7,12 @@ import { Role } from '@prisma/client';
 export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
+  private readonly roleAliases: Record<string, Role> = {
+    ADMINISTRADOR: Role.ADMIN,
+    ASSISTANT: Role.ASISTENTE,
+    ASSISTENTE: Role.ASISTENTE,
+  };
+
   canActivate(context: ExecutionContext): boolean {
     const requiredRoles = this.reflector.getAllAndOverride<Role[]>(ROLES_KEY, [
       context.getHandler(),
@@ -33,6 +39,10 @@ export class RolesGuard implements CanActivate {
 
   private normalizeRole(role?: Role | string | null): Role | null {
     const normalized = `${role ?? ''}`.trim().toUpperCase();
-    return normalized ? (normalized as Role) : null;
+    if (!normalized) return null;
+    if (normalized in this.roleAliases) {
+      return this.roleAliases[normalized];
+    }
+    return normalized as Role;
   }
 }
