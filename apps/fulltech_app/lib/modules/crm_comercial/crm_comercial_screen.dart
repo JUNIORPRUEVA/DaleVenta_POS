@@ -462,6 +462,11 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   // Evita que el badge reaparezca si el backend aún no refleja el “read”.
   final Set<String> _locallyReadConversationIds = <String>{};
 
+  // Polling ligero: asegura que la lista se refresque y se reordene cuando entra
+  // un mensaje nuevo (estilo WhatsApp: el chat con actividad reciente va arriba).
+  Timer? _conversationPollTimer;
+  DateTime? _lastConversationPollAt;
+
   @override
   void initState() {
     super.initState();
@@ -471,6 +476,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     _loadQuickReplies();
     _loadComposerTools();
     _loadAll();
+
+    // Importante: si no tenemos websocket/push, necesitamos refrescar la lista.
+    // Lo hacemos liviano (solo lista de conversaciones) y sin loaders.
+    _startConversationPolling();
   }
 
   @override
@@ -498,6 +507,7 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     _mediaCaptionCtrl.dispose();
     _composerSpellTimer?.cancel();
     _commercialAiTimer?.cancel();
+    _conversationPollTimer?.cancel();
     _toastTimer?.cancel();
     _toastEntry?.remove();
     _toastEntry = null;
@@ -518,6 +528,52 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     });
 
     super.dispose();
+  }
+
+  void _startConversationPolling() {
+    _conversationPollTimer?.cancel();
+    // Cada 6s: suficiente para “sentirse” realtime sin cargar demasiado.
+    _conversationPollTimer = Timer.periodic(const Duration(seconds: 6), (_) async {
+      if (!mounted) return;
+      if (_saving || _loading) return;
+      // Evita stacking de polls si el request toma más de lo esperado.
+      final last = _lastConversationPollAt;
+      final now = DateTime.now();
+      if (last != null && now.difference(last).inSeconds < 5) return;
+      _lastConversationPollAt = now;
+      await _refreshConversationsOnly();
+    });
+  }
+
+  Future<void> _refreshConversationsOnly() async {
+    try {
+      final repo = ref.read(crmComercialRepositoryProvider);
+      final res = await repo.listConversations(limit: 100);
+      if (!mounted) return;
+
+      final merged = _applyLocalReadOverrides(res.items);
+      // Backend ya ordena por lastMessageAt desc, pero reforzamos por si acaso.
+      final sorted = List<CrmComercialInboxConversation>.from(merged)
+        ..sort((a, b) {
+          final ad = a.lastMessageAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final bd = b.lastMessageAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          return bd.compareTo(ad);
+        });
+
+      setState(() {
+        _conversations = sorted;
+        // Mantener referencia a seleccionada actual, si existe en el nuevo listado.
+        final selId = _selectedConversation?.id;
+        if (selId != null) {
+          final found = sorted.where((c) => c.id == selId).toList(growable: false);
+          if (found.isNotEmpty) {
+            _selectedConversation = found.first;
+          }
+        }
+      });
+    } catch (_) {
+      // Silencioso: el polling no debe mostrar errores.
+    }
   }
 
   void _handleChatScrollChanged() {
