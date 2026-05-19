@@ -439,6 +439,16 @@ class CrmComercialRepository {
     return res.data ?? const <String, dynamic>{};
   }
 
+  Future<Map<String, dynamic>> deleteConversationMessage({
+    required String conversationId,
+    required String messageId,
+  }) async {
+    final res = await _dio.delete<Map<String, dynamic>>(
+      ApiRoutes.crmCommercialConversationMessageDelete(conversationId, messageId),
+    );
+    return res.data ?? const <String, dynamic>{};
+  }
+
   Future<Map<String, dynamic>> startConversationMediaMessage({
     required String phone,
     required String mediaType, // 'image', 'video', 'audio', 'document'

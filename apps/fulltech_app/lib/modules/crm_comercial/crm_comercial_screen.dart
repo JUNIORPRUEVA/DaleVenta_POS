@@ -343,6 +343,8 @@ const List<String> _taskPriorities = <String>[
 
 enum _CrmRightPanelTab { detail, ia }
 
+enum _CrmDateFilter { all, today, yesterday, last7Days, customRange }
+
 enum _CrmToastKind { info, success, error }
 
 class CrmComercialScreen extends ConsumerStatefulWidget {
@@ -406,6 +408,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   bool _sendingChatMessage = false;
   String _lastShellActionsSignature = '';
   _CrmRightPanelTab _activeRightPanelTab = _CrmRightPanelTab.detail;
+  _CrmDateFilter _conversationDateFilter = _CrmDateFilter.all;
+  _CrmDateFilter _messageDateFilter = _CrmDateFilter.all;
+  DateTimeRange? _conversationCustomRange;
+  DateTimeRange? _messageCustomRange;
 
   // Composer support state
   CompanySettings? _companySettings;
@@ -535,8 +541,15 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
 
   List<CrmComercialInboxMessage> get _filteredMessages {
     final query = _conversationSearchCtrl.text.trim().toLowerCase();
-    if (query.isEmpty) return _messages;
     return _messages.where((message) {
+      if (!_matchesDateFilter(
+        message.sentAt,
+        _messageDateFilter,
+        _messageCustomRange,
+      )) {
+        return false;
+      }
+      if (query.isEmpty) return true;
       final text = message.displayText.toLowerCase();
       final sender = (message.senderName ?? '').toLowerCase();
       return text.contains(query) || sender.contains(query);
@@ -548,6 +561,13 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     return _conversations.where((conversation) {
       if (_statusFilter.isNotEmpty &&
           _conversationEffectiveStatus(conversation) != _statusFilter) {
+        return false;
+      }
+      if (!_matchesDateFilter(
+        conversation.lastMessageAt,
+        _conversationDateFilter,
+        _conversationCustomRange,
+      )) {
         return false;
       }
       if (query.isEmpty) return true;
@@ -626,6 +646,81 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
       return raw.substring(0, 1).toUpperCase() + raw.substring(1);
     }
     return DateFormat('dd/MM').format(value);
+  }
+
+  bool _matchesDateFilter(
+    DateTime? value,
+    _CrmDateFilter filter,
+    DateTimeRange? customRange,
+  ) {
+    if (filter == _CrmDateFilter.all) return true;
+    if (value == null) return false;
+    final target = DateTime(value.year, value.month, value.day);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    switch (filter) {
+      case _CrmDateFilter.today:
+        return target == today;
+      case _CrmDateFilter.yesterday:
+        return target == today.subtract(const Duration(days: 1));
+      case _CrmDateFilter.last7Days:
+        final minDate = today.subtract(const Duration(days: 6));
+        return !target.isBefore(minDate) && !target.isAfter(today);
+      case _CrmDateFilter.customRange:
+        if (customRange == null) return true;
+        final start = DateTime(
+          customRange.start.year,
+          customRange.start.month,
+          customRange.start.day,
+        );
+        final end = DateTime(
+          customRange.end.year,
+          customRange.end.month,
+          customRange.end.day,
+        );
+        return !target.isBefore(start) && !target.isAfter(end);
+      case _CrmDateFilter.all:
+        return true;
+    }
+  }
+
+  String _dateFilterLabel(_CrmDateFilter filter) {
+    switch (filter) {
+      case _CrmDateFilter.all:
+        return 'Todas';
+      case _CrmDateFilter.today:
+        return 'Hoy';
+      case _CrmDateFilter.yesterday:
+        return 'Ayer';
+      case _CrmDateFilter.last7Days:
+        return 'Ultimos 7 dias';
+      case _CrmDateFilter.customRange:
+        return 'Intervalo';
+    }
+  }
+
+  Future<void> _pickCustomDateRange({required bool forMessages}) async {
+    final now = DateTime.now();
+    final currentRange = forMessages ? _messageCustomRange : _conversationCustomRange;
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 2),
+      lastDate: DateTime(now.year + 1),
+      initialDateRange: currentRange,
+      helpText: 'Selecciona intervalo',
+      saveText: 'Aplicar',
+      cancelText: 'Cancelar',
+    );
+    if (!mounted || picked == null) return;
+    setState(() {
+      if (forMessages) {
+        _messageCustomRange = picked;
+        _messageDateFilter = _CrmDateFilter.customRange;
+      } else {
+        _conversationCustomRange = picked;
+        _conversationDateFilter = _CrmDateFilter.customRange;
+      }
+    });
   }
 
   void _scrollChatToBottom({bool animated = true}) {
@@ -1156,7 +1251,15 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
       );
       try {
         await _openConversation(selectedConversation.id);
-        await _syncWithServer();
+        // Evita bloquear el render del chat con una sincronización completa.
+        // Se ejecuta en segundo plano para prevenir parpadeos perceptibles.
+        Future<void>(() async {
+          try {
+            await _syncWithServer();
+          } catch (error) {
+            debugPrint('[CRM][UI][_sendMessageToCurrentConversation] background sync error=$error');
+          }
+        });
       } catch (refreshError) {
         debugPrint(
           '[CRM][UI][_sendMessageToCurrentConversation] post-send refresh error=$refreshError',
@@ -1187,6 +1290,49 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
         setState(() => _sendingChatMessage = false);
       }
       debugPrint('[CRM][UI][_sendMessageToCurrentConversation] sending=false');
+    }
+  }
+
+  Future<void> _deleteMessageFromCurrentConversation(String messageId) async {
+    final selectedConversation = _selectedConversation;
+    if (selectedConversation == null || messageId.trim().isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar mensaje'),
+        content: const Text('¿Quieres eliminar este mensaje enviado?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(crmComercialRepositoryProvider).deleteConversationMessage(
+            conversationId: selectedConversation.id,
+            messageId: messageId,
+          );
+      await _openConversation(selectedConversation.id);
+      if (mounted) {
+        _showCrmToast('Mensaje eliminado.', kind: _CrmToastKind.success);
+      }
+    } catch (error) {
+      if (!mounted) return;
+      _showCrmToast(
+        error is ApiException ? error.message : 'No se pudo eliminar el mensaje.',
+        kind: _CrmToastKind.error,
+      );
     }
   }
 
@@ -4765,6 +4911,44 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                             color: _statusFilter.isEmpty ? _waTextMuted : _waGreenDark,
                           ),
                         ),
+                        PopupMenuButton<String>(
+                          tooltip:
+                              'Filtrar chats por fecha (${_dateFilterLabel(_conversationDateFilter)})',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 34,
+                            minHeight: 34,
+                          ),
+                          onSelected: (value) async {
+                            if (value == 'custom') {
+                              await _pickCustomDateRange(forMessages: false);
+                              return;
+                            }
+                            setState(() {
+                              _conversationDateFilter = {
+                                    'all': _CrmDateFilter.all,
+                                    'today': _CrmDateFilter.today,
+                                    'yesterday': _CrmDateFilter.yesterday,
+                                    'last7': _CrmDateFilter.last7Days,
+                                  }[value] ??
+                                  _CrmDateFilter.all;
+                            });
+                          },
+                          itemBuilder: (context) => const [
+                            PopupMenuItem<String>(value: 'all', child: Text('Todas las fechas')),
+                            PopupMenuItem<String>(value: 'today', child: Text('Hoy')),
+                            PopupMenuItem<String>(value: 'yesterday', child: Text('Ayer')),
+                            PopupMenuItem<String>(value: 'last7', child: Text('Ultimos 7 dias')),
+                            PopupMenuItem<String>(value: 'custom', child: Text('Intervalo personalizado')),
+                          ],
+                          icon: Icon(
+                            Icons.filter_alt_rounded,
+                            size: 20,
+                            color: _conversationDateFilter == _CrmDateFilter.all
+                                ? _waTextMuted
+                                : _waGreenDark,
+                          ),
+                        ),
                         const SizedBox(width: 2),
                         FilterChip(
                           selected: _onlyMine,
@@ -5118,6 +5302,39 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                       : null,
                   icon: const Icon(Icons.search_rounded, size: 20),
                 ),
+                PopupMenuButton<String>(
+                  tooltip:
+                      'Filtrar mensajes por fecha (${_dateFilterLabel(_messageDateFilter)})',
+                  onSelected: (value) async {
+                    if (value == 'custom') {
+                      await _pickCustomDateRange(forMessages: true);
+                      return;
+                    }
+                    setState(() {
+                      _messageDateFilter = {
+                            'all': _CrmDateFilter.all,
+                            'today': _CrmDateFilter.today,
+                            'yesterday': _CrmDateFilter.yesterday,
+                            'last7': _CrmDateFilter.last7Days,
+                          }[value] ??
+                          _CrmDateFilter.all;
+                    });
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem<String>(value: 'all', child: Text('Todas las fechas')),
+                    PopupMenuItem<String>(value: 'today', child: Text('Hoy')),
+                    PopupMenuItem<String>(value: 'yesterday', child: Text('Ayer')),
+                    PopupMenuItem<String>(value: 'last7', child: Text('Ultimos 7 dias')),
+                    PopupMenuItem<String>(value: 'custom', child: Text('Intervalo personalizado')),
+                  ],
+                  icon: Icon(
+                    Icons.filter_alt_rounded,
+                    size: 20,
+                    color: _messageDateFilter == _CrmDateFilter.all
+                        ? _waTextMuted
+                        : _waGreenDark,
+                  ),
+                ),
                 IconButton(
                   tooltip: 'Panel IA',
                   onPressed: !hasConversation
@@ -5232,6 +5449,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                         child: Image.asset(
                           'assets/image/wa_bg_light.png',
                           fit: BoxFit.cover,
+                          gaplessPlayback: true,
+                          filterQuality: FilterQuality.low,
                           errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                         ),
                       ),
@@ -5309,7 +5528,12 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                                   label: _formatDayLabel(entry.createdAt),
                                 ),
                               ),
-                            _CrmTimelineTile(entry: entry),
+                            _CrmTimelineTile(
+                              entry: entry,
+                              onDeleteOutgoing: entry.isOutgoing && entry.messageId != null
+                                  ? () => _deleteMessageFromCurrentConversation(entry.messageId!)
+                                  : null,
+                            ),
                             const SizedBox(height: 5),
                           ],
                         );
@@ -6489,7 +6713,7 @@ class _CrmConversationListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tileColor = isActive ? _waSelected : Colors.transparent;
+    final tileColor = isActive ? _waSelected : Colors.white;
     // Estado visual: NUEVO si no está vinculado, estado real si está vinculado
     final showStatus = statusLabel.isNotEmpty && statusLabel != 'SIN CRM';
     return Material(
@@ -6502,8 +6726,13 @@ class _CrmConversationListItem extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           curve: Curves.easeOut,
-          color: tileColor,
-          padding: const EdgeInsets.fromLTRB(0, 2, 8, 2),
+          margin: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+          padding: const EdgeInsets.fromLTRB(0, 3, 8, 3),
+          decoration: BoxDecoration(
+            color: tileColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _waBorder.withAlpha(isActive ? 120 : 70)),
+          ),
           child: Row(
             children: [
               AnimatedContainer(
@@ -6714,9 +6943,10 @@ class _CrmTimelineEntry {
 }
 
 class _CrmTimelineTile extends StatelessWidget {
-  const _CrmTimelineTile({required this.entry});
+  const _CrmTimelineTile({required this.entry, this.onDeleteOutgoing});
 
   final _CrmTimelineEntry entry;
+  final VoidCallback? onDeleteOutgoing;
 
   // Builds the appropriate media widget based on messageType.
   // Wraps the entry fields back into a CrmComercialInboxMessage for the ConsumerStatefulWidgets.
@@ -6752,7 +6982,8 @@ class _CrmTimelineTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maxBubbleWidth = MediaQuery.of(context).size.width < 900 ? 320.0 : 760.0;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final maxBubbleWidth = (screenWidth * 0.62).clamp(220.0, 520.0);
     final bubbleColor = entry.isOutgoing
         ? const Color(0xFFD9FDD3)
         : Colors.white.withAlpha(235);
@@ -6771,7 +7002,7 @@ class _CrmTimelineTile extends StatelessWidget {
         ConstrainedBox(
           constraints: BoxConstraints(maxWidth: maxBubbleWidth),
           child: Container(
-            padding: const EdgeInsets.fromLTRB(10, 6, 10, 5),
+            padding: const EdgeInsets.fromLTRB(11, 7, 11, 6),
             decoration: BoxDecoration(
               color: bubbleColor,
               borderRadius: bubbleRadius,
@@ -6818,11 +7049,45 @@ class _CrmTimelineTile extends StatelessWidget {
                 const SizedBox(height: 3),
                 Align(
                   alignment: Alignment.bottomRight,
-                  child: Text(
-                    entry.createdAt == null
-                        ? 'Sin fecha'
-                        : DateFormat('HH:mm').format(entry.createdAt!),
-                    style: const TextStyle(fontSize: 9.5, color: _waTextMuted),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        entry.createdAt == null
+                            ? 'Sin fecha'
+                            : DateFormat('HH:mm').format(entry.createdAt!),
+                        style: const TextStyle(fontSize: 9.5, color: _waTextMuted),
+                      ),
+                      if (entry.isOutgoing) ...[
+                        const SizedBox(width: 4),
+                        const Icon(
+                          Icons.done_all_rounded,
+                          size: 14,
+                          color: Color(0xFF53BDEB),
+                        ),
+                      ],
+                      if (entry.isOutgoing && onDeleteOutgoing != null) ...[
+                        const SizedBox(width: 2),
+                        PopupMenuButton<String>(
+                          padding: EdgeInsets.zero,
+                          tooltip: 'Opciones del mensaje',
+                          onSelected: (value) {
+                            if (value == 'delete') onDeleteOutgoing?.call();
+                          },
+                          itemBuilder: (context) => const [
+                            PopupMenuItem<String>(
+                              value: 'delete',
+                              child: Text('Eliminar mensaje'),
+                            ),
+                          ],
+                          icon: const Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 16,
+                            color: _waTextMuted,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],

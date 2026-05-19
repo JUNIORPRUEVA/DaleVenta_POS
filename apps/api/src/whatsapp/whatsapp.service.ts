@@ -1111,6 +1111,26 @@ export class WhatsappService {
     );
   }
 
+  async deleteMessage(params: {
+    instanceName: string;
+    remoteJid: string;
+    messageId: string;
+    fromMe?: boolean;
+  }): Promise<unknown> {
+    const payload = {
+      id: params.messageId,
+      remoteJid: params.remoteJid,
+      fromMe: params.fromMe ?? true,
+    };
+    return this.fetchEvolution(
+      `/message/delete/${encodeURIComponent(params.instanceName)}`,
+      {
+        method: 'DELETE',
+        body: JSON.stringify(payload),
+      },
+    );
+  }
+
   async findChatMessages(
     instanceName: string,
     remoteJid: string,

@@ -159,6 +159,20 @@ export class CrmCommercialController {
     );
   }
 
+  @Delete('conversations/:conversationId/messages/:messageId')
+  @Roles(Role.ADMIN)
+  deleteConversationMessage(
+    @Req() req: Request,
+    @Param('conversationId') conversationId: string,
+    @Param('messageId') messageId: string,
+  ) {
+    return this.crmCommercial.deleteConversationMessage(
+      this.userOrThrow(req),
+      conversationId,
+      messageId,
+    );
+  }
+
   @Post('conversations/start-media')
   @Roles(Role.ADMIN)
   startConversationMediaMessage(

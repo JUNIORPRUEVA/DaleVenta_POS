@@ -1564,6 +1564,65 @@ export class CrmCommercialService {
     }
   }
 
+  async deleteConversationMessage(
+    user: AuthUser,
+    conversationId: string,
+    messageId: string,
+  ) {
+    if (!this.isAdmin(user)) {
+      throw new ForbiddenException('Solo ADMIN puede eliminar mensajes en CRM Comercial');
+    }
+
+    const conversation = await this.prisma.whatsappConversation.findUnique({
+      where: { id: conversationId },
+      include: { instance: { select: { instanceName: true } } },
+    });
+
+    if (!conversation) {
+      throw new NotFoundException('Conversacion no encontrada.');
+    }
+
+    const message = await this.prisma.whatsappMessage.findFirst({
+      where: {
+        id: messageId,
+        conversationId,
+      },
+      select: {
+        id: true,
+        direction: true,
+        evolutionId: true,
+      },
+    });
+
+    if (!message) {
+      throw new NotFoundException('Mensaje no encontrado en esta conversación.');
+    }
+
+    if (message.direction !== 'OUTGOING') {
+      throw new BadRequestException('Solo se pueden eliminar mensajes salientes.');
+    }
+
+    if (!message.evolutionId) {
+      throw new BadRequestException('Este mensaje no tiene identificador remoto para eliminarse.');
+    }
+
+    await this.whatsappService.deleteMessage({
+      instanceName: conversation.instance.instanceName,
+      remoteJid: conversation.remoteJid,
+      messageId: message.evolutionId,
+      fromMe: true,
+    });
+
+    await this.prisma.whatsappMessage.delete({ where: { id: message.id } });
+
+    return {
+      ok: true,
+      conversationId,
+      messageId,
+      deleted: true,
+    };
+  }
+
   async startConversationMediaMessage(
     user: AuthUser,
     dto: StartCrmCommercialMediaMessageDto,

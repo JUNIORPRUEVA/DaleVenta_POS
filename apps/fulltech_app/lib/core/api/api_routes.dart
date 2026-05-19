@@ -118,6 +118,8 @@ class ApiRoutes {
       '/crm-commercial/conversations/$id/reply';
   static String crmCommercialConversationReplyMedia(String id) =>
       '/crm-commercial/conversations/$id/reply-media';
+  static String crmCommercialConversationMessageDelete(String conversationId, String messageId) =>
+      '/crm-commercial/conversations/$conversationId/messages/$messageId';
   static const crmCommercialLibrary = '/crm-commercial/library';
   static String crmCommercialLibraryUse(String id) =>
       '/crm-commercial/library/$id/use';
