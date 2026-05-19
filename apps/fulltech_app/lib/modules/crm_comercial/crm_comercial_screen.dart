@@ -667,15 +667,51 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     }).length;
   }
 
+  /// Carga inicial con caché: muestra datos cacheados al instante y sincroniza después.
   Future<void> _loadAll() async {
-    setState(() {
-      _loading = true;
-      _error = '';
-    });
+    final repo = ref.read(crmComercialRepositoryProvider);
+
+    // Paso 1: Intentar cargar datos cacheados inmediatamente
+    final cachedData = await repo.getCachedData();
+    if (cachedData != null && mounted) {
+      setState(() {
+        _users = cachedData.users;
+        _crmSettings = cachedData.settings;
+        _availableWhatsappInstances = cachedData.whatsappInstances;
+        _allTasks = cachedData.tasks;
+        _conversations = cachedData.conversations;
+        _loading = false;
+      });
+
+      // Si hay conversación seleccionada, cargar sus mensajes del caché
+      final conversationId = _selectedConversation?.id;
+      if (conversationId != null) {
+        final cachedMessages = await repo.getCachedMessages(conversationId);
+        if (cachedMessages.isNotEmpty && mounted) {
+          setState(() => _messages = cachedMessages);
+        }
+      }
+    } else {
+      // No hay caché, mostrar loading brevemente
+      if (mounted) {
+        setState(() {
+          _loading = true;
+          _error = '';
+        });
+      }
+    }
+
+    // Paso 2: Sincronizar con el servidor en segundo plano
+    _syncWithServer();
+  }
+
+  /// Sincroniza datos con el servidor y actualiza el caché.
+  Future<void> _syncWithServer() async {
+    final repo = ref.read(crmComercialRepositoryProvider);
 
     try {
-      final repo = ref.read(crmComercialRepositoryProvider);
-      final customers = await repo.listCustomers(
+      // Cargar todos los datos del servidor
+      final customersResponse = await repo.listCustomers(
         q: _searchCtrl.text,
         status: _statusFilter,
         onlyMine: _onlyMine,
@@ -686,12 +722,13 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
       final availableInstances = await repo.listAvailableWhatsappInstances();
       final conversationsResponse = await repo.listConversations();
 
+      // Determinar selección actual
       CrmComercialCustomer? selected = _selected;
       if (selected != null) {
-        final found = customers.items.where((e) => e.id == selected!.id);
+        final found = customersResponse.items.where((e) => e.id == selected!.id);
         selected = found.isEmpty ? null : found.first;
       }
-      selected ??= customers.items.isEmpty ? null : customers.items.first;
+      selected ??= customersResponse.items.isEmpty ? null : customersResponse.items.first;
 
       CrmComercialInboxConversation? selectedConversation = _selectedConversation;
       if (selectedConversation != null) {
@@ -700,9 +737,11 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
         );
         selectedConversation = found.isEmpty ? null : found.first;
       }
-      selectedConversation ??=
-          conversationsResponse.items.isEmpty ? null : conversationsResponse.items.first;
+      selectedConversation ??= conversationsResponse.items.isEmpty
+          ? null
+          : conversationsResponse.items.first;
 
+      // Cargar mensajes de la conversación seleccionada
       List<CrmComercialInboxMessage> messages = const [];
       if (selectedConversation != null) {
         final messageResponse = await repo.getConversationMessages(
@@ -712,15 +751,20 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
         if (messageResponse.conversation != null) {
           selectedConversation = messageResponse.conversation;
         }
+        // Guardar mensajes en caché
+        if (selectedConversation != null) {
+          await repo.cacheMessages(selectedConversation.id, messages);
+        }
       }
 
+      // Obtener detalle del cliente seleccionado
       if (selected != null) {
         selected = await repo.getCustomer(selected.id);
         _nextActionCtrl.text = selected.nextAction ?? '';
       }
 
       if (selectedConversation != null && selectedConversation.crmCustomerId != null) {
-        final linked = customers.items
+        final linked = customersResponse.items
             .where((e) => e.id == selectedConversation!.crmCustomerId)
             .toList(growable: false);
         if (linked.isNotEmpty) {
@@ -728,6 +772,16 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
           _nextActionCtrl.text = selected.nextAction ?? '';
         }
       }
+
+      // Guardar todo en caché
+      await repo.cacheData(CrmComercialCacheData(
+        conversations: conversationsResponse.items,
+        customers: customersResponse.items,
+        tasks: allTasks,
+        settings: crmSettings,
+        whatsappInstances: availableInstances,
+        users: users,
+      ));
 
       if (!mounted) return;
       setState(() {
@@ -745,6 +799,12 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
       _scheduleSilentCommercialSuggestion();
     } catch (error) {
       if (!mounted) return;
+      debugPrint('[CRM] Error sincronizando: $error');
+      // Si ya hay datos en pantalla, no mostramos error
+      if (_conversations.isNotEmpty) {
+        return;
+      }
+      // Si no hay datos, mostrar error
       setState(() {
         _loading = false;
         _error = error.toString();

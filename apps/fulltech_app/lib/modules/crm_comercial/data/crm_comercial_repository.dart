@@ -7,15 +7,21 @@ import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/errors/api_exception.dart';
 import '../models/crm_comercial_models.dart';
+import 'crm_comercial_local_db.dart';
+import 'crm_comercial_cache_providers.dart';
 
 final crmComercialRepositoryProvider = Provider<CrmComercialRepository>((ref) {
-  return CrmComercialRepository(ref.watch(dioProvider));
+  return CrmComercialRepository(
+    ref.watch(dioProvider),
+    ref.watch(crmComercialLocalDbProvider),
+  );
 });
 
 class CrmComercialRepository {
-  CrmComercialRepository(this._dio);
+  CrmComercialRepository(this._dio, this._localDb);
 
   final Dio _dio;
+  final CrmComercialLocalDb _localDb;
 
   String _extractErrorMessage(dynamic data, String fallback) {
     if (data is String && data.trim().isNotEmpty) return data.trim();
@@ -498,4 +504,81 @@ class CrmComercialRepository {
     );
     return CrmComercialFollowupTask.fromJson(res.data ?? const {});
   }
+
+  // ==================== CACHE METHODS ====================
+
+  /// Carga datos desde caché local para mostrar al instante.
+  /// Devuelve null si no hay datos en caché.
+  Future<CrmComercialCacheData?> getCachedData() async {
+    try {
+      final conversations = await _localDb.getConversations();
+      final customers = await _localDb.getCustomers();
+      final tasks = await _localDb.getFollowupTasks();
+      final settings = await _localDb.getSettings();
+      final instances = await _localDb.getWhatsappInstances();
+      final users = await _localDb.getUsers();
+
+      return CrmComercialCacheData(
+        conversations: conversations,
+        customers: customers,
+        tasks: tasks,
+        settings: settings,
+        whatsappInstances: instances,
+        users: users,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Guarda datos en caché local después de obtenerlos del servidor.
+  Future<void> cacheData(CrmComercialCacheData data) async {
+    await _localDb.saveConversations(data.conversations);
+    await _localDb.saveCustomers(data.customers);
+    await _localDb.saveFollowupTasks(data.tasks);
+    if (data.settings != null) {
+      await _localDb.saveSettings(data.settings!);
+    }
+    await _localDb.saveWhatsappInstances(data.whatsappInstances);
+    await _localDb.saveUsers(data.users);
+  }
+
+  /// Guarda mensajes de una conversación en caché.
+  Future<void> cacheMessages(String conversationId, List<CrmComercialInboxMessage> messages) async {
+    await _localDb.saveMessages(conversationId, messages);
+  }
+
+  /// Obtiene mensajes de una conversación desde el caché.
+  Future<List<CrmComercialInboxMessage>> getCachedMessages(String conversationId) async {
+    return _localDb.getMessages(conversationId);
+  }
+
+  /// Agrega un mensaje enviado al caché local (optimistic UI).
+  Future<void> addMessageToCache(String conversationId, CrmComercialInboxMessage message) async {
+    await _localDb.saveMessage(conversationId, message);
+  }
+
+  /// Limpia todo el caché local.
+  Future<void> clearCache() async {
+    await _localDb.clearCache();
+  }
+}
+
+/// Datos cacheados del CRM Comercial.
+class CrmComercialCacheData {
+  final List<CrmComercialInboxConversation> conversations;
+  final List<CrmComercialCustomer> customers;
+  final List<CrmComercialFollowupTask> tasks;
+  final CrmComercialSettings? settings;
+  final List<CrmComercialWhatsappInstance> whatsappInstances;
+  final List<CrmComercialUserRef> users;
+
+  CrmComercialCacheData({
+    required this.conversations,
+    required this.customers,
+    required this.tasks,
+    this.settings,
+    required this.whatsappInstances,
+    required this.users,
+  });
 }
