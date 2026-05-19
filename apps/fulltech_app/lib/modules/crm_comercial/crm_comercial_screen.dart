@@ -176,9 +176,20 @@ String _avatarInitials(String raw) {
   return (parts[0].substring(0, 1) + parts[1].substring(0, 1)).toUpperCase();
 }
 
+/// Sanea texto para evitar caracteres no válidos UTF-16
+String _sanitizeText(String? text) {
+  if (text == null) return '';
+  // Eliminar caracteres de control y bytes no válidos
+  return text
+      .replaceAll(RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]'), '')
+      .replaceAll(RegExp(r'[\uFFFD]'), '') // Replacement character
+      .replaceAll(RegExp(r'[\u{1F600}-\u{1F64F}]', unicode: true), '') // Emojis problemáticos si los hay
+      .trim();
+}
+
 String _avatarFallbackText(String title, String? phone) {
-  final normalizedTitle = title.trim();
-  final normalizedPhone = (phone ?? '').trim();
+  final normalizedTitle = _sanitizeText(title)?.trim() ?? '';
+  final normalizedPhone = _sanitizeText(phone)?.trim() ?? '';
   if (normalizedTitle.isNotEmpty &&
       normalizedTitle.toLowerCase() != 'nuevo contacto') {
     return _avatarInitials(normalizedTitle);
@@ -1061,10 +1072,13 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   }
 
   Future<void> _openConversation(String conversationId) async {
-    setState(() {
-      _saving = true;
-      _error = '';
-    });
+    // Solo actualizamos el estado de "saving" si no estamos ya guardando
+    if (!_saving && mounted) {
+      setState(() {
+        _saving = true;
+        _error = '';
+      });
+    }
     try {
       final repo = ref.read(crmComercialRepositoryProvider);
       final response = await repo.getConversationMessages(conversationId);
@@ -1081,12 +1095,14 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
       }
 
       if (!mounted) return;
+      // Actualizamos solo los campos necesarios, sin forzar rebuild completo
       setState(() {
         _selectedConversation = conversation;
         _messages = response.items;
         _conversationWarning = response.warning;
         _selected = linkedCustomer;
         _nextActionCtrl.text = linkedCustomer?.nextAction ?? '';
+        _saving = false;
       });
       _scheduleSilentCommercialSuggestion();
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1097,13 +1113,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
       if (!mounted) return;
       setState(() {
         _error = error.toString();
+        _saving = false;
       });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _saving = false;
-        });
-      }
     }
   }
 
@@ -4570,9 +4581,7 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     final selected = _selected;
     return Scaffold(
       backgroundColor: _waBg,
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _buildCrmShell(context, selected),
+      body: _buildCrmShell(context, selected),
     );
   }
 
