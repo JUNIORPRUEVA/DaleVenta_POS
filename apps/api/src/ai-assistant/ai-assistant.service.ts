@@ -4225,6 +4225,56 @@ export class AiAssistantService {
     return admin?.id ?? fallbackUserId;
   }
 
+  /**
+   * Genera texto libre usando OpenAI (sin estructura JSON).
+   * Usado por CrmBotService.evaluateAndRespond() para respuestas automáticas del bot.
+   */
+  async generateText(systemPrompt: string): Promise<string> {
+    const runtime = await this.getOpenAiRuntimeConfig();
+    if (!runtime.apiKey) {
+      throw new BadRequestException('OpenAI API key no configurada');
+    }
+
+    const candidates = this.getOpenAiModelCandidates(runtime.model);
+
+    for (const candidate of candidates) {
+      try {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${runtime.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: candidate,
+            temperature: 0.3,
+            messages: [
+              { role: 'system', content: systemPrompt },
+            ],
+          }),
+        });
+
+        if (!response.ok) {
+          this.logDebug('openai.generateText.http_error', { candidate, status: response.status });
+          continue;
+        }
+
+        const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+        const content = payload.choices?.[0]?.message?.content?.trim();
+        if (content) {
+          return content;
+        }
+      } catch (error) {
+        this.logDebug('openai.generateText.error', {
+          candidate,
+          message: error instanceof Error ? error.message : `${error}`,
+        });
+      }
+    }
+
+    throw new BadRequestException('No se pudo generar texto desde OpenAI.');
+  }
+
   private async getOpenAiRuntimeConfig(): Promise<AiRuntimeConfig> {
     const envKey = (this.config.get<string>('OPENAI_API_KEY') ?? process.env.OPENAI_API_KEY ?? '').trim();
     const envModel = (this.config.get<string>('OPENAI_MODEL') ?? process.env.OPENAI_MODEL ?? '').trim();

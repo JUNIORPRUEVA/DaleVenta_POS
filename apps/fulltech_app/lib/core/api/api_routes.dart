@@ -131,6 +131,23 @@ class ApiRoutes {
       '/crm-commercial/ai/orthography-suggestion';
   static const crmCommercialAiSuggestReply = '/crm-commercial/ai/suggest-reply';
 
+  // CRM Comercial - Bot
+  static const crmCommercialBotSettings = '/crm-commercial/bot/settings';
+  static String crmCommercialBotConversationStatus(String id) =>
+      '/crm-commercial/bot/conversations/$id/status';
+  static String crmCommercialBotConversationPause(String id) =>
+      '/crm-commercial/bot/conversations/$id/pause';
+  static String crmCommercialBotConversationResume(String id) =>
+      '/crm-commercial/bot/conversations/$id/resume';
+  static String crmCommercialBotConversationExclude(String id) =>
+      '/crm-commercial/bot/conversations/$id/exclude';
+  static String crmCommercialBotConversationInclude(String id) =>
+      '/crm-commercial/bot/conversations/$id/include';
+  static String crmCommercialBotConversationSuggest(String id) =>
+      '/crm-commercial/bot/conversations/$id/suggest';
+  static String crmCommercialBotConversationSend(String id) =>
+      '/crm-commercial/bot/conversations/$id/send';
+
   // Productos
   static const products = '/products';
   static const catalogProducts = '/catalog/products';

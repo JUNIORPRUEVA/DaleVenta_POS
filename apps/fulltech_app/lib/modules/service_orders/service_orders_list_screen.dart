@@ -68,6 +68,7 @@ class _ServiceOrdersListScreenState
   final Set<String> _busyOrderIds = <String>{};
   final Set<String> _creatingFromOrderIds = <String>{};
   bool _purgingAllDebug = false;
+  bool _showRightPanel = true;
   ProviderSubscription<AuthState>? _authStateSubscription;
   StreamSubscription<OperationsRealtimeMessage>?
   _operationsRealtimeSubscription;
@@ -462,55 +463,91 @@ class _ServiceOrdersListScreenState
         ),
       ),
       body: isDesktop
-          ? Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+          ? Stack(
               children: [
-                Expanded(
-                  child: _buildOrdersRefreshContent(
-                    state: state,
-                    controller: controller,
-                    currentUser: currentUser,
-                    canManageStatusAsRole: canManageStatusAsRole,
-                    isAdmin: isAdmin,
-                    currentUserId: currentUserId,
-                    supportConversationUri: supportConversationUri,
-                    visibleOrders: visibleOrders,
-                    contentMaxWidth: contentMaxWidth,
-                    desktopLayout: true,
-                    availableCreators: availableCreators,
-                    availableTechnicians: availableTechnicians,
-                    pendingCount: pendingCount,
-                    inProgressCount: inProgressCount,
-                    pausedCount: pausedCount,
-                    gpsReadyCount: gpsReadyCount,
-                    scheduledCount: scheduledCount,
-                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: _buildOrdersRefreshContent(
+                        state: state,
+                        controller: controller,
+                        currentUser: currentUser,
+                        canManageStatusAsRole: canManageStatusAsRole,
+                        isAdmin: isAdmin,
+                        currentUserId: currentUserId,
+                        supportConversationUri: supportConversationUri,
+                        visibleOrders: visibleOrders,
+                        contentMaxWidth: contentMaxWidth,
+                        desktopLayout: true,
+                        availableCreators: availableCreators,
+                        availableTechnicians: availableTechnicians,
+                        pendingCount: pendingCount,
+                        inProgressCount: inProgressCount,
+                        pausedCount: pausedCount,
+                        gpsReadyCount: gpsReadyCount,
+                        scheduledCount: scheduledCount,
+                      ),
+                    ),
+                    if (_showRightPanel)
+                      SizedBox(
+                        width: _operationsDesktopSidebarWidth(width),
+                        child: _DesktopOperationsFilterSidebar(
+                          filter: _filter,
+                          activeCount: visibleOrders.length,
+                          refreshing: state.refreshing,
+                          searchController: _collapsedQuickSearchCtrl,
+                          availableCreators: availableCreators,
+                          availableTechnicians: availableTechnicians,
+                          visibleOrders: visibleOrders,
+                          onSearchChanged: (_) => setState(() {}),
+                          onClearSearch: () {
+                            _collapsedQuickSearchCtrl.clear();
+                            setState(() {});
+                          },
+                          onReset: () => setState(() {
+                            _collapsedQuickSearchCtrl.clear();
+                            _filter = const ServiceOrdersFilter.mainDefault();
+                          }),
+                          onFilterChanged: (next) => setState(() {
+                            _filter = next;
+                          }),
+                          onPickCustomRange: _pickDesktopCustomRange,
+                        ),
+                      ),
+                  ],
                 ),
-                SizedBox(
-                  width: _operationsDesktopSidebarWidth(width),
-                  child: _DesktopOperationsFilterSidebar(
-                    filter: _filter,
-                    activeCount: visibleOrders.length,
-                    refreshing: state.refreshing,
-                    searchController: _collapsedQuickSearchCtrl,
-                    availableCreators: availableCreators,
-                    availableTechnicians: availableTechnicians,
-                    visibleOrders: visibleOrders,
-                    onSearchChanged: (_) => setState(() {}),
-                    onClearSearch: () {
-                      _collapsedQuickSearchCtrl.clear();
-                      setState(() {});
-                    },
-                    onReset: () => setState(() {
-                      _collapsedQuickSearchCtrl.clear();
-                      _filter = const ServiceOrdersFilter.mainDefault();
-                    }),
-                    onFilterChanged: (next) => setState(() {
-                      _filter = next;
-                    }),
-                    onPickCustomRange: _pickDesktopCustomRange,
+                if (_showRightPanel)
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    child: Align(
+                      alignment: Alignment.topRight,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 14, right: 6),
+                        child: _SidebarToggleButton(
+                          icon: Icons.chevron_right,
+                          tooltip: 'Ocultar panel de filtros',
+                          onPressed: () => setState(() => _showRightPanel = false),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                if (!_showRightPanel)
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    child: Align(
+                      alignment: Alignment.center,
+                      child: _SidebarToggleButton(
+                        icon: Icons.chevron_left,
+                        tooltip: 'Mostrar panel de filtros',
+                        onPressed: () => setState(() => _showRightPanel = true),
+                      ),
+                    ),
+                  ),
               ],
             )
           : _buildOrdersRefreshContent(
@@ -1371,6 +1408,49 @@ List<_FilterUserOption> _buildFilterUserOptions({
 }
 
 enum _OperationsOverflowAction { sync, purge }
+
+class _SidebarToggleButton extends StatelessWidget {
+  const _SidebarToggleButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onPressed,
+        child: Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: colorScheme.outlineVariant.withValues(alpha: 0.78),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.shadow.withValues(alpha: 0.08),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Icon(icon, size: 18, color: colorScheme.onSurfaceVariant),
+        ),
+      ),
+    );
+  }
+}
 
 class _PriorityMapButton extends StatelessWidget {
   const _PriorityMapButton({required this.onPressed});

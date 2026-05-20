@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:typed_data';
@@ -295,7 +295,7 @@ class CrmComercialRepository {
   /// Downloads media bytes using the authenticated backend proxy.
   /// For WhatsappMessage media, the endpoint is /whatsapp-inbox/media/:messageId.
   /// The [mediaUrl] may be a full internal path like /whatsapp-inbox/media/UUID
-  /// or a relative path — it is forwarded as-is through the Dio client (which
+  /// or a relative path � it is forwarded as-is through the Dio client (which
   /// already carries the JWT auth header).
   Future<Uint8List> downloadMediaBytes(String mediaUrl) async {
     try {
@@ -543,8 +543,8 @@ class CrmComercialRepository {
 
   // ==================== CACHE METHODS ====================
 
-  /// Carga datos desde caché local para mostrar al instante.
-  /// Devuelve null si no hay datos en caché.
+  /// Carga datos desde cach� local para mostrar al instante.
+  /// Devuelve null si no hay datos en cach�.
   Future<CrmComercialCacheData?> getCachedData() async {
     try {
       final conversations = await _localDb.getConversations();
@@ -567,7 +567,7 @@ class CrmComercialRepository {
     }
   }
 
-  /// Guarda datos en caché local después de obtenerlos del servidor.
+  /// Guarda datos en cach� local despu�s de obtenerlos del servidor.
   Future<void> cacheData(CrmComercialCacheData data) async {
     await _localDb.saveConversations(data.conversations);
     await _localDb.saveCustomers(data.customers);
@@ -579,22 +579,22 @@ class CrmComercialRepository {
     await _localDb.saveUsers(data.users);
   }
 
-  /// Guarda mensajes de una conversación en caché.
+  /// Guarda mensajes de una conversaci�n en cach�.
   Future<void> cacheMessages(String conversationId, List<CrmComercialInboxMessage> messages) async {
     await _localDb.saveMessages(conversationId, messages);
   }
 
-  /// Obtiene mensajes de una conversación desde el caché.
+  /// Obtiene mensajes de una conversaci�n desde el cach�.
   Future<List<CrmComercialInboxMessage>> getCachedMessages(String conversationId) async {
     return _localDb.getMessages(conversationId);
   }
 
-  /// Agrega un mensaje enviado al caché local (optimistic UI).
+  /// Agrega un mensaje enviado al cach� local (optimistic UI).
   Future<void> addMessageToCache(String conversationId, CrmComercialInboxMessage message) async {
     await _localDb.saveMessage(conversationId, message);
   }
 
-  /// Limpia todo el caché local.
+  /// Limpia todo el cach� local.
   Future<void> clearCache() async {
     await _localDb.clearCache();
   }
@@ -617,4 +617,104 @@ class CrmComercialCacheData {
     required this.whatsappInstances,
     required this.users,
   });
+
+  // ─── Bot AI methods ────────────────────────────────────────────────────────
+
+  /// Obtiene la configuración global del bot.
+  Future<Map<String, dynamic>> getBotSettings() async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      ApiRoutes.crmCommercialBotSettings,
+      options: _silentRequestOptions,
+    );
+    return res.data ?? {};
+  }
+
+  /// Actualiza la configuración global del bot.
+  Future<Map<String, dynamic>> updateBotSettings(Map<String, dynamic> data) async {
+    final res = await _dio.patch<Map<String, dynamic>>(
+      ApiRoutes.crmCommercialBotSettings,
+      data: data,
+      options: _silentRequestOptions,
+    );
+    return res.data ?? {};
+  }
+
+  /// Obtiene el estado del bot para una conversación específica.
+  Future<Map<String, dynamic>> getConversationBotStatus(String conversationId) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      ApiRoutes.crmCommercialBotConversationStatus(conversationId),
+      options: _silentRequestOptions,
+    );
+    return res.data ?? {};
+  }
+
+  /// Pausa el bot para una conversación.
+  Future<Map<String, dynamic>> pauseBotForConversation(
+    String conversationId, {
+    String? reason,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      ApiRoutes.crmCommercialBotConversationPause(conversationId),
+      data: reason != null ? {'reason': reason} : {},
+      options: _silentRequestOptions,
+    );
+    return res.data ?? {};
+  }
+
+  /// Reanuda el bot para una conversación.
+  Future<Map<String, dynamic>> resumeBotForConversation(String conversationId) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      ApiRoutes.crmCommercialBotConversationResume(conversationId),
+      options: _silentRequestOptions,
+    );
+    return res.data ?? {};
+  }
+
+  /// Excluye un número del bot.
+  Future<Map<String, dynamic>> excludeNumberFromBot(String conversationId) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      ApiRoutes.crmCommercialBotConversationExclude(conversationId),
+      options: _silentRequestOptions,
+    );
+    return res.data ?? {};
+  }
+
+  /// Incluye un número en el bot (quita exclusión).
+  Future<Map<String, dynamic>> includeNumberInBot(String conversationId) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      ApiRoutes.crmCommercialBotConversationInclude(conversationId),
+      options: _silentRequestOptions,
+    );
+    return res.data ?? {};
+  }
+
+  /// Solicita una sugerencia de respuesta del bot para una conversación.
+  Future<Map<String, dynamic>> suggestBotReply(
+    String conversationId, {
+    String? lastCustomerMessage,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      ApiRoutes.crmCommercialBotConversationSuggest(conversationId),
+      data: lastCustomerMessage != null
+          ? {'lastCustomerMessage': lastCustomerMessage}
+          : {},
+      options: _silentRequestOptions,
+    );
+    return res.data ?? {};
+  }
+
+  /// Envía una respuesta generada por el bot a una conversación.
+  Future<Map<String, dynamic>> sendBotReply(
+    String conversationId, {
+    String? lastCustomerMessage,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      ApiRoutes.crmCommercialBotConversationSend(conversationId),
+      data: lastCustomerMessage != null
+          ? {'lastCustomerMessage': lastCustomerMessage}
+          : {},
+      options: _silentRequestOptions,
+    );
+    return res.data ?? {};
+  }
 }

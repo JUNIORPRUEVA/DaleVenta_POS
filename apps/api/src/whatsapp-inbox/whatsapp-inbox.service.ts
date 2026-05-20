@@ -1,8 +1,10 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -22,6 +24,7 @@ import {
   normalizeWhatsappIdentity,
   normalizeWhatsappPhone,
 } from './whatsapp-identity.util';
+import { CrmBotService } from '../crm-commercial/crm-bot.service';
 
 export interface ParsedWhatsappMessage {
   evolutionId: string;
@@ -888,6 +891,8 @@ export class WhatsappInboxService {
     private readonly whatsappService: WhatsappService,
     private readonly r2: R2Service,
     private readonly redis: RedisService,
+    @Inject(forwardRef(() => CrmBotService))
+    private readonly crmBotService?: CrmBotService,
   ) {}
 
   private conversationsCacheKey(instanceId: string, limit: number) {
@@ -2104,6 +2109,30 @@ export class WhatsappInboxService {
         customerPhone: parsed.remotePhone ?? null,
         action,
       });
+
+      // ─── Trigger CRM Bot auto-responder for incoming customer messages ───
+      if (
+        !parsed.fromMe &&
+        !result.duplicate &&
+        this.crmBotService &&
+        (parsed.body || parsed.caption)
+      ) {
+        const messageBody = (parsed.caption || parsed.body || '').trim();
+        if (messageBody) {
+          // Fire and forget – do not block the webhook response
+          this.crmBotService.evaluateAndRespond(
+            result.conversation.id,
+            messageBody,
+            result.message.id,
+          ).catch((err: unknown) => {
+            console.error('[CRM-BOT][AutoResponderError]', {
+              conversationId: result.conversation.id,
+              messageId: result.message.id,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          });
+        }
+      }
     }
 
     if (

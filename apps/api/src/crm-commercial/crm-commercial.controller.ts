@@ -17,6 +17,7 @@ import { Request } from 'express';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CrmCommercialService } from './crm-commercial.service';
+import { CrmBotService } from './crm-bot.service';
 import { ChangeCrmCommercialStatusDto } from './dto/change-crm-commercial-status.dto';
 import { CreateCrmCommercialActivityDto } from './dto/create-crm-commercial-activity.dto';
 import { CreateCrmCommercialCustomerDto } from './dto/create-crm-commercial-customer.dto';
@@ -40,11 +41,19 @@ import {
   CrmCommercialLibraryItemQueryDto,
   UpdateCrmCommercialLibraryItemDto,
 } from './dto/crm-commercial-library-item.dto';
+import {
+  UpdateCrmBotSettingsDto,
+  BotPauseConversationDto,
+  BotSuggestReplyDto,
+} from './dto/crm-bot-settings.dto';
 
 @UseGuards(AuthGuard('jwt'), RolesGuard)
 @Controller('crm-commercial')
 export class CrmCommercialController {
-  constructor(private readonly crmCommercial: CrmCommercialService) {}
+  constructor(
+    private readonly crmCommercial: CrmCommercialService,
+    private readonly crmBot: CrmBotService,
+  ) {}
 
   private userOrThrow(req: Request) {
     const user = req.user as { id?: string; role?: Role } | undefined;
@@ -332,5 +341,76 @@ export class CrmCommercialController {
   @Roles(Role.ADMIN)
   cancelFollowupTask(@Req() req: Request, @Param('id') id: string) {
     return this.crmCommercial.cancelFollowupTask(this.userOrThrow(req), id);
+  }
+
+  // ==================== BOT ENDPOINTS ====================
+
+  @Get('bot/settings')
+  @Roles(Role.ADMIN)
+  getBotSettings(@Req() req: Request) {
+    return this.crmBot.getBotSettings(this.userOrThrow(req));
+  }
+
+  @Patch('bot/settings')
+  @Roles(Role.ADMIN)
+  updateBotSettings(
+    @Req() req: Request,
+    @Body() dto: UpdateCrmBotSettingsDto,
+  ) {
+    return this.crmBot.updateBotSettings(this.userOrThrow(req), dto);
+  }
+
+  @Get('bot/conversations/:id/status')
+  @Roles(Role.ADMIN)
+  getConversationBotStatus(@Req() req: Request, @Param('id') id: string) {
+    return this.crmBot.getConversationBotStatus(this.userOrThrow(req), id);
+  }
+
+  @Post('bot/conversations/:id/pause')
+  @Roles(Role.ADMIN)
+  pauseBotForConversation(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: BotPauseConversationDto,
+  ) {
+    return this.crmBot.pauseBotForConversation(this.userOrThrow(req), id, dto.reason);
+  }
+
+  @Post('bot/conversations/:id/resume')
+  @Roles(Role.ADMIN)
+  resumeBotForConversation(@Req() req: Request, @Param('id') id: string) {
+    return this.crmBot.resumeBotForConversation(this.userOrThrow(req), id);
+  }
+
+  @Post('bot/conversations/:id/exclude')
+  @Roles(Role.ADMIN)
+  excludeNumber(@Req() req: Request, @Param('id') id: string) {
+    return this.crmBot.excludeNumber(this.userOrThrow(req), id);
+  }
+
+  @Post('bot/conversations/:id/include')
+  @Roles(Role.ADMIN)
+  includeNumber(@Req() req: Request, @Param('id') id: string) {
+    return this.crmBot.includeNumber(this.userOrThrow(req), id);
+  }
+
+  @Post('bot/conversations/:id/suggest')
+  @Roles(Role.ADMIN)
+  suggestBotReply(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: BotSuggestReplyDto,
+  ) {
+    return this.crmBot.suggestReply(this.userOrThrow(req), id, dto);
+  }
+
+  @Post('bot/conversations/:id/send')
+  @Roles(Role.ADMIN)
+  sendAiReply(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: BotSuggestReplyDto,
+  ) {
+    return this.crmBot.sendAiReply(this.userOrThrow(req), id, dto);
   }
 }

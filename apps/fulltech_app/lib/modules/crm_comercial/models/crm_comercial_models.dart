@@ -310,6 +310,10 @@ class CrmComercialInboxConversation {
     this.crmCustomerStatus,
     this.isNewContact = false,
     this.canConvertToCrm = false,
+    this.botPaused = false,
+    this.botStatus,
+    this.botSkippedReason,
+    this.isExcluded = false,
   });
 
   final String id;
@@ -328,6 +332,10 @@ class CrmComercialInboxConversation {
   final String? crmCustomerStatus;
   final bool isNewContact;
   final bool canConvertToCrm;
+  final bool botPaused;
+  final String\? botStatus;
+  final String\? botSkippedReason;
+  final bool isExcluded;
 
   bool get isOutgoingLastMessage =>
       (lastMessageDirection ?? '').toUpperCase() == 'OUTGOING';
@@ -349,6 +357,10 @@ class CrmComercialInboxConversation {
     String? crmCustomerStatus,
     bool? isNewContact,
     bool? canConvertToCrm,
+    bool? botPaused,
+    String? botStatus,
+    String? botSkippedReason,
+    bool? isExcluded,
   }) {
     return CrmComercialInboxConversation(
       id: id ?? this.id,
@@ -367,6 +379,10 @@ class CrmComercialInboxConversation {
       crmCustomerStatus: crmCustomerStatus ?? this.crmCustomerStatus,
       isNewContact: isNewContact ?? this.isNewContact,
       canConvertToCrm: canConvertToCrm ?? this.canConvertToCrm,
+      botPaused: botPaused ?? this.botPaused,
+      botStatus: botStatus ?? this.botStatus,
+      botSkippedReason: botSkippedReason ?? this.botSkippedReason,
+      isExcluded: isExcluded ?? this.isExcluded,
     );
   }
 
@@ -388,6 +404,10 @@ class CrmComercialInboxConversation {
       crmCustomerStatus: json['crmCustomerStatus']?.toString(),
       isNewContact: json['isNewContact'] == true,
       canConvertToCrm: json['canConvertToCrm'] == true,
+      botPaused: json['botPaused'] == true,
+      botStatus: json['botStatus']?.toString(),
+      botSkippedReason: json['botSkippedReason']?.toString(),
+      isExcluded: json['isExcluded'] == true,
     );
   }
 }

@@ -1144,20 +1144,29 @@ enum WhatsappMessageType {
   DOCUMENT
   STICKER
   OTHER
+  CONVERSATION
 
   @@map("whatsapp_message_type")
 }
 
 model WhatsappConversation {
-  id            String    @id @default(uuid()) @db.Uuid
-  instanceId    String    @db.Uuid @map("instance_id")
-  remoteJid     String    @map("remote_jid")
-  remotePhone   String?   @map("remote_phone")
-  remoteName    String?   @map("remote_name")
-  lastMessageAt DateTime? @map("last_message_at")
-  unreadCount   Int       @default(0) @map("unread_count")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id                  String    @id @default(uuid()) @db.Uuid
+  instanceId          String    @db.Uuid @map("instance_id")
+  remoteJid           String    @map("remote_jid")
+  remotePhone         String?   @map("remote_phone")
+  remoteName          String?   @map("remote_name")
+  lastMessageAt       DateTime? @map("last_message_at")
+  unreadCount         Int       @default(0) @map("unread_count")
+  botPaused           Boolean   @default(false) @map("bot_paused")
+  botPausedAt         DateTime? @map("bot_paused_at")
+  botPausedByUserId   String?   @map("bot_paused_by_user_id") @db.Uuid
+  botPauseReason      String?   @map("bot_pause_reason") @db.Text
+  assignedHumanUserId String?   @map("assigned_human_user_id") @db.Uuid
+  lastHumanMessageAt  DateTime? @map("last_human_message_at")
+  botLastReplyAt      DateTime? @map("bot_last_reply_at")
+  botSkippedReason    String?   @map("bot_skipped_reason")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
   instance UserWhatsappInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
   messages WhatsappMessage[]
@@ -1188,6 +1197,10 @@ model WhatsappMessage {
   caption        String?                  @db.Text
   senderName     String?                  @map("sender_name")
   sentAt         DateTime                 @map("sent_at")
+  aiGenerated    Boolean                  @default(false) @map("ai_generated")
+  aiModel        String?                  @map("ai_model")
+  aiPromptVersion String?                 @map("ai_prompt_version")
+  aiError        String?                  @db.Text @map("ai_error")
   createdAt      DateTime                 @default(now()) @map("created_at")
   rawPayload     Json?                    @map("raw_payload")
 
@@ -1671,6 +1684,14 @@ model CrmCommercialSetting {
   selectedWhatsappInstanceId String?  @map("selected_whatsapp_instance_id")
   selectedWhatsappInstanceName String? @map("selected_whatsapp_instance_name")
   enabled                    Boolean  @default(false)
+  botEnabled                 Boolean  @default(false) @map("bot_enabled")
+  botSystemPrompt            String?  @map("bot_system_prompt") @db.Text
+  businessContext            String?  @map("business_context") @db.Text
+  autoReplyDelaySeconds      Int      @default(2) @map("auto_reply_delay_seconds")
+  humanTakeoverMinutes       Int      @default(30) @map("human_takeover_minutes")
+  botDefaultStatus           String   @default("ACTIVE") @map("bot_default_status")
+  botExcludedNumbers         Json     @default("[]") @map("bot_excluded_numbers")
+  botAllowedChannels         Json     @default("[\"WHATSAPP\"]") @map("bot_allowed_channels")
   updatedByUserId            String?  @map("updated_by_user_id") @db.Uuid
   createdAt                  DateTime @default(now()) @map("created_at")
   updatedAt                  DateTime @updatedAt @map("updated_at")
