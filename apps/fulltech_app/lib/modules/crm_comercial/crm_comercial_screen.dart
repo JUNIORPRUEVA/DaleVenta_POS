@@ -467,6 +467,13 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   Timer? _conversationPollTimer;
   DateTime? _lastConversationPollAt;
 
+  // Bot state
+  bool _botPaused = false;
+  String? _botStatus;
+  String? _botSkippedReason;
+  bool _isExcluded = false;
+  bool _botLoading = false;
+
   @override
   void initState() {
     super.initState();
@@ -5164,20 +5171,48 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                               setState(() => _statusFilter = '');
                               _loadAll();
                             }
+                            if (value == 'bot-pause') {
+                              _toggleBotPause();
+                            }
+                            if (value == 'bot-exclude') {
+                              _toggleBotExclude();
+                            }
+                            if (value == 'bot-suggest') {
+                              _suggestBotReply();
+                            }
                           },
-                          itemBuilder: (context) => const [
-                            PopupMenuItem<String>(
+                          itemBuilder: (context) => [
+                            const PopupMenuItem<String>(
                               value: 'new-chat',
                               child: Text('Nuevo chat por numero'),
                             ),
-                            PopupMenuItem<String>(
+                            const PopupMenuItem<String>(
                               value: 'refresh',
                               child: Text('Actualizar lista'),
                             ),
-                            PopupMenuItem<String>(
+                            const PopupMenuItem<String>(
                               value: 'clear-status',
                               child: Text('Quitar filtro de estado'),
                             ),
+                            if (_selectedConversation != null) ...[
+                              const PopupMenuDivider(),
+                              PopupMenuItem<String>(
+                                value: 'bot-pause',
+                                child: Text(_botPaused
+                                    ? 'Reanudar bot'
+                                    : 'Pausar bot'),
+                              ),
+                              PopupMenuItem<String>(
+                                value: 'bot-exclude',
+                                child: Text(_isExcluded
+                                    ? 'Incluir numero en bot'
+                                    : 'Excluir numero del bot'),
+                              ),
+                              PopupMenuItem<String>(
+                                value: 'bot-suggest',
+                                child: const Text('Sugerir respuesta IA'),
+                              ),
+                            ],
                           ],
                         ),
                       ],
@@ -5471,6 +5506,14 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                       : null,
                   icon: const Icon(Icons.search_rounded, size: 20),
                 ),
+                if (hasConversation && _selectedConversation != null)
+                  _BotStatusBadge(
+                    botPaused: _botPaused,
+                    botStatus: _botStatus,
+                    botSkippedReason: _botSkippedReason,
+                    isExcluded: _isExcluded,
+                    botLoading: _botLoading,
+                  ),
                 PopupMenuButton<String>(
                   tooltip:
                       'Filtrar mensajes por fecha (${_dateFilterLabel(_messageDateFilter)})',
@@ -6633,6 +6676,111 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     }
     return DateFormat('dd/MM/yyyy').format(value);
   }
+
+  // ── Bot methods ──────────────────────────────────────────────────────────
+
+  Future<void> _toggleBotPause() async {
+    final conversationId = _selectedConversation?.id;
+    if (conversationId == null) return;
+    setState(() => _botLoading = true);
+    try {
+      final repo = ref.read(crmComercialRepositoryProvider);
+      if (_botPaused) {
+        await repo.resumeBotForConversation(conversationId);
+        setState(() {
+          _botPaused = false;
+          _botStatus = null;
+          _botSkippedReason = null;
+        });
+      } else {
+        await repo.pauseBotForConversation(conversationId);
+        setState(() {
+          _botPaused = true;
+          _botStatus = 'PAUSED';
+        });
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al cambiar estado del bot: $e')),
+        );
+      }
+    } finally {
+      setState(() => _botLoading = false);
+    }
+  }
+
+  Future<void> _toggleBotExclude() async {
+    final conversationId = _selectedConversation?.id;
+    if (conversationId == null) return;
+    setState(() => _botLoading = true);
+    try {
+      final repo = ref.read(crmComercialRepositoryProvider);
+      if (_isExcluded) {
+        await repo.includeNumberInBot(conversationId);
+        setState(() => _isExcluded = false);
+      } else {
+        await repo.excludeNumberFromBot(conversationId);
+        setState(() => _isExcluded = true);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al cambiar exclusion: $e')),
+        );
+      }
+    } finally {
+      setState(() => _botLoading = false);
+    }
+  }
+
+  Future<void> _suggestBotReply() async {
+    final conversationId = _selectedConversation?.id;
+    if (conversationId == null) return;
+    setState(() => _botLoading = true);
+    try {
+      final repo = ref.read(crmComercialRepositoryProvider);
+      final result = await repo.suggestBotReply(conversationId);
+      final suggestion = result['suggestion'] as String?;
+      if (suggestion != null && suggestion.isNotEmpty && context.mounted) {
+        _chatComposerCtrl.text = suggestion;
+        _chatComposerCtrl.selection = TextSelection.fromPosition(
+          TextPosition(offset: suggestion.length),
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sugerencia de IA cargada en el compositor'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al obtener sugerencia: $e')),
+        );
+      }
+    } finally {
+      setState(() => _botLoading = false);
+    }
+  }
+
+  Future<void> _refreshBotStatus() async {
+    final conversationId = _selectedConversation?.id;
+    if (conversationId == null) return;
+    try {
+      final repo = ref.read(crmComercialRepositoryProvider);
+      final status = await repo.getConversationBotStatus(conversationId);
+      setState(() {
+        _botPaused = status['botPaused'] == true;
+        _botStatus = status['botStatus'] as String?;
+        _botSkippedReason = status['botSkippedReason'] as String?;
+        _isExcluded = status['isExcluded'] == true;
+      });
+    } catch (_) {
+      // Silently fail on refresh
+    }
+  }
 }
 
 class _DateSeparator extends StatelessWidget {
@@ -7003,6 +7151,7 @@ class _InfoRow extends StatelessWidget {
       ),
     );
   }
+
 }
 
 class _CrmConversationListItem extends StatelessWidget {
@@ -7163,6 +7312,63 @@ class _CrmConversationListItem extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _BotStatusBadge extends StatelessWidget {
+  const _BotStatusBadge({
+    required this.botPaused,
+    required this.botStatus,
+    required this.botSkippedReason,
+    required this.isExcluded,
+    required this.botLoading,
+  });
+
+  final bool botPaused;
+  final String? botStatus;
+  final String? botSkippedReason;
+  final bool isExcluded;
+  final bool botLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    IconData icon;
+    Color color;
+    String tooltip;
+
+    if (botLoading) {
+      icon = Icons.smart_toy_outlined;
+      color = Colors.grey;
+      tooltip = 'Procesando...';
+    } else if (isExcluded) {
+      icon = Icons.block;
+      color = Colors.red;
+      tooltip = 'Numero excluido del bot';
+    } else if (botPaused) {
+      icon = Icons.pause_circle_outline;
+      color = Colors.orange;
+      tooltip = 'Bot pausado para esta conversacion';
+    } else if (botStatus == 'HUMAN_TAKEOVER') {
+      icon = Icons.support_agent;
+      color = Colors.blue;
+      tooltip = 'Agente humano tomó el control';
+    } else if (botSkippedReason != null) {
+      icon = Icons.skip_next;
+      color = Colors.grey;
+      tooltip = 'Bot saltó: $botSkippedReason';
+    } else {
+      icon = Icons.smart_toy;
+      color = Colors.green;
+      tooltip = 'Bot activo';
+    }
+
+    return Tooltip(
+      message: tooltip,
+      child: Padding(
+        padding: const EdgeInsets.only(right: 4),
+        child: Icon(icon, size: 20, color: color),
       ),
     );
   }

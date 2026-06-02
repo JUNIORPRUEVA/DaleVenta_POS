@@ -333,8 +333,8 @@ class CrmComercialInboxConversation {
   final bool isNewContact;
   final bool canConvertToCrm;
   final bool botPaused;
-  final String\? botStatus;
-  final String\? botSkippedReason;
+  final String? botStatus;
+  final String? botSkippedReason;
   final bool isExcluded;
 
   bool get isOutgoingLastMessage =>

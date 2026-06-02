@@ -116,7 +116,6 @@ export class CreateCloseDto {
   expenses!: number;
 
   @IsNumber()
-  @Min(0)
   @IsOptional()
   cashDelivered?: number;
 
@@ -193,7 +192,6 @@ export class UpdateCloseDto {
 
   @IsNumber()
   @IsOptional()
-  @Min(0)
   cashDelivered?: number;
 
   @IsString()

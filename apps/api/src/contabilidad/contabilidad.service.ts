@@ -662,9 +662,9 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
         : value instanceof Prisma.Decimal
           ? value.toNumber()
           : Number(value ?? 0);
-    if (!Number.isFinite(n) || n < 0) {
+    if (!Number.isFinite(n)) {
       throw new BadRequestException(
-        'Los montos del cierre no pueden ser negativos.',
+        'Monto inválido.',
       );
     }
     return Math.round(n * 100) / 100;
@@ -835,8 +835,11 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     const card = this.decimal(dto.card);
     const otherIncome = this.decimal(dto.otherIncome ?? 0);
     const expenses = this.decimal(dto.expenses);
-    // Calcular automáticamente: cashDelivered = cash - expenses
-    const cashDelivered = this.decimal(cash - expenses);
+    // Usar el cashDelivered enviado por el frontend (fondo de caja inicial)
+    // Si no se envía, se calcula como cash - expenses (compatibilidad hacia atrás)
+    const cashDelivered = dto.cashDelivered !== undefined
+      ? this.decimal(dto.cashDelivered)
+      : this.decimal(cash - expenses);
     const totals = this.calculateCloseTotals({
       cash,
       transfers,
@@ -1184,8 +1187,11 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     const card = this.decimal(dto.card ?? close.card);
     const otherIncome = this.decimal(dto.otherIncome ?? close.otherIncome);
     const expenses = this.decimal(dto.expenses ?? close.expenses);
-    // Calcular automáticamente: cashDelivered = cash - expenses
-    const cashDelivered = this.decimal(cash - expenses);
+    // Usar el cashDelivered enviado por el frontend (fondo de caja inicial)
+    // Si no se envía, se calcula como cash - expenses (compatibilidad hacia atrás)
+    const cashDelivered = dto.cashDelivered !== undefined
+      ? this.decimal(dto.cashDelivered)
+      : this.decimal(cash - expenses);
     const totals = this.calculateCloseTotals({
       cash,
       transfers,

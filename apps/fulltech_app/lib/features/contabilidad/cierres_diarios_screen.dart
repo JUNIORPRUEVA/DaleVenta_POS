@@ -663,12 +663,12 @@ class _CierresDiariosScreenState extends ConsumerState<CierresDiariosScreen> {
           const SizedBox(height: 10),
           _buildExpensesSection(money, assistantMode: assistantMode),
           const SizedBox(height: 10),
-          _moneyField(
-            _cashDeliveredCtrl,
-            'Efectivo entregado',
-            required: true,
-            mustBeGreaterThanZero: true,
-          ),
+          if (_type != CloseType.phytoemagry)
+            _moneyField(
+              _cashDeliveredCtrl,
+              'Fondo de caja (efectivo inicial)',
+              required: true,
+            ),
           if (!assistantMode) ...[
             const SizedBox(height: 10),
             TextFormField(
@@ -2969,10 +2969,10 @@ class _HistoryFullScreenPageState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Detalle del filtro actual',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
-            ),
+          const Text(
+            'Fondo de caja',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+          ),
             const SizedBox(height: 4),
             Text(
               '${closes.length} cierres filtrados',
@@ -2984,7 +2984,7 @@ class _HistoryFullScreenPageState
             ),
             const SizedBox(height: 10),
             _RightTotalLine(
-              label: 'Efectivo entregado',
+              label: 'Fondo de caja',
               value: _money(totalDelivered),
             ),
             _RightTotalLine(label: 'Depositado', value: _money(deposited)),
@@ -3095,7 +3095,7 @@ class _HistoryFullScreenPageState
       // Income section (3 cols)
       [
         ('Efectivo declarado', totals.cashDeclared, null),
-        ('Efectivo entregado', totals.cashDelivered, null),
+        ('Fondo de caja', totals.cashDelivered, null),
         ('Efec. disponible', totals.cashAvailable, const Color(0xFF047857)),
       ],
       // Transfers section (2 cols)
@@ -3826,7 +3826,7 @@ class _HistoryFullScreenPageState
                                               CrossAxisAlignment.end,
                                           children: [
                                             const Text(
-                                              'Efectivo entregado',
+                                              'Fondo de caja',
                                               style: TextStyle(
                                                 fontSize: 9.5,
                                                 fontWeight: FontWeight.w700,
@@ -4767,7 +4767,7 @@ class _CloseDetailFullScreenPageState
                               value: _money(currentClose.expenses),
                             ),
                             _DetailAmountLine(
-                              label: 'Efectivo entregado',
+                              label: 'Fondo de caja',
                               value: _money(currentClose.cashDelivered),
                             ),
                             _DetailAmountLine(
@@ -5581,7 +5581,7 @@ class _CloseDetailFullScreenPageState
           ),
           const SizedBox(height: 10),
           const Text(
-            'Efectivo entregado',
+            'Fondo de caja',
             style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
           ),
           const SizedBox(height: 6),
@@ -6467,7 +6467,7 @@ class _CloseSummaryBlock extends StatelessWidget {
             value: money.format(cashDeclared),
           ),
           _MoneyPill(
-            label: 'Efectivo entregado',
+            label: 'Fondo de caja',
             value: money.format(cashDelivered),
           ),
           _MoneyPill(label: 'Diferencia', value: money.format(difference)),
