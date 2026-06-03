@@ -504,7 +504,11 @@ class _CierresDiariosScreenState extends ConsumerState<CierresDiariosScreen> {
           );
     final delivered = _toMoney(_cashDeliveredCtrl.text);
     final totalIncome = cash + transfer + card + otherIncome;
-    final netTotal = totalIncome - expenses;
+    // Si el efectivo declarado no alcanza para cubrir los gastos,
+    // se toma de las otras fuentes (transferencias, tarjeta, otros ingresos)
+    // para cubrir la diferencia. El netTotal nunca debe ser negativo
+    // si hay suficientes ingresos totales.
+    final netTotal = totalIncome >= expenses ? totalIncome - expenses : 0.0;
     final difference = cash - delivered;
     final locked =
         state.editingClose?.isApproved == true ||

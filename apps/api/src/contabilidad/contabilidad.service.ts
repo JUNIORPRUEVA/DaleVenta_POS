@@ -733,11 +733,19 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     const totalIncome =
       params.cash + transfer + params.card + params.otherIncome;
     const netTotal = totalIncome - params.expenses;
+    // Si el efectivo declarado no alcanza para cubrir los gastos,
+    // se toma de las otras fuentes (transferencias, tarjeta, otros ingresos)
+    // para cubrir la diferencia. El netTotal nunca debe ser negativo
+    // si hay suficientes ingresos totales.
+    const adjustedNetTotal = Math.max(netTotal, 0);
+    // La diferencia entre efectivo declarado y fondo de caja:
+    // Si el efectivo es menor que los gastos, la diferencia refleja
+    // que se usó efectivo de otras fuentes para cubrir el fondo
     const difference = params.cash - params.cashDelivered;
     return {
       transfer: this.decimal(transfer),
       totalIncome: this.decimal(totalIncome),
-      netTotal: this.roundMoney(netTotal),
+      netTotal: this.roundMoney(adjustedNetTotal),
       difference: this.roundMoney(difference),
     };
   }
@@ -836,10 +844,11 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     const otherIncome = this.decimal(dto.otherIncome ?? 0);
     const expenses = this.decimal(dto.expenses);
     // Usar el cashDelivered enviado por el frontend (fondo de caja inicial)
-    // Si no se envía, se calcula como cash - expenses (compatibilidad hacia atrás)
+    // Si no se envía, se calcula considerando que si el efectivo no alcanza
+    // para los gastos, se toma de otras fuentes (transferencias, tarjeta, otros ingresos)
     const cashDelivered = dto.cashDelivered !== undefined
       ? this.decimal(dto.cashDelivered)
-      : this.decimal(cash - expenses);
+      : this.decimal(Math.max(cash - expenses, 0));
     const totals = this.calculateCloseTotals({
       cash,
       transfers,
@@ -1188,10 +1197,11 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     const otherIncome = this.decimal(dto.otherIncome ?? close.otherIncome);
     const expenses = this.decimal(dto.expenses ?? close.expenses);
     // Usar el cashDelivered enviado por el frontend (fondo de caja inicial)
-    // Si no se envía, se calcula como cash - expenses (compatibilidad hacia atrás)
+    // Si no se envía, se calcula considerando que si el efectivo no alcanza
+    // para los gastos, se toma de otras fuentes (transferencias, tarjeta, otros ingresos)
     const cashDelivered = dto.cashDelivered !== undefined
       ? this.decimal(dto.cashDelivered)
-      : this.decimal(cash - expenses);
+      : this.decimal(Math.max(cash - expenses, 0));
     const totals = this.calculateCloseTotals({
       cash,
       transfers,
