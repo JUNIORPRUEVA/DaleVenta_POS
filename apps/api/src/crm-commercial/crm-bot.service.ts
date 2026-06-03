@@ -8,7 +8,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { AiAssistantService } from '../ai-assistant/ai-assistant.service';
 import { normalizeWhatsappPhone } from '../whatsapp-inbox/whatsapp-identity.util';
-import { Role, WhatsappMessageDirection } from '@prisma/client';
+import {
+  Role,
+  WhatsappMessageDirection,
+  WhatsappMessageType,
+} from '@prisma/client';
 
 type AuthUser = { id: string; role: Role };
 
@@ -16,6 +20,7 @@ export enum BotSkipReason {
   BOT_DISABLED = 'BOT_DISABLED',
   CONVERSATION_PAUSED = 'CONVERSATION_PAUSED',
   NUMBER_EXCLUDED = 'NUMBER_EXCLUDED',
+  HUMAN_TAKEOVER = 'HUMAN_TAKEOVER',
   HUMAN_TAKEOVER_ACTIVE = 'HUMAN_TAKEOVER_ACTIVE',
   MISSING_API_KEY = 'MISSING_API_KEY',
   SELF_MESSAGE = 'SELF_MESSAGE',
@@ -66,6 +71,12 @@ SERVICIOS PRINCIPALES:
 - Intercom y sistemas de acceso
 - Puntos de venta (sistemas POS)
 - Tecnología en general`;
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
 
 @Injectable()
 export class CrmBotService {
@@ -192,7 +203,8 @@ export class CrmBotService {
     const settings = await this.getBotSettings(user);
     const phone = conversation.remotePhone || conversation.remoteJid;
     const normalizedPhone = phone ? normalizeWhatsappPhone(phone) ?? phone.replace(/\D/g, '') : '';
-    const isExcluded = settings.excludedNumbers.some(
+    const excludedNumbers = asStringArray(settings.excludedNumbers);
+    const isExcluded = excludedNumbers.some(
       (excluded: string) => normalizedPhone.includes(excluded.replace(/\D/g, '')) || excluded.replace(/\D/g, '').includes(normalizedPhone),
     );
 
@@ -565,7 +577,7 @@ export class CrmBotService {
         conversationId,
         evolutionId: evolutionMessageId ?? null,
         direction: WhatsappMessageDirection.OUTGOING,
-        messageType: 'conversation',
+        messageType: WhatsappMessageType.CONVERSATION,
         body: suggestion.suggestedReply,
         senderName: 'Bot IA',
         sentAt: new Date(),
@@ -656,7 +668,7 @@ export class CrmBotService {
     // 5. Verificar si el número está excluido
     const phone = conversation.remotePhone || conversation.remoteJid;
     const normalizedPhone = phone ? normalizeWhatsappPhone(phone) ?? phone.replace(/\D/g, '') : '';
-    const excludedNumbers = (crmSettings.botExcludedNumbers as string[]) ?? [];
+    const excludedNumbers = asStringArray(crmSettings.botExcludedNumbers);
     const isExcluded = excludedNumbers.some((excluded: string) => {
       const cleanExcluded = excluded.replace(/\D/g, '');
       const cleanPhone = normalizedPhone.replace(/\D/g, '');
@@ -683,7 +695,7 @@ export class CrmBotService {
       if (elapsed < takeoverMinutes * 60 * 1000) {
         await this.updateBotSkipReason(conversationId, BotSkipReason.HUMAN_TAKEOVER);
         this.logger.log(`Bot saltado: HUMAN_TAKEOVER_ACTIVE (humano respondió hace ${Math.round(elapsed / 60000)}min) para conversación ${conversationId}`);
-        return { responded: false, reason: BotSkipReason.HUMAN_TAKEOVER };
+        return { responded: false, reason: BotSkipReason.HUMAN_TAKEOVER_ACTIVE };
       }
     }
 
@@ -808,7 +820,7 @@ export class CrmBotService {
         conversationId,
         evolutionId: evolutionMessageId ?? null,
         direction: WhatsappMessageDirection.OUTGOING,
-        messageType: 'conversation',
+        messageType: WhatsappMessageType.CONVERSATION,
         body: text,
         senderName: 'Bot IA',
         sentAt: new Date(),
