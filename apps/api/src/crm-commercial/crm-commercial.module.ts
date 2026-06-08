@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { WhatsappInboxModule } from '../whatsapp-inbox/whatsapp-inbox.module';
@@ -8,7 +8,12 @@ import { CrmCommercialService } from './crm-commercial.service';
 import { CrmBotService } from './crm-bot.service';
 
 @Module({
-  imports: [PrismaModule, WhatsappModule, WhatsappInboxModule, AiAssistantModule],
+  imports: [
+    PrismaModule,
+    WhatsappModule,
+    forwardRef(() => WhatsappInboxModule),
+    AiAssistantModule,
+  ],
   controllers: [CrmCommercialController],
   providers: [CrmCommercialService, CrmBotService],
   exports: [CrmBotService],
