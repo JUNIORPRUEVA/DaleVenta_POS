@@ -16,6 +16,20 @@
 5) El contenedor corre `npx prisma migrate deploy` antes de iniciar `node dist/main.js`.
 6) Opcional: para crear/resetear el usuario ADMIN al desplegar, define `RUN_SEED=true` y `ADMIN_PASSWORD` en el entorno (EasyPanel / .env.docker). Esto ejecuta `npx prisma db seed` en el arranque.
 
+### Configuración recomendada en EasyPanel
+- Contexto / Root Directory: `apps/api`
+- Dockerfile: `Dockerfile`
+- Puerto interno: `4000`
+- Healthcheck path: `/health`
+- Variables obligatorias:
+  - `DATABASE_URL` o el grupo `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
+  - `PUBLIC_BASE_URL`
+  - `JWT_SECRET`
+- Variables recomendadas para evitar arranques frágiles:
+  - `MIGRATION_STRICT=false`
+  - `REDIS_ENABLED=false` si no tienes un servicio Redis real en EasyPanel
+  - `PRODUCTS_SOURCE=LOCAL` hasta que FULLPOS esté configurado
+
 ## Troubleshooting: Prisma P3009 (migración fallida en producción)
 
 ### Síntoma
@@ -124,4 +138,3 @@ Notas:
 ## Seed (credenciales)
 - `ADMIN_EMAIL` (si no se define, usa `admin@fulltech.local`)
 - `ADMIN_PASSWORD` (requerido; define/actualiza la contraseña del ADMIN)
-

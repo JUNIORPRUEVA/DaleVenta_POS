@@ -15,6 +15,11 @@ FROM node:20-bullseye-slim AS runner
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl wget && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production
+ENV PORT=4000
+ENV RUN_MIGRATIONS=true
+ENV MIGRATION_STRICT=false
+ENV REDIS_ENABLED=false
+ENV PRODUCTS_SOURCE=LOCAL
 COPY package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
