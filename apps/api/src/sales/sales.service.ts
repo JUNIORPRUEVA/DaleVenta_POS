@@ -1,11 +1,31 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSaleDto, CreateSaleItemDto } from './dto/create-sale.dto';
 
 @Injectable()
 export class SalesService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private saleInclude() {
+    return {
+      customer: {
+        select: {
+          id: true,
+          nombre: true,
+          telefono: true,
+        },
+      },
+      user: {
+        select: {
+          id: true,
+          nombreCompleto: true,
+          email: true,
+        },
+      },
+      items: true,
+    } satisfies Prisma.SaleInclude;
+  }
 
   private isSchemaMismatch(error: unknown) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -41,15 +61,37 @@ export class SalesService {
         where,
         orderBy: { saleDate: 'desc' },
         include: {
-          customer: {
-            select: {
-              id: true,
-              nombre: true,
-              telefono: true,
-            },
-          },
+          customer: this.saleInclude().customer,
+          user: this.saleInclude().user,
           items: true,
         },
+      });
+    } catch (error) {
+      if (!this.isSchemaMismatch(error)) throw error;
+      return [];
+    }
+  }
+
+  async listInvoices(
+    user: { id: string; role: Role },
+    from?: string,
+    to?: string,
+    customerId?: string,
+    includeDeleted = false,
+  ) {
+    const normalizedCustomerId = customerId?.trim();
+    const where: Prisma.SaleWhereInput = {
+      ...(user.role === Role.ADMIN || user.role === Role.ASISTENTE ? {} : { userId: user.id }),
+      ...(includeDeleted ? {} : { isDeleted: false }),
+      ...(normalizedCustomerId ? { customerId: normalizedCustomerId } : {}),
+      ...this.buildDateRange(from, to),
+    };
+
+    try {
+      return await this.prisma.sale.findMany({
+        where,
+        orderBy: { saleDate: 'desc' },
+        include: this.saleInclude(),
       });
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
@@ -355,7 +397,7 @@ export class SalesService {
     return { ok: true };
   }
 
-  async returnSale(requestUserId: string, saleId: string) {
+  async returnSale(requestUser: { id: string; role: Role }, saleId: string) {
     let sale:
       | (Prisma.SaleGetPayload<{
           include: { items: true };
@@ -376,7 +418,11 @@ export class SalesService {
       throw new NotFoundException('Venta no encontrada');
     }
 
-    if (sale.userId !== requestUserId) {
+    const canReturn =
+      sale.userId === requestUser.id ||
+      requestUser.role === Role.ADMIN ||
+      requestUser.role === Role.ASISTENTE;
+    if (!canReturn) {
       throw new ForbiddenException('No puedes devolver esta venta');
     }
 
@@ -395,21 +441,12 @@ export class SalesService {
           data: {
             isDeleted: true,
             deletedAt: new Date(),
-            deletedById: requestUserId,
+            deletedById: requestUser.id,
             note: sale!.note?.trim()
               ? `${sale!.note}\nDEVOLUCION: venta devuelta desde historial.`
               : 'DEVOLUCION: venta devuelta desde historial.',
           },
-          include: {
-            customer: {
-              select: {
-                id: true,
-                nombre: true,
-                telefono: true,
-              },
-            },
-            items: true,
-          },
+          include: this.saleInclude(),
         });
       });
     } catch (error) {

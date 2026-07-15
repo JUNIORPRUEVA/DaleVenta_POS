@@ -19,6 +19,12 @@ export class SalesController {
     return this.sales.listMine(user.id, query.from, query.to, query.customerId, query.includeDeleted === 'true');
   }
 
+  @Get('invoices')
+  listInvoices(@Req() req: Request, @Query() query: SalesRangeQueryDto) {
+    const user = req.user as { id: string; role: Role };
+    return this.sales.listInvoices(user, query.from, query.to, query.customerId, query.includeDeleted === 'true');
+  }
+
   @Get('summary')
   summaryMine(@Req() req: Request, @Query() query: SalesRangeQueryDto) {
     const user = req.user as { id: string; role: string };
@@ -46,7 +52,7 @@ export class SalesController {
 
   @Post(':id/return')
   returnSale(@Req() req: Request, @Param('id') id: string) {
-    const user = req.user as { id: string; role: string };
-    return this.sales.returnSale(user.id, id);
+    const user = req.user as { id: string; role: Role };
+    return this.sales.returnSale(user, id);
   }
 }

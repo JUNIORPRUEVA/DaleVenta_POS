@@ -115,7 +115,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
             ),
           ),
           TextButton(
-            onPressed: () => context.go(Routes.ventas),
+            onPressed: () => context.go(Routes.ventasLista),
             child: const Text('Quitar filtro'),
           ),
         ],
@@ -158,7 +158,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
 
     return Scaffold(
       appBar: CustomAppBar(
-        title: 'Mis Ventas',
+        title: 'Lista de ventas y devoluciones',
         showLogo: false,
         showDepartmentLabel: false,
         actions: [
@@ -450,6 +450,19 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    _SalesLedgerCard(
+                                      sales: state.sales,
+                                      money: _money,
+                                      date: _date,
+                                      statusLabel: _saleStatusLabel,
+                                      statusColor: (sale) =>
+                                          _saleStatusColor(context, sale),
+                                      onView: (sale) =>
+                                          _showDetailsDialog(context, sale),
+                                      onReturn: (sale) =>
+                                          _returnSale(context, sale),
+                                    ),
+                                    SizedBox(height: gap),
                                     _SalesSummary(
                                       state: state,
                                       dayPoints: dayPoints,
@@ -504,6 +517,16 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                       totalSales: state.summary.totalSales,
                       totalSold: state.summary.totalSold,
                       money: _money,
+                    ),
+                    SizedBox(height: gap),
+                    _SalesLedgerCard(
+                      sales: state.sales,
+                      money: _money,
+                      date: _date,
+                      statusLabel: _saleStatusLabel,
+                      statusColor: (sale) => _saleStatusColor(context, sale),
+                      onView: (sale) => _showDetailsDialog(context, sale),
+                      onReturn: (sale) => _returnSale(context, sale),
                     ),
                     SizedBox(height: gap),
                     _SalesSummary(
@@ -585,7 +608,16 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                           ),
                         ),
                       )
-                    : _buildSalesByDayStats(state, compact: true, maxItems: 4),
+                    : _SalesLedgerCard(
+                        sales: state.sales,
+                        money: _money,
+                        date: _date,
+                        statusLabel: _saleStatusLabel,
+                        statusColor: (sale) => _saleStatusColor(context, sale),
+                        onView: (sale) => _showDetailsDialog(context, sale),
+                        onReturn: (sale) => _returnSale(context, sale),
+                        compact: true,
+                      ),
               ),
             ],
           ),
@@ -700,102 +732,12 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
     );
   }
 
-  Widget _buildSalesByDayStats(
-    VentasState state, {
-    bool compact = false,
-    int maxItems = 6,
-  }) {
-    final totalsByDay = <String, double>{};
-    for (final sale in state.sales) {
-      final date = sale.saleDate ?? DateTime.now();
-      final key = DateFormat('dd/MM').format(date);
-      totalsByDay.update(
-        key,
-        (value) => value + sale.totalSold,
-        ifAbsent: () => sale.totalSold,
-      );
-    }
+  String _saleStatusLabel(SaleModel sale) =>
+      sale.isDeleted ? 'Devuelta' : 'Activa';
 
-    final entries = totalsByDay.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    final top = entries.take(maxItems).toList();
-    final maxValue = top.isEmpty ? 1.0 : top.first.value;
-
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(compact ? 10 : 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.bar_chart_outlined, size: 18),
-                SizedBox(width: 8),
-                Text(
-                  'Ventas por día',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (top.isEmpty)
-              Text(
-                'Aún no hay datos para estadísticas de días.',
-                style: Theme.of(context).textTheme.bodySmall,
-              )
-            else
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: compact
-                      ? MainAxisAlignment.spaceEvenly
-                      : MainAxisAlignment.start,
-                  children: top
-                      .map((entry) {
-                        final ratio = (entry.value / maxValue).clamp(0.0, 1.0);
-                        return Padding(
-                          padding: EdgeInsets.symmetric(
-                            vertical: compact ? 2 : 4,
-                          ),
-                          child: Row(
-                            children: [
-                              SizedBox(
-                                width: compact ? 42 : 48,
-                                child: Text(
-                                  entry.key,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ),
-                              Expanded(
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: LinearProgressIndicator(value: ratio),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              SizedBox(
-                                width: compact ? 82 : 90,
-                                child: Text(
-                                  compact
-                                      ? _moneyCompact(entry.value)
-                                      : _money(entry.value),
-                                  textAlign: TextAlign.right,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      })
-                      .toList(growable: false),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
+  Color _saleStatusColor(BuildContext context, SaleModel sale) {
+    if (sale.isDeleted) return const Color(0xFFB45309);
+    return Theme.of(context).colorScheme.primary;
   }
 
   void _showDetailsDialog(BuildContext context, SaleModel sale) {
@@ -828,6 +770,19 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                     _date(saleDate),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Chip(
+                    visualDensity: VisualDensity.compact,
+                    label: Text(_saleStatusLabel(sale)),
+                    backgroundColor: _saleStatusColor(
+                      context,
+                      sale,
+                    ).withValues(alpha: 0.10),
+                    labelStyle: TextStyle(
+                      color: _saleStatusColor(context, sale),
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                   if ((sale.note ?? '').trim().isNotEmpty) ...[
@@ -904,13 +859,13 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
     );
   }
 
-  Future<void> _deleteSale(BuildContext context, String id) async {
+  Future<void> _returnSale(BuildContext context, SaleModel sale) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Eliminar venta'),
-        content: const Text(
-          'Esta acción ocultará la venta del historial. ¿Deseas continuar?',
+        title: const Text('Devolver venta'),
+        content: Text(
+          'Esta acción marcará la venta como devuelta y restaurará el stock de sus productos. ¿Deseas continuar?\n\nTotal: ${_money(sale.totalSold)}',
         ),
         actions: [
           TextButton(
@@ -919,7 +874,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Eliminar'),
+            child: const Text('Devolver'),
           ),
         ],
       ),
@@ -928,16 +883,16 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
     if (ok != true) return;
 
     try {
-      await ref.read(ventasControllerProvider.notifier).deleteSale(id);
+      await ref.read(ventasControllerProvider.notifier).returnSale(sale.id);
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Venta eliminada')));
+      ).showSnackBar(const SnackBar(content: Text('Venta devuelta')));
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo eliminar: $e')));
+      ).showSnackBar(SnackBar(content: Text('No se pudo devolver: $e')));
     }
   }
 
@@ -1039,7 +994,11 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
         error = null;
       });
       try {
-        final rows = await repo.listSales(from: from, to: to);
+        final rows = await repo.listSales(
+          from: from,
+          to: to,
+          includeDeleted: true,
+        );
         if (!context.mounted) return;
         setStateDialog(() {
           items = rows;
@@ -1243,7 +1202,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   subtitle: Text(
-                                    'Vendido ${_money(sale.totalSold)}',
+                                    '${_saleStatusLabel(sale)} · Vendido ${_money(sale.totalSold)}',
                                   ),
                                   trailing: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -1257,10 +1216,15 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                                         ),
                                       ),
                                       IconButton(
-                                        tooltip: 'Eliminar',
-                                        onPressed: () =>
-                                            _deleteSale(context, sale.id),
-                                        icon: const Icon(Icons.delete_outline),
+                                        tooltip: sale.isDeleted
+                                            ? 'Venta ya devuelta'
+                                            : 'Devolver venta',
+                                        onPressed: sale.isDeleted
+                                            ? null
+                                            : () => _returnSale(context, sale),
+                                        icon: const Icon(
+                                          Icons.assignment_return_outlined,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -1277,6 +1241,306 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
       ),
     );
   }
+}
+
+class _SalesLedgerCard extends StatelessWidget {
+  const _SalesLedgerCard({
+    required this.sales,
+    required this.money,
+    required this.date,
+    required this.statusLabel,
+    required this.statusColor,
+    required this.onView,
+    required this.onReturn,
+    this.compact = false,
+  });
+
+  final List<SaleModel> sales;
+  final String Function(double value) money;
+  final String Function(DateTime date) date;
+  final String Function(SaleModel sale) statusLabel;
+  final Color Function(SaleModel sale) statusColor;
+  final ValueChanged<SaleModel> onView;
+  final ValueChanged<SaleModel> onReturn;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final visible = sales.take(compact ? 30 : 80).toList(growable: false);
+
+    return Card(
+      elevation: 0,
+      color: theme.colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(compact ? 16 : 22),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              compact ? 12 : 16,
+              compact ? 12 : 15,
+              compact ? 10 : 14,
+              10,
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.receipt_long_outlined,
+                    color: theme.colorScheme.primary,
+                    size: 19,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Ventas y devoluciones',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      Text(
+                        '${visible.length} movimientos visibles',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          if (visible.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: Text('No hay ventas en este rango')),
+            )
+          else if (compact)
+            Expanded(
+              child: ListView.separated(
+                itemCount: visible.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final sale = visible[index];
+                  return _SalesLedgerMobileRow(
+                    sale: sale,
+                    money: money,
+                    date: date,
+                    statusLabel: statusLabel,
+                    statusColor: statusColor,
+                    onView: onView,
+                    onReturn: onReturn,
+                  );
+                },
+              ),
+            )
+          else
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 420),
+              child: SingleChildScrollView(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    headingRowColor: WidgetStatePropertyAll(
+                      theme.colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.36,
+                      ),
+                    ),
+                    columns: const [
+                      DataColumn(label: Text('Venta')),
+                      DataColumn(label: Text('Cliente')),
+                      DataColumn(label: Text('Fecha')),
+                      DataColumn(label: Text('Total'), numeric: true),
+                      DataColumn(label: Text('Estado')),
+                      DataColumn(label: Text('Acciones')),
+                    ],
+                    rows: [
+                      for (final sale in visible)
+                        DataRow(
+                          color: WidgetStatePropertyAll(
+                            sale.isDeleted
+                                ? Colors.transparent
+                                : theme.colorScheme.primary.withValues(
+                                    alpha: 0.035,
+                                  ),
+                          ),
+                          cells: [
+                            DataCell(
+                              Text(
+                                _shortSaleId(sale.id),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              SizedBox(
+                                width: 190,
+                                child: Text(
+                                  sale.customerName ?? 'Sin cliente',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Text(date(sale.saleDate ?? DateTime.now())),
+                            ),
+                            DataCell(
+                              Text(
+                                money(sale.totalSold),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              _SalesStatusPill(
+                                label: statusLabel(sale),
+                                color: statusColor(sale),
+                              ),
+                            ),
+                            DataCell(
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    tooltip: 'Ver detalle',
+                                    onPressed: () => onView(sale),
+                                    icon: const Icon(Icons.visibility_outlined),
+                                  ),
+                                  IconButton(
+                                    tooltip: sale.isDeleted
+                                        ? 'Venta ya devuelta'
+                                        : 'Devolver venta',
+                                    onPressed: sale.isDeleted
+                                        ? null
+                                        : () => onReturn(sale),
+                                    icon: const Icon(
+                                      Icons.assignment_return_outlined,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SalesLedgerMobileRow extends StatelessWidget {
+  const _SalesLedgerMobileRow({
+    required this.sale,
+    required this.money,
+    required this.date,
+    required this.statusLabel,
+    required this.statusColor,
+    required this.onView,
+    required this.onReturn,
+  });
+
+  final SaleModel sale;
+  final String Function(double value) money;
+  final String Function(DateTime date) date;
+  final String Function(SaleModel sale) statusLabel;
+  final Color Function(SaleModel sale) statusColor;
+  final ValueChanged<SaleModel> onView;
+  final ValueChanged<SaleModel> onReturn;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      onTap: () => onView(sale),
+      title: Text(
+        '${_shortSaleId(sale.id)} · ${sale.customerName ?? 'Sin cliente'}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontWeight: FontWeight.w800),
+      ),
+      subtitle: Text(
+        '${date(sale.saleDate ?? DateTime.now())} · ${statusLabel(sale)}',
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            money(sale.totalSold),
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'view') onView(sale);
+              if (value == 'return' && !sale.isDeleted) onReturn(sale);
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'view', child: Text('Ver detalle')),
+              PopupMenuItem(
+                value: 'return',
+                enabled: !sale.isDeleted,
+                child: Text(sale.isDeleted ? 'Ya devuelta' : 'Devolver'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SalesStatusPill extends StatelessWidget {
+  const _SalesStatusPill({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w800,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+}
+
+String _shortSaleId(String id) {
+  final clean = id.trim();
+  if (clean.length <= 8) return 'Factura $clean';
+  return 'Factura ${clean.substring(0, 8)}';
 }
 
 class _StatsHeader extends StatelessWidget {

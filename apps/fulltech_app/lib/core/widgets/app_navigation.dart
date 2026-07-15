@@ -92,8 +92,14 @@ List<AppNavigationSection> buildAppNavigationSections(
         if (can(AppPermission.viewQuotes))
           const AppNavigationItem(
             icon: Icons.point_of_sale_outlined,
-            title: 'Ventas',
+            title: 'Facturación',
             route: Routes.cotizaciones,
+          ),
+        if (can(AppPermission.viewSales))
+          const AppNavigationItem(
+            icon: Icons.receipt_long_outlined,
+            title: 'Lista de ventas',
+            route: Routes.ventasLista,
           ),
         if (can(AppPermission.viewPunch))
           const AppNavigationItem(
@@ -231,6 +237,13 @@ String safeCurrentLocation(BuildContext context) {
 }
 
 bool isNavigationRouteActive(String location, String route) {
+  final path = Uri.tryParse(location)?.path ?? location;
+  if (route == Routes.ventas) {
+    return path == Routes.ventas;
+  }
+  if (route == Routes.ventasLista) {
+    return path == Routes.ventasLista;
+  }
   if (route == Routes.serviceOrderCommissions) {
     return location == Routes.serviceOrderCommissions;
   }
@@ -265,6 +278,7 @@ String resolveNavigationTitle(
   if (path == Routes.serviceOrderCreate) return 'Crear orden';
   if (path == Routes.documentFlows) return 'Flujo documental';
   if (path == Routes.cotizacionesHistorial) return 'Historial de ventas';
+  if (path == Routes.ventasLista) return 'Lista de ventas';
   if (path == Routes.clienteNuevo) return 'Nuevo cliente';
   if (path == Routes.ai) return 'IA';
   if (path == Routes.publicidad) return 'Publicidad';
@@ -310,6 +324,7 @@ bool desktopShellShouldShowOwnAppBar(String location) {
     Routes.contabilidad,
     Routes.clientes,
     Routes.ventas,
+    Routes.ventasLista,
     Routes.serviceOrders,
     Routes.serviceOrderCommissions,
     Routes.mediaGallery,

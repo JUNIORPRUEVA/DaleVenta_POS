@@ -334,6 +334,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(List<AppNavigationSection> sections) {
 
   addGroup('Ventas POS', Icons.point_of_sale_rounded, [
     Routes.cotizaciones,
+    Routes.ventasLista,
     Routes.catalogo,
     Routes.ventas,
   ]);

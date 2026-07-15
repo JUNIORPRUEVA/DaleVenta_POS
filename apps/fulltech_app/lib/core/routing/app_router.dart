@@ -49,7 +49,7 @@ import '../../modules/service_orders/service_order_commissions_screen.dart';
 import '../../modules/service_orders/service_order_detail_screen.dart';
 import '../../modules/service_orders/service_order_models.dart';
 import '../../modules/service_orders/service_orders_list_screen.dart';
-import '../../modules/ventas/mis_ventas_screen.dart';
+import '../../modules/ventas/tpv_sales_history_screen.dart';
 import '../../modules/ventas/registrar_venta_screen.dart';
 import '../ai_assistant/presentation/ai_screen.dart';
 import '../auth/auth_provider.dart';
@@ -224,7 +224,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: Routes.ventasLista,
-            builder: (context, state) => const MisVentasScreen(),
+            builder: (context, state) => const TpvSalesHistoryScreen(),
           ),
           GoRoute(
             path: Routes.ventas,

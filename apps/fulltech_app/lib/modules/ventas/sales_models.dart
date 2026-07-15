@@ -154,6 +154,7 @@ class SaleItemModel {
 class SaleModel {
   final String id;
   final String userId;
+  final String? userName;
   final String? customerId;
   final String? customerName;
   final DateTime? saleDate;
@@ -169,6 +170,7 @@ class SaleModel {
   const SaleModel({
     required this.id,
     required this.userId,
+    required this.userName,
     required this.customerId,
     required this.customerName,
     required this.saleDate,
@@ -191,10 +193,17 @@ class SaleModel {
       customerName = customer['nombre']?.toString();
       customerId = customer['id']?.toString();
     }
+    final user = json['user'];
+    String? userName;
+    if (user is Map) {
+      userName =
+          user['nombreCompleto']?.toString() ?? user['email']?.toString();
+    }
 
     return SaleModel(
       id: (json['id'] ?? '').toString(),
       userId: (json['userId'] ?? '').toString(),
+      userName: userName,
       customerId: json['customerId']?.toString() ?? customerId,
       customerName: customerName,
       saleDate: json['saleDate'] != null

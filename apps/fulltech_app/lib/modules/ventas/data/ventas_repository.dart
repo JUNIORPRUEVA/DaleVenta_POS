@@ -75,6 +75,38 @@ class VentasRepository {
     }
   }
 
+  Future<List<SaleModel>> listInvoices({
+    required DateTime from,
+    required DateTime to,
+    String? customerId,
+    bool includeDeleted = true,
+  }) async {
+    try {
+      final res = await _dio.get(
+        ApiRoutes.salesInvoices,
+        queryParameters: {
+          'from': _dateOnly(from),
+          'to': _dateOnly(to),
+          if ((customerId ?? '').trim().isNotEmpty)
+            'customerId': customerId!.trim(),
+          if (includeDeleted) 'includeDeleted': 'true',
+        },
+        options: Options(extra: const {'skipLoader': true}),
+      );
+
+      final rows = res.data is List ? (res.data as List) : const [];
+      return rows
+          .whereType<Map>()
+          .map((e) => SaleModel.fromJson(e.cast<String, dynamic>()))
+          .toList(growable: false);
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(e.response?.data, 'No se pudieron cargar las facturas'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
   Future<SalesSummaryModel> summary({
     required DateTime from,
     required DateTime to,
