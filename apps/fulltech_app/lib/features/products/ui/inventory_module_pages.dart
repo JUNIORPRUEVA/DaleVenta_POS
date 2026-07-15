@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +12,7 @@ import '../../../core/utils/money_formatters.dart';
 import '../../../core/widgets/app_drawer.dart';
 import '../../../core/widgets/product_network_image.dart';
 import '../../catalogo/application/catalog_controller.dart';
+import '../../catalogo/data/catalog_repository.dart';
 
 const _primaryBlue = Color(0xFF1A56DB);
 const _lightBlueHover = Color(0xFFEFF6FF);
@@ -36,6 +39,21 @@ bool _isLowStock(ProductModel product) {
   return stock > 0 && stock <= 3;
 }
 
+double? _parseInventoryNumber(String raw) {
+  var value = raw
+      .trim()
+      .replaceAll('RD\$', '')
+      .replaceAll('rd\$', '')
+      .replaceAll(' ', '');
+  if (value.isEmpty) return null;
+  if (value.contains(',') && value.contains('.')) {
+    value = value.replaceAll(',', '');
+  } else {
+    value = value.replaceAll(',', '.');
+  }
+  return double.tryParse(value);
+}
+
 class InventoryModulePages extends ConsumerStatefulWidget {
   const InventoryModulePages({super.key});
 
@@ -57,6 +75,35 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     return ref.read(catalogControllerProvider.notifier).load(forceRemote: true);
   }
 
+  List<String> _categoryOptions(List<ProductModel> products) {
+    final categories = products
+        .map((product) => product.categoriaLabel)
+        .where((category) => category.trim().isNotEmpty)
+        .toSet()
+        .toList();
+    categories.sort();
+    return categories;
+  }
+
+  Future<void> _openProductEditor({ProductModel? product}) {
+    return _showInventoryProductEditor(
+      context,
+      ref,
+      product: product,
+      categories: _categoryOptions(ref.read(catalogControllerProvider).items),
+    );
+  }
+
+  Future<void> _setProductStock(ProductModel product, double stock) async {
+    await ref
+        .read(catalogControllerProvider.notifier)
+        .adjustStock(product: product, stock: stock);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Stock actualizado: ${product.nombre}')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).user;
@@ -67,12 +114,11 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
       'inventory' => 1,
       'stock' => 2,
       'categories' => 3,
-      'suppliers' => 4,
       _ => 0,
     };
 
     return DefaultTabController(
-      length: 5,
+      length: 4,
       initialIndex: initialTabIndex,
       child: Scaffold(
         drawer: buildAdaptiveDrawer(context, currentUser: user),
@@ -95,6 +141,11 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
             style: TextStyle(fontWeight: FontWeight.w900),
           ),
           actions: [
+            FilledButton.icon(
+              onPressed: () => _openProductEditor(),
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Nuevo producto'),
+            ),
             IconButton(
               tooltip: 'Actualizar',
               onPressed: state.refreshing ? null : _refresh,
@@ -120,7 +171,6 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
               Tab(icon: Icon(Icons.dashboard_outlined), text: 'Inventario'),
               Tab(icon: Icon(Icons.tune_outlined), text: 'Ajuste Stock'),
               Tab(icon: Icon(Icons.category_outlined), text: 'Categorías'),
-              Tab(icon: Icon(Icons.business_outlined), text: 'Suplidores'),
             ],
           ),
         ),
@@ -133,14 +183,20 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                     loading: state.refreshing,
                     error: state.error,
                     onRefresh: _refresh,
+                    onCreate: () => _openProductEditor(),
+                    onEdit: (product) => _openProductEditor(product: product),
+                    onSetStock: _setProductStock,
                     onDelete: (product) => ref
                         .read(catalogControllerProvider.notifier)
                         .remove(product.id),
                   ),
                   InventoryTab(products: products, onRefresh: _refresh),
-                  StockAdjustmentsPage(products: products, onRefresh: _refresh),
+                  StockAdjustmentsPage(
+                    products: products,
+                    onRefresh: _refresh,
+                    onSetStock: _setProductStock,
+                  ),
                   CategoriesTab(products: products, onRefresh: _refresh),
-                  SuppliersTab(products: products, onRefresh: _refresh),
                 ],
               ),
       ),
@@ -208,6 +264,9 @@ class CatalogTab extends StatefulWidget {
     required this.loading,
     required this.error,
     required this.onRefresh,
+    required this.onCreate,
+    required this.onEdit,
+    required this.onSetStock,
     required this.onDelete,
   });
 
@@ -215,6 +274,9 @@ class CatalogTab extends StatefulWidget {
   final bool loading;
   final String? error;
   final Future<void> Function() onRefresh;
+  final VoidCallback onCreate;
+  final ValueChanged<ProductModel> onEdit;
+  final Future<void> Function(ProductModel product, double stock) onSetStock;
   final Future<void> Function(ProductModel product) onDelete;
 
   @override
@@ -337,6 +399,7 @@ class _CatalogTabState extends State<CatalogTab> {
                   _searchCtrl.clear();
                   _query = '';
                 }),
+                onCreate: widget.onCreate,
               ),
               const SizedBox(height: 12),
               if (widget.error != null)
@@ -353,6 +416,8 @@ class _CatalogTabState extends State<CatalogTab> {
                         ? _selectedIds.add(product.id)
                         : _selectedIds.remove(product.id);
                   }),
+                  onEdit: widget.onEdit,
+                  onSetStock: widget.onSetStock,
                   onDelete: _confirmDelete,
                 )
               else
@@ -366,6 +431,8 @@ class _CatalogTabState extends State<CatalogTab> {
                         ? _selectedIds.add(product.id)
                         : _selectedIds.remove(product.id);
                   }),
+                  onEdit: widget.onEdit,
+                  onSetStock: widget.onSetStock,
                   onDelete: _confirmDelete,
                 ),
             ],
@@ -389,6 +456,7 @@ class _CatalogToolbar extends StatelessWidget {
     required this.onToggleLowStock,
     required this.onToggleOutStock,
     required this.onClearFilters,
+    required this.onCreate,
   });
 
   final TextEditingController controller;
@@ -402,6 +470,7 @@ class _CatalogToolbar extends StatelessWidget {
   final ValueChanged<bool> onToggleLowStock;
   final ValueChanged<bool> onToggleOutStock;
   final VoidCallback onClearFilters;
+  final VoidCallback onCreate;
 
   @override
   Widget build(BuildContext context) {
@@ -457,6 +526,11 @@ class _CatalogToolbar extends StatelessWidget {
             icon: const Icon(Icons.cleaning_services_outlined, size: 17),
             label: const Text('Limpiar'),
           ),
+          FilledButton.icon(
+            onPressed: onCreate,
+            icon: const Icon(Icons.add_rounded, size: 17),
+            label: const Text('Nuevo producto'),
+          ),
           if (selectedCount > 0)
             Chip(
               backgroundColor: _lightBlueHover,
@@ -475,6 +549,8 @@ class _CatalogTable extends StatelessWidget {
     required this.allSelected,
     required this.onToggleAll,
     required this.onToggle,
+    required this.onEdit,
+    required this.onSetStock,
     required this.onDelete,
   });
 
@@ -483,6 +559,8 @@ class _CatalogTable extends StatelessWidget {
   final bool allSelected;
   final ValueChanged<bool> onToggleAll;
   final void Function(ProductModel product, bool selected) onToggle;
+  final ValueChanged<ProductModel> onEdit;
+  final Future<void> Function(ProductModel product, double stock) onSetStock;
   final ValueChanged<ProductModel> onDelete;
 
   @override
@@ -538,8 +616,17 @@ class _CatalogTable extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
+                          tooltip: 'Editar',
+                          onPressed: () => onEdit(product),
+                          icon: const Icon(Icons.edit_outlined),
+                        ),
+                        IconButton(
                           tooltip: 'Ajustar stock',
-                          onPressed: () => _openStockPreview(context, product),
+                          onPressed: () => _showStockAdjustmentPanel(
+                            context,
+                            product: product,
+                            onSetStock: onSetStock,
+                          ),
                           icon: const Icon(Icons.tune_outlined),
                         ),
                         IconButton(
@@ -564,12 +651,16 @@ class _CompactCatalogList extends StatelessWidget {
     required this.products,
     required this.selectedIds,
     required this.onToggle,
+    required this.onEdit,
+    required this.onSetStock,
     required this.onDelete,
   });
 
   final List<ProductModel> products;
   final Set<String> selectedIds;
   final void Function(ProductModel product, bool selected) onToggle;
+  final ValueChanged<ProductModel> onEdit;
+  final Future<void> Function(ProductModel product, double stock) onSetStock;
   final ValueChanged<ProductModel> onDelete;
 
   @override
@@ -582,7 +673,12 @@ class _CompactCatalogList extends StatelessWidget {
               product: product,
               selected: selectedIds.contains(product.id),
               onSelected: (value) => onToggle(product, value),
-              onStock: () => _openStockPreview(context, product),
+              onEdit: () => onEdit(product),
+              onStock: () => _showStockAdjustmentPanel(
+                context,
+                product: product,
+                onSetStock: onSetStock,
+              ),
               onDelete: () => onDelete(product),
             ),
         ],
@@ -690,10 +786,12 @@ class StockAdjustmentsPage extends StatefulWidget {
     super.key,
     required this.products,
     required this.onRefresh,
+    required this.onSetStock,
   });
 
   final List<ProductModel> products;
   final Future<void> Function() onRefresh;
+  final Future<void> Function(ProductModel product, double stock) onSetStock;
 
   @override
   State<StockAdjustmentsPage> createState() => _StockAdjustmentsPageState();
@@ -704,6 +802,7 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
   String _mode = 'Incrementar';
   final _qtyCtrl = TextEditingController(text: '1');
   final _noteCtrl = TextEditingController();
+  bool _saving = false;
 
   @override
   void dispose() {
@@ -712,7 +811,7 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
     super.dispose();
   }
 
-  double get _quantity => double.tryParse(_qtyCtrl.text.trim()) ?? 0;
+  double get _quantity => _parseInventoryNumber(_qtyCtrl.text) ?? 0;
 
   double _previewStock(ProductModel product) {
     final stock = _stockOf(product);
@@ -721,6 +820,40 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
       'Fijar exacto' => _quantity,
       _ => stock + _quantity,
     };
+  }
+
+  Future<void> _applyAdjustment() async {
+    final selected =
+        _selected ??
+        (widget.products.isNotEmpty ? widget.products.first : null);
+    if (selected == null || _quantity < 0) return;
+    final nextStock = _previewStock(selected);
+    if (nextStock < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('El stock no puede quedar negativo')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await widget.onSetStock(selected, nextStock);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Ajuste aplicado: ${selected.nombre} ahora tiene ${_stockText(nextStock)}',
+          ),
+        ),
+      );
+      _noteCtrl.clear();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('No se pudo ajustar stock: $e')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -833,6 +966,24 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
                         message:
                             'Stock actual ${_stockText(selected.stock)} → Nuevo stock ${_stockText(_previewStock(selected))}',
                       ),
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton.icon(
+                          onPressed: _saving ? null : _applyAdjustment,
+                          icon: _saving
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.save_outlined),
+                          label: const Text('Guardar ajuste'),
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -905,7 +1056,6 @@ class CategoriesTab extends StatelessWidget {
                     _SectionHeader(
                       title: 'Categorías',
                       subtitle: '${rows.length} categorías visibles',
-                      actionLabel: 'Nueva categoría',
                     ),
                     const SizedBox(height: 10),
                     if (rows.isEmpty)
@@ -924,41 +1074,6 @@ class CategoriesTab extends StatelessWidget {
                           badge: 'Activa',
                         ),
                   ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class SuppliersTab extends StatelessWidget {
-  const SuppliersTab({
-    super.key,
-    required this.products,
-    required this.onRefresh,
-  });
-
-  final List<ProductModel> products;
-  final Future<void> Function() onRefresh;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return RefreshIndicator(
-          onRefresh: onRefresh,
-          child: ListView(
-            padding: productsResponsivePagePadding(constraints),
-            children: const [
-              ProductsSurface(
-                child: ProductsEmptyState(
-                  icon: Icons.business_outlined,
-                  title: 'Suplidores',
-                  message:
-                      'La estructura del módulo ya está lista. Falta conectar el repositorio de suplidores cuando el backend lo exponga.',
                 ),
               ),
             ],
@@ -1049,6 +1164,7 @@ class CompactProductCard extends StatelessWidget {
     required this.product,
     this.selected = false,
     required this.onSelected,
+    this.onEdit,
     this.onStock,
     this.onDelete,
   });
@@ -1056,6 +1172,7 @@ class CompactProductCard extends StatelessWidget {
   final ProductModel product;
   final bool selected;
   final ValueChanged<bool> onSelected;
+  final VoidCallback? onEdit;
   final VoidCallback? onStock;
   final VoidCallback? onDelete;
 
@@ -1129,6 +1246,12 @@ class CompactProductCard extends StatelessWidget {
                 label: 'Margen',
                 value: '${_marginOf(product).toStringAsFixed(0)}%',
               ),
+              if (onEdit != null)
+                IconButton(
+                  tooltip: 'Editar',
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined),
+                ),
               if (onStock != null)
                 TextButton(onPressed: onStock, child: const Text('Stock')),
               if (onDelete != null)
@@ -1364,15 +1487,10 @@ class _CompactMetric extends StatelessWidget {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
-    required this.title,
-    required this.subtitle,
-    required this.actionLabel,
-  });
+  const _SectionHeader({required this.title, required this.subtitle});
 
   final String title;
   final String subtitle;
-  final String actionLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -1392,11 +1510,6 @@ class _SectionHeader extends StatelessWidget {
               Text(subtitle, style: const TextStyle(color: _textSecondary)),
             ],
           ),
-        ),
-        OutlinedButton.icon(
-          onPressed: null,
-          icon: const Icon(Icons.add_rounded),
-          label: Text(actionLabel),
         ),
       ],
     );
@@ -1475,78 +1588,556 @@ class _InlineInfo extends StatelessWidget {
   }
 }
 
-void _openStockPreview(BuildContext context, ProductModel product) {
-  showGeneralDialog<void>(
+Future<void> _showStockAdjustmentPanel(
+  BuildContext context, {
+  required ProductModel product,
+  required Future<void> Function(ProductModel product, double stock) onSetStock,
+}) {
+  final qtyCtrl = TextEditingController(text: '1');
+  var mode = 'Incrementar';
+  var saving = false;
+
+  double quantity() => _parseInventoryNumber(qtyCtrl.text) ?? 0;
+  double preview() {
+    final stock = _stockOf(product);
+    return switch (mode) {
+      'Disminuir' => stock - quantity(),
+      'Fijar exacto' => quantity(),
+      _ => stock + quantity(),
+    };
+  }
+
+  Future<void> submit(
+    BuildContext dialogContext,
+    void Function(void Function()) setPanelState,
+  ) async {
+    final nextStock = preview();
+    if (nextStock < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('El stock no puede quedar negativo')),
+      );
+      return;
+    }
+    setPanelState(() => saving = true);
+    try {
+      await onSetStock(product, nextStock);
+      if (dialogContext.mounted) Navigator.pop(dialogContext);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('No se pudo ajustar stock: $e')));
+      }
+    } finally {
+      if (dialogContext.mounted) setPanelState(() => saving = false);
+    }
+  }
+
+  return showModalBottomSheet<void>(
     context: context,
-    barrierDismissible: true,
-    barrierLabel: 'Cerrar',
-    pageBuilder: (context, animation, secondaryAnimation) {
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: Colors.transparent,
+    barrierColor: Colors.black45,
+    builder: (sheetContext) {
+      final size = MediaQuery.sizeOf(sheetContext);
+      final panelWidth = size.width >= 640 ? 520.0 : size.width;
       return Align(
         alignment: Alignment.centerRight,
-        child: Material(
-          color: Colors.transparent,
-          child: Container(
-            width: MediaQuery.sizeOf(context).width.clamp(420.0, 520.0),
-            height: double.infinity,
-            color: Colors.white,
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+        child: SizedBox(
+          width: panelWidth,
+          height: size.height,
+          child: StatefulBuilder(
+            builder: (dialogContext, setPanelState) => Material(
+              color: Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ProductThumbnail(product: product, size: 56),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            product.nombre,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 18,
-                            ),
+                    Row(
+                      children: [
+                        ProductThumbnail(product: product, size: 56),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                product.nombre,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 18,
+                                ),
+                              ),
+                              Text(product.codigo ?? product.id),
+                            ],
                           ),
-                          Text(product.codigo ?? product.id),
-                        ],
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(dialogContext),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    _InlineInfo(
+                      icon: Icons.inventory_2_outlined,
+                      message:
+                          'Stock actual: ${_stockText(product.stock)} · Valor: ${formatRdCurrencyAccounting(_stockOf(product) * product.precio)}',
+                    ),
+                    const SizedBox(height: 14),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(
+                          value: 'Incrementar',
+                          label: Text('Incrementar'),
+                          icon: Icon(Icons.add_rounded),
+                        ),
+                        ButtonSegment(
+                          value: 'Disminuir',
+                          label: Text('Disminuir'),
+                          icon: Icon(Icons.remove_rounded),
+                        ),
+                        ButtonSegment(
+                          value: 'Fijar exacto',
+                          label: Text('Fijar'),
+                          icon: Icon(Icons.edit_outlined),
+                        ),
+                      ],
+                      selected: {mode},
+                      onSelectionChanged: (value) {
+                        setPanelState(() => mode = value.first);
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: qtyCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      onChanged: (_) => setPanelState(() {}),
+                      decoration: const InputDecoration(
+                        labelText: 'Cantidad',
+                        border: OutlineInputBorder(),
                       ),
                     ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close_rounded),
+                    const SizedBox(height: 14),
+                    _InlineInfo(
+                      icon: Icons.preview_outlined,
+                      message: 'Nuevo stock: ${_stockText(preview())}',
+                    ),
+                    const Spacer(),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: saving
+                            ? null
+                            : () => submit(dialogContext, setPanelState),
+                        icon: saving
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.save_outlined),
+                        label: const Text('Guardar ajuste'),
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
-                _InlineInfo(
-                  icon: Icons.inventory_2_outlined,
-                  message:
-                      'Stock actual: ${_stockText(product.stock)} · Valor: ${formatRdCurrencyAccounting(_stockOf(product) * product.precio)}',
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'El ajuste con trazabilidad queda listo para conectar al repositorio de stock.',
-                  style: TextStyle(color: _textSecondary),
-                ),
-              ],
+              ),
             ),
           ),
         ),
       );
     },
-    transitionBuilder: (context, animation, secondaryAnimation, child) {
-      final curved = CurvedAnimation(
-        parent: animation,
-        curve: Curves.easeOutCubic,
+  ).whenComplete(qtyCtrl.dispose);
+}
+
+Future<void> _showInventoryProductEditor(
+  BuildContext context,
+  WidgetRef ref, {
+  ProductModel? product,
+  required List<String> categories,
+}) {
+  final nameCtrl = TextEditingController(text: product?.nombre ?? '');
+  final priceCtrl = TextEditingController(
+    text: product == null ? '' : formatRdAccountingAmount(product.precio),
+  );
+  final costCtrl = TextEditingController(
+    text: product == null ? '' : formatRdAccountingAmount(product.costo),
+  );
+  final stockCtrl = TextEditingController(
+    text: product == null ? '0' : _stockText(product.stock),
+  );
+  final categoryCtrl = TextEditingController(
+    text: product == null || product.categoriaLabel == 'Sin categoría'
+        ? ''
+        : product.categoriaLabel,
+  );
+  Uint8List? imageBytes;
+  String? imageName;
+  var saving = false;
+  var pickingImage = false;
+
+  Future<void> pickImage(
+    BuildContext dialogContext,
+    void Function(void Function()) setPanelState,
+  ) async {
+    if (pickingImage) return;
+    setPanelState(() => pickingImage = true);
+    try {
+      await Future<void>.delayed(Duration.zero);
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        withData: true,
       );
-      return FadeTransition(
-        opacity: curved,
-        child: ScaleTransition(
-          scale: Tween<double>(begin: 0.98, end: 1).animate(curved),
-          child: child,
+      final file = result?.files.single;
+      if (file?.bytes == null) return;
+      if (!dialogContext.mounted) return;
+      setPanelState(() {
+        imageBytes = file!.bytes;
+        imageName = file.name;
+      });
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo leer la imagen: $e')),
+        );
+      }
+    } finally {
+      if (dialogContext.mounted) {
+        setPanelState(() => pickingImage = false);
+      } else {
+        pickingImage = false;
+      }
+    }
+  }
+
+  Future<void> submit(
+    BuildContext dialogContext,
+    void Function(void Function()) setPanelState,
+  ) async {
+    final name = nameCtrl.text.trim();
+    final price = _parseInventoryNumber(priceCtrl.text);
+    final cost = _parseInventoryNumber(costCtrl.text);
+    final stock = _parseInventoryNumber(stockCtrl.text);
+    final category = categoryCtrl.text.trim();
+    if (name.isEmpty ||
+        price == null ||
+        cost == null ||
+        stock == null ||
+        category.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Completa nombre, precio, costo, stock y categoría'),
         ),
       );
-    },
-  );
+      return;
+    }
+
+    setPanelState(() => saving = true);
+    try {
+      final repo = ref.read(catalogRepositoryProvider);
+      String? uploadedImagePath;
+      if (imageBytes != null && imageName != null) {
+        uploadedImagePath = await repo.uploadImage(
+          bytes: imageBytes!,
+          filename: imageName!,
+        );
+      }
+      if (product == null) {
+        await repo.createProduct(
+          nombre: name,
+          precio: price,
+          costo: cost,
+          stock: stock,
+          categoria: category,
+          fotoUrl: uploadedImagePath,
+        );
+      } else {
+        await repo.updateProduct(
+          id: product.id,
+          nombre: name,
+          precio: price,
+          costo: cost,
+          stock: stock,
+          categoria: category,
+          fotoUrl: uploadedImagePath,
+        );
+      }
+      if (dialogContext.mounted) Navigator.pop(dialogContext);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              product == null ? 'Producto creado' : 'Producto actualizado',
+            ),
+          ),
+        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!context.mounted) return;
+          unawaited(
+            ref
+                .read(catalogControllerProvider.notifier)
+                .load(forceRemote: true),
+          );
+        });
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('No se pudo guardar: $e')));
+      }
+    } finally {
+      if (dialogContext.mounted) setPanelState(() => saving = false);
+    }
+  }
+
+  final existingImageUrl = product?.displayFotoUrl?.trim() ?? '';
+
+  return Navigator.of(context)
+      .push<void>(
+        MaterialPageRoute<void>(
+          fullscreenDialog: true,
+          builder: (pageContext) {
+            return StatefulBuilder(
+              builder: (dialogContext, setPanelState) => Material(
+                color: Colors.white,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 18, 14, 14),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: _lightBlueHover,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              product == null
+                                  ? Icons.add_box_outlined
+                                  : Icons.edit_outlined,
+                              color: _primaryBlue,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              product == null
+                                  ? 'Nuevo producto'
+                                  : 'Editar producto',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 20,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(dialogContext),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            TextField(
+                              controller: nameCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'Nombre del producto',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: priceCtrl,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                          decimal: true,
+                                        ),
+                                    decoration: const InputDecoration(
+                                      labelText: 'Precio',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: TextField(
+                                    controller: costCtrl,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                          decimal: true,
+                                        ),
+                                    decoration: const InputDecoration(
+                                      labelText: 'Costo',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: stockCtrl,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              decoration: const InputDecoration(
+                                labelText: 'Stock disponible',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: categoryCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'Categoría',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            if (categories.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: [
+                                  for (final category in categories)
+                                    ChoiceChip(
+                                      label: Text(category),
+                                      selected:
+                                          categoryCtrl.text.trim() == category,
+                                      onSelected: (_) {
+                                        setPanelState(
+                                          () => categoryCtrl.text = category,
+                                        );
+                                      },
+                                    ),
+                                ],
+                              ),
+                            ],
+                            const SizedBox(height: 16),
+                            OutlinedButton.icon(
+                              onPressed: saving || pickingImage
+                                  ? null
+                                  : () =>
+                                        pickImage(dialogContext, setPanelState),
+                              icon: pickingImage
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.upload_file_rounded),
+                              label: Text(
+                                pickingImage
+                                    ? 'Seleccionando imagen...'
+                                    : imageName ??
+                                          'Subir imagen desde el ordenador',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              height: 160,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: _lightBlueHover,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: _borderSoft),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: imageBytes != null
+                                  ? Image.memory(
+                                      imageBytes!,
+                                      fit: BoxFit.cover,
+                                      width: double.infinity,
+                                    )
+                                  : (product != null &&
+                                        existingImageUrl.isNotEmpty)
+                                  ? ProductNetworkImage(
+                                      imageUrl: existingImageUrl,
+                                      productId: product.id,
+                                      productName: product.nombre,
+                                      originalUrl: product.originalFotoUrl,
+                                      fit: BoxFit.cover,
+                                      fallback: const Icon(
+                                        Icons.image_outlined,
+                                        size: 44,
+                                        color: _textSecondary,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.image_outlined,
+                                      size: 44,
+                                      color: _textSecondary,
+                                    ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: saving
+                              ? null
+                              : () => submit(dialogContext, setPanelState),
+                          icon: saving
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.save_outlined),
+                          label: Text(
+                            product == null
+                                ? 'Crear producto'
+                                : 'Guardar cambios',
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      )
+      .whenComplete(() {
+        nameCtrl.dispose();
+        priceCtrl.dispose();
+        costCtrl.dispose();
+        stockCtrl.dispose();
+        categoryCtrl.dispose();
+      });
 }

@@ -84,6 +84,8 @@ class _ProductNetworkImageState extends State<ProductNetworkImage> {
   @override
   Widget build(BuildContext context) {
     final primaryUrl = (widget.imageUrl).trim();
+    if (primaryUrl.isEmpty) return widget.fallback;
+
     final backupUrl = _buildBackupUrl(primaryUrl, widget.originalUrl);
     final selectedBaseUrl = _usingBackupUrl && backupUrl != null
         ? backupUrl
@@ -104,7 +106,8 @@ class _ProductNetworkImageState extends State<ProductNetworkImage> {
         return widget.loading ?? widget.fallback;
       },
       errorWidget: (context, _, error) {
-        final canUseBackup = !_usingBackupUrl &&
+        final canUseBackup =
+            !_usingBackupUrl &&
             backupUrl != null &&
             backupUrl.trim().isNotEmpty &&
             backupUrl.trim() != primaryUrl;

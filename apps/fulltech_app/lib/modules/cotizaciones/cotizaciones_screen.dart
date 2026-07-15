@@ -1440,7 +1440,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                       hintText: type == _DiscountType.percent ? '10' : '500',
                     ),
                     onSubmitted: (_) {
-                      final amount = double.tryParse(amountCtrl.text.trim());
+                      final amount = _parseAccountingInput(amountCtrl.text);
                       if (amount == null || amount <= 0) return;
                       Navigator.pop(
                         dialogContext,
@@ -1458,7 +1458,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               ),
               FilledButton(
                 onPressed: () {
-                  final amount = double.tryParse(amountCtrl.text.trim());
+                  final amount = _parseAccountingInput(amountCtrl.text);
                   if (amount == null || amount <= 0) return;
                   Navigator.pop(
                     dialogContext,
@@ -1481,7 +1481,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     var type = _DiscountType.fixed;
     final amountCtrl = TextEditingController(
       text: _effectiveGeneralDiscountAmount > 0
-          ? _effectiveGeneralDiscountAmount.toStringAsFixed(2)
+          ? _formatAccountingInput(_effectiveGeneralDiscountAmount)
           : '',
     );
 
@@ -1557,8 +1557,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                       border: const OutlineInputBorder(),
                     ),
                     onSubmitted: (_) {
-                      final raw = amountCtrl.text.trim().replaceAll(',', '.');
-                      final amount = double.tryParse(raw);
+                      final amount = type == _DiscountType.percent
+                          ? double.tryParse(
+                              amountCtrl.text.trim().replaceAll(',', '.'),
+                            )
+                          : _parseAccountingInput(amountCtrl.text);
                       if (amount == null || amount <= 0) {
                         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                           const SnackBar(
@@ -1596,8 +1599,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 ),
               FilledButton(
                 onPressed: () {
-                  final raw = amountCtrl.text.trim().replaceAll(',', '.');
-                  final amount = double.tryParse(raw);
+                  final amount = type == _DiscountType.percent
+                      ? double.tryParse(
+                          amountCtrl.text.trim().replaceAll(',', '.'),
+                        )
+                      : _parseAccountingInput(amountCtrl.text);
                   if (amount == null || amount <= 0) {
                     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                       const SnackBar(content: Text('Ingresa un valor válido')),
@@ -1752,10 +1758,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 : editingItem.qty.toStringAsFixed(2)),
     );
     final costCtrl = TextEditingController(
-      text: editingItem?.externalCostUnit?.toStringAsFixed(2) ?? '',
+      text: editingItem?.externalCostUnit == null
+          ? ''
+          : _formatAccountingInput(editingItem!.externalCostUnit!),
     );
     final priceCtrl = TextEditingController(
-      text: editingItem?.unitPrice.toStringAsFixed(2) ?? '',
+      text: editingItem == null
+          ? ''
+          : _formatAccountingInput(editingItem.unitPrice),
     );
 
     final ok = await showDialog<bool>(
@@ -1828,8 +1838,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     final qty = double.tryParse(qtyCtrl.text.trim()) ?? 0;
     final externalCost = costCtrl.text.trim().isEmpty
         ? null
-        : double.tryParse(costCtrl.text.trim());
-    final unitPrice = double.tryParse(priceCtrl.text.trim()) ?? -1;
+        : _parseAccountingInput(costCtrl.text);
+    final unitPrice = _parseAccountingInput(priceCtrl.text) ?? -1;
 
     await _disposeControllersSafely([nameCtrl, qtyCtrl, costCtrl, priceCtrl]);
 
@@ -3624,7 +3634,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         ),
       ),
       title: const Text(
-        'Ventas TPV',
+        'Facturación',
         style: TextStyle(fontWeight: FontWeight.w900),
       ),
       actions: [
@@ -5643,6 +5653,23 @@ String _formatProductStock(double? stock) {
   return 'Disp. $text';
 }
 
+String _formatAccountingInput(num value) => formatRdAccountingAmount(value);
+
+double? _parseAccountingInput(String raw) {
+  var value = raw
+      .trim()
+      .replaceAll('RD\$', '')
+      .replaceAll('rd\$', '')
+      .replaceAll(' ', '');
+  if (value.isEmpty) return null;
+  if (value.contains(',') && value.contains('.')) {
+    value = value.replaceAll(',', '');
+  } else {
+    value = value.replaceAll(',', '.');
+  }
+  return double.tryParse(value);
+}
+
 class _DesktopExternalProductCard extends StatelessWidget {
   const _DesktopExternalProductCard({required this.onTap});
 
@@ -5816,7 +5843,7 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
   void initState() {
     super.initState();
     _priceCtrl = TextEditingController(
-      text: widget.item.unitPrice.toStringAsFixed(2),
+      text: _formatAccountingInput(widget.item.unitPrice),
     );
   }
 
@@ -5824,7 +5851,7 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
   void didUpdateWidget(covariant _DesktopTicketItem oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.item.unitPrice != widget.item.unitPrice) {
-      _priceCtrl.text = widget.item.unitPrice.toStringAsFixed(2);
+      _priceCtrl.text = _formatAccountingInput(widget.item.unitPrice);
     }
   }
 
@@ -5965,8 +5992,11 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                   ),
                   onTap: () {},
                   onSubmitted: (value) {
-                    final parsed = double.tryParse(value.trim());
-                    if (parsed != null) widget.onChangePrice(parsed);
+                    final parsed = _parseAccountingInput(value);
+                    if (parsed != null) {
+                      widget.onChangePrice(parsed);
+                      _priceCtrl.text = _formatAccountingInput(parsed);
+                    }
                   },
                 ),
               ),
@@ -6483,7 +6513,7 @@ class _TicketCompactItemState extends State<_TicketCompactItem> {
   void initState() {
     super.initState();
     _priceCtrl = TextEditingController(
-      text: widget.item.unitPrice.toStringAsFixed(2),
+      text: _formatAccountingInput(widget.item.unitPrice),
     );
     _qtyCtrl = TextEditingController(
       text: widget.item.qty % 1 == 0
@@ -6496,7 +6526,7 @@ class _TicketCompactItemState extends State<_TicketCompactItem> {
   void didUpdateWidget(covariant _TicketCompactItem oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.item.unitPrice != widget.item.unitPrice) {
-      _priceCtrl.text = widget.item.unitPrice.toStringAsFixed(2);
+      _priceCtrl.text = _formatAccountingInput(widget.item.unitPrice);
     }
     if (oldWidget.item.qty != widget.item.qty) {
       _qtyCtrl.text = widget.item.qty % 1 == 0
@@ -6621,8 +6651,11 @@ class _TicketCompactItemState extends State<_TicketCompactItem> {
                         border: OutlineInputBorder(),
                       ),
                       onSubmitted: (value) {
-                        final next = double.tryParse(value.trim());
-                        if (next != null) widget.onChangePrice(next);
+                        final next = _parseAccountingInput(value);
+                        if (next != null) {
+                          widget.onChangePrice(next);
+                          _priceCtrl.text = _formatAccountingInput(next);
+                        }
                       },
                     ),
                   ),

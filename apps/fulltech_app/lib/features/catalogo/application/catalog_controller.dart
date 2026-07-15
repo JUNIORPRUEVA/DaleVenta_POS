@@ -245,6 +245,20 @@ class CatalogController extends StateNotifier<CatalogState> {
     }
   }
 
+  Future<void> adjustStock({
+    required ProductModel product,
+    required double stock,
+  }) {
+    return update(
+      id: product.id,
+      nombre: product.nombre,
+      precio: product.precio,
+      costo: product.costo,
+      stock: stock,
+      categoria: product.categoriaLabel,
+    );
+  }
+
   Future<void> remove(String id) async {
     state = state.copyWith(saving: true, actionError: null);
     try {

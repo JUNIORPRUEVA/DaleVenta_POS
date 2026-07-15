@@ -35,56 +35,15 @@ class _GlobalErrorFallback extends StatefulWidget {
 }
 
 class _GlobalErrorFallbackState extends State<_GlobalErrorFallback> {
-  bool _reported = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_reported) return;
-    _reported = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      AppErrorReporter.instance.recordFlutterError(widget.details);
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Material(
-      color: Colors.transparent,
+    return const ColoredBox(
+      color: Color(0xFFF1F5F9),
       child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Card(
-            margin: const EdgeInsets.all(24),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.error_outline_rounded,
-                    size: 40,
-                    color: theme.colorScheme.error,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Ocurrió un error inesperado',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'La app siguió funcionando y el detalle quedó registrado.',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ],
-              ),
-            ),
-          ),
+        child: Icon(
+          Icons.error_outline_rounded,
+          size: 36,
+          color: Color(0xFFB91C1C),
         ),
       ),
     );
@@ -172,16 +131,6 @@ class MyApp extends ConsumerStatefulWidget {
 class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   bool _backgroundStartupStarted = false;
   ProviderSubscription<AuthState>? _authStateSubscription;
-
-  String _sessionScopeKey(AuthState authState) {
-    final userId = (authState.user?.id ?? '').trim();
-    if (authState.isAuthenticated && userId.isNotEmpty) {
-      return 'session:$userId';
-    }
-    return authState.isAuthenticated
-        ? 'session:authenticated'
-        : 'session:guest';
-  }
 
   @override
   void initState() {
@@ -285,11 +234,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
               enableBlurEffects:
                   widget.enableBackgroundStartup && _backgroundStartupStarted,
             ),
-            if (effectiveChild != null)
-              ProviderScope(
-                key: ValueKey(_sessionScopeKey(authState)),
-                child: effectiveChild,
-              ),
+            if (effectiveChild != null) effectiveChild,
             const AppLoadingOverlay(),
             const AppErrorOverlay(),
             const UpdateGuardOverlay(),
