@@ -25,6 +25,7 @@ class RouteAccess {
         return AppPermission.viewCatalog;
       case Routes.ventas:
       case Routes.ventasLista:
+      case Routes.caja:
       case Routes.registrarVenta:
         return AppPermission.viewSales;
       case Routes.serviceOrders:

@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsNumber, IsOptional, IsString, IsUUID, Min, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsIn, IsNumber, IsOptional, IsString, IsUUID, Min, ValidateNested } from 'class-validator';
 
 export class CreateSaleItemDto {
   @IsOptional()
@@ -34,6 +34,22 @@ export class CreateSaleDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  @IsOptional()
+  @IsIn(['cash', 'transfer', 'mixed'])
+  paymentMethod?: 'cash' | 'transfer' | 'mixed';
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  paymentCashAmount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  paymentTransferAmount?: number;
 
   @IsArray()
   @ArrayMinSize(1)

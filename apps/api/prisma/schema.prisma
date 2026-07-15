@@ -1739,8 +1739,14 @@ model Sale {
   id               String    @id @default(uuid()) @db.Uuid
   userId           String    @db.Uuid
   customerId       String?   @db.Uuid
+  cashSessionId    String?   @db.Uuid
   saleDate         DateTime  @default(now())
   note             String?
+  paymentMethod    String    @default("cash")
+  paymentCashAmount Decimal  @default(0) @db.Decimal(12, 2)
+  paymentTransferAmount Decimal @default(0) @db.Decimal(12, 2)
+  kind             String    @default("invoice")
+  status           String    @default("PAID")
   totalSold        Decimal   @db.Decimal(12, 2)
   totalCost        Decimal   @db.Decimal(12, 2)
   totalProfit      Decimal   @db.Decimal(12, 2)
@@ -1754,13 +1760,83 @@ model Sale {
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   customer  Client?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  cashSession CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
   deletedBy User?     @relation("SaleDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   items     SaleItem[]
 
   @@index([userId])
   @@index([customerId])
+  @@index([cashSessionId])
   @@index([saleDate])
   @@index([isDeleted])
+}
+
+model CashboxDaily {
+  id              String        @id @default(uuid()) @db.Uuid
+  businessDate    String        @unique
+  openedAt        DateTime      @default(now())
+  openedByUserId  String        @db.Uuid
+  initialAmount   Decimal       @default(0) @db.Decimal(12, 2)
+  currentAmount   Decimal       @default(0) @db.Decimal(12, 2)
+  status          String        @default("OPEN")
+  closedAt        DateTime?
+  closedByUserId  String?       @db.Uuid
+  note            String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  sessions        CashSession[]
+
+  @@index([status])
+  @@map("cashbox_daily")
+}
+
+model CashSession {
+  id              String         @id @default(uuid()) @db.Uuid
+  openedByUserId  String         @db.Uuid
+  userName        String?
+  openedAt        DateTime       @default(now())
+  initialAmount   Decimal        @default(0) @db.Decimal(12, 2)
+  closingAmount   Decimal?       @db.Decimal(12, 2)
+  expectedAmount  Decimal?       @db.Decimal(12, 2)
+  difference      Decimal?       @db.Decimal(12, 2)
+  status          String         @default("OPEN")
+  closedAt        DateTime?
+  closedByUserId  String?        @db.Uuid
+  cashboxDailyId  String?        @db.Uuid
+  businessDate    String?
+  requiresClosure Boolean        @default(false)
+  note            String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  cashboxDaily    CashboxDaily?  @relation(fields: [cashboxDailyId], references: [id], onDelete: SetNull)
+  movements       CashMovement[]
+  sales           Sale[]
+
+  @@index([openedByUserId, status])
+  @@index([cashboxDailyId])
+  @@index([businessDate])
+  @@map("cash_sessions")
+}
+
+model CashMovement {
+  id              String       @id @default(uuid()) @db.Uuid
+  sessionId       String       @db.Uuid
+  type            String
+  amount          Decimal      @db.Decimal(12, 2)
+  reason          String?
+  movementType    String       @default("expense")
+  affectsProfit   Boolean      @default(true)
+  userId          String?      @db.Uuid
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  session         CashSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([createdAt])
+  @@map("cash_movements")
 }
 
 model SaleItem {

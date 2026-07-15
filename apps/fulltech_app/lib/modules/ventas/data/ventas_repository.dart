@@ -251,6 +251,9 @@ class VentasRepository {
   Future<void> createSale({
     required String customerId,
     String? note,
+    String? paymentMethod,
+    double? paymentCashAmount,
+    double? paymentTransferAmount,
     required List<SaleDraftItem> items,
   }) async {
     if (items.isEmpty) {
@@ -266,6 +269,11 @@ class VentasRepository {
         data: {
           'customerId': customerId,
           if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+          if ((paymentMethod ?? '').trim().isNotEmpty)
+            'paymentMethod': paymentMethod!.trim(),
+          if (paymentCashAmount != null) 'paymentCashAmount': paymentCashAmount,
+          if (paymentTransferAmount != null)
+            'paymentTransferAmount': paymentTransferAmount,
           'items': items.map((item) => item.toPayload()).toList(),
         },
       );

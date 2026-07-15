@@ -31,6 +31,7 @@ import { WhatsappInboxModule } from './whatsapp-inbox/whatsapp-inbox.module';
 import { EmployeeWarningsModule } from './employee-warnings/employee-warnings.module';
 import { MarketingModule } from './marketing/marketing.module';
 import { CrmCommercialModule } from './crm-commercial/crm-commercial.module';
+import { CashModule } from './cash/cash.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { CrmCommercialModule } from './crm-commercial/crm-commercial.module';
     EmployeeWarningsModule,
     MarketingModule,
     CrmCommercialModule,
+    CashModule,
   ]
 })
 export class AppModule {}

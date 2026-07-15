@@ -26,6 +26,9 @@ import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/responsive_shell.dart';
 import '../../core/widgets/product_network_image.dart';
+import '../cash/cash_box_screen.dart';
+import '../cash/cash_providers.dart';
+import '../cash/cash_repository.dart';
 import '../clientes/cliente_model.dart';
 import '../clientes/cliente_form_screen.dart';
 import '../service_orders/service_order_models.dart';
@@ -41,6 +44,28 @@ import 'ai/presentation/widgets/quotation_rule_detail_sheet.dart';
 import 'cotizacion_models.dart';
 import 'data/cotizaciones_repository.dart';
 import 'utils/cotizacion_pdf_service.dart';
+
+enum _CheckoutPaymentMethod {
+  cash('Efectivo', Icons.payments_outlined),
+  transfer('Transferencia', Icons.account_balance_outlined),
+  mixed('Mixto', Icons.call_split_rounded);
+
+  const _CheckoutPaymentMethod(this.label, this.icon);
+  final String label;
+  final IconData icon;
+}
+
+class _CheckoutResult {
+  const _CheckoutResult({
+    required this.method,
+    required this.cashAmount,
+    required this.transferAmount,
+  });
+
+  final _CheckoutPaymentMethod method;
+  final double cashAmount;
+  final double transferAmount;
+}
 
 class CotizacionesScreen extends ConsumerStatefulWidget {
   const CotizacionesScreen({
@@ -3659,34 +3684,91 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
   }
 
-  Future<void> _finalizeCotizacion() async {
+  bool _validateCheckoutReady() {
     if (_selectedClientId == null || _selectedClientName == 'Sin cliente') {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Selecciona o crea un cliente primero')),
       );
-      return;
+      return false;
     }
 
     if ((_selectedClientPhone ?? '').trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('El cliente debe tener teléfono')),
       );
-      return;
+      return false;
     }
 
     if (_items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Agrega al menos un producto al ticket')),
       );
-      return;
+      return false;
     }
+
+    return true;
+  }
+
+  String _checkoutPaymentLabel(_CheckoutPaymentMethod method) => method.label;
+
+  Future<void> _openCheckoutDialog() async {
+    if (!_validateCheckoutReady()) return;
+
+    final cashState = await ref.read(cashRepositoryProvider).state();
+    if (cashState.activeSession == null) {
+      if (!mounted) return;
+      final openingAmount = await showCashAmountDialog(
+        context,
+        title: 'Abrir caja para facturar',
+        actionLabel: 'Abrir caja',
+      );
+      if (openingAmount == null) return;
+      await ref
+          .read(activeCashSessionControllerProvider.notifier)
+          .open(openingAmount);
+    }
+    if (!mounted) return;
+
+    final result = await showDialog<_CheckoutResult>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => _CheckoutPaymentDialog(
+        total: _total,
+        money: _money,
+        onConfirm: (method) => Navigator.of(context).pop(method),
+      ),
+    );
+    if (result == null) return;
+
+    await _finalizeCotizacion(checkout: result);
+  }
+
+  Future<void> _finalizeCotizacion({_CheckoutResult? checkout}) async {
+    if (!_validateCheckoutReady()) return;
+
+    final paymentLabel = checkout == null
+        ? null
+        : _checkoutPaymentLabel(checkout.method);
+    final saleNote = [
+      if (_note.trim().isNotEmpty) _note.trim(),
+      if (paymentLabel != null) 'Pago: $paymentLabel',
+    ].join('\n');
 
     try {
       await ref
           .read(ventasRepositoryProvider)
           .createSale(
             customerId: _selectedClientId!,
-            note: _note,
+            note: saleNote.isEmpty ? _note : saleNote,
+            paymentMethod: checkout == null
+                ? null
+                : switch (checkout.method) {
+                    _CheckoutPaymentMethod.cash => 'cash',
+                    _CheckoutPaymentMethod.transfer => 'transfer',
+                    _CheckoutPaymentMethod.mixed => 'mixed',
+                  },
+            paymentCashAmount: checkout?.cashAmount,
+            paymentTransferAmount: checkout?.transferAmount,
             items: _items
                 .map(
                   (item) => SaleDraftItem(
@@ -4123,7 +4205,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     const SizedBox(width: 6),
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed: _finalizeCotizacion,
+                        onPressed: _openCheckoutDialog,
                         icon: const Icon(Icons.check_circle_outline, size: 16),
                         label: const Text('Finalizar'),
                         style: FilledButton.styleFrom(
@@ -4489,7 +4571,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                             : () {
                                 _commitEditorChange(_resetEditorState);
                               },
-                        onFinalize: _finalizeCotizacion,
+                        onFinalize: _openCheckoutDialog,
                         onMinusQty: (index) =>
                             _setQty(index, _items[index].qty - 1),
                         onPlusQty: (index) =>
@@ -4577,6 +4659,469 @@ class _DesktopTopbarAction extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
             side: const BorderSide(color: Color(0xFFCFE0FF)),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CheckoutPaymentDialog extends StatefulWidget {
+  const _CheckoutPaymentDialog({
+    required this.total,
+    required this.money,
+    required this.onConfirm,
+  });
+
+  final double total;
+  final String Function(double value) money;
+  final ValueChanged<_CheckoutResult> onConfirm;
+
+  @override
+  State<_CheckoutPaymentDialog> createState() => _CheckoutPaymentDialogState();
+}
+
+class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
+  _CheckoutPaymentMethod _method = _CheckoutPaymentMethod.cash;
+  late final TextEditingController _cashController;
+
+  @override
+  void initState() {
+    super.initState();
+    _cashController = TextEditingController(
+      text: widget.total.toStringAsFixed(2),
+    );
+    _cashController.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _cashController.dispose();
+    super.dispose();
+  }
+
+  double get _cashAmount {
+    final raw = _cashController.text.trim().replaceAll(',', '.');
+    return double.tryParse(raw) ?? 0;
+  }
+
+  double get _transferAmount {
+    if (_method == _CheckoutPaymentMethod.transfer) return widget.total;
+    if (_method == _CheckoutPaymentMethod.mixed) {
+      return (widget.total - _cashAmount).clamp(0, widget.total);
+    }
+    return 0;
+  }
+
+  double get _coveredAmount {
+    if (_method == _CheckoutPaymentMethod.cash) return _cashAmount;
+    if (_method == _CheckoutPaymentMethod.transfer) return widget.total;
+    return _cashAmount + _transferAmount;
+  }
+
+  double get _changeAmount {
+    if (_method == _CheckoutPaymentMethod.transfer) return 0;
+    return (_coveredAmount - widget.total).clamp(0, double.infinity);
+  }
+
+  bool get _canConfirm => _coveredAmount + 0.0001 >= widget.total;
+
+  _CheckoutResult _result() {
+    final cashAmount = switch (_method) {
+      _CheckoutPaymentMethod.cash => widget.total,
+      _CheckoutPaymentMethod.transfer => 0.0,
+      _CheckoutPaymentMethod.mixed => _cashAmount
+          .clamp(0, widget.total)
+          .toDouble(),
+    };
+    final transferAmount = switch (_method) {
+      _CheckoutPaymentMethod.cash => 0.0,
+      _CheckoutPaymentMethod.transfer => widget.total,
+      _CheckoutPaymentMethod.mixed => (widget.total - cashAmount).clamp(
+        0,
+        widget.total,
+      ).toDouble(),
+    };
+    return _CheckoutResult(
+      method: _method,
+      cashAmount: cashAmount,
+      transferAmount: transferAmount,
+    );
+  }
+
+  void _selectMethod(_CheckoutPaymentMethod method) {
+    setState(() {
+      _method = method;
+      if (method == _CheckoutPaymentMethod.transfer) {
+        _cashController.text = '0.00';
+      } else if (_cashAmount <= 0) {
+        _cashController.text = widget.total.toStringAsFixed(2);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isTransfer = _method == _CheckoutPaymentMethod.transfer;
+    final isMixed = _method == _CheckoutPaymentMethod.mixed;
+
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 18, 18, 16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEAF1FF),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: const Icon(
+                      Icons.point_of_sale_rounded,
+                      color: Color(0xFF1957E6),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Cobrar venta',
+                          style: TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Confirma el pago y genera la factura',
+                          style: TextStyle(color: Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Cerrar',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: Color(0xFFE2E8F0)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 18, 24, 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFD6E3ED)),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            const Text(
+                              'Total a pagar',
+                              style: TextStyle(
+                                color: Color(0xFF475569),
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              widget.money(widget.total),
+                              style: const TextStyle(
+                                fontSize: 30,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF0F172A),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 26, color: Color(0xFFE2E8F0)),
+                        if (!isTransfer) ...[
+                          _PaymentAmountInput(
+                            label: isMixed
+                                ? 'Efectivo recibido'
+                                : 'Cliente paga con',
+                            controller: _cashController,
+                            enabled: true,
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                        if (isTransfer || isMixed) ...[
+                          _ReadonlyPaymentLine(
+                            icon: Icons.account_balance_outlined,
+                            label: 'Transferencia',
+                            value: widget.money(_transferAmount),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                        _ReadonlyPaymentLine(
+                          icon: Icons.keyboard_return_rounded,
+                          label: 'Devuelta',
+                          value: widget.money(_changeAmount),
+                          strong: _changeAmount > 0,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Método de pago',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      for (final method in _CheckoutPaymentMethod.values) ...[
+                        Expanded(
+                          child: _PaymentMethodTile(
+                            method: method,
+                            selected: _method == method,
+                            onTap: () => _selectMethod(method),
+                          ),
+                        ),
+                        if (method != _CheckoutPaymentMethod.values.last)
+                          const SizedBox(width: 10),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(24, 14, 24, 18),
+              decoration: const BoxDecoration(
+                color: Color(0xFFF8FBFD),
+                border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _canConfirm
+                          ? 'Enter/F9 para cobrar · Esc para salir'
+                          : 'Monto recibido insuficiente para completar el cobro',
+                      style: TextStyle(
+                        color: _canConfirm
+                            ? const Color(0xFF64748B)
+                            : theme.colorScheme.error,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancelar'),
+                  ),
+                  const SizedBox(width: 10),
+                  FilledButton.icon(
+                    onPressed: _canConfirm
+                        ? () => widget.onConfirm(_result())
+                        : null,
+                    icon: const Icon(Icons.receipt_long_outlined),
+                    label: const Text('Cobrar y facturar'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF1957E6),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 22,
+                        vertical: 16,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      textStyle: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PaymentAmountInput extends StatelessWidget {
+  const _PaymentAmountInput({
+    required this.label,
+    required this.controller,
+    required this.enabled,
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 210,
+          height: 46,
+          child: TextField(
+            controller: controller,
+            enabled: enabled,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              color: Color(0xFF1957E6),
+              fontWeight: FontWeight.w900,
+            ),
+            decoration: InputDecoration(
+              prefixText: r'$  ',
+              filled: true,
+              fillColor: const Color(0xFFF8FBFD),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(9),
+                borderSide: const BorderSide(color: Color(0xFFC9D8EA)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(9),
+                borderSide: const BorderSide(color: Color(0xFFC9D8EA)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(9),
+                borderSide: const BorderSide(
+                  color: Color(0xFF1957E6),
+                  width: 1.4,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ReadonlyPaymentLine extends StatelessWidget {
+  const _ReadonlyPaymentLine({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.strong = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool strong;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF2F6FA),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: const Color(0xFF64748B)),
+          const SizedBox(width: 10),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF64748B),
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            value,
+            style: TextStyle(
+              color: strong ? const Color(0xFF1957E6) : const Color(0xFF64748B),
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentMethodTile extends StatelessWidget {
+  const _PaymentMethodTile({
+    required this.method,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _CheckoutPaymentMethod method;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? const Color(0xFF1957E6) : Colors.white,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          height: 54,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected
+                  ? const Color(0xFF1957E6)
+                  : const Color(0xFFD4E0EA),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                method.icon,
+                size: 19,
+                color: selected ? Colors.white : const Color(0xFF1957E6),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                method.label,
+                style: TextStyle(
+                  color: selected ? Colors.white : const Color(0xFF0F172A),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
           ),
         ),
       ),

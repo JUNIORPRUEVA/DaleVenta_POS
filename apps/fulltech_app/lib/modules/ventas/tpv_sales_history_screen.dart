@@ -314,16 +314,30 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
         : visibleSales.first;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFEFF6FA),
       drawer: buildAdaptiveDrawer(context, currentUser: user),
       appBar: AppBar(
+        backgroundColor: const Color(0xFF0E5261),
+        foregroundColor: Colors.white,
+        elevation: 0,
         leading: Builder(
-          builder: (context) => IconButton(
-            tooltip: 'Menu',
-            onPressed: () => Scaffold.of(context).openDrawer(),
-            icon: const Icon(Icons.menu_rounded),
+          builder: (context) => Padding(
+            padding: const EdgeInsets.all(8),
+            child: Material(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              child: IconButton(
+                tooltip: 'Menu',
+                onPressed: () => Scaffold.of(context).openDrawer(),
+                icon: const Icon(Icons.menu_rounded, color: Color(0xFF1957E6)),
+              ),
+            ),
           ),
         ),
-        title: const Text('Facturacion'),
+        title: const Text(
+          'Facturacion',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
         actions: [
           _MetricBadge(
             icon: Icons.receipt_long_outlined,
@@ -349,7 +363,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
           ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(28, 8, 28, 22),
+              padding: const EdgeInsets.fromLTRB(24, 10, 24, 16),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -370,7 +384,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                       onReturn: _returnSale,
                     ),
                   ),
-                  const SizedBox(width: 24),
+                  const SizedBox(width: 18),
                   Expanded(
                     flex: 32,
                     child: selected == null
@@ -414,22 +428,25 @@ class _Toolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(26, 16, 26, 12),
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 10),
       decoration: const BoxDecoration(
-        color: Color(0xFFF6F9FC),
-        border: Border(bottom: BorderSide(color: Color(0xFFD6E1EA))),
+        color: Color(0xFFF4F8FB),
+        border: Border(bottom: BorderSide(color: Color(0xFFD8E5EE))),
       ),
       child: Row(
         children: [
           SizedBox(
             width: 44,
-            height: 44,
+            height: 42,
             child: OutlinedButton(
               onPressed: onBack,
               style: OutlinedButton.styleFrom(
                 padding: EdgeInsets.zero,
+                foregroundColor: const Color(0xFF0E5261),
+                side: const BorderSide(color: Color(0xFFBFD3E0)),
+                backgroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(9),
                 ),
               ),
               child: const Icon(Icons.arrow_back_rounded),
@@ -439,7 +456,7 @@ class _Toolbar extends StatelessWidget {
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 720),
             child: SizedBox(
-              height: 44,
+              height: 42,
               child: TextField(
                 controller: controller,
                 decoration: InputDecoration(
@@ -448,8 +465,19 @@ class _Toolbar extends StatelessWidget {
                   filled: true,
                   fillColor: Colors.white,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFFC9DAE6)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF1957E6),
+                      width: 1.3,
+                    ),
+                  ),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
               ),
@@ -470,11 +498,18 @@ class _Toolbar extends StatelessWidget {
               PopupMenuItem(value: _InvoiceFilter.all, child: Text('Todas')),
             ],
             child: Container(
-              height: 44,
-              padding: const EdgeInsets.symmetric(horizontal: 18),
+              height: 42,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
                 color: const Color(0xFF1957E6),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(9),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF1957E6).withValues(alpha: 0.18),
+                    blurRadius: 14,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
               ),
               child: Row(
                 children: [
@@ -534,14 +569,14 @@ class _InvoiceListCard extends StatelessWidget {
       elevation: 0,
       color: Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: const BorderSide(color: Color(0xFFD3E0EA)),
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: Color(0xFFC9D9E4)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
+            padding: const EdgeInsets.fromLTRB(18, 12, 14, 10),
             child: Row(
               children: [
                 const Expanded(
@@ -552,7 +587,8 @@ class _InvoiceListCard extends StatelessWidget {
                         'Listado de facturas',
                         style: TextStyle(
                           fontSize: 15,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF23384A),
                         ),
                       ),
                       SizedBox(height: 2),
@@ -571,6 +607,7 @@ class _InvoiceListCard extends StatelessWidget {
                   style: const TextStyle(
                     color: Color(0xFF64748B),
                     fontWeight: FontWeight.w700,
+                    fontSize: 12,
                   ),
                 ),
                 IconButton(
@@ -666,8 +703,8 @@ class _InvoiceRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        color: selected ? const Color(0xFFF4F8FF) : Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        color: selected ? const Color(0xFFF0F6FF) : Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
         child: Row(
           children: [
             Expanded(
@@ -679,7 +716,7 @@ class _InvoiceRow extends StatelessWidget {
                     'Factura ${invoiceNumber(sale)}',
                     style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
                     sale.userName ?? sale.userId,
                     maxLines: 1,
@@ -723,22 +760,26 @@ class _InvoiceRow extends StatelessWidget {
             IconButton(
               tooltip: 'Ver detalle',
               onPressed: onTap,
+              visualDensity: VisualDensity.compact,
               icon: const Icon(Icons.visibility_outlined, size: 19),
             ),
             IconButton(
               tooltip: 'Imprimir',
               onPressed: onPrint,
+              visualDensity: VisualDensity.compact,
               icon: const Icon(Icons.print_outlined, size: 19),
             ),
             IconButton(
               tooltip: 'PDF',
               onPressed: onPdf,
+              visualDensity: VisualDensity.compact,
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 19),
               color: const Color(0xFFE11D48),
             ),
             IconButton(
               tooltip: active ? 'Devolver' : 'Factura devuelta',
               onPressed: onReturn,
+              visualDensity: VisualDensity.compact,
               icon: const Icon(Icons.assignment_return_outlined, size: 19),
               color: const Color(0xFFEA580C),
             ),
@@ -781,15 +822,15 @@ class _InvoiceDetailPanel extends StatelessWidget {
       elevation: 0,
       color: Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: const BorderSide(color: Color(0xFFD3E0EA)),
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: Color(0xFFC9D9E4)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 10, 12),
+            padding: const EdgeInsets.fromLTRB(18, 14, 10, 10),
             child: Row(
               children: [
                 Expanded(
@@ -800,6 +841,7 @@ class _InvoiceDetailPanel extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w900,
+                      color: Color(0xFF23384A),
                     ),
                   ),
                 ),
@@ -813,7 +855,7 @@ class _InvoiceDetailPanel extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 18),
             child: Column(
               children: [
                 _DetailLine('Factura', invoiceNumber(sale)),
@@ -827,11 +869,11 @@ class _InvoiceDetailPanel extends StatelessWidget {
             ),
           ),
           const Padding(
-            padding: EdgeInsets.fromLTRB(20, 18, 20, 8),
+            padding: EdgeInsets.fromLTRB(18, 16, 18, 8),
             child: Divider(height: 1),
           ),
           const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20),
+            padding: EdgeInsets.symmetric(horizontal: 18),
             child: Text(
               'DETALLE',
               style: TextStyle(
@@ -844,7 +886,7 @@ class _InvoiceDetailPanel extends StatelessWidget {
           const SizedBox(height: 8),
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 18),
               itemCount: sale.items.length,
               itemBuilder: (context, index) {
                 final item = sale.items[index];
@@ -879,8 +921,9 @@ class _InvoiceDetailPanel extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+          Container(
+            color: const Color(0xFFF8FBFD),
+            padding: const EdgeInsets.fromLTRB(18, 10, 18, 10),
             child: Column(
               children: [
                 _TotalLine('Subtotal', subtotal),
@@ -890,7 +933,7 @@ class _InvoiceDetailPanel extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
             child: Row(
               children: [
                 Expanded(
@@ -946,29 +989,48 @@ class _MetricBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      constraints: const BoxConstraints(minWidth: 124, minHeight: 46),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFD4E1F0)),
+        color: Colors.white.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: const Color(0xFF1957E6), size: 18),
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: Icon(icon, color: Colors.white, size: 16),
+          ),
           const SizedBox(width: 8),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 label.toUpperCase(),
                 style: const TextStyle(
-                  fontSize: 10,
+                  fontSize: 9.5,
                   fontWeight: FontWeight.w900,
-                  color: Color(0xFF64748B),
+                  color: Color(0xFFCFE8F2),
                 ),
               ),
-              Text(value, style: const TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 1),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                ),
+              ),
             ],
           ),
         ],

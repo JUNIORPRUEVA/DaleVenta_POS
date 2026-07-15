@@ -18,6 +18,7 @@ class Routes {
   static const clientes = '/clientes';
   static const ventas = '/ventas';
   static const ventasLista = '/ventas/lista';
+  static const caja = '/caja';
   static const cotizaciones = '/cotizaciones';
   static const cotizacionesHistorial = '/cotizaciones/historial';
   static const serviceOrders = '/service-orders';

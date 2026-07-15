@@ -166,6 +166,12 @@ class ApiRoutes {
   static const salesSummary = '/sales/summary';
   static String saleDetail(String id) => '/sales/$id';
   static String saleReturn(String id) => '/sales/$id/return';
+  static const cashState = '/cash/state';
+  static const cashOpenSession = '/cash/sessions/open';
+  static const cashCloseSession = '/cash/sessions/close';
+  static const cashSummary = '/cash/summary';
+  static const cashMovements = '/cash/movements';
+  static const cashClosedSessions = '/cash/sessions/closed';
 
   static const services = '/services';
   static const technicians = '/technicians';

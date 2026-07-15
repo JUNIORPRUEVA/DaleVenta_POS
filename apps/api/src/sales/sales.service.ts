@@ -293,6 +293,24 @@ export class SalesService {
     const commissionAmount = totalProfit.greaterThan(0)
       ? totalProfit.mul(commissionRate)
       : new Prisma.Decimal(0);
+    const activeSession = await this.prisma.cashSession.findFirst({
+      where: { openedByUserId: userId, status: 'OPEN', closedAt: null },
+      orderBy: { openedAt: 'desc' },
+    });
+    if (!activeSession) {
+      throw new BadRequestException('Debes abrir caja antes de facturar.');
+    }
+
+    const paymentMethod = dto.paymentMethod ?? 'cash';
+    const paymentCashAmount = new Prisma.Decimal(
+      dto.paymentCashAmount ?? (paymentMethod === 'cash' ? totalSold.toNumber() : 0),
+    );
+    const paymentTransferAmount = new Prisma.Decimal(
+      dto.paymentTransferAmount ?? (paymentMethod === 'transfer' ? totalSold.toNumber() : 0),
+    );
+    if (paymentCashAmount.plus(paymentTransferAmount).lessThan(totalSold)) {
+      throw new BadRequestException('El monto pagado no cubre el total de la factura.');
+    }
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -318,8 +336,14 @@ export class SalesService {
           data: {
             userId,
             customerId: dto.customerId,
+            cashSessionId: activeSession.id,
             saleDate: new Date(),
             note: dto.note,
+            paymentMethod,
+            paymentCashAmount,
+            paymentTransferAmount,
+            kind: 'invoice',
+            status: 'PAID',
             totalSold,
             totalCost,
             totalProfit,

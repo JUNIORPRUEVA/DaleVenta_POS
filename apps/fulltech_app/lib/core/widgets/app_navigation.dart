@@ -101,6 +101,12 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Lista de ventas',
             route: Routes.ventasLista,
           ),
+        if (can(AppPermission.viewSales))
+          const AppNavigationItem(
+            icon: Icons.point_of_sale_rounded,
+            title: 'Caja',
+            route: Routes.caja,
+          ),
         if (can(AppPermission.viewPunch))
           const AppNavigationItem(
             icon: Icons.access_time_rounded,
@@ -279,6 +285,7 @@ String resolveNavigationTitle(
   if (path == Routes.documentFlows) return 'Flujo documental';
   if (path == Routes.cotizacionesHistorial) return 'Historial de ventas';
   if (path == Routes.ventasLista) return 'Lista de ventas';
+  if (path == Routes.caja) return 'Caja';
   if (path == Routes.clienteNuevo) return 'Nuevo cliente';
   if (path == Routes.ai) return 'IA';
   if (path == Routes.publicidad) return 'Publicidad';
@@ -325,6 +332,7 @@ bool desktopShellShouldShowOwnAppBar(String location) {
     Routes.clientes,
     Routes.ventas,
     Routes.ventasLista,
+    Routes.caja,
     Routes.serviceOrders,
     Routes.serviceOrderCommissions,
     Routes.mediaGallery,
