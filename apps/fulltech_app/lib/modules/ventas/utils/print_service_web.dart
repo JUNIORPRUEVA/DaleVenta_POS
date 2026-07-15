@@ -2,6 +2,7 @@ import 'package:web/web.dart' as web;
 
 import 'package:intl/intl.dart';
 
+import '../../../core/utils/money_formatters.dart';
 import '../sales_models.dart';
 
 Future<void> printSalesSummary({
@@ -11,7 +12,6 @@ Future<void> printSalesSummary({
   required SalesSummaryModel summary,
   required List<SaleModel> sales,
 }) async {
-  final currency = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
   final dateFmt = DateFormat('dd/MM/yyyy');
 
   final rows = sales
@@ -21,9 +21,9 @@ Future<void> printSalesSummary({
 <tr>
   <td>${dateFmt.format(sale.saleDate ?? DateTime.now())}</td>
   <td>${sale.customerName ?? 'Sin cliente'}</td>
-  <td style="text-align:right;">${currency.format(sale.totalSold)}</td>
-  <td style="text-align:right;">${currency.format(sale.totalProfit)}</td>
-  <td style="text-align:right;">${currency.format(sale.commissionAmount)}</td>
+  <td style="text-align:right;">${formatRdCurrencyAccounting(sale.totalSold)}</td>
+  <td style="text-align:right;">${formatRdCurrencyAccounting(sale.totalProfit)}</td>
+  <td style="text-align:right;">${formatRdCurrencyAccounting(sale.commissionAmount)}</td>
 </tr>
 ''',
       )
@@ -57,9 +57,9 @@ Future<void> printSalesSummary({
   </div>
 
   <div class="summary">
-    <div class="card"><div class="label">Total vendido</div><div class="value">${currency.format(summary.totalSold)}</div></div>
-    <div class="card"><div class="label">Total utilidad</div><div class="value">${currency.format(summary.totalProfit)}</div></div>
-    <div class="card"><div class="label">Total comisión</div><div class="value">${currency.format(summary.totalCommission)}</div></div>
+    <div class="card"><div class="label">Total vendido</div><div class="value">${formatRdCurrencyAccounting(summary.totalSold)}</div></div>
+    <div class="card"><div class="label">Total utilidad</div><div class="value">${formatRdCurrencyAccounting(summary.totalProfit)}</div></div>
+    <div class="card"><div class="label">Total comisión</div><div class="value">${formatRdCurrencyAccounting(summary.totalCommission)}</div></div>
   </div>
 
   <table>

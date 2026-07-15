@@ -18,7 +18,8 @@ import '../../features/administracion/admin_service_commissions_screen.dart';
 import '../../features/administracion/admin_sales_registry_screen.dart';
 import '../../features/administracion/admin_quotes_registry_screen.dart';
 import '../../features/administracion/administracion_screen.dart';
-import '../../features/catalogo/catalogo_screen.dart';
+import '../../features/products/ui/inventory_module_pages.dart';
+import '../../features/reports/ui/reports_page.dart';
 import '../../features/media_gallery/presentation/media_gallery_screen.dart';
 import '../../modules/clientes/cliente_detail_screen.dart';
 import '../../modules/clientes/clientes_screen.dart';
@@ -171,7 +172,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: Routes.catalogo,
-            builder: (context, state) => const CatalogoScreen(),
+            builder: (context, state) => const InventoryModulePages(),
           ),
           GoRoute(
             path: Routes.contabilidad,
@@ -222,8 +223,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const ClientesMapScreen(),
           ),
           GoRoute(
-            path: Routes.ventas,
+            path: Routes.ventasLista,
             builder: (context, state) => const MisVentasScreen(),
+          ),
+          GoRoute(
+            path: Routes.ventas,
+            builder: (context, state) => const ReportsPage(),
           ),
           GoRoute(
             path: Routes.cotizaciones,

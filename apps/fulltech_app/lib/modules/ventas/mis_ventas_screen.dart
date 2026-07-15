@@ -9,6 +9,7 @@ import 'package:printing/printing.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/debug/debug_admin_action.dart';
 import '../../core/routing/routes.dart';
+import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import 'application/ventas_controller.dart';
@@ -37,8 +38,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
   bool _isDesktop(BuildContext context) =>
       MediaQuery.sizeOf(context).width >= 1180;
 
-  String _money(double value) =>
-      NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$').format(value);
+  String _money(double value) => formatRdCurrencyAccounting(value);
   String _date(DateTime date) => DateFormat('dd/MM/yyyy').format(date);
 
   String _quincenaName(DateTime from, DateTime to) {
@@ -316,16 +316,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
     return '';
   }
 
-  String _moneyCompact(double value) {
-    final absValue = value.abs();
-    if (absValue >= 1000000) {
-      return 'RD\$${(value / 1000000).toStringAsFixed(1)}M';
-    }
-    if (absValue >= 1000) {
-      return 'RD\$${(value / 1000).toStringAsFixed(1)}k';
-    }
-    return 'RD\$${value.toStringAsFixed(0)}';
-  }
+  String _moneyCompact(double value) => formatRdCurrencyAccounting(value);
 
   Widget _buildDesktopBody(VentasState state, String? employeeName) {
     final averageTicket = state.summary.totalSales == 0
@@ -380,7 +371,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
       ),
       _DesktopMetricData(
         title: 'Mejor venta',
-        value: bestSale == null ? 'RD\$0.00' : _money(bestSale.totalSold),
+        value: bestSale == null ? _money(0) : _money(bestSale.totalSold),
         subtitle: bestSale == null
             ? 'Sin registros todavia'
             : (bestSale.customerName ?? 'Sin cliente'),
@@ -813,153 +804,88 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
       builder: (context) {
         final saleDate = sale.saleDate ?? DateTime.now();
         return AlertDialog(
-          title: Text('Cotización · Venta ${sale.id.substring(0, 8)}'),
+          title: const Text('Detalle de venta'),
           content: SizedBox(
-            width: 680,
+            width: 420,
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _detailLine('Fecha', _date(saleDate)),
-                  _detailLine('Cliente', sale.customerName ?? 'Sin cliente'),
-                  _detailLine(
-                    'Nota',
-                    (sale.note ?? '').trim().isEmpty ? 'N/A' : sale.note!,
+                  // ── Encabezado compacto ──
+                  Text(
+                    sale.customerName?.trim().isNotEmpty == true
+                        ? sale.customerName!
+                        : 'Sin cliente',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const Divider(height: 20),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
+                  const SizedBox(height: 2),
+                  Text(
+                    _date(saleDate),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
-                    decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(8),
+                  ),
+                  if ((sale.note ?? '').trim().isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      sale.note!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
+                  ],
+                  const Divider(height: 14),
+                  // ── Items ──
+                  ...sale.items.map((item) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
                     child: Row(
-                      children: const [
+                      children: [
                         Expanded(
-                          flex: 5,
                           child: Text(
-                            'Producto',
-                            style: TextStyle(fontWeight: FontWeight.w700),
+                            '${item.productNameSnapshot} x${item.qty.toStringAsFixed(item.qty % 1 == 0 ? 0 : 2)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12),
                           ),
                         ),
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            'Cantidad',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 3,
-                          child: Text(
-                            'Precio U.',
-                            textAlign: TextAlign.right,
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 3,
-                          child: Text(
-                            'Total',
-                            textAlign: TextAlign.right,
-                            style: TextStyle(fontWeight: FontWeight.w700),
+                        Text(
+                          _money(item.subtotalSold),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  ...sale.items.asMap().entries.map((entry) {
-                    final item = entry.value;
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 6),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
+                  )),
+                  const Divider(height: 14),
+                  // ── Total a Cobrar ──
+                  Row(
+                    children: [
+                      Text(
+                        'Cobrar',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
                       ),
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(8),
+                      const Spacer(),
+                      Text(
+                        _money(sale.totalSold),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        ),
                       ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            flex: 5,
-                            child: Text(
-                              item.productNameSnapshot,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 2,
-                            child: Text(
-                              item.qty.toString(),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                          Expanded(
-                            flex: 3,
-                            child: Text(
-                              _money(item.priceSoldUnit),
-                              textAlign: TextAlign.right,
-                            ),
-                          ),
-                          Expanded(
-                            flex: 3,
-                            child: Text(
-                              _money(item.subtotalSold),
-                              textAlign: TextAlign.right,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Container(
-                      width: 330,
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Column(
-                        children: [
-                          _totalsLine('Total vendido', _money(sale.totalSold)),
-                          _totalsLine('Total costo', _money(sale.totalCost)),
-                          _totalsLine(
-                            'Total utilidad',
-                            _money(sale.totalProfit),
-                          ),
-                          const Divider(height: 14),
-                          _totalsLine(
-                            'Comisión',
-                            _money(sale.commissionAmount),
-                            highlight: true,
-                          ),
-                        ],
-                      ),
-                    ),
+                    ],
                   ),
                 ],
               ),
@@ -973,48 +899,6 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
           ],
         );
       },
-    );
-  }
-
-  Widget _totalsLine(String label, String value, {bool highlight = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontWeight: highlight ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              fontWeight: highlight ? FontWeight.w800 : FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _detailLine(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 130,
-            child: Text(
-              '$label:',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-          Expanded(child: Text(value)),
-        ],
-      ),
     );
   }
 

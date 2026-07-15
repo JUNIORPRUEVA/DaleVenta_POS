@@ -10,17 +10,40 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/role_branding.dart';
 import 'app_navigation.dart';
-import 'user_avatar.dart';
 
-class AppDrawer extends ConsumerWidget {
+class AppDrawer extends ConsumerStatefulWidget {
   final UserModel? currentUser;
 
   const AppDrawer({super.key, this.currentUser});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AppDrawer> createState() => _AppDrawerState();
+}
+
+class _AppDrawerState extends ConsumerState<AppDrawer> {
+  int? _openGroupIndex;
+
+  void _openGroup(int index) {
+    if (_openGroupIndex == index) return;
+    setState(() => _openGroupIndex = index);
+  }
+
+  void _toggleGroup(int index) {
+    setState(() => _openGroupIndex = _openGroupIndex == index ? null : index);
+  }
+
+  void _closeGroup(int index) {
+    if (_openGroupIndex != index) return;
+    setState(() => _openGroupIndex = null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentUser = widget.currentUser;
     final sections = buildAppNavigationSections(ref, currentUser);
+    final groups = _buildDrawerGroups(sections);
     final mediaQuery = MediaQuery.of(context);
+    final isDesktop = mediaQuery.size.width >= kDesktopShellBreakpoint;
     final isCompactMobile = mediaQuery.size.width < 390;
     final location = safeCurrentLocation(context);
     final role =
@@ -39,6 +62,10 @@ class AppDrawer extends ConsumerWidget {
     );
 
     return Drawer(
+      width: isDesktop ? 318 : null,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.horizontal(right: Radius.circular(18)),
+      ),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: AppColors.surface,
@@ -60,7 +87,7 @@ class AppDrawer extends ConsumerWidget {
                     isCompactMobile ? 10 : 12,
                     isCompactMobile ? 10 : 11,
                     isCompactMobile ? 10 : 12,
-                    isCompactMobile ? 10 : 11,
+                    isCompactMobile ? 9 : 10,
                   ),
                   decoration: BoxDecoration(
                     color: AppColors.surfaceMuted,
@@ -72,49 +99,64 @@ class AppDrawer extends ConsumerWidget {
                     children: [
                       Row(
                         children: [
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.pop(context);
-                              context.go(Routes.profile);
-                            },
-                            child: UserAvatar(
-                              imageUrl: currentUser?.fotoPersonalUrl,
-                              radius: isCompactMobile ? 17 : 18,
-                              backgroundColor: AppColors.primary.withValues(
-                                alpha: 0.10,
-                              ),
-                              child: Text(
-                                userInitials(currentUser),
-                                style: AppTextStyles.small.copyWith(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 9),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  'FULLTECH',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTextStyles.title.copyWith(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
+                          Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.22,
                                   ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  branding.departmentName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTextStyles.small,
+                                  blurRadius: 14,
+                                  offset: const Offset(0, 6),
                                 ),
                               ],
+                            ),
+                            child: const Icon(
+                              Icons.receipt_long_outlined,
+                              color: Colors.white,
+                              size: 22,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text.rich(
+                              TextSpan(
+                                text: 'FullTech POS',
+                                style: AppTextStyles.title.copyWith(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w900,
+                                  color: AppColors.textPrimary,
+                                ),
+                                children: [
+                                  TextSpan(
+                                    text: '  Sistema de facturación',
+                                    style: AppTextStyles.small.copyWith(
+                                      color: AppColors.textSecondary,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Cerrar menú',
+                            onPressed: () => Navigator.pop(context),
+                            icon: Icon(
+                              Icons.close_rounded,
+                              color: AppColors.textSecondary,
+                            ),
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                           ),
                         ],
@@ -168,13 +210,20 @@ class AppDrawer extends ConsumerWidget {
                     8,
                   ),
                   children: [
-                    for (final section in sections) ...[
-                      _DrawerSectionTitle(
-                        section.title,
+                    for (var i = 0; i < groups.length; i++)
+                      _DrawerMenuGroupTile(
+                        group: groups[i],
+                        index: i,
                         compact: isCompactMobile,
-                      ),
-                      for (final item in section.items)
-                        _DrawerMenuItem(
+                        expanded: _openGroupIndex == i,
+                        selected: groups[i].items.any(
+                          (item) =>
+                              isNavigationRouteActive(location, item.route),
+                        ),
+                        onHoverOpen: isDesktop ? () => _openGroup(i) : null,
+                        onHoverExit: isDesktop ? () => _closeGroup(i) : null,
+                        onTapHeader: () => _toggleGroup(i),
+                        itemBuilder: (item) => _DrawerMenuItem(
                           icon: item.icon,
                           title: item.title,
                           compact: isCompactMobile,
@@ -188,8 +237,7 @@ class AppDrawer extends ConsumerWidget {
                             context.go(item.route);
                           },
                         ),
-                      SizedBox(height: isCompactMobile ? 12 : 16),
-                    ],
+                      ),
                   ],
                 ),
               ),
@@ -264,6 +312,88 @@ class AppDrawer extends ConsumerWidget {
   }
 }
 
+List<_DrawerMenuGroup> _buildDrawerGroups(List<AppNavigationSection> sections) {
+  final itemsByRoute = <String, AppNavigationItem>{};
+  for (final section in sections) {
+    for (final item in section.items) {
+      itemsByRoute.putIfAbsent(item.route, () => item);
+    }
+  }
+
+  AppNavigationItem? pick(String route) => itemsByRoute.remove(route);
+
+  final groups = <_DrawerMenuGroup>[];
+  void addGroup(String title, IconData icon, List<String> routes) {
+    final items = <AppNavigationItem>[
+      for (final route in routes)
+        if (pick(route) case final item?) item,
+    ];
+    if (items.isEmpty) return;
+    groups.add(_DrawerMenuGroup(title: title, icon: icon, items: items));
+  }
+
+  addGroup('Ventas POS', Icons.point_of_sale_rounded, [
+    Routes.cotizaciones,
+    Routes.catalogo,
+    Routes.ventas,
+  ]);
+  addGroup('Operaciones', Icons.work_outline_rounded, [
+    Routes.serviceOrders,
+    Routes.mediaGallery,
+    Routes.documentFlows,
+  ]);
+  addGroup('Clientes', Icons.groups_2_outlined, [
+    Routes.clientes,
+    Routes.crmComercial,
+  ]);
+  addGroup('Administración', Icons.admin_panel_settings_outlined, [
+    Routes.contabilidad,
+    Routes.administracion,
+  ]);
+  addGroup('Nómina y equipo', Icons.payments_outlined, [
+    Routes.nomina,
+    Routes.serviceOrderCommissions,
+    Routes.misPagos,
+    Routes.ponche,
+    Routes.users,
+  ]);
+  addGroup('Comunicación', Icons.campaign_outlined, [
+    Routes.publicidad,
+    Routes.whatsapp,
+    Routes.whatsappCrm,
+    Routes.ai,
+  ]);
+  addGroup('Sistema', Icons.tune_rounded, [
+    Routes.manualInterno,
+    Routes.amonestaciones,
+    Routes.configuracion,
+  ]);
+
+  if (itemsByRoute.isNotEmpty) {
+    groups.add(
+      _DrawerMenuGroup(
+        title: 'Más módulos',
+        icon: Icons.apps_rounded,
+        items: itemsByRoute.values.toList(),
+      ),
+    );
+  }
+
+  return groups;
+}
+
+class _DrawerMenuGroup {
+  const _DrawerMenuGroup({
+    required this.title,
+    required this.icon,
+    required this.items,
+  });
+
+  final String title;
+  final IconData icon;
+  final List<AppNavigationItem> items;
+}
+
 Widget? buildAdaptiveDrawer(
   BuildContext context, {
   required UserModel? currentUser,
@@ -273,9 +403,163 @@ Widget? buildAdaptiveDrawer(
   if (route is PopupRoute) return null;
   if (route is PageRoute && route.fullscreenDialog) return null;
 
-  final width = MediaQuery.sizeOf(context).width;
-  if (width >= kDesktopShellBreakpoint) return null;
   return AppDrawer(currentUser: currentUser);
+}
+
+class _DrawerMenuGroupTile extends StatelessWidget {
+  const _DrawerMenuGroupTile({
+    required this.group,
+    required this.index,
+    required this.compact,
+    required this.expanded,
+    required this.selected,
+    required this.onTapHeader,
+    required this.itemBuilder,
+    this.onHoverOpen,
+    this.onHoverExit,
+  });
+
+  final _DrawerMenuGroup group;
+  final int index;
+  final bool compact;
+  final bool expanded;
+  final bool selected;
+  final VoidCallback onTapHeader;
+  final VoidCallback? onHoverOpen;
+  final VoidCallback? onHoverExit;
+  final Widget Function(AppNavigationItem item) itemBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = selected || expanded
+        ? AppColors.primary
+        : AppColors.textPrimary;
+    final headerBg = selected || expanded
+        ? AppColors.primary.withValues(alpha: 0.09)
+        : Colors.transparent;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: onHoverOpen == null ? null : (_) => onHoverOpen!(),
+      onExit: onHoverExit == null ? null : (_) => onHoverExit!(),
+      child: Padding(
+        padding: EdgeInsets.only(bottom: compact ? 4 : 5),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          decoration: BoxDecoration(
+            color: expanded
+                ? AppColors.surfaceMuted.withValues(alpha: 0.36)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Column(
+            children: [
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(15),
+                  onTap: onTapHeader,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    height: compact ? 46 : 50,
+                    padding: EdgeInsets.symmetric(horizontal: compact ? 9 : 10),
+                    decoration: BoxDecoration(
+                      color: headerBg,
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: compact ? 32 : 34,
+                          height: compact ? 32 : 34,
+                          decoration: BoxDecoration(
+                            color: foreground.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            group.icon,
+                            color: foreground,
+                            size: compact ? 18 : 19,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            group.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.body.copyWith(
+                              color: foreground,
+                              fontWeight: FontWeight.w900,
+                              fontSize: compact ? 13.8 : 14.6,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          constraints: const BoxConstraints(minWidth: 26),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: (selected || expanded)
+                                ? Colors.white.withValues(alpha: 0.82)
+                                : AppColors.surfaceMuted,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            '${group.items.length}',
+                            textAlign: TextAlign.center,
+                            style: AppTextStyles.small.copyWith(
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 10.5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        AnimatedRotation(
+                          turns: expanded ? 0.25 : 0,
+                          duration: const Duration(milliseconds: 180),
+                          curve: Curves.easeOut,
+                          child: Icon(
+                            Icons.chevron_right_rounded,
+                            color: foreground,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              AnimatedCrossFade(
+                firstChild: const SizedBox(width: double.infinity),
+                secondChild: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    compact ? 6 : 7,
+                    2,
+                    compact ? 6 : 7,
+                    compact ? 5 : 6,
+                  ),
+                  child: Column(
+                    children: [
+                      for (final item in group.items) itemBuilder(item),
+                    ],
+                  ),
+                ),
+                crossFadeState: expanded
+                    ? CrossFadeState.showSecond
+                    : CrossFadeState.showFirst,
+                duration: const Duration(milliseconds: 170),
+                sizeCurve: Curves.easeOut,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _DrawerMenuItem extends StatefulWidget {
@@ -335,15 +619,10 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final selected = widget.selected;
-    final borderColor = selected
-        ? AppColors.primary.withValues(alpha: 0.30)
-        : (_hovered
-              ? AppColors.secondary.withValues(alpha: 0.20)
-              : Colors.transparent);
     final tileBg = selected
-        ? AppColors.primary.withValues(alpha: 0.10)
+        ? AppColors.primary.withValues(alpha: 0.09)
         : (_hovered
-              ? AppColors.secondary.withValues(alpha: 0.06)
+              ? AppColors.surfaceMuted.withValues(alpha: 0.72)
               : Colors.transparent);
     final foreground = selected ? AppColors.primary : AppColors.textSecondary;
 
@@ -372,29 +651,14 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   curve: Curves.easeOut,
-                  height: widget.compact ? 50 : 54,
+                  height: widget.compact ? 44 : 48,
                   padding: EdgeInsets.symmetric(
-                    horizontal: widget.compact ? 12 : 14,
-                    vertical: 10,
+                    horizontal: widget.compact ? 10 : 12,
+                    vertical: 8,
                   ),
                   decoration: BoxDecoration(
                     color: tileBg,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: borderColor,
-                      width: 1.5,
-                    ),
-                    boxShadow: _hovered || selected
-                        ? [
-                            BoxShadow(
-                              color: selected
-                                  ? AppColors.primary.withValues(alpha: 0.12)
-                                  : AppColors.secondary.withValues(alpha: 0.08),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ]
-                        : [],
                   ),
                   child: Row(
                     children: [
@@ -410,17 +674,10 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
                         ),
                       ),
                       SizedBox(width: selected ? 9 : 12),
-                      AnimatedDefaultTextStyle(
-                        duration: const Duration(milliseconds: 200),
-                        style: TextStyle(
-                          fontSize: widget.compact ? 18 : 20,
-                          color: foreground,
-                        ),
-                        child: Icon(
-                          widget.icon,
-                          size: widget.compact ? 20 : 22,
-                          color: foreground,
-                        ),
+                      Icon(
+                        widget.icon,
+                        size: widget.compact ? 19 : 20,
+                        color: foreground,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -431,7 +688,9 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
                           style: AppTextStyles.body.copyWith(
                             fontWeight: selected
                                 ? FontWeight.w700
-                                : (_hovered ? FontWeight.w600 : FontWeight.w500),
+                                : (_hovered
+                                      ? FontWeight.w600
+                                      : FontWeight.w500),
                             fontSize: widget.compact ? 13.8 : 14.4,
                             color: foreground,
                           ),
@@ -462,40 +721,6 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _DrawerSectionTitle extends StatelessWidget {
-  final String text;
-  final bool compact;
-
-  const _DrawerSectionTitle(this.text, {required this.compact});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        compact ? 6 : 8,
-        compact ? 14 : 16,
-        compact ? 6 : 8,
-        compact ? 6 : 8,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              text.toUpperCase(),
-              style: AppTextStyles.small.copyWith(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textSecondary,
-                letterSpacing: 0.9,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

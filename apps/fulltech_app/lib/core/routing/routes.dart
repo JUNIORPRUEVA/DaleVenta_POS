@@ -17,6 +17,7 @@ class Routes {
   static const contabilidadPagosPendientes = '/contabilidad/pagos-pendientes';
   static const clientes = '/clientes';
   static const ventas = '/ventas';
+  static const ventasLista = '/ventas/lista';
   static const cotizaciones = '/cotizaciones';
   static const cotizacionesHistorial = '/cotizaciones/historial';
   static const serviceOrders = '/service-orders';

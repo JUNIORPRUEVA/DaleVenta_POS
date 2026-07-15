@@ -5,6 +5,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../../core/utils/money_formatters.dart';
 import '../sales_models.dart';
 
 Future<Uint8List> buildSalesSummaryPdf({
@@ -14,7 +15,6 @@ Future<Uint8List> buildSalesSummaryPdf({
   required SalesSummaryModel summary,
   required List<SaleModel> sales,
 }) async {
-  final currency = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
   final dateFmt = DateFormat('dd/MM/yyyy');
 
   final doc = pw.Document(title: 'Resumen de ventas', author: 'FullTech');
@@ -53,10 +53,10 @@ Future<Uint8List> buildSalesSummaryPdf({
                 (sale) => [
                   dateFmt.format(sale.saleDate ?? DateTime.now()),
                   sale.customerName ?? 'Sin cliente',
-                  currency.format(sale.totalSold),
-                  currency.format(sale.totalCost),
-                  currency.format(sale.totalProfit),
-                  currency.format(sale.commissionAmount),
+                  formatRdCurrencyAccounting(sale.totalSold),
+                  formatRdCurrencyAccounting(sale.totalCost),
+                  formatRdCurrencyAccounting(sale.totalProfit),
+                  formatRdCurrencyAccounting(sale.commissionAmount),
                 ],
               )
               .toList(),
@@ -81,13 +81,22 @@ Future<Uint8List> buildSalesSummaryPdf({
                 ),
                 pw.SizedBox(height: 6),
                 _totalLine('Cantidad', '${summary.totalSales}'),
-                _totalLine('Total vendido', currency.format(summary.totalSold)),
-                _totalLine('Total costo', currency.format(summary.totalCost)),
-                _totalLine('Total puntos', currency.format(summary.totalProfit)),
+                _totalLine(
+                  'Total vendido',
+                  formatRdCurrencyAccounting(summary.totalSold),
+                ),
+                _totalLine(
+                  'Total costo',
+                  formatRdCurrencyAccounting(summary.totalCost),
+                ),
+                _totalLine(
+                  'Total puntos',
+                  formatRdCurrencyAccounting(summary.totalProfit),
+                ),
                 pw.Divider(height: 10),
                 _totalLine(
                   'Total beneficio (10%)',
-                  currency.format(summary.totalCommission),
+                  formatRdCurrencyAccounting(summary.totalCommission),
                   highlight: true,
                 ),
               ],

@@ -9,6 +9,7 @@ import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/routing/routes.dart';
+import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../features/catalogo/data/catalog_local_repository.dart';
 import '../clientes/cliente_model.dart';
@@ -75,8 +76,7 @@ class _CotizacionesHistorialScreenState
   DateTime? _toDate;
   bool _ownOnly = false;
 
-  String _money(double value) =>
-      NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$').format(value);
+  String _money(double value) => formatRdCurrencyAccounting(value);
 
   String _normalizeText(String? value) {
     return (value ?? '').trim().toLowerCase();
@@ -1512,8 +1512,7 @@ class _HistorialDesktopSidebar extends StatelessWidget {
   final VoidCallback onPickTo;
   final VoidCallback onClearFilters;
 
-  String _fmt(double v) =>
-      NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$').format(v);
+  String _fmt(double v) => formatRdCurrencyAccounting(v);
 
   @override
   Widget build(BuildContext context) {

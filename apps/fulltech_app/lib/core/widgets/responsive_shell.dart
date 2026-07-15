@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../auth/app_role.dart';
 import '../auth/auth_provider.dart';
@@ -10,23 +13,15 @@ import '../models/user_model.dart';
 import '../routing/routes.dart';
 import '../theme/role_branding.dart';
 import '../utils/date_time_formatters.dart';
+import 'app_drawer.dart';
 import 'app_navigation.dart';
 import 'user_avatar.dart';
 
 BoxDecoration _desktopSurfaceDecoration(ThemeData theme) {
   return BoxDecoration(
-    color: theme.colorScheme.surface.withValues(alpha: 0.92),
-    borderRadius: BorderRadius.circular(20),
-    border: Border.all(
-      color: theme.colorScheme.outlineVariant.withValues(alpha: 0.40),
-    ),
-    boxShadow: [
-      BoxShadow(
-        color: theme.colorScheme.shadow.withValues(alpha: 0.08),
-        blurRadius: 30,
-        offset: const Offset(0, 14),
-      ),
-    ],
+    color: const Color(0xFFEFF5F8),
+    borderRadius: BorderRadius.circular(0),
+    border: Border.all(color: const Color(0xFFD3E0E7)),
   );
 }
 
@@ -56,6 +51,16 @@ class DesktopShellRouteActions {
 final desktopShellRouteActionsProvider =
     StateProvider<DesktopShellRouteActions?>((ref) => null);
 
+class DesktopShellFooterContent {
+  const DesktopShellFooterContent({required this.route, required this.builder});
+
+  final String route;
+  final WidgetBuilder builder;
+}
+
+final desktopShellFooterContentProvider =
+    StateProvider<DesktopShellFooterContent?>((ref) => null);
+
 class ResponsiveShell extends ConsumerStatefulWidget {
   const ResponsiveShell({super.key, required this.child});
 
@@ -66,14 +71,7 @@ class ResponsiveShell extends ConsumerStatefulWidget {
 }
 
 class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
-  // Default: collapsed. User can expand; collapses automatically on navigation.
-  bool _collapsed = true;
-  String _lastKnownLocation = '';
-
-  void _toggleSidebar() {
-    if (!mounted) return;
-    setState(() => _collapsed = !_collapsed);
-  }
+  final _shellScaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   Widget build(BuildContext context) {
@@ -94,73 +92,68 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final shellActions = routeActions?.route == location
         ? routeActions!.actions
         : const <DesktopShellActionItem>[];
+    final customFooter = ref.watch(desktopShellFooterContentProvider);
+    final footerBuilder = customFooter?.route == location
+        ? customFooter!.builder
+        : null;
 
-    // Auto-collapse when the user navigates to a different screen.
-    if (_lastKnownLocation.isNotEmpty && _lastKnownLocation != location) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && !_collapsed) setState(() => _collapsed = true);
-      });
-    }
-    _lastKnownLocation = location;
-
-    // Force sidebar collapsed and locked on CRM WhatsApp screen.
-    final isCrmScreen = location == Routes.whatsappCrm;
-    final effectiveCollapsed = isCrmScreen ? true : _collapsed;
-    final effectiveToggle = isCrmScreen ? () {} : _toggleSidebar;
-
-    return Material(
-      color: Colors.transparent,
-      child: Row(
-        children: [
-          DesktopSidebar(
-            collapsed: effectiveCollapsed,
-            currentUser: user,
-            sections: sections,
-            currentLocation: location,
-            onToggleSidebar: effectiveToggle,
-            onNavigate: (route) => context.go(route),
-          ),
-          Expanded(
-            child: Column(
-              children: [
-                if (showShellAppBar)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                    child: DesktopShellAppBar(
-                      collapsed: effectiveCollapsed,
-                      title: title,
-                      currentUser: user,
-                      onToggleSidebar: effectiveToggle,
-                      extraActions: shellActions,
+    return Scaffold(
+      key: _shellScaffoldKey,
+      backgroundColor: Colors.transparent,
+      drawer: buildAdaptiveDrawer(context, currentUser: user),
+      body: Material(
+        color: Colors.transparent,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              left: 0,
+              child: Column(
+                children: [
+                  if (showShellAppBar)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                      child: DesktopShellAppBar(
+                        collapsed: true,
+                        title: title,
+                        currentUser: user,
+                        onToggleSidebar: () =>
+                            _shellScaffoldKey.currentState?.openDrawer(),
+                        extraActions: shellActions,
+                      ),
                     ),
-                  ),
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      16,
-                      showShellAppBar ? 0 : 12,
-                      16,
-                      12,
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: DecoratedBox(
-                        decoration: _desktopSurfaceDecoration(theme),
-                        child: Theme(
-                          data: theme.copyWith(
-                            scaffoldBackgroundColor: Colors.transparent,
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.zero,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.zero,
+                        child: DecoratedBox(
+                          decoration: _desktopSurfaceDecoration(theme),
+                          child: Theme(
+                            data: theme.copyWith(
+                              scaffoldBackgroundColor: Colors.transparent,
+                            ),
+                            child: widget.child,
                           ),
-                          child: widget.child,
                         ),
                       ),
                     ),
                   ),
-                ),
-                const DesktopShellFooter(),
-              ],
+                  footerBuilder == null
+                      ? const DesktopShellFooter()
+                      : footerBuilder(context),
+                ],
+              ),
             ),
-          ),
-        ],
+            if (!showShellAppBar && location != Routes.cotizaciones)
+              Positioned(
+                left: 14,
+                top: 14,
+                child: _GlobalDrawerButton(
+                  onPressed: () => _shellScaffoldKey.currentState?.openDrawer(),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -188,12 +181,8 @@ class DesktopShellFooter extends ConsumerWidget {
           height: 52,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
-            color: theme.colorScheme.surface.withValues(alpha: 0.88),
-            border: Border(
-              top: BorderSide(
-                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.60),
-              ),
-            ),
+            color: const Color(0xFFF7FAFC),
+            border: Border(top: BorderSide(color: const Color(0xFFD6E1E8))),
           ),
           child: Row(
             children: [
@@ -204,8 +193,8 @@ class DesktopShellFooter extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelMedium?.copyWith(
                     fontWeight: FontWeight.w800,
-                    color: theme.colorScheme.onSurface,
-                    letterSpacing: 0.1,
+                    color: const Color(0xFF183548),
+                    letterSpacing: 0,
                   ),
                 ),
               ),
@@ -213,14 +202,47 @@ class DesktopShellFooter extends ConsumerWidget {
                 timeText,
                 style: theme.textTheme.labelLarge?.copyWith(
                   fontWeight: FontWeight.w900,
-                  color: theme.colorScheme.onSurface,
-                  letterSpacing: 0.3,
+                  color: const Color(0xFF183548),
+                  letterSpacing: 0,
                 ),
               ),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+class _GlobalDrawerButton extends StatelessWidget {
+  const _GlobalDrawerButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.96),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFCFE0FF)),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF0F172A).withValues(alpha: 0.10),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: IconButton(
+          tooltip: 'Menú',
+          onPressed: onPressed,
+          icon: const Icon(Icons.menu_rounded),
+          color: const Color(0xFF1957E6),
+        ),
+      ),
     );
   }
 }
@@ -530,18 +552,39 @@ List<_SidebarMenuGroup> _buildDesktopSidebarGroups(
     ];
   }
 
+  AppNavigationItem menuItem(String route, String title, IconData icon) {
+    final original = routeToItem[route];
+    return AppNavigationItem(
+      icon: icon,
+      title: title,
+      route: route,
+      showIndicator: original?.showIndicator ?? false,
+    );
+  }
+
   final groups = <_SidebarMenuGroup>[
     _SidebarMenuGroup(
       key: 'principal',
       title: 'Principal',
       icon: Icons.dashboard_outlined,
-      items: pick([
-        Routes.serviceOrders,
-        Routes.clientes,
-        Routes.cotizaciones,
-        Routes.catalogo,
-        Routes.ventas,
-      ]),
+      items: pick([Routes.serviceOrders, Routes.clientes]),
+    ),
+    _SidebarMenuGroup(
+      key: 'ventas_tpv',
+      title: 'Ventas TPV',
+      icon: Icons.point_of_sale_outlined,
+      items: [
+        if (routeToItem.containsKey(Routes.cotizaciones))
+          menuItem(
+            Routes.cotizaciones,
+            'Punto de venta',
+            Icons.shopping_cart_checkout_outlined,
+          ),
+        if (routeToItem.containsKey(Routes.catalogo))
+          menuItem(Routes.catalogo, 'Inventario', Icons.inventory_2_outlined),
+        if (routeToItem.containsKey(Routes.ventas))
+          menuItem(Routes.ventas, 'Reportes', Icons.query_stats_outlined),
+      ],
     ),
     _SidebarMenuGroup(
       key: 'administracion',
@@ -616,18 +659,6 @@ String? _resolveActiveGroupKey(
   return groups.isEmpty ? null : groups.first.key;
 }
 
-bool _groupContainsActiveRoute(
-  _SidebarMenuGroup group,
-  String currentLocation,
-) {
-  for (final item in group.items) {
-    if (isNavigationRouteActive(currentLocation, item.route)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 class DesktopSidebar extends ConsumerStatefulWidget {
   const DesktopSidebar({
     super.key,
@@ -652,12 +683,50 @@ class DesktopSidebar extends ConsumerStatefulWidget {
 
 class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
   String? _openGroupKey;
+  bool _clientsExpanded = false;
+  bool _adminExpanded = false;
 
   @override
   void initState() {
     super.initState();
     final groups = _buildDesktopSidebarGroups(widget.sections);
     _openGroupKey = _resolveActiveGroupKey(groups, widget.currentLocation);
+    _restoreSidebarPreference();
+    _syncSubmenusWithRoute();
+  }
+
+  Future<void> _restoreSidebarPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    final collapsed = prefs.getBool('premium_sidebar_collapsed');
+    if (!mounted || collapsed == null || collapsed == widget.collapsed) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && collapsed != widget.collapsed) widget.onToggleSidebar();
+    });
+  }
+
+  Future<void> _persistSidebarPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('premium_sidebar_collapsed', !widget.collapsed);
+  }
+
+  void _toggleSidebar() {
+    widget.onToggleSidebar();
+    unawaited(_persistSidebarPreference());
+  }
+
+  void _syncSubmenusWithRoute() {
+    final path =
+        Uri.tryParse(widget.currentLocation)?.path ?? widget.currentLocation;
+    if (path.startsWith(Routes.clientes) ||
+        path.startsWith(Routes.cotizacionesHistorial) ||
+        path.startsWith(Routes.contabilidadPagosPendientes)) {
+      _clientsExpanded = true;
+    }
+    if (path.startsWith(Routes.administracion) ||
+        path.startsWith(Routes.contabilidad) ||
+        path.startsWith(Routes.contabilidadPagosPendientes)) {
+      _adminExpanded = true;
+    }
   }
 
   @override
@@ -672,280 +741,449 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
     if (next != null && next != _openGroupKey) {
       setState(() => _openGroupKey = next);
     }
+    _syncSubmenusWithRoute();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final width = widget.collapsed ? 80.0 : 256.0;
-    final branding = resolveRoleBranding(
-      widget.currentUser?.appRole ?? AppRole.unknown,
+    final screenSize = MediaQuery.sizeOf(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final scale = (screenSize.height / 860).clamp(0.72, 1.0);
+    final width = widget.collapsed
+        ? (screenSize.width * 0.05 * scale).clamp(58.0, 68.0)
+        : (screenSize.width * 0.124).clamp(176.0, 194.0);
+    final baseColor = isDark
+        ? const Color(0xFF1E293B)
+        : const Color(0xFFF2F6F9);
+    final textColor = isDark
+        ? const Color(0xFFE2E8F0)
+        : const Color(0xFF1E293B);
+    final mutedText = Color.alphaBlend(
+      textColor.withValues(alpha: 0.55),
+      baseColor,
     );
-    const onBase = Colors.white;
-    const panelTop = Color(0xFF0F172A);
-    const panelBottom = Color(0xFF111C31);
-    const slate400 = Color(0xFF94A3B8);
-    const slate500 = Color(0xFF64748B);
-    final groups = _buildDesktopSidebarGroups(widget.sections);
+    final activeColor = isDark
+        ? const Color(0xFF60A5FA)
+        : const Color(0xFF2563EB);
+    final hoverColor = Color.alphaBlend(
+      activeColor.withValues(alpha: 0.08),
+      baseColor,
+    );
+    final borderColor = Color.alphaBlend(
+      const Color(0xFFCBD5E1).withValues(alpha: 0.18),
+      baseColor,
+    );
+    final routeToItem = _desktopRouteToItem(widget.sections);
     final footerItems = _buildDesktopSidebarFooterItems(widget.sections);
+    final visualCollapsed = widget.collapsed;
+    final navPaddingH = visualCollapsed ? 8.0 : 12.0;
+
+    AppNavigationItem? nav(String route, String title, IconData icon) {
+      final original = routeToItem[route];
+      if (original == null) return null;
+      return AppNavigationItem(
+        icon: icon,
+        title: title,
+        route: route,
+        showIndicator: original.showIndicator,
+      );
+    }
+
+    final ventas = nav(
+      Routes.cotizaciones,
+      'Ventas',
+      Icons.storefront_outlined,
+    );
+    final productos = nav(
+      Routes.catalogo,
+      'Productos',
+      Icons.inventory_2_outlined,
+    );
+    final clientes = nav(
+      Routes.clientes,
+      'Clientes',
+      Icons.people_alt_outlined,
+    );
+    final cotizaciones = nav(
+      Routes.cotizacionesHistorial,
+      'Cotizaciones',
+      Icons.edit_note_outlined,
+    );
+    final creditos = nav(
+      Routes.contabilidadPagosPendientes,
+      'Créditos',
+      Icons.credit_card_outlined,
+    );
+    final reportes = nav(Routes.ventas, 'Reportes', Icons.bar_chart_rounded);
+    final compras = nav(
+      Routes.contabilidad,
+      'Compras',
+      Icons.shopping_cart_outlined,
+    );
+    final gastos = nav(
+      Routes.contabilidadPagosPendientes,
+      'Gastos',
+      Icons.payments_outlined,
+    );
+    final configuracion = nav(
+      Routes.configuracion,
+      'Configuración',
+      Icons.settings_outlined,
+    );
+
+    final clientRoutes = {
+      if (clientes != null) clientes.route,
+      if (cotizaciones != null) cotizaciones.route,
+      if (creditos != null) creditos.route,
+    };
+    final adminRoutes = {
+      if (compras != null) compras.route,
+      if (gastos != null) gastos.route,
+      Routes.administracion,
+    };
 
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeInOutCubic,
       width: width,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [panelTop, panelBottom],
-        ),
+        color: baseColor,
+        border: Border(right: BorderSide(color: borderColor)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.22),
-            blurRadius: 20,
-            offset: const Offset(4, 0),
+            color: Colors.black.withValues(alpha: 0.14),
+            blurRadius: 22,
+            spreadRadius: -14,
+            offset: const Offset(8, 0),
           ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
-        child: Column(
+        child: Stack(
           children: [
-            // ── Brand / toggle header ────────────────────────────────
-            GestureDetector(
-              onTap: widget.onToggleSidebar,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                height: 62,
-                padding: EdgeInsets.symmetric(
-                  horizontal: widget.collapsed ? 0 : 14,
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.white.withValues(alpha: isDark ? 0.03 : 0.26),
+                        Colors.transparent,
+                        const Color(
+                          0xFFE2E8F0,
+                        ).withValues(alpha: isDark ? 0.04 : 0.42),
+                      ],
+                      stops: const [0.0, 0.38, 1.0],
+                    ),
+                  ),
                 ),
-                child: widget.collapsed
-                    ? Center(
-                        child: Tooltip(
-                          message: 'Expandir menú',
-                          preferBelow: false,
-                          verticalOffset: 28,
-                          textStyle: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 11,
+              ),
+            ),
+            Column(
+              children: [
+                _PremiumSidebarHeader(
+                  collapsed: visualCollapsed,
+                  textColor: textColor,
+                  mutedText: mutedText,
+                  activeColor: activeColor,
+                  borderColor: borderColor,
+                  baseColor: baseColor,
+                  scale: scale,
+                  onToggle: _toggleSidebar,
+                ),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final compactHeight = constraints.maxHeight < 780;
+                      final showLabels = !visualCollapsed && !compactHeight;
+                      return ListView(
+                        padding: EdgeInsets.fromLTRB(
+                          navPaddingH,
+                          visualCollapsed ? 12 : 8,
+                          navPaddingH,
+                          12,
+                        ),
+                        children: [
+                          _PremiumSectionLabel(
+                            text: 'Principal',
+                            visible: showLabels,
+                            color: mutedText,
+                            scale: scale,
                           ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0F172A),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Container(
-                            width: 42,
-                            height: 42,
-                            decoration: BoxDecoration(
-                              color: onBase.withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: onBase.withValues(alpha: 0.10),
+                          if (ventas != null)
+                            _PremiumSidebarNavItem(
+                              item: ventas,
+                              collapsed: visualCollapsed,
+                              currentLocation: widget.currentLocation,
+                              textColor: textColor,
+                              activeColor: activeColor,
+                              hoverColor: hoverColor,
+                              baseColor: baseColor,
+                              scale: scale,
+                              onTap: () => widget.onNavigate(ventas.route),
+                            ),
+                          if (productos != null)
+                            _PremiumSidebarNavItem(
+                              item: productos,
+                              collapsed: visualCollapsed,
+                              currentLocation: widget.currentLocation,
+                              textColor: textColor,
+                              activeColor: activeColor,
+                              hoverColor: hoverColor,
+                              baseColor: baseColor,
+                              scale: scale,
+                              onTap: () => widget.onNavigate(productos.route),
+                            ),
+                          _PremiumSidebarNavItem(
+                            item: const AppNavigationItem(
+                              icon: Icons.groups_outlined,
+                              title: 'Clientes',
+                              route: '__clients__',
+                            ),
+                            activeRoutes: clientRoutes,
+                            collapsed: visualCollapsed,
+                            currentLocation: widget.currentLocation,
+                            textColor: textColor,
+                            activeColor: activeColor,
+                            hoverColor: hoverColor,
+                            baseColor: baseColor,
+                            scale: scale,
+                            showSubmenuBadge: true,
+                            trailing: AnimatedRotation(
+                              turns: _clientsExpanded ? 0.25 : 0,
+                              duration: const Duration(milliseconds: 220),
+                              curve: Curves.easeOutCubic,
+                              child: Icon(
+                                Icons.chevron_right_rounded,
+                                size: 16,
+                                color: textColor.withValues(alpha: 0.58),
                               ),
                             ),
-                            child: const Icon(
-                              Icons.business_rounded,
-                              color: Colors.white,
-                              size: 18,
-                            ),
+                            onTap: () {
+                              if (visualCollapsed) {
+                                _toggleSidebar();
+                                setState(() => _clientsExpanded = true);
+                              } else {
+                                setState(
+                                  () => _clientsExpanded = !_clientsExpanded,
+                                );
+                              }
+                            },
                           ),
-                        ),
-                      )
-                    : Row(
-                        children: [
-                          Container(
-                            width: 34,
-                            height: 34,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(
-                              Icons.business_rounded,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  'FULLTECH',
-                                  style: theme.textTheme.labelLarge?.copyWith(
-                                    fontFamily: 'Inter',
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0,
-                                    color: onBase,
-                                  ),
+                          _PremiumSidebarSubmenu(
+                            visible: !visualCollapsed && _clientsExpanded,
+                            children: [
+                              if (clientes != null)
+                                _PremiumSidebarNavItem(
+                                  item: clientes,
+                                  collapsed: false,
+                                  lowEmphasis: true,
+                                  currentLocation: widget.currentLocation,
+                                  textColor: textColor,
+                                  activeColor: activeColor,
+                                  hoverColor: hoverColor,
+                                  baseColor: baseColor,
+                                  scale: scale,
+                                  onTap: () =>
+                                      widget.onNavigate(clientes.route),
                                 ),
-                                Text(
-                                  branding.departmentName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: slate400,
-                                    fontFamily: 'Inter',
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                              if (cotizaciones != null)
+                                _PremiumSidebarNavItem(
+                                  item: cotizaciones,
+                                  collapsed: false,
+                                  lowEmphasis: true,
+                                  currentLocation: widget.currentLocation,
+                                  textColor: textColor,
+                                  activeColor: activeColor,
+                                  hoverColor: hoverColor,
+                                  baseColor: baseColor,
+                                  scale: scale,
+                                  onTap: () =>
+                                      widget.onNavigate(cotizaciones.route),
                                 ),
-                              ],
+                              if (creditos != null)
+                                _PremiumSidebarNavItem(
+                                  item: creditos,
+                                  collapsed: false,
+                                  lowEmphasis: true,
+                                  currentLocation: widget.currentLocation,
+                                  textColor: textColor,
+                                  activeColor: activeColor,
+                                  hoverColor: hoverColor,
+                                  baseColor: baseColor,
+                                  scale: scale,
+                                  onTap: () =>
+                                      widget.onNavigate(creditos.route),
+                                ),
+                            ],
+                          ),
+                          if (reportes != null)
+                            _PremiumSidebarNavItem(
+                              item: reportes,
+                              collapsed: visualCollapsed,
+                              currentLocation: widget.currentLocation,
+                              textColor: textColor,
+                              activeColor: activeColor,
+                              hoverColor: hoverColor,
+                              baseColor: baseColor,
+                              scale: scale,
+                              onTap: () => widget.onNavigate(reportes.route),
                             ),
+                          _PremiumSidebarNavItem(
+                            item: const AppNavigationItem(
+                              icon: Icons.grid_view_rounded,
+                              title: 'Administración',
+                              route: '__admin__',
+                            ),
+                            activeRoutes: adminRoutes,
+                            collapsed: visualCollapsed,
+                            currentLocation: widget.currentLocation,
+                            textColor: textColor,
+                            activeColor: activeColor,
+                            hoverColor: hoverColor,
+                            baseColor: baseColor,
+                            scale: scale,
+                            showSubmenuBadge: true,
+                            trailing: AnimatedRotation(
+                              turns: _adminExpanded ? 0.25 : 0,
+                              duration: const Duration(milliseconds: 220),
+                              curve: Curves.easeOutCubic,
+                              child: Icon(
+                                Icons.chevron_right_rounded,
+                                size: 16,
+                                color: textColor.withValues(alpha: 0.58),
+                              ),
+                            ),
+                            onTap: () {
+                              if (visualCollapsed) {
+                                _toggleSidebar();
+                                setState(() => _adminExpanded = true);
+                              } else {
+                                setState(
+                                  () => _adminExpanded = !_adminExpanded,
+                                );
+                              }
+                            },
                           ),
-                          Icon(
-                            Icons.keyboard_double_arrow_left_rounded,
-                            size: 16,
-                            color: slate500,
+                          _PremiumSidebarSubmenu(
+                            visible: !visualCollapsed && _adminExpanded,
+                            children: [
+                              if (compras != null)
+                                _PremiumSidebarNavItem(
+                                  item: compras,
+                                  collapsed: false,
+                                  lowEmphasis: true,
+                                  currentLocation: widget.currentLocation,
+                                  textColor: textColor,
+                                  activeColor: activeColor,
+                                  hoverColor: hoverColor,
+                                  baseColor: baseColor,
+                                  scale: scale,
+                                  onTap: () => widget.onNavigate(compras.route),
+                                ),
+                              if (gastos != null)
+                                _PremiumSidebarNavItem(
+                                  item: gastos,
+                                  collapsed: false,
+                                  lowEmphasis: true,
+                                  currentLocation: widget.currentLocation,
+                                  textColor: textColor,
+                                  activeColor: activeColor,
+                                  hoverColor: hoverColor,
+                                  baseColor: baseColor,
+                                  scale: scale,
+                                  onTap: () => widget.onNavigate(gastos.route),
+                                ),
+                            ],
                           ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Divider(color: borderColor),
+                          ),
+                          _PremiumSectionLabel(
+                            text: 'Sistema',
+                            visible: showLabels,
+                            color: mutedText,
+                            scale: scale,
+                          ),
+                          if (configuracion != null)
+                            _PremiumSidebarNavItem(
+                              item: configuracion,
+                              collapsed: visualCollapsed,
+                              lowEmphasis: true,
+                              currentLocation: widget.currentLocation,
+                              textColor: textColor,
+                              activeColor: activeColor,
+                              hoverColor: hoverColor,
+                              baseColor: baseColor,
+                              scale: scale,
+                              onTap: () =>
+                                  widget.onNavigate(configuracion.route),
+                            ),
                         ],
-                      ),
-              ),
-            ),
-
-            // ── Top separator ────────────────────────────────────────
-            Divider(height: 1, color: onBase.withValues(alpha: 0.07)),
-
-            // ── Navigation items ─────────────────────────────────────
-            Expanded(
-              child: ListView(
-                physics: const ClampingScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
-                children: [
-                  if (widget.collapsed)
-                    for (final group in groups)
-                      _DesktopSidebarCollapsedGroupButton(
-                        title: group.title,
-                        icon: group.icon,
-                        items: group.items,
-                        currentLocation: widget.currentLocation,
-                        onNavigate: widget.onNavigate,
-                        selected: _groupContainsActiveRoute(
-                          group,
-                          widget.currentLocation,
-                        ),
-                        showIndicator: group.items.any(
-                          (item) => item.showIndicator,
-                        ),
-                      )
-                  else
-                    for (final group in groups) ...[
-                      _DesktopSidebarGroupHeader(
-                        title: group.title,
-                        icon: group.icon,
-                        open: _openGroupKey == group.key,
-                        active: _groupContainsActiveRoute(
-                          group,
-                          widget.currentLocation,
-                        ),
-                        onTap: () {
-                          final containsActive = _groupContainsActiveRoute(
-                            group,
-                            widget.currentLocation,
-                          );
-                          setState(() {
-                            if (_openGroupKey == group.key) {
-                              _openGroupKey = containsActive ? group.key : null;
-                            } else {
-                              _openGroupKey = group.key;
-                            }
-                          });
-                        },
-                      ),
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 220),
-                        curve: Curves.easeOutCubic,
-                        child: _openGroupKey == group.key
-                            ? Padding(
-                                padding: const EdgeInsets.only(
-                                  left: 8,
-                                  right: 2,
-                                  top: 4,
-                                  bottom: 14,
-                                ),
-                                child: Column(
-                                  children: [
-                                    for (final item in group.items)
-                                      _DesktopSidebarItem(
-                                        collapsed: false,
-                                        isSubItem: true,
-                                        item: item,
-                                        selected: isNavigationRouteActive(
-                                          widget.currentLocation,
-                                          item.route,
-                                        ),
-                                        onTap: () =>
-                                            widget.onNavigate(item.route),
-                                      ),
-                                  ],
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ],
-                ],
-              ),
-            ),
-
-            // ── Bottom separator ────────────────────────────────────
-            Divider(height: 1, color: onBase.withValues(alpha: 0.07)),
-
-            // ── User / logout footer ─────────────────────────────────
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                widget.collapsed ? 8 : 10,
-                8,
-                widget.collapsed ? 8 : 10,
-                12,
-              ),
-              child: Column(
-                children: [
-                  for (final item in footerItems) ...[
-                    _SidebarFooterButton(
-                      collapsed: widget.collapsed,
-                      tooltip: item.title,
-                      icon: item.icon,
-                      label: item.title,
-                      selected: isNavigationRouteActive(
-                        widget.currentLocation,
-                        item.route,
-                      ),
-                      onTap: () => widget.onNavigate(item.route),
-                    ),
-                    const SizedBox(height: 4),
-                  ],
-                  // Profile
-                  _SidebarFooterButton(
-                    collapsed: widget.collapsed,
-                    tooltip: 'Mi perfil',
-                    icon: Icons.person_outline_rounded,
-                    label: widget.currentUser?.nombreCompleto ?? 'Perfil',
-                    sublabel: branding.departmentName,
-                    useAvatar: true,
-                    avatarInitials: userInitials(widget.currentUser),
-                    selected: isNavigationRouteActive(
-                      widget.currentLocation,
-                      Routes.profile,
-                    ),
-                    onTap: () => context.push(Routes.profile),
-                  ),
-                  const SizedBox(height: 4),
-                  // Logout
-                  _SidebarFooterButton(
-                    collapsed: widget.collapsed,
-                    tooltip: 'Cerrar sesión',
-                    icon: Icons.logout_rounded,
-                    label: 'Cerrar sesión',
-                    isDestructive: true,
-                    onTap: () async {
-                      await ref.read(authStateProvider.notifier).logout();
+                      );
                     },
                   ),
-                ],
-              ),
+                ),
+                Divider(height: 1, color: borderColor),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    widget.collapsed ? 8 : 10,
+                    8,
+                    widget.collapsed ? 8 : 10,
+                    12,
+                  ),
+                  child: Column(
+                    children: [
+                      for (final item in footerItems) ...[
+                        _SidebarFooterButton(
+                          collapsed: widget.collapsed,
+                          tooltip: item.title,
+                          icon: item.icon,
+                          label: item.title,
+                          selected: isNavigationRouteActive(
+                            widget.currentLocation,
+                            item.route,
+                          ),
+                          onTap: () => widget.onNavigate(item.route),
+                        ),
+                        const SizedBox(height: 4),
+                      ],
+                      _SidebarFooterButton(
+                        collapsed: widget.collapsed,
+                        tooltip: 'Mi perfil',
+                        icon: Icons.person_outline_rounded,
+                        label: widget.currentUser?.nombreCompleto ?? 'Perfil',
+                        sublabel: resolveRoleBranding(
+                          widget.currentUser?.appRole ?? AppRole.unknown,
+                        ).departmentName,
+                        useAvatar: true,
+                        avatarInitials: userInitials(widget.currentUser),
+                        selected: isNavigationRouteActive(
+                          widget.currentLocation,
+                          Routes.profile,
+                        ),
+                        onTap: () => context.push(Routes.profile),
+                      ),
+                      const SizedBox(height: 4),
+                      _SidebarFooterButton(
+                        collapsed: widget.collapsed,
+                        tooltip: 'Cerrar sesión',
+                        icon: Icons.logout_rounded,
+                        label: 'Cerrar sesión',
+                        isDestructive: true,
+                        onTap: () async {
+                          await ref.read(authStateProvider.notifier).logout();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -954,67 +1192,531 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
   }
 }
 
-class _DesktopSidebarGroupHeader extends StatelessWidget {
-  const _DesktopSidebarGroupHeader({
-    required this.title,
-    required this.icon,
-    required this.open,
-    required this.active,
-    required this.onTap,
+class _PremiumSidebarHeader extends StatelessWidget {
+  const _PremiumSidebarHeader({
+    required this.collapsed,
+    required this.textColor,
+    required this.mutedText,
+    required this.activeColor,
+    required this.borderColor,
+    required this.baseColor,
+    required this.scale,
+    required this.onToggle,
   });
 
-  final String title;
-  final IconData icon;
-  final bool open;
-  final bool active;
-  final VoidCallback onTap;
+  final bool collapsed;
+  final Color textColor;
+  final Color mutedText;
+  final Color activeColor;
+  final Color borderColor;
+  final Color baseColor;
+  final double scale;
+  final VoidCallback onToggle;
 
   @override
   Widget build(BuildContext context) {
-    const normal = Color(0xFF94A3B8);
-    const activeColor = Color(0xFFFFFFFF);
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 10, bottom: 4),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: onTap,
-          child: SizedBox(
-            height: 38,
-            child: Row(
-              children: [
-                Icon(icon, size: 20, color: active ? activeColor : normal),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: active ? activeColor : normal,
-                      fontFamily: 'Inter',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ),
-                AnimatedRotation(
-                  turns: open ? 0.0 : -0.25,
-                  duration: const Duration(milliseconds: 220),
-                  child: Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    size: 18,
-                    color: normal,
-                  ),
-                ),
-              ],
+    final brandSize = collapsed
+        ? (40 * scale).clamp(34.0, 44.0)
+        : (34 * scale).clamp(30.0, 38.0);
+    final icon = AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeInOut,
+      width: brandSize,
+      height: brandSize,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        gradient: LinearGradient(
+          colors: [
+            Color.alphaBlend(Colors.white.withValues(alpha: 0.16), baseColor),
+            Color.alphaBlend(Colors.white.withValues(alpha: 0.04), baseColor),
+          ],
+        ),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.16),
+            blurRadius: 14,
+            spreadRadius: -10,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          Icon(Icons.receipt_long_outlined, color: textColor, size: 19),
+          Positioned(
+            right: 5,
+            bottom: 7,
+            child: Icon(
+              Icons.credit_card_rounded,
+              color: activeColor,
+              size: 10,
             ),
+          ),
+          if (collapsed)
+            Positioned(
+              right: -5,
+              bottom: -5,
+              child: Container(
+                width: 15,
+                height: 15,
+                decoration: BoxDecoration(
+                  color: activeColor,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: baseColor, width: 2),
+                ),
+                child: const Icon(
+                  Icons.keyboard_arrow_right_rounded,
+                  color: Colors.white,
+                  size: 11,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    return SizedBox(
+      height: 52,
+      child: InkWell(
+        onTap: onToggle,
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: collapsed ? 0 : 12),
+          child: collapsed
+              ? Center(child: icon)
+              : Row(
+                  children: [
+                    icon,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'FULLPOS',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 13.6,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.44,
+                            ),
+                          ),
+                          Text(
+                            'Sistema comercial',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: mutedText,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 0.22,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Colapsar menú',
+                      onPressed: onToggle,
+                      icon: Icon(
+                        Icons.keyboard_arrow_left_rounded,
+                        color: mutedText,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PremiumSectionLabel extends StatelessWidget {
+  const _PremiumSectionLabel({
+    required this.text,
+    required this.visible,
+    required this.color,
+    required this.scale,
+  });
+
+  final String text;
+  final bool visible;
+  final Color color;
+  final double scale;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!visible) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 5),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          text.toUpperCase(),
+          style: TextStyle(
+            color: color.withValues(alpha: 0.92),
+            fontSize: (8.4 * scale).clamp(7.8, 9.4),
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.45,
           ),
         ),
       ),
+    );
+  }
+}
+
+class _PremiumSidebarSubmenu extends StatelessWidget {
+  const _PremiumSidebarSubmenu({required this.visible, required this.children});
+
+  final bool visible;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.topCenter,
+      child: visible
+          ? Padding(
+              padding: const EdgeInsets.only(left: 14, top: 3, bottom: 5),
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 180),
+                opacity: visible ? 1 : 0,
+                child: Column(children: children),
+              ),
+            )
+          : const SizedBox.shrink(),
+    );
+  }
+}
+
+class _PremiumSidebarNavItem extends StatefulWidget {
+  const _PremiumSidebarNavItem({
+    required this.item,
+    required this.collapsed,
+    required this.currentLocation,
+    required this.textColor,
+    required this.activeColor,
+    required this.hoverColor,
+    required this.baseColor,
+    required this.scale,
+    required this.onTap,
+    this.activeRoutes,
+    this.lowEmphasis = false,
+    this.showSubmenuBadge = false,
+    this.trailing,
+  });
+
+  final AppNavigationItem item;
+  final bool collapsed;
+  final String currentLocation;
+  final Color textColor;
+  final Color activeColor;
+  final Color hoverColor;
+  final Color baseColor;
+  final double scale;
+  final VoidCallback onTap;
+  final Set<String>? activeRoutes;
+  final bool lowEmphasis;
+  final bool showSubmenuBadge;
+  final Widget? trailing;
+
+  @override
+  State<_PremiumSidebarNavItem> createState() => _PremiumSidebarNavItemState();
+}
+
+class _PremiumSidebarNavItemState extends State<_PremiumSidebarNavItem> {
+  bool _hovered = false;
+
+  bool get _active {
+    final path =
+        Uri.tryParse(widget.currentLocation)?.path ?? widget.currentLocation;
+    final route = widget.item.route;
+    final ownRoute =
+        !route.startsWith('__') &&
+        (path == route || path.startsWith('$route/'));
+    final childRoute =
+        widget.activeRoutes?.any((r) => path == r || path.startsWith('$r/')) ??
+        false;
+    return ownRoute || childRoute;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final collapsed = widget.collapsed;
+    final active = _active;
+    final rowHeight = collapsed
+        ? (42 * widget.scale).clamp(40.0, 46.0)
+        : (38 * widget.scale).clamp(35.0, 42.0);
+    final radius = BorderRadius.circular((9 * widget.scale).clamp(7.0, 9.0));
+    final fg = active
+        ? Colors.white
+        : widget.textColor.withValues(
+            alpha: widget.lowEmphasis && !_hovered ? 0.62 : 1,
+          );
+    final activeTop = Color.alphaBlend(
+      Colors.white.withValues(alpha: 0.10),
+      widget.activeColor,
+    );
+    final activeBottom = Color.alphaBlend(
+      Colors.black.withValues(alpha: 0.18),
+      widget.activeColor,
+    );
+
+    Widget content = AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeInOut,
+      height: rowHeight,
+      padding: EdgeInsets.symmetric(
+        horizontal: collapsed ? 0 : (11 * widget.scale).clamp(9.0, 13.0),
+      ),
+      decoration: BoxDecoration(
+        color: active
+            ? null
+            : (_hovered ? widget.hoverColor : Colors.transparent),
+        gradient: active
+            ? LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [activeTop, activeBottom],
+              )
+            : null,
+        borderRadius: radius,
+        border: Border.all(
+          color: active
+              ? Colors.white.withValues(alpha: 0.18)
+              : widget.textColor.withValues(alpha: _hovered ? 0.10 : 0.0),
+        ),
+        boxShadow: active
+            ? [
+                BoxShadow(
+                  color: widget.activeColor.withValues(alpha: 0.42),
+                  blurRadius: 20,
+                  spreadRadius: -8,
+                  offset: const Offset(0, 10),
+                ),
+              ]
+            : _hovered
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.16),
+                  blurRadius: 14,
+                  spreadRadius: -8,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : null,
+      ),
+      child: collapsed
+          ? Center(
+              child: _PremiumCollapsedIcon(
+                icon: widget.item.icon,
+                active: active,
+                hovered: _hovered,
+                textColor: widget.textColor,
+                activeColor: widget.activeColor,
+                showSubmenuBadge: widget.showSubmenuBadge,
+              ),
+            )
+          : Row(
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Icon(widget.item.icon, color: fg, size: 19.5),
+                    if (widget.showSubmenuBadge)
+                      Positioned(
+                        right: -6,
+                        bottom: -5,
+                        child: _SubmenuBadge(
+                          color: active ? Colors.white : widget.activeColor,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    widget.item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: fg,
+                      fontSize: 12.1,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.12,
+                    ),
+                  ),
+                ),
+                if (widget.trailing != null) widget.trailing!,
+              ],
+            ),
+    );
+
+    content = AnimatedScale(
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeInOut,
+      scale: _hovered ? 1.05 : 1.0,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: radius,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(onTap: widget.onTap, child: content),
+      ),
+    );
+
+    if (collapsed) {
+      content = Tooltip(
+        message: widget.item.title,
+        preferBelow: false,
+        verticalOffset: 30,
+        textStyle: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+          fontSize: 16.5,
+        ),
+        decoration: BoxDecoration(
+          color: const Color(0xFF475569),
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.28),
+              blurRadius: 20,
+              spreadRadius: -10,
+              offset: const Offset(0, 12),
+            ),
+          ],
+        ),
+        child: content,
+      );
+    }
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: collapsed ? 8 : 5),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: content,
+      ),
+    );
+  }
+}
+
+class _PremiumCollapsedIcon extends StatelessWidget {
+  const _PremiumCollapsedIcon({
+    required this.icon,
+    required this.active,
+    required this.hovered,
+    required this.textColor,
+    required this.activeColor,
+    required this.showSubmenuBadge,
+  });
+
+  final IconData icon;
+  final bool active;
+  final bool hovered;
+  final Color textColor;
+  final Color activeColor;
+  final bool showSubmenuBadge;
+
+  @override
+  Widget build(BuildContext context) {
+    final iconColor = active ? Colors.white : textColor;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: active
+              ? [
+                  activeColor,
+                  Color.alphaBlend(
+                    Colors.black.withValues(alpha: 0.16),
+                    activeColor,
+                  ),
+                ]
+              : [
+                  Colors.white.withValues(alpha: hovered ? 0.92 : 0.72),
+                  Colors.white.withValues(alpha: hovered ? 0.64 : 0.44),
+                ],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: textColor.withValues(
+            alpha: active
+                ? 0.18
+                : hovered
+                ? 0.11
+                : 0.08,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: (active ? activeColor : Colors.black).withValues(
+              alpha: active
+                  ? 0.44
+                  : hovered
+                  ? 0.18
+                  : 0.10,
+            ),
+            blurRadius: active ? 18 : 12,
+            spreadRadius: -8,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: 8,
+            right: 8,
+            top: 7,
+            child: Container(
+              height: 1.2,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.transparent,
+                    iconColor.withValues(alpha: active ? 0.32 : 0.22),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Center(child: Icon(icon, color: iconColor, size: 19.5)),
+          if (showSubmenuBadge)
+            Positioned(
+              right: 5,
+              bottom: 4,
+              child: _SubmenuBadge(color: active ? Colors.white : activeColor),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubmenuBadge extends StatelessWidget {
+  const _SubmenuBadge({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 7,
+      height: 7,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     );
   }
 }
@@ -1098,8 +1800,8 @@ class _DesktopSidebarCollapsedGroupButtonState
 
   @override
   Widget build(BuildContext context) {
-    const normal = Color(0xFF94A3B8);
-    const activeColor = Color(0xFFFFFFFF);
+    const normal = Color(0xFF5F7180);
+    const activeColor = Color(0xFF1957E6);
 
     final icon = SizedBox(
       height: 48,
@@ -1111,10 +1813,8 @@ class _DesktopSidebarCollapsedGroupButtonState
           height: 42,
           decoration: BoxDecoration(
             color: widget.selected
-                ? Colors.white.withValues(alpha: 0.12)
-                : (_hovered
-                      ? Colors.white.withValues(alpha: 0.06)
-                      : Colors.transparent),
+                ? const Color(0xFFEAF1FF)
+                : (_hovered ? const Color(0xFFF3F7FF) : Colors.transparent),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Stack(
@@ -1133,7 +1833,7 @@ class _DesktopSidebarCollapsedGroupButtonState
                   Icons.chevron_right_rounded,
                   size: 12,
                   color: widget.selected
-                      ? activeColor.withValues(alpha: 0.9)
+                      ? activeColor
                       : normal.withValues(alpha: 0.85),
                 ),
               ),
@@ -1147,7 +1847,7 @@ class _DesktopSidebarCollapsedGroupButtonState
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.error,
                       shape: BoxShape.circle,
-                      border: Border.all(color: activeColor, width: 1.1),
+                      border: Border.all(color: Colors.white, width: 1.1),
                     ),
                   ),
                 ),
@@ -1224,17 +1924,16 @@ class _SidebarFooterButtonState extends State<_SidebarFooterButton> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    const onBase = Colors.white;
-    const slate400 = Color(0xFF94A3B8);
+    const slate400 = Color(0xFF5F7180);
     final bg = widget.selected
-        ? theme.colorScheme.primary.withValues(alpha: 0.22)
+        ? const Color(0xFFEAF1FF)
         : _hovered
-        ? Colors.white.withValues(alpha: widget.isDestructive ? 0.08 : 0.07)
+        ? const Color(0xFFF3F7FF)
         : Colors.transparent;
     final fgColor = widget.selected
-        ? onBase
+        ? const Color(0xFF1957E6)
         : widget.isDestructive
-        ? Colors.red.shade200
+        ? Colors.red.shade600
         : slate400;
 
     Widget content = Container(
@@ -1244,7 +1943,7 @@ class _SidebarFooterButtonState extends State<_SidebarFooterButton> {
         color: bg,
         borderRadius: BorderRadius.circular(10),
         border: widget.selected
-            ? Border.all(color: Colors.white.withValues(alpha: 0.10))
+            ? Border.all(color: const Color(0xFFB9CCFF))
             : null,
       ),
       child: widget.collapsed
@@ -1254,11 +1953,11 @@ class _SidebarFooterButtonState extends State<_SidebarFooterButton> {
                 widget.useAvatar
                     ? CircleAvatar(
                         radius: 13,
-                        backgroundColor: Colors.white.withValues(alpha: 0.14),
+                        backgroundColor: const Color(0xFFEAF1FF),
                         child: Text(
                           widget.avatarInitials,
                           style: TextStyle(
-                            color: onBase,
+                            color: const Color(0xFF1957E6),
                             fontFamily: 'Inter',
                             fontWeight: FontWeight.w600,
                             fontSize: 10,
@@ -1335,14 +2034,12 @@ class _SidebarFooterButtonState extends State<_SidebarFooterButton> {
 class _DesktopSidebarItem extends StatefulWidget {
   const _DesktopSidebarItem({
     required this.collapsed,
-    this.isSubItem = false,
     required this.item,
     required this.selected,
     required this.onTap,
   });
 
   final bool collapsed;
-  final bool isSubItem;
   final AppNavigationItem item;
   final bool selected;
   final VoidCallback onTap;
@@ -1357,8 +2054,8 @@ class _DesktopSidebarItemState extends State<_DesktopSidebarItem> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    const onBase = Colors.white;
-    const normalText = Color(0xFF94A3B8);
+    const onBase = Color(0xFF1957E6);
+    const normalText = Color(0xFF5F7180);
     final selected = widget.selected;
     final collapsed = widget.collapsed;
 
@@ -1374,10 +2071,8 @@ class _DesktopSidebarItemState extends State<_DesktopSidebarItem> {
             height: 42,
             decoration: BoxDecoration(
               color: selected
-                  ? Colors.white.withValues(alpha: 0.12)
-                  : (_hovered
-                        ? Colors.white.withValues(alpha: 0.06)
-                        : Colors.transparent),
+                  ? const Color(0xFFEAF1FF)
+                  : (_hovered ? const Color(0xFFF3F7FF) : Colors.transparent),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Stack(
@@ -1399,7 +2094,7 @@ class _DesktopSidebarItemState extends State<_DesktopSidebarItem> {
                       decoration: BoxDecoration(
                         color: theme.colorScheme.error,
                         shape: BoxShape.circle,
-                        border: Border.all(color: onBase, width: 1.1),
+                        border: Border.all(color: Colors.white, width: 1.1),
                       ),
                     ),
                   ),
@@ -1410,18 +2105,16 @@ class _DesktopSidebarItemState extends State<_DesktopSidebarItem> {
       );
     } else {
       final itemBg = selected
-          ? Colors.white.withValues(alpha: 0.12)
-          : (_hovered
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.transparent);
+          ? const Color(0xFFEAF1FF)
+          : (_hovered ? const Color(0xFFF3F7FF) : Colors.transparent);
 
       content = SizedBox(
-        height: widget.isSubItem ? 42 : 46,
+        height: 46,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 170),
           curve: Curves.easeOut,
           margin: const EdgeInsets.symmetric(vertical: 2),
-          padding: EdgeInsets.symmetric(horizontal: widget.isSubItem ? 10 : 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
             color: itemBg,
             borderRadius: BorderRadius.circular(10),
@@ -1434,7 +2127,7 @@ class _DesktopSidebarItemState extends State<_DesktopSidebarItem> {
                 height: 24,
                 decoration: BoxDecoration(
                   color: selected
-                      ? theme.colorScheme.primary
+                      ? const Color(0xFF1957E6)
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(999),
                 ),
@@ -1442,10 +2135,10 @@ class _DesktopSidebarItemState extends State<_DesktopSidebarItem> {
               SizedBox(width: selected ? 10 : 13),
               Icon(
                 widget.item.icon,
-                size: widget.isSubItem ? 17 : 19,
+                size: 19,
                 color: selected ? onBase : normalText,
               ),
-              SizedBox(width: widget.isSubItem ? 8 : 10),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   widget.item.title,
@@ -1455,7 +2148,7 @@ class _DesktopSidebarItemState extends State<_DesktopSidebarItem> {
                     fontFamily: 'Inter',
                     fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                     color: selected ? onBase : normalText,
-                    fontSize: widget.isSubItem ? 13 : 14,
+                    fontSize: 14,
                   ),
                 ),
               ),

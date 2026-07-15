@@ -8,6 +8,7 @@ import '../../core/auth/auth_provider.dart';
 import '../../core/errors/user_facing_error.dart';
 import '../../core/models/user_model.dart';
 import '../../core/routing/routes.dart';
+import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/professional_recovery_card.dart';
@@ -147,8 +148,7 @@ class _AdminQuotesRegistryScreenState
     await _load();
   }
 
-  String _money(double value) =>
-      NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$').format(value);
+  String _money(double value) => formatRdCurrencyAccounting(value);
 
   String _dateOnlyText(DateTime value) {
     return DateFormat('dd/MM/yyyy', 'es_DO').format(value);

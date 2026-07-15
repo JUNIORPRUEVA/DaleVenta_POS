@@ -91,8 +91,8 @@ List<AppNavigationSection> buildAppNavigationSections(
           ),
         if (can(AppPermission.viewQuotes))
           const AppNavigationItem(
-            icon: Icons.request_quote_outlined,
-            title: 'Cotizaciones',
+            icon: Icons.point_of_sale_outlined,
+            title: 'Ventas',
             route: Routes.cotizaciones,
           ),
         if (can(AppPermission.viewPunch))
@@ -103,14 +103,14 @@ List<AppNavigationSection> buildAppNavigationSections(
           ),
         if (can(AppPermission.viewCatalog))
           const AppNavigationItem(
-            icon: Icons.storefront_outlined,
-            title: 'Catálogo',
+            icon: Icons.inventory_2_outlined,
+            title: 'Inventario',
             route: Routes.catalogo,
           ),
         if (can(AppPermission.viewSales))
           const AppNavigationItem(
-            icon: Icons.point_of_sale_outlined,
-            title: 'Mis Ventas',
+            icon: Icons.bar_chart_rounded,
+            title: 'Reportes',
             route: Routes.ventas,
           ),
         if (can(AppPermission.viewAccounting))
@@ -264,15 +264,19 @@ String resolveNavigationTitle(
   if (path == Routes.mediaGallery) return 'Galería media';
   if (path == Routes.serviceOrderCreate) return 'Crear orden';
   if (path == Routes.documentFlows) return 'Flujo documental';
-  if (path == Routes.cotizacionesHistorial) return 'Historial de cotizaciones';
+  if (path == Routes.cotizacionesHistorial) return 'Historial de ventas';
   if (path == Routes.clienteNuevo) return 'Nuevo cliente';
   if (path == Routes.ai) return 'IA';
   if (path == Routes.publicidad) return 'Publicidad';
-  if (path == Routes.publicidadInvestigacion) return 'Publicidad / Investigación';
+  if (path == Routes.publicidadInvestigacion) {
+    return 'Publicidad / Investigación';
+  }
   if (path == Routes.publicidadEstados) return 'Publicidad / Estados';
   if (path == Routes.publicidadCampanas) return 'Publicidad / Campañas';
   if (path == Routes.publicidadMarketplace) return 'Publicidad / Marketplace';
-  if (path == Routes.publicidadGaleria) return 'Publicidad / Galería de Contenido';
+  if (path == Routes.publicidadGaleria) {
+    return 'Publicidad / Galería de Contenido';
+  }
   if (path == Routes.galeriaPublicidad) return 'Galería de Publicidad';
   if (path == Routes.whatsappCrm) return 'CRM WhatsApp';
   if (path == Routes.crmComercial) return 'CRM Comercial';

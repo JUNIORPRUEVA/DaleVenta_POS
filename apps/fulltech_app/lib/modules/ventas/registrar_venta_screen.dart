@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../core/auth/auth_provider.dart';
 import '../../core/cache/fulltech_cache_manager.dart';
@@ -10,6 +9,7 @@ import '../../core/models/product_model.dart';
 import '../../core/realtime/catalog_realtime_service.dart';
 import '../../core/routing/app_route_observer.dart';
 import '../../core/routing/routes.dart';
+import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/product_network_image.dart';
@@ -50,8 +50,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
 
   ClienteModel? _selectedClient;
 
-  String _money(double value) =>
-      NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$').format(value);
+  String _money(double value) => formatRdCurrencyAccounting(value);
 
   List<ProductModel> get _filteredProducts {
     final q = _searchCtrl.text.trim().toLowerCase();
@@ -308,29 +307,92 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       showDragHandle: true,
       builder: (context) {
         final categories = _availableCategories;
+        final theme = Theme.of(context);
         return SafeArea(
-          child: ListView(
-            shrinkWrap: true,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              ListTile(
-                leading: Icon(
-                  _selectedCategory == null
-                      ? Icons.check_circle
-                      : Icons.list_alt_outlined,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.category_outlined,
+                      size: 20,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Filtrar por categoría',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
-                title: const Text('Todas las categorías'),
-                onTap: () => Navigator.pop(context, null),
               ),
-              for (final category in categories)
-                ListTile(
-                  leading: Icon(
-                    _selectedCategory == category
-                        ? Icons.check_circle
-                        : Icons.category_outlined,
-                  ),
-                  title: Text(category),
-                  onTap: () => Navigator.pop(context, category),
+              const Divider(height: 1),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  children: [
+                    ListTile(
+                      leading: Icon(
+                        _selectedCategory == null
+                            ? Icons.check_circle
+                            : Icons.list_alt_outlined,
+                        color: _selectedCategory == null
+                            ? theme.colorScheme.primary
+                            : null,
+                      ),
+                      title: Text(
+                        'Todas las categorías',
+                        style: TextStyle(
+                          fontWeight: _selectedCategory == null
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          color: _selectedCategory == null
+                              ? theme.colorScheme.primary
+                              : null,
+                        ),
+                      ),
+                      onTap: () => Navigator.pop(context, null),
+                    ),
+                    if (categories.isNotEmpty) ...[
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        child: Divider(height: 1),
+                      ),
+                      for (final category in categories)
+                        ListTile(
+                          leading: Icon(
+                            _selectedCategory == category
+                                ? Icons.check_circle
+                                : Icons.category_outlined,
+                            color: _selectedCategory == category
+                                ? theme.colorScheme.primary
+                                : null,
+                          ),
+                          title: Text(
+                            category,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: _selectedCategory == category
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: _selectedCategory == category
+                                  ? theme.colorScheme.primary
+                                  : null,
+                            ),
+                          ),
+                          onTap: () => Navigator.pop(context, category),
+                        ),
+                    ],
+                  ],
                 ),
+              ),
             ],
           ),
         );
@@ -380,42 +442,22 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                   ],
                 ),
                 SizedBox(
-                  width: 280,
+                  width: 200,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: TextField(
                       controller: _searchCtrl,
                       onChanged: (_) => setState(() {}),
                       decoration: InputDecoration(
-                        hintText: 'Buscar producto...',
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (_searchCtrl.text.isNotEmpty)
-                              IconButton(
-                                tooltip: 'Limpiar búsqueda',
-                                onPressed: () {
-                                  _searchCtrl.clear();
-                                  setState(() {});
-                                },
-                                icon: const Icon(Icons.close),
-                              ),
-                            IconButton(
-                              tooltip: _selectedCategory == null
-                                  ? 'Filtrar por categoría'
-                                  : 'Categoría: $_selectedCategory',
-                              onPressed: _pickCategoryFilter,
-                              icon: Icon(
-                                _selectedCategory == null
-                                    ? Icons.filter_alt_outlined
-                                    : Icons.filter_alt,
-                              ),
-                            ),
-                          ],
+                        hintText: 'Buscar...',
+                        prefixIcon: const Icon(Icons.search, size: 18),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 8,
                         ),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(10),
                           borderSide: BorderSide.none,
                         ),
                         filled: true,
@@ -669,17 +711,31 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                     fontSize: compactCard ? 10 : 11,
                                   ),
                                 ),
-                                const SizedBox(height: 1),
-                                Text(
-                                  p.categoriaLabel,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.92),
-                                    fontSize: compactCard ? 8.3 : 9.2,
-                                    fontWeight: FontWeight.w500,
+                                const SizedBox(height: 2),
+                                // Categoría con badge elegante - sin corte de texto
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: compactCard ? 4 : 5,
+                                    vertical: compactCard ? 1.5 : 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.18),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    p.categoriaLabel,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.fade,
+                                    softWrap: false,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: compactCard ? 8.5 : 9.5,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.2,
+                                    ),
                                   ),
                                 ),
+                                const SizedBox(height: 2),
                                 Text(
                                   _money(p.precio),
                                   maxLines: 1,
@@ -711,6 +767,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     required bool showInlineTotals,
   }) {
     final isWide = MediaQuery.of(context).size.width >= 1024;
+    final hasClient = _selectedClient != null;
     return Padding(
       padding: EdgeInsets.all(isCompact ? 10 : (isWide ? 8 : 12)),
       child: DecoratedBox(
@@ -726,7 +783,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
             isCompact ? 8 : (isWide ? 10 : 10),
             isCompact ? 8 : (isWide ? 10 : 10),
             isCompact ? 8 : (isWide ? 10 : 10),
-            isCompact ? 6 : (isWide ? 6 : 8),
+            isCompact ? 4 : (isWide ? 4 : 6),
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -736,42 +793,27 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Resumen de venta',
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                      if (!showInlineTotals)
-                        TextButton.icon(
-                          onPressed: _showTotalsDialog,
-                          icon: const Icon(Icons.receipt_long_outlined),
-                          label: const Text('Resumen'),
-                          style: TextButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            minimumSize: const Size(0, 34),
-                          ),
-                        ),
-                    ],
-                  ),
-                  if (_cart.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        '${_cart.length} item(s)',
-                        style: Theme.of(context).textTheme.bodySmall,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                  // ── Solo mostrar encabezado si hay cliente seleccionado ──
+                  if (hasClient) ...[
+                    Text(
+                      _selectedClient!.nombre,
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  SizedBox(height: compactVertical ? 4 : 6),
+                    if (_cart.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 1),
+                        child: Text(
+                          '${_cart.length} item(s)',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                    SizedBox(height: compactVertical ? 4 : 6),
+                  ] else
+                    SizedBox(height: compactVertical ? 4 : 6),
+                  // ── Lista de items ──
                   Expanded(
                     flex: 5,
                     child: _cart.isEmpty
@@ -795,8 +837,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                   onTap: () => _openEditCartItemDialog(index),
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
+                                      horizontal: 6,
+                                      vertical: 3,
                                     ),
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(8),
@@ -814,36 +856,20 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                           ),
                                           maxLines: 1,
                                         ),
-                                        const SizedBox(width: 6),
+                                        const SizedBox(width: 4),
                                         Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Text(
-                                                item.name,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  fontSize: 11,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Toca para editar cantidad y precio',
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .bodySmall
-                                                    ?.copyWith(fontSize: 10),
-                                              ),
-                                            ],
+                                          child: Text(
+                                            item.name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                            ),
                                           ),
                                         ),
-                                        const SizedBox(width: 6),
+                                        const SizedBox(width: 4),
                                         Text(
-                                          _money(item.priceSoldUnit),
+                                          _money(item.subtotalSold),
                                           style: const TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.w700,
@@ -851,21 +877,25 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         ),
-                                        IconButton(
-                                          visualDensity: VisualDensity.compact,
-                                          padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(
-                                            minHeight: 28,
-                                            minWidth: 28,
-                                          ),
-                                          splashRadius: 14,
-                                          tooltip: 'Quitar item',
-                                          onPressed: () => setState(
-                                            () => _cart.removeAt(index),
-                                          ),
-                                          icon: const Icon(
-                                            Icons.close,
-                                            size: 16,
+                                        SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: IconButton(
+                                            visualDensity: VisualDensity.compact,
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(
+                                              minHeight: 24,
+                                              minWidth: 24,
+                                            ),
+                                            splashRadius: 12,
+                                            tooltip: 'Quitar item',
+                                            onPressed: () => setState(
+                                              () => _cart.removeAt(index),
+                                            ),
+                                            icon: const Icon(
+                                              Icons.close,
+                                              size: 14,
+                                            ),
                                           ),
                                         ),
                                       ],
@@ -877,111 +907,163 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                           ),
                   ),
                   SizedBox(height: compactVertical ? 4 : 6),
-                  Expanded(
-                    flex: showInlineTotals ? 4 : 3,
-                    child: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: FilledButton.tonalIcon(
-                                  onPressed: _openClientPickerDialog,
-                                  icon: const Icon(
-                                    Icons.person_search_outlined,
-                                  ),
-                                  label: Text(
-                                    _selectedClient == null
-                                          ? 'Seleccionar cliente'
-                                        : _selectedClient!.nombre,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  style: FilledButton.styleFrom(
-                                    visualDensity: VisualDensity.compact,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 8,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: _openNoteDialog,
-                                  icon: const Icon(
-                                    Icons.sticky_note_2_outlined,
-                                  ),
-                                  label: Text(
-                                    _noteCtrl.text.trim().isEmpty
-                                          ? 'Agregar nota'
-                                        : 'Editar nota',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    visualDensity: VisualDensity.compact,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 8,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
+                  // ── Botones de acción (cliente + nota) ──
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.tonalIcon(
+                          onPressed: _openClientPickerDialog,
+                          icon: const Icon(
+                            Icons.person_search_outlined,
+                            size: 16,
                           ),
-                          if (_noteCtrl.text.trim().isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(
-                                _noteCtrl.text.trim(),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
+                          label: Text(
+                            hasClient
+                                ? _selectedClient!.nombre
+                                : 'Seleccionar cliente',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          style: FilledButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 6,
                             ),
-                          if (showInlineTotals) ...[
-                            const SizedBox(height: 6),
-                            _totalsTile('Total vendido', _money(_totalSold)),
-                            _totalsTile('Total costo', _money(_totalCost)),
-                            _totalsTile('Total utilidad', _money(_totalProfit)),
-                            _totalsTile(
-                              'Comisión (10%)',
-                              _money(_commission),
-                              highlight: true,
+                            textStyle: const TextStyle(fontSize: 11),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _openNoteDialog,
+                          icon: const Icon(
+                            Icons.sticky_note_2_outlined,
+                            size: 16,
+                          ),
+                          label: Text(
+                            _noteCtrl.text.trim().isEmpty
+                                ? 'Nota'
+                                : 'Editar nota',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 6,
                             ),
-                          ],
+                            textStyle: const TextStyle(fontSize: 11),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_noteCtrl.text.trim().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        _noteCtrl.text.trim(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  // ── Línea divisoria + Total a Cobrar ──
+                  if (_cart.isNotEmpty) ...[
+                    const Divider(height: 12, thickness: 1),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(
+                        children: [
+                          Text(
+                            'Cobrar',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            _money(_totalSold),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                  ),
-                  SizedBox(height: compactVertical ? 4 : 6),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: _saving || _selectedClient == null
-                          ? null
-                          : _saveSale,
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          vertical: compactVertical ? 8 : 10,
-                        ),
-                        child: _saving
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
+                  ],
+                  // ── Botón de guardar/limpiar ──
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: _saving || !hasClient || _cart.isEmpty
+                              ? null
+                              : _saveSale,
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: _saving
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text(
+                                  'GUARDAR VENTA',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12,
+                                  ),
                                 ),
-                              )
-                            : const Text(
-                                'GUARDAR VENTA',
-                                style: TextStyle(fontWeight: FontWeight.w800),
-                              ),
+                        ),
                       ),
-                    ),
+                      if (_cart.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        OutlinedButton(
+                          onPressed: () => setState(() {
+                            _cart = [];
+                            _selectedClient = null;
+                            _noteCtrl.clear();
+                          }),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            side: BorderSide(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                          child: Text(
+                            'Limpiar',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               );

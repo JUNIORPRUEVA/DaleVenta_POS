@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/errors/user_facing_error.dart';
 import '../../core/routing/routes.dart';
+import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/professional_recovery_card.dart';
 import '../../modules/ventas/data/ventas_repository.dart';
 import '../../modules/ventas/sales_models.dart';
@@ -123,8 +124,7 @@ class _AdminSalesRegistryScreenState
     await _load();
   }
 
-  String _money(double value) =>
-      NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$').format(value);
+  String _money(double value) => formatRdCurrencyAccounting(value);
 
   String _dateOnlyText(DateTime value) {
     return DateFormat('dd/MM/yyyy', 'es_DO').format(value);
@@ -545,8 +545,7 @@ class _AdminSalesUserDetailScreenState
     );
   }
 
-  String _money(double value) =>
-      NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$').format(value);
+  String _money(double value) => formatRdCurrencyAccounting(value);
 
   String _dateOnlyText(DateTime value) {
     return DateFormat('dd/MM/yyyy', 'es_DO').format(value);
@@ -569,23 +568,46 @@ class _AdminSalesUserDetailScreenState
         return AlertDialog(
           title: const Text('Detalle de venta'),
           content: SizedBox(
-            width: 460,
+            width: 400,
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('ID: ${sale.id}'),
-                  Text('Usuario: ${sale.userId}'),
+                  // ── Encabezado compacto ──
                   Text(
-                    'Cliente: ${sale.customerName?.trim().isNotEmpty == true ? sale.customerName : 'No especificado'}',
+                    sale.customerName?.trim().isNotEmpty == true
+                        ? sale.customerName!
+                        : 'Sin cliente',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  Text('Fecha: $dateText'),
-                  if ((sale.note ?? '').trim().isNotEmpty) Text('Nota: ${sale.note}'),
-                  const Divider(height: 18),
+                  const SizedBox(height: 2),
+                  Text(
+                    dateText,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if ((sale.note ?? '').trim().isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      sale.note!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                  const Divider(height: 14),
+                  // ── Items ──
                   ...sale.items.map(
                     (item) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      padding: const EdgeInsets.symmetric(vertical: 2),
                       child: Row(
                         children: [
                           Expanded(
@@ -593,18 +615,42 @@ class _AdminSalesUserDetailScreenState
                               '${item.productNameSnapshot} x${item.qty.toStringAsFixed(item.qty % 1 == 0 ? 0 : 2)}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12),
                             ),
                           ),
-                          Text(_money(item.subtotalSold)),
+                          Text(
+                            _money(item.subtotalSold),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ),
-                  const Divider(height: 18),
-                  Text('Total vendido: ${_money(sale.totalSold)}'),
-                  Text('Total costo: ${_money(sale.totalCost)}'),
-                  Text('Utilidad: ${_money(sale.totalProfit)}'),
-                  Text('Comisión: ${_money(sale.commissionAmount)}'),
+                  const Divider(height: 14),
+                  // ── Total a Cobrar ──
+                  Row(
+                    children: [
+                      Text(
+                        'Cobrar',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        _money(sale.totalSold),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
