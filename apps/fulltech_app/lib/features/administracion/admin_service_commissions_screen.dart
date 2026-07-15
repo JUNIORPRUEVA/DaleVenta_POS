@@ -9,6 +9,7 @@ import '../../core/auth/app_role.dart';
 import '../../core/models/user_model.dart';
 import '../../core/errors/user_facing_error.dart';
 import '../../core/routing/routes.dart';
+import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/professional_recovery_card.dart';
 import '../../features/user/data/users_repository.dart';
 import '../../modules/clientes/cliente_model.dart';
@@ -141,8 +142,7 @@ class _AdminServiceCommissionsScreenState
     await _load();
   }
 
-  String _money(double value) =>
-      NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$').format(value);
+  String _money(double value) => formatRdCurrencyAccounting(value);
 
   String _dateOnlyText(DateTime value) {
     return DateFormat('dd/MM/yyyy', 'es_DO').format(value);
@@ -195,14 +195,18 @@ class _AdminServiceCommissionsScreenState
     final rows = _summary.items;
     if (query.isEmpty) return rows;
 
-    return rows.where((item) {
-      return item.displayName.toLowerCase().contains(query) ||
-          item.userEmail.toLowerCase().contains(query) ||
-          item.userId.toLowerCase().contains(query);
-    }).toList(growable: false);
+    return rows
+        .where((item) {
+          return item.displayName.toLowerCase().contains(query) ||
+              item.userEmail.toLowerCase().contains(query) ||
+              item.userId.toLowerCase().contains(query);
+        })
+        .toList(growable: false);
   }
 
-  Future<void> _openUserDetail(AdminServiceCommissionUserSummary summary) async {
+  Future<void> _openUserDetail(
+    AdminServiceCommissionUserSummary summary,
+  ) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => _AdminServiceUserDetailScreen(
@@ -226,27 +230,30 @@ class _AdminServiceCommissionsScreenState
     };
     final userIds = <String>{...remoteById.keys, ...localById.keys};
 
-    final mergedItems = userIds.map((userId) {
-      final remoteItem = remoteById[userId];
-      final localItem = localById[userId];
-      final base = remoteItem ?? localItem!;
-      final localPoints = localItem?.totalPoints ?? 0;
-      return AdminServiceCommissionUserSummary(
-        userId: base.userId,
-        userName: base.userName,
-        userEmail: base.userEmail,
-        totalServices: base.totalServices,
-        installationCount: base.installationCount,
-        maintenanceCount: base.maintenanceCount,
-        totalSold: base.totalSold,
-        totalPoints: localPoints > 0 ? localPoints : base.totalPoints,
-      );
-    }).toList(growable: false)
-      ..sort((left, right) {
-        final pointsOrder = right.totalPoints.compareTo(left.totalPoints);
-        if (pointsOrder != 0) return pointsOrder;
-        return right.totalSold.compareTo(left.totalSold);
-      });
+    final mergedItems =
+        userIds
+            .map((userId) {
+              final remoteItem = remoteById[userId];
+              final localItem = localById[userId];
+              final base = remoteItem ?? localItem!;
+              final localPoints = localItem?.totalPoints ?? 0;
+              return AdminServiceCommissionUserSummary(
+                userId: base.userId,
+                userName: base.userName,
+                userEmail: base.userEmail,
+                totalServices: base.totalServices,
+                installationCount: base.installationCount,
+                maintenanceCount: base.maintenanceCount,
+                totalSold: base.totalSold,
+                totalPoints: localPoints > 0 ? localPoints : base.totalPoints,
+              );
+            })
+            .toList(growable: false)
+          ..sort((left, right) {
+            final pointsOrder = right.totalPoints.compareTo(left.totalPoints);
+            if (pointsOrder != 0) return pointsOrder;
+            return right.totalSold.compareTo(left.totalSold);
+          });
 
     return AdminServiceCommissionUsersSummary(
       items: mergedItems,
@@ -415,7 +422,9 @@ class _AdminServiceCommissionsScreenState
                             color: scheme.surface,
                             borderRadius: BorderRadius.circular(18),
                             border: Border.all(
-                              color: scheme.outlineVariant.withValues(alpha: 0.28),
+                              color: scheme.outlineVariant.withValues(
+                                alpha: 0.28,
+                              ),
                             ),
                           ),
                           child: Column(
@@ -449,7 +458,8 @@ class _AdminServiceCommissionsScreenState
                                   Expanded(
                                     child: _AdminSalesCompactStat(
                                       label: 'Instalación',
-                                      value: '${_summary.totals.totalInstallations}',
+                                      value:
+                                          '${_summary.totals.totalInstallations}',
                                       icon: Icons.build_rounded,
                                     ),
                                   ),
@@ -457,7 +467,8 @@ class _AdminServiceCommissionsScreenState
                                   Expanded(
                                     child: _AdminSalesCompactStat(
                                       label: 'Mantenimiento',
-                                      value: '${_summary.totals.totalMaintenances}',
+                                      value:
+                                          '${_summary.totals.totalMaintenances}',
                                       icon: Icons.settings_suggest_outlined,
                                     ),
                                   ),
@@ -477,7 +488,9 @@ class _AdminServiceCommissionsScreenState
                                   Expanded(
                                     child: _AdminSalesCompactStat(
                                       label: 'Puntos utilidad',
-                                      value: _money(_summary.totals.totalPoints),
+                                      value: _money(
+                                        _summary.totals.totalPoints,
+                                      ),
                                       icon: Icons.stars_rounded,
                                     ),
                                   ),
@@ -501,41 +514,42 @@ class _AdminServiceCommissionsScreenState
                           onRetryNow: _retryNow,
                         )
                       : visible.isEmpty
-                          ? Center(
-                              child: Text(
-                                'No hay servicios por usuario para mostrar en este período.',
-                                style: theme.textTheme.bodyLarge?.copyWith(
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                              ),
-                            )
-                          : RefreshIndicator(
-                              onRefresh: _load,
-                              child: ListView.separated(
-                                physics: const AlwaysScrollableScrollPhysics(),
-                                padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
-                                itemCount: visible.length,
-                                separatorBuilder: (_, __) => const SizedBox(height: 6),
-                                itemBuilder: (context, index) {
-                                  final item = visible[index];
-                                  final accentColor = item.totalPoints >= 0
-                                      ? const Color(0xFF0F766E)
-                                      : const Color(0xFFB91C1C);
-
-                                  return _AdminServiceUserCard(
-                                    summary: item,
-                                    accentColor: accentColor,
-                                    dateRangeLabel:
-                                        '${_dateOnlyText(_from)} - ${_dateOnlyText(_to)}',
-                                    soldLabel: _money(item.totalSold),
-                                    pointsLabel: _money(item.totalPoints),
-                                    servicesCountLabel:
-                                        '${item.totalServices} servicios',
-                                    onTap: () => _openUserDetail(item),
-                                  );
-                                },
-                              ),
+                      ? Center(
+                          child: Text(
+                            'No hay servicios por usuario para mostrar en este período.',
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              color: scheme.onSurfaceVariant,
                             ),
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _load,
+                          child: ListView.separated(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
+                            itemCount: visible.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 6),
+                            itemBuilder: (context, index) {
+                              final item = visible[index];
+                              final accentColor = item.totalPoints >= 0
+                                  ? const Color(0xFF0F766E)
+                                  : const Color(0xFFB91C1C);
+
+                              return _AdminServiceUserCard(
+                                summary: item,
+                                accentColor: accentColor,
+                                dateRangeLabel:
+                                    '${_dateOnlyText(_from)} - ${_dateOnlyText(_to)}',
+                                soldLabel: _money(item.totalSold),
+                                pointsLabel: _money(item.totalPoints),
+                                servicesCountLabel:
+                                    '${item.totalServices} servicios',
+                                onTap: () => _openUserDetail(item),
+                              );
+                            },
+                          ),
+                        ),
                 ),
               ],
             );
@@ -568,7 +582,8 @@ class _AdminServiceUserDetailScreenState
   bool _loading = false;
   bool _showHeaderPanel = true;
   UserFacingError? _error;
-  List<ServiceOrderCommissionItem> _items = const <ServiceOrderCommissionItem>[];
+  List<ServiceOrderCommissionItem> _items =
+      const <ServiceOrderCommissionItem>[];
   late DateTime _from;
   late DateTime _to;
 
@@ -648,38 +663,42 @@ class _AdminServiceUserDetailScreenState
     final localById = {for (final item in localItems) item.id: item};
     final ids = <String>{...remoteById.keys, ...localById.keys};
 
-    return ids.map((id) {
-      final remote = remoteById[id];
-      final local = localById[id];
-      final base = remote ?? local!;
-      final localPoints = local?.totalCommissionAmount ?? 0;
-      return ServiceOrderCommissionItem(
-        id: base.id,
-        clientId: base.clientId,
-        clientName: base.clientName,
-        quotationId: base.quotationId,
-        createdById: base.createdById,
-        createdByName: base.createdByName,
-        technicianId: base.technicianId,
-        technicianName: base.technicianName,
-        serviceType: base.serviceType,
-        status: base.status,
-        finalizedAt: base.finalizedAt,
-        totalAmount: base.totalAmount,
-        sellerCommissionAmount: localPoints > 0
-            ? (local?.sellerCommissionAmount ?? base.sellerCommissionAmount)
-            : base.sellerCommissionAmount,
-        technicianCommissionAmount: localPoints > 0
-            ? (local?.technicianCommissionAmount ?? base.technicianCommissionAmount)
-            : base.technicianCommissionAmount,
-        visibleCommissionAmount: localPoints > 0
-            ? (local?.visibleCommissionAmount ?? base.visibleCommissionAmount)
-            : base.visibleCommissionAmount,
-        totalCommissionAmount: localPoints > 0
-            ? localPoints
-            : base.totalCommissionAmount,
-      );
-    }).toList(growable: false);
+    return ids
+        .map((id) {
+          final remote = remoteById[id];
+          final local = localById[id];
+          final base = remote ?? local!;
+          final localPoints = local?.totalCommissionAmount ?? 0;
+          return ServiceOrderCommissionItem(
+            id: base.id,
+            clientId: base.clientId,
+            clientName: base.clientName,
+            quotationId: base.quotationId,
+            createdById: base.createdById,
+            createdByName: base.createdByName,
+            technicianId: base.technicianId,
+            technicianName: base.technicianName,
+            serviceType: base.serviceType,
+            status: base.status,
+            finalizedAt: base.finalizedAt,
+            totalAmount: base.totalAmount,
+            sellerCommissionAmount: localPoints > 0
+                ? (local?.sellerCommissionAmount ?? base.sellerCommissionAmount)
+                : base.sellerCommissionAmount,
+            technicianCommissionAmount: localPoints > 0
+                ? (local?.technicianCommissionAmount ??
+                      base.technicianCommissionAmount)
+                : base.technicianCommissionAmount,
+            visibleCommissionAmount: localPoints > 0
+                ? (local?.visibleCommissionAmount ??
+                      base.visibleCommissionAmount)
+                : base.visibleCommissionAmount,
+            totalCommissionAmount: localPoints > 0
+                ? localPoints
+                : base.totalCommissionAmount,
+          );
+        })
+        .toList(growable: false);
   }
 
   Future<void> _pickDateRange() async {
@@ -710,30 +729,37 @@ class _AdminServiceUserDetailScreenState
     final query = _searchCtrl.text.trim().toLowerCase();
     if (query.isEmpty) return _items;
 
-    return _items.where((item) {
-      final dateText = item.finalizedAt == null
-          ? ''
-          : DateFormat('dd/MM/yyyy h:mm a', 'es_DO').format(
-              item.finalizedAt!.toLocal(),
-            );
-      return item.clientName.toLowerCase().contains(query) ||
-          item.id.toLowerCase().contains(query) ||
-          item.quotationId.toLowerCase().contains(query) ||
-          item.serviceType.toLowerCase().contains(query) ||
-          (item.createdByName).toLowerCase().contains(query) ||
-          (item.technicianName ?? '').toLowerCase().contains(query) ||
-          dateText.toLowerCase().contains(query);
-    }).toList(growable: false);
+    return _items
+        .where((item) {
+          final dateText = item.finalizedAt == null
+              ? ''
+              : DateFormat(
+                  'dd/MM/yyyy h:mm a',
+                  'es_DO',
+                ).format(item.finalizedAt!.toLocal());
+          return item.clientName.toLowerCase().contains(query) ||
+              item.id.toLowerCase().contains(query) ||
+              item.quotationId.toLowerCase().contains(query) ||
+              item.serviceType.toLowerCase().contains(query) ||
+              (item.createdByName).toLowerCase().contains(query) ||
+              (item.technicianName ?? '').toLowerCase().contains(query) ||
+              dateText.toLowerCase().contains(query);
+        })
+        .toList(growable: false);
   }
 
   AdminServiceCommissionTotals get _detailSummary {
     return AdminServiceCommissionTotals(
       totalServices: _visibleItems.length,
       totalInstallations: _visibleItems
-          .where((item) => item.serviceType.trim().toLowerCase() == 'instalacion')
+          .where(
+            (item) => item.serviceType.trim().toLowerCase() == 'instalacion',
+          )
           .length,
       totalMaintenances: _visibleItems
-          .where((item) => item.serviceType.trim().toLowerCase() == 'mantenimiento')
+          .where(
+            (item) => item.serviceType.trim().toLowerCase() == 'mantenimiento',
+          )
           .length,
       totalSold: _visibleItems.fold<double>(
         0,
@@ -746,14 +772,14 @@ class _AdminServiceUserDetailScreenState
     );
   }
 
-  String _money(double value) =>
-      NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$').format(value);
+  String _money(double value) => formatRdCurrencyAccounting(value);
 
   String _dateOnlyText(DateTime value) {
     return DateFormat('dd/MM/yyyy', 'es_DO').format(value);
   }
 
-  bool get _isQuincenaRange => _rangeLooksLikeAdminCommissionQuincena(_from, _to);
+  bool get _isQuincenaRange =>
+      _rangeLooksLikeAdminCommissionQuincena(_from, _to);
 
   String get _activeFilterLabel => _isQuincenaRange
       ? _adminCommissionRangeLabel(_from, _to)
@@ -773,9 +799,10 @@ class _AdminServiceUserDetailScreenState
   void _openServiceDetail(ServiceOrderCommissionItem item) {
     final dateText = item.finalizedAt == null
         ? 'Sin fecha'
-        : DateFormat('dd/MM/yyyy h:mm a', 'es_DO').format(
-            item.finalizedAt!.toLocal(),
-          );
+        : DateFormat(
+            'dd/MM/yyyy h:mm a',
+            'es_DO',
+          ).format(item.finalizedAt!.toLocal());
 
     showDialog<void>(
       context: context,
@@ -1035,38 +1062,38 @@ class _AdminServiceUserDetailScreenState
                       onRetryNow: _load,
                     )
                   : visible.isEmpty
-                      ? Center(
-                          child: Text(
-                            'No hay servicios para este filtro.',
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          ),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: _load,
-                          child: ListView.separated(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
-                            itemCount: visible.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 6),
-                            itemBuilder: (context, index) {
-                              final item = visible[index];
-                              return _AdminServiceItemCard(
-                                item: item,
-                                moneyText: _money,
-                                typeLabel: _serviceTypeLabel(item.serviceType),
-                                dateText: item.finalizedAt == null
-                                    ? 'Sin fecha'
-                                    : DateFormat(
-                                        'dd/MM/yyyy h:mm a',
-                                        'es_DO',
-                                      ).format(item.finalizedAt!.toLocal()),
-                                onTap: () => _openServiceDetail(item),
-                              );
-                            },
-                          ),
+                  ? Center(
+                      child: Text(
+                        'No hay servicios para este filtro.',
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: scheme.onSurfaceVariant,
                         ),
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _load,
+                      child: ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+                        itemCount: visible.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 6),
+                        itemBuilder: (context, index) {
+                          final item = visible[index];
+                          return _AdminServiceItemCard(
+                            item: item,
+                            moneyText: _money,
+                            typeLabel: _serviceTypeLabel(item.serviceType),
+                            dateText: item.finalizedAt == null
+                                ? 'Sin fecha'
+                                : DateFormat(
+                                    'dd/MM/yyyy h:mm a',
+                                    'es_DO',
+                                  ).format(item.finalizedAt!.toLocal()),
+                            onTap: () => _openServiceDetail(item),
+                          );
+                        },
+                      ),
+                    ),
             ),
           ],
         ),
@@ -1124,11 +1151,7 @@ class _CompactTopActionButton extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(14),
-          child: SizedBox(
-            width: 44,
-            height: 44,
-            child: Icon(icon, size: 20),
-          ),
+          child: SizedBox(width: 44, height: 44, child: Icon(icon, size: 20)),
         ),
       ),
     );
@@ -1221,8 +1244,14 @@ class _AdminServiceUserCard extends StatelessWidget {
                           label: 'Mant.',
                           value: '${summary.maintenanceCount}',
                         ),
-                        _AdminSalesInlineChip(label: 'Vendido', value: soldLabel),
-                        _AdminSalesInlineChip(label: 'Puntos', value: pointsLabel),
+                        _AdminSalesInlineChip(
+                          label: 'Vendido',
+                          value: soldLabel,
+                        ),
+                        _AdminSalesInlineChip(
+                          label: 'Puntos',
+                          value: pointsLabel,
+                        ),
                         _AdminSalesInlineChip(
                           label: 'Servicios',
                           value: servicesCountLabel,
@@ -1367,9 +1396,9 @@ class _AdminSalesInlineChip extends StatelessWidget {
       child: Text(
         '$label · $value',
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: scheme.onSurfaceVariant,
-            ),
+          fontWeight: FontWeight.w700,
+          color: scheme.onSurfaceVariant,
+        ),
       ),
     );
   }
@@ -1525,7 +1554,9 @@ class _AdminSalesFilterPill extends StatelessWidget {
   }
 }
 
-_AdminCommissionDateRange _currentAdminCommissionQuincenaRange([DateTime? reference]) {
+_AdminCommissionDateRange _currentAdminCommissionQuincenaRange([
+  DateTime? reference,
+]) {
   final now = reference ?? DateTime.now();
   final current = DateTime(now.year, now.month, now.day);
 
@@ -1602,14 +1633,13 @@ class _AdminServiceCommissionFallbackRepository {
       accumulator.add(entry.item);
     }
 
-    final items = grouped.values
-        .map((entry) => entry.build())
-        .toList(growable: false)
-      ..sort((left, right) {
-        final points = right.totalPoints.compareTo(left.totalPoints);
-        if (points != 0) return points;
-        return right.totalSold.compareTo(left.totalSold);
-      });
+    final items =
+        grouped.values.map((entry) => entry.build()).toList(growable: false)
+          ..sort((left, right) {
+            final points = right.totalPoints.compareTo(left.totalPoints);
+            if (points != 0) return points;
+            return right.totalSold.compareTo(left.totalSold);
+          });
 
     final totals = AdminServiceCommissionTotals(
       totalServices: computed.length,
@@ -1657,23 +1687,27 @@ class _AdminServiceCommissionFallbackRepository {
     final snapshot = await _loadSnapshot();
     final start = DateTime(from.year, from.month, from.day);
     final end = DateTime(to.year, to.month, to.day, 23, 59, 59, 999);
-    final filteredOrders = snapshot.orders.where((order) {
-      if (order.status != ServiceOrderStatus.finalizado) return false;
-      if (order.serviceType != ServiceOrderType.instalacion &&
-          order.serviceType != ServiceOrderType.mantenimiento) {
-        return false;
-      }
-      final finalizedAt = order.finalizedAt;
-      if (finalizedAt == null) return false;
-      return !finalizedAt.isBefore(start) && !finalizedAt.isAfter(end);
-    }).toList(growable: false);
+    final filteredOrders = snapshot.orders
+        .where((order) {
+          if (order.status != ServiceOrderStatus.finalizado) return false;
+          if (order.serviceType != ServiceOrderType.instalacion &&
+              order.serviceType != ServiceOrderType.mantenimiento) {
+            return false;
+          }
+          final finalizedAt = order.finalizedAt;
+          if (finalizedAt == null) return false;
+          return !finalizedAt.isBefore(start) && !finalizedAt.isAfter(end);
+        })
+        .toList(growable: false);
 
     final quotationsById = await _loadQuotationsById(filteredOrders);
     final items = <_AdminComputedCommissionItem>[];
 
     for (final order in filteredOrders) {
       final quotationId = (order.quotationId ?? '').trim();
-      final quotation = quotationId.isEmpty ? null : quotationsById[quotationId];
+      final quotation = quotationId.isEmpty
+          ? null
+          : quotationsById[quotationId];
       final creator = snapshot.usersById[order.createdById];
       final assignedToId = (order.assignedToId ?? '').trim();
       final technician = assignedToId.isEmpty
@@ -1684,15 +1718,16 @@ class _AdminServiceCommissionFallbackRepository {
         creator: creator,
         technician: technician,
       );
-      final clientName = (order.client?.nombre ??
-              snapshot.clientsById[order.clientId]?.nombre ??
-              '')
-          .trim();
+      final clientName =
+          (order.client?.nombre ??
+                  snapshot.clientsById[order.clientId]?.nombre ??
+                  '')
+              .trim();
       final commission = _computeCommission(
         quotation: quotation,
         recipientSource: recipient.userId == order.createdById
-        ? _CommissionRecipientSource.creator
-        : _CommissionRecipientSource.assignedTechnician,
+            ? _CommissionRecipientSource.creator
+            : _CommissionRecipientSource.assignedTechnician,
       );
 
       items.add(
@@ -1703,10 +1738,13 @@ class _AdminServiceCommissionFallbackRepository {
           item: ServiceOrderCommissionItem(
             id: order.id,
             clientId: order.clientId,
-            clientName: clientName.isEmpty ? 'Cliente no especificado' : clientName,
+            clientName: clientName.isEmpty
+                ? 'Cliente no especificado'
+                : clientName,
             quotationId: quotationId,
             createdById: order.createdById,
-            createdByName: (creator?.nombreCompleto ?? order.createdById).trim(),
+            createdByName: (creator?.nombreCompleto ?? order.createdById)
+                .trim(),
             technicianId: assignedToId.isEmpty ? null : assignedToId,
             technicianName: (technician?.nombreCompleto ?? '').trim().isEmpty
                 ? null
@@ -1735,7 +1773,8 @@ class _AdminServiceCommissionFallbackRepository {
     var usersById = Map<String, UserModel>.from(localSnapshot.usersById);
 
     final needsRemoteOrders = orders.isEmpty;
-    final needsRemoteUsers = usersById.isEmpty ||
+    final needsRemoteUsers =
+        usersById.isEmpty ||
         orders.any((order) {
           final assignedToId = (order.assignedToId ?? '').trim();
           return !usersById.containsKey(order.createdById) ||
@@ -1837,7 +1876,8 @@ class _AdminServiceCommissionFallbackRepository {
     if (quotation.totalCost != null) return true;
     if (quotation.items.isEmpty) return false;
     return quotation.items.every(
-      (item) => item.subtotalCostSnapshot != null || item.tracedCostUnit != null,
+      (item) =>
+          item.subtotalCostSnapshot != null || item.tracedCostUnit != null,
     );
   }
 
@@ -1898,11 +1938,11 @@ class _AdminServiceCommissionFallbackRepository {
             as double;
     final sellerCommissionAmount =
         recipientSource == _CommissionRecipientSource.creator
-            ? totalCommissionAmount
+        ? totalCommissionAmount
         : 0.0;
     final technicianCommissionAmount =
         recipientSource == _CommissionRecipientSource.assignedTechnician
-            ? totalCommissionAmount
+        ? totalCommissionAmount
         : 0.0;
 
     return _LocalCommissionAmounts(

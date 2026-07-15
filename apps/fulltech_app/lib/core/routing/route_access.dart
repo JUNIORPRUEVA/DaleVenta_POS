@@ -24,6 +24,7 @@ class RouteAccess {
       case Routes.catalogo:
         return AppPermission.viewCatalog;
       case Routes.ventas:
+      case Routes.ventasLista:
       case Routes.registrarVenta:
         return AppPermission.viewSales;
       case Routes.serviceOrders:
@@ -113,6 +114,9 @@ class RouteAccess {
   }
 
   static String defaultHomeForRole(AppRole role) {
+    if (hasPermission(role, AppPermission.viewQuotes)) {
+      return Routes.cotizaciones;
+    }
     if (hasPermission(role, AppPermission.viewOperations)) {
       return Routes.serviceOrders;
     }

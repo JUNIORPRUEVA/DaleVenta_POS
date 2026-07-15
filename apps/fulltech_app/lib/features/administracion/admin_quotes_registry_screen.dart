@@ -96,10 +96,11 @@ class _AdminQuotesRegistryScreenState
       final filteredRows = selectedUserId.isEmpty
           ? rows
           : rows
-              .where(
-                (item) => (item.createdByUserId ?? '').trim() == selectedUserId,
-              )
-              .toList(growable: false);
+                .where(
+                  (item) =>
+                      (item.createdByUserId ?? '').trim() == selectedUserId,
+                )
+                .toList(growable: false);
       setState(() {
         _items = filteredRows;
         _users = users;
@@ -183,7 +184,9 @@ class _AdminQuotesRegistryScreenState
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text('ID: ${item.id}'),
-                  Text('Usuario: ${item.createdByUserName ?? item.createdByUserId ?? 'No disponible'}'),
+                  Text(
+                    'Usuario: ${item.createdByUserName ?? item.createdByUserId ?? 'No disponible'}',
+                  ),
                   Text('Cliente: ${item.customerName}'),
                   if ((item.customerPhone ?? '').trim().isNotEmpty)
                     Text('Teléfono: ${item.customerPhone}'),
@@ -250,111 +253,116 @@ class _AdminQuotesRegistryScreenState
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? ProfessionalRecoveryCard(
-                  error: _error!,
-                  autoRetryCountdown: _autoRetryCountdown > 0
-                      ? _autoRetryCountdown
-                      : null,
-                  isRetrying: _loading,
-                  onRetryNow: _retryNow,
-                )
-              : Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-                      child: DropdownButtonFormField<String?>(
-                        initialValue: _selectedUserId,
-                        decoration: const InputDecoration(
-                          labelText: 'Filtrar por usuario',
-                          prefixIcon: Icon(Icons.person_search_outlined),
-                        ),
-                        items: [
-                          const DropdownMenuItem<String?>(
-                            value: null,
-                            child: Text('Todos los usuarios'),
-                          ),
-                          ..._users.map(
-                            (user) => DropdownMenuItem<String?>(
-                              value: user.id,
-                              child: Text(
-                                user.nombreCompleto.trim().isEmpty
-                                    ? user.email
-                                    : user.nombreCompleto,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          setState(() => _selectedUserId = value);
-                          unawaited(_load());
-                        },
-                      ),
+          ? ProfessionalRecoveryCard(
+              error: _error!,
+              autoRetryCountdown: _autoRetryCountdown > 0
+                  ? _autoRetryCountdown
+                  : null,
+              isRetrying: _loading,
+              onRetryNow: _retryNow,
+            )
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                  child: DropdownButtonFormField<String?>(
+                    initialValue: _selectedUserId,
+                    decoration: const InputDecoration(
+                      labelText: 'Filtrar por usuario',
+                      prefixIcon: Icon(Icons.person_search_outlined),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: OutlinedButton.icon(
-                          onPressed: _pickDateRange,
-                          icon: const Icon(Icons.date_range_rounded),
-                          label: Text(
-                            'Rango: ${_dateOnlyText(_from)} - ${_dateOnlyText(_to)}',
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Todos los usuarios'),
+                      ),
+                      ..._users.map(
+                        (user) => DropdownMenuItem<String?>(
+                          value: user.id,
+                          child: Text(
+                            user.nombreCompleto.trim().isEmpty
+                                ? user.email
+                                : user.nombreCompleto,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ),
-                    ),
-                    Expanded(
-                      child: _items.isEmpty
-                          ? const Center(
-                              child: Text(
-                                'No hay cotizaciones globales para mostrar.',
-                              ),
-                            )
-                          : RefreshIndicator(
-                              onRefresh: _load,
-                              child: ListView.separated(
-                                physics: const AlwaysScrollableScrollPhysics(),
-                                padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-                                itemCount: _items.length + (_refreshing ? 1 : 0),
-                                separatorBuilder: (_, _) => const SizedBox(height: 8),
-                                itemBuilder: (context, index) {
-                                  if (_refreshing && index == 0) {
-                                    return const LinearProgressIndicator();
-                                  }
-                                  final item = _items[_refreshing ? index - 1 : index];
-
-                                  final owner = (item.createdByUserName ?? '').trim();
-                                  final ownerText = owner.isEmpty
-                                      ? ((item.createdByUserId ?? '').trim().isEmpty
-                                          ? 'Usuario no disponible'
-                                          : item.createdByUserId!)
-                                      : owner;
-
-                                  return Card(
-                                    child: ListTile(
-                                      onTap: () => _openQuoteDetail(item),
-                                      title: Text(
-                                        item.customerName,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      subtitle: Text(
-                                        '${DateFormat('dd/MM/yyyy h:mm a', 'es_DO').format(item.createdAt)} '
-                                        '· Líneas: ${item.items.length} · Usuario: $ownerText',
-                                      ),
-                                      trailing: Text(
-                                        _money(item.total),
-                                        style: const TextStyle(fontWeight: FontWeight.w800),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                    ),
-                  ],
+                    ],
+                    onChanged: (value) {
+                      setState(() => _selectedUserId = value);
+                      unawaited(_load());
+                    },
+                  ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      onPressed: _pickDateRange,
+                      icon: const Icon(Icons.date_range_rounded),
+                      label: Text(
+                        'Rango: ${_dateOnlyText(_from)} - ${_dateOnlyText(_to)}',
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: _items.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'No hay cotizaciones globales para mostrar.',
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _load,
+                          child: ListView.separated(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                            itemCount: _items.length + (_refreshing ? 1 : 0),
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 8),
+                            itemBuilder: (context, index) {
+                              if (_refreshing && index == 0) {
+                                return const LinearProgressIndicator();
+                              }
+                              final item =
+                                  _items[_refreshing ? index - 1 : index];
+
+                              final owner = (item.createdByUserName ?? '')
+                                  .trim();
+                              final ownerText = owner.isEmpty
+                                  ? ((item.createdByUserId ?? '').trim().isEmpty
+                                        ? 'Usuario no disponible'
+                                        : item.createdByUserId!)
+                                  : owner;
+
+                              return Card(
+                                child: ListTile(
+                                  onTap: () => _openQuoteDetail(item),
+                                  title: Text(
+                                    item.customerName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  subtitle: Text(
+                                    '${DateFormat('dd/MM/yyyy h:mm a', 'es_DO').format(item.createdAt)} '
+                                    '· Líneas: ${item.items.length} · Usuario: $ownerText',
+                                  ),
+                                  trailing: Text(
+                                    _money(item.total),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                ),
+              ],
+            ),
     );
   }
 }

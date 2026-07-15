@@ -12,6 +12,10 @@ export class CreateProductDto {
   @Min(0)
   costo!: number;
 
+  @IsNumber()
+  @Min(0)
+  stock!: number;
+
   @IsOptional()
   @IsString()
   fotoUrl?: string;
@@ -19,4 +23,3 @@ export class CreateProductDto {
   @IsString()
   categoria!: string;
 }
-

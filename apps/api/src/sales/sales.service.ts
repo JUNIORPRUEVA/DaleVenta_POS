@@ -212,7 +212,7 @@ export class SalesService {
       new Set(dto.items.map((item) => item.productId).filter((id): id is string => Boolean(id))),
     );
 
-    let products: Array<{ id: string; nombre: string; imagen: string | null; costo: Prisma.Decimal }> = [];
+    let products: Array<{ id: string; nombre: string; imagen: string | null; costo: Prisma.Decimal; stock: Prisma.Decimal }> = [];
     if (productIds.length) {
       try {
         products = await this.prisma.product.findMany({
@@ -222,6 +222,7 @@ export class SalesService {
             nombre: true,
             imagen: true,
             costo: true,
+            stock: true,
           },
         });
       } catch (error) {
@@ -253,6 +254,24 @@ export class SalesService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
+        for (const item of normalizedItems) {
+          if (!item.productId) continue;
+          const updated = await tx.product.updateMany({
+            where: {
+              id: item.productId,
+              stock: { gte: item.qty },
+            },
+            data: {
+              stock: { decrement: item.qty },
+            },
+          });
+          if (updated.count !== 1) {
+            throw new BadRequestException(
+              `Stock insuficiente para ${item.productNameSnapshot}`,
+            );
+          }
+        }
+
         const sale = await tx.sale.create({
           data: {
             userId,
@@ -351,7 +370,7 @@ export class SalesService {
   private normalizeItem(
     item: CreateSaleItemDto,
     index: number,
-    productMap: Map<string, { id: string; nombre: string; imagen: string | null; costo: Prisma.Decimal }>,
+    productMap: Map<string, { id: string; nombre: string; imagen: string | null; costo: Prisma.Decimal; stock: Prisma.Decimal }>,
   ) {
     const qty = new Prisma.Decimal(item.qty);
     const priceSoldUnit = new Prisma.Decimal(item.priceSoldUnit);

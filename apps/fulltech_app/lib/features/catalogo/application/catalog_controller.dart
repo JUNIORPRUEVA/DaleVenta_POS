@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/cache/fulltech_cache_manager.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/models/product_model.dart';
-import '../data/catalog_local_repository.dart';
 import '../data/catalog_repository.dart';
 import '../data/catalog_sync_utils.dart';
 
@@ -49,6 +48,22 @@ final catalogControllerProvider =
       return CatalogController(ref);
     });
 
+class CatalogImportDraft {
+  const CatalogImportDraft({
+    required this.nombre,
+    required this.precio,
+    required this.costo,
+    required this.stock,
+    required this.categoria,
+  });
+
+  final String nombre;
+  final double precio;
+  final double costo;
+  final double stock;
+  final String categoria;
+}
+
 class CatalogController extends StateNotifier<CatalogState> {
   final Ref ref;
   static const _silentRefreshMinInterval = Duration(seconds: 20);
@@ -56,19 +71,6 @@ class CatalogController extends StateNotifier<CatalogState> {
   DateTime? _lastSuccessfulRemoteSyncAt;
 
   CatalogController(this.ref) : super(const CatalogState());
-
-  Future<CatalogLocalSnapshot> _loadFromLocal() {
-    return ref.read(catalogLocalRepositoryProvider).readSnapshot();
-  }
-
-  Future<void> _saveToLocal(List<ProductModel> items, {DateTime? syncedAt}) {
-    final catalogVersion = buildCatalogSyncVersion(items);
-    return ref.read(catalogLocalRepositoryProvider).saveSnapshot(
-      items,
-      syncedAt: syncedAt ?? DateTime.now(),
-      catalogVersion: catalogVersion,
-    );
-  }
 
   Future<void> load({bool silent = false, bool forceRemote = false}) async {
     if (silent && forceRemote && _remoteRefreshInFlight) return;
@@ -87,22 +89,11 @@ class CatalogController extends StateNotifier<CatalogState> {
     final shouldShowLoading = !silent || state.items.isEmpty;
 
     if (shouldShowLoading && state.items.isEmpty) {
-      final snapshot = await _loadFromLocal();
-      if (snapshot.items.isNotEmpty) {
-        _lastSuccessfulRemoteSyncAt ??= snapshot.lastSyncedAt;
-        state = state.copyWith(
-          items: snapshot.items,
-          loading: false,
-          refreshing: true,
-          clearError: true,
-        );
-      } else {
-        state = state.copyWith(
-          loading: true,
-          refreshing: false,
-          clearError: true,
-        );
-      }
+      state = state.copyWith(
+        loading: true,
+        refreshing: false,
+        clearError: true,
+      );
     } else if (shouldShowLoading) {
       state = state.copyWith(
         loading: false,
@@ -126,7 +117,6 @@ class CatalogController extends StateNotifier<CatalogState> {
       final syncVersion = buildCatalogSyncVersion(merged);
       final items = applyCatalogSyncVersion(merged, syncVersion);
       state = state.copyWith(items: items, loading: false, refreshing: false);
-      await _saveToLocal(items);
       Future<void>.microtask(
         () => FulltechImageCacheManager.warmImageUrls(
           items.map((item) => item.displayFotoUrl),
@@ -155,27 +145,29 @@ class CatalogController extends StateNotifier<CatalogState> {
     required String nombre,
     required double precio,
     required double costo,
-    required List<int> imageBytes,
-    required String filename,
+    required double stock,
     required String categoria,
+    List<int>? imageBytes,
+    String? filename,
   }) async {
     state = state.copyWith(saving: true, actionError: null);
     try {
       final repo = ref.read(catalogRepositoryProvider);
-      final path = await repo.uploadImage(
-        bytes: imageBytes,
-        filename: filename,
-      );
+      String? path;
+      if (imageBytes != null && filename != null) {
+        path = await repo.uploadImage(bytes: imageBytes, filename: filename);
+      }
       final created = await repo.createProduct(
         nombre: nombre,
         precio: precio,
         costo: costo,
+        stock: stock,
         fotoUrl: path,
         categoria: categoria,
       );
       final updated = [created, ...state.items];
       state = state.copyWith(items: updated, saving: false);
-      await _saveToLocal(updated);
+      await load(forceRemote: true, silent: true);
       _lastSuccessfulRemoteSyncAt = DateTime.now();
     } catch (e) {
       final message = e is ApiException
@@ -186,11 +178,41 @@ class CatalogController extends StateNotifier<CatalogState> {
     }
   }
 
+  Future<int> importProducts(List<CatalogImportDraft> drafts) async {
+    if (drafts.isEmpty) return 0;
+    state = state.copyWith(saving: true, actionError: null);
+    try {
+      final repo = ref.read(catalogRepositoryProvider);
+      var createdCount = 0;
+      for (final draft in drafts) {
+        await repo.createProduct(
+          nombre: draft.nombre,
+          precio: draft.precio,
+          costo: draft.costo,
+          stock: draft.stock,
+          categoria: draft.categoria,
+        );
+        createdCount += 1;
+      }
+      state = state.copyWith(saving: false);
+      await load(forceRemote: true);
+      _lastSuccessfulRemoteSyncAt = DateTime.now();
+      return createdCount;
+    } catch (e) {
+      final message = e is ApiException
+          ? e.message
+          : 'No se pudieron importar los productos';
+      state = state.copyWith(saving: false, actionError: message);
+      rethrow;
+    }
+  }
+
   Future<void> update({
     required String id,
     required String nombre,
     required double precio,
     required double costo,
+    required double stock,
     required String categoria,
     List<int>? newImageBytes,
     String? newFilename,
@@ -210,12 +232,13 @@ class CatalogController extends StateNotifier<CatalogState> {
         nombre: nombre,
         precio: precio,
         costo: costo,
+        stock: stock,
         fotoUrl: fotoUrl,
         categoria: categoria,
       );
       final list = state.items.map((p) => p.id == id ? updated : p).toList();
       state = state.copyWith(items: list, saving: false);
-      await _saveToLocal(list);
+      await load(forceRemote: true, silent: true);
       _lastSuccessfulRemoteSyncAt = DateTime.now();
     } catch (e) {
       final message = e is ApiException
@@ -233,7 +256,7 @@ class CatalogController extends StateNotifier<CatalogState> {
       await repo.deleteProduct(id);
       final list = state.items.where((p) => p.id != id).toList();
       state = state.copyWith(items: list, saving: false);
-      await _saveToLocal(list);
+      await load(forceRemote: true, silent: true);
       _lastSuccessfulRemoteSyncAt = DateTime.now();
     } catch (e) {
       final message = e is ApiException
@@ -248,7 +271,6 @@ class CatalogController extends StateNotifier<CatalogState> {
     state = state.copyWith(saving: true, actionError: null);
     try {
       final result = await ref.read(catalogRepositoryProvider).purgeAllDebug();
-      await ref.read(catalogLocalRepositoryProvider).clearSnapshot();
       state = state.copyWith(items: const [], saving: false, clearError: true);
       _lastSuccessfulRemoteSyncAt = DateTime.now();
       return (result['deletedProducts'] as num?)?.toInt() ?? 0;

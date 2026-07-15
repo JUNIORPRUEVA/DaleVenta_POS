@@ -177,11 +177,13 @@ class _AdminSalesRegistryScreenState
     final rows = _summary.items;
     if (query.isEmpty) return rows;
 
-    return rows.where((item) {
-      return item.displayName.toLowerCase().contains(query) ||
-          item.userEmail.toLowerCase().contains(query) ||
-          item.userId.toLowerCase().contains(query);
-    }).toList(growable: false);
+    return rows
+        .where((item) {
+          return item.displayName.toLowerCase().contains(query) ||
+              item.userEmail.toLowerCase().contains(query) ||
+              item.userId.toLowerCase().contains(query);
+        })
+        .toList(growable: false);
   }
 
   Future<void> _openUserDetail(AdminSalesUserSummary summary) async {
@@ -336,7 +338,9 @@ class _AdminSalesRegistryScreenState
                             color: scheme.surface,
                             borderRadius: BorderRadius.circular(18),
                             border: Border.all(
-                              color: scheme.outlineVariant.withValues(alpha: 0.28),
+                              color: scheme.outlineVariant.withValues(
+                                alpha: 0.28,
+                              ),
                             ),
                           ),
                           child: Row(
@@ -374,40 +378,41 @@ class _AdminSalesRegistryScreenState
                           onRetryNow: _retryNow,
                         )
                       : visible.isEmpty
-                          ? Center(
-                              child: Text(
-                                'No hay ventas por usuario para mostrar en este período.',
-                                style: theme.textTheme.bodyLarge?.copyWith(
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                              ),
-                            )
-                          : RefreshIndicator(
-                              onRefresh: _load,
-                              child: ListView.separated(
-                                physics: const AlwaysScrollableScrollPhysics(),
-                                padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
-                                itemCount: visible.length,
-                                separatorBuilder: (_, __) => const SizedBox(height: 6),
-                                itemBuilder: (context, index) {
-                                  final item = visible[index];
-                                  final accentColor = item.totalProfit >= 0
-                                      ? const Color(0xFF0F766E)
-                                      : const Color(0xFFB91C1C);
-
-                                  return _AdminSalesUserCard(
-                                    summary: item,
-                                    accentColor: accentColor,
-                                    dateRangeLabel:
-                                        '${_dateOnlyText(_from)} - ${_dateOnlyText(_to)}',
-                                    soldLabel: _money(item.totalSold),
-                                    pointsLabel: _money(item.totalProfit),
-                                    salesCountLabel: '${item.totalSales} ventas',
-                                    onTap: () => _openUserDetail(item),
-                                  );
-                                },
-                              ),
+                      ? Center(
+                          child: Text(
+                            'No hay ventas por usuario para mostrar en este período.',
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              color: scheme.onSurfaceVariant,
                             ),
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _load,
+                          child: ListView.separated(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
+                            itemCount: visible.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 6),
+                            itemBuilder: (context, index) {
+                              final item = visible[index];
+                              final accentColor = item.totalProfit >= 0
+                                  ? const Color(0xFF0F766E)
+                                  : const Color(0xFFB91C1C);
+
+                              return _AdminSalesUserCard(
+                                summary: item,
+                                accentColor: accentColor,
+                                dateRangeLabel:
+                                    '${_dateOnlyText(_from)} - ${_dateOnlyText(_to)}',
+                                soldLabel: _money(item.totalSold),
+                                pointsLabel: _money(item.totalProfit),
+                                salesCountLabel: '${item.totalSales} ventas',
+                                onTap: () => _openUserDetail(item),
+                              );
+                            },
+                          ),
+                        ),
                 ),
               ],
             );
@@ -521,23 +526,37 @@ class _AdminSalesUserDetailScreenState
     final query = _searchCtrl.text.trim().toLowerCase();
     if (query.isEmpty) return _items;
 
-    return _items.where((item) {
-      final dateText = item.saleDate == null
-          ? ''
-          : DateFormat('dd/MM/yyyy h:mm a', 'es_DO').format(item.saleDate!.toLocal());
-      return (item.customerName ?? '').toLowerCase().contains(query) ||
-          (item.note ?? '').toLowerCase().contains(query) ||
-          item.id.toLowerCase().contains(query) ||
-          dateText.toLowerCase().contains(query);
-    }).toList(growable: false);
+    return _items
+        .where((item) {
+          final dateText = item.saleDate == null
+              ? ''
+              : DateFormat(
+                  'dd/MM/yyyy h:mm a',
+                  'es_DO',
+                ).format(item.saleDate!.toLocal());
+          return (item.customerName ?? '').toLowerCase().contains(query) ||
+              (item.note ?? '').toLowerCase().contains(query) ||
+              item.id.toLowerCase().contains(query) ||
+              dateText.toLowerCase().contains(query);
+        })
+        .toList(growable: false);
   }
 
   SalesSummaryModel get _detailSummary {
     return SalesSummaryModel(
       totalSales: _visibleSales.length,
-      totalSold: _visibleSales.fold<double>(0, (sum, item) => sum + item.totalSold),
-      totalCost: _visibleSales.fold<double>(0, (sum, item) => sum + item.totalCost),
-      totalProfit: _visibleSales.fold<double>(0, (sum, item) => sum + item.totalProfit),
+      totalSold: _visibleSales.fold<double>(
+        0,
+        (sum, item) => sum + item.totalSold,
+      ),
+      totalCost: _visibleSales.fold<double>(
+        0,
+        (sum, item) => sum + item.totalCost,
+      ),
+      totalProfit: _visibleSales.fold<double>(
+        0,
+        (sum, item) => sum + item.totalProfit,
+      ),
       totalCommission: _visibleSales.fold<double>(
         0,
         (sum, item) => sum + item.commissionAmount,
@@ -560,7 +579,10 @@ class _AdminSalesUserDetailScreenState
   void _openSaleDetail(SaleModel sale) {
     final dateText = sale.saleDate == null
         ? 'Sin fecha'
-        : DateFormat('dd/MM/yyyy h:mm a', 'es_DO').format(sale.saleDate!.toLocal());
+        : DateFormat(
+            'dd/MM/yyyy h:mm a',
+            'es_DO',
+          ).format(sale.saleDate!.toLocal());
 
     showDialog<void>(
       context: context,
@@ -875,37 +897,37 @@ class _AdminSalesUserDetailScreenState
                       onRetryNow: _load,
                     )
                   : visible.isEmpty
-                      ? Center(
-                          child: Text(
-                            'No hay ventas para este filtro.',
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          ),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: _load,
-                          child: ListView.separated(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
-                            itemCount: visible.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 6),
-                            itemBuilder: (context, index) {
-                              final sale = visible[index];
-                              return _AdminSaleItemCard(
-                                sale: sale,
-                                moneyText: _money,
-                                dateText: sale.saleDate == null
-                                    ? 'Sin fecha'
-                                    : DateFormat(
-                                        'dd/MM/yyyy h:mm a',
-                                        'es_DO',
-                                      ).format(sale.saleDate!.toLocal()),
-                                onTap: () => _openSaleDetail(sale),
-                              );
-                            },
-                          ),
+                  ? Center(
+                      child: Text(
+                        'No hay ventas para este filtro.',
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: scheme.onSurfaceVariant,
                         ),
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _load,
+                      child: ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+                        itemCount: visible.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 6),
+                        itemBuilder: (context, index) {
+                          final sale = visible[index];
+                          return _AdminSaleItemCard(
+                            sale: sale,
+                            moneyText: _money,
+                            dateText: sale.saleDate == null
+                                ? 'Sin fecha'
+                                : DateFormat(
+                                    'dd/MM/yyyy h:mm a',
+                                    'es_DO',
+                                  ).format(sale.saleDate!.toLocal()),
+                            onTap: () => _openSaleDetail(sale),
+                          );
+                        },
+                      ),
+                    ),
             ),
           ],
         ),
@@ -963,11 +985,7 @@ class _CompactTopActionButton extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(14),
-          child: SizedBox(
-            width: 44,
-            height: 44,
-            child: Icon(icon, size: 20),
-          ),
+          child: SizedBox(width: 44, height: 44, child: Icon(icon, size: 20)),
         ),
       ),
     );
@@ -1204,9 +1222,9 @@ class _AdminSalesInlineChip extends StatelessWidget {
       child: Text(
         '$label · $value',
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: scheme.onSurfaceVariant,
-            ),
+          fontWeight: FontWeight.w700,
+          color: scheme.onSurfaceVariant,
+        ),
       ),
     );
   }

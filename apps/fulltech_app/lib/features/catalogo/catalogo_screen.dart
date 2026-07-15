@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -7,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_provider.dart';
-import '../../core/company/company_settings_repository.dart';
 import '../../core/debug/debug_admin_action.dart';
 import '../../core/models/product_model.dart';
 import '../../core/realtime/catalog_realtime_service.dart';
@@ -26,6 +26,20 @@ String _formatStock(double? stock) {
   if (stock == null) return '—';
   final isWhole = stock % 1 == 0;
   return isWhole ? stock.toStringAsFixed(0) : stock.toStringAsFixed(2);
+}
+
+double? _parseCatalogNumber(String raw) {
+  var value = raw
+      .trim()
+      .replaceAll('RD\$', '')
+      .replaceAll('rd\$', '')
+      .replaceAll(' ', '');
+  if (value.contains(',') && value.contains('.')) {
+    value = value.replaceAll(',', '');
+  } else {
+    value = value.replaceAll(',', '.');
+  }
+  return double.tryParse(value);
 }
 
 class CatalogoScreen extends ConsumerStatefulWidget {
@@ -161,9 +175,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
 
   Future<void> _purgeAllDebug() async {
     final user = ref.read(authStateProvider).user;
-    final settings = ref.read(companySettingsProvider).valueOrNull;
-    final canManage =
-        canUseDebugAdminAction(user) && !(settings?.productsReadOnly ?? true);
+    final canManage = canUseDebugAdminAction(user);
     if (!canManage) {
       return;
     }
@@ -212,10 +224,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
   Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).user;
     final isAdmin = (user?.role ?? '').trim().toUpperCase() == 'ADMIN';
-    final companySettings = ref.watch(companySettingsProvider);
-    final productsReadOnly =
-        companySettings.valueOrNull?.productsReadOnly ?? true;
-    final canManage = isAdmin && !productsReadOnly;
+    final canManage = isAdmin;
 
     final isModal = widget.modal;
 
@@ -357,6 +366,26 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                   tooltip: 'Limpiar tabla (debug)',
                   onPressed: _purgeAllDebug,
                 ),
+                if (canManage)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: FilledButton.icon(
+                      onPressed: () => _openProductForm(
+                        categories: categoryOptions,
+                      ),
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: const Text('Nuevo producto'),
+                    ),
+                  ),
+                if (canManage)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: OutlinedButton.icon(
+                      onPressed: _importProductsFromCsv,
+                      icon: const Icon(Icons.upload_file_rounded, size: 18),
+                      label: const Text('Importar'),
+                    ),
+                  ),
                 Padding(
                   padding: const EdgeInsets.only(right: 4),
                   child: Badge(
@@ -414,7 +443,13 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                     ),
             ),
       drawer: isModal ? null : buildAdaptiveDrawer(context, currentUser: user),
-      floatingActionButton: null,
+      floatingActionButton: canManage && !isModal
+          ? FloatingActionButton.extended(
+              onPressed: () => _openProductForm(categories: categoryOptions),
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Producto'),
+            )
+          : null,
       body: Padding(
         padding: EdgeInsets.fromLTRB(
           isWideLayout ? 16 : 12,
@@ -756,6 +791,146 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
         );
       },
     );
+  }
+
+  Future<void> _importProductsFromCsv() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['csv', 'txt'],
+      allowMultiple: false,
+      withData: true,
+    );
+    final file = result?.files.single;
+    final bytes = file?.bytes;
+    if (bytes == null) return;
+
+    try {
+      final content = utf8.decode(bytes, allowMalformed: true);
+      final drafts = _parseProductCsv(content);
+      if (drafts.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se encontraron productos válidos para importar'),
+          ),
+        );
+        return;
+      }
+
+      final imported = await ref
+          .read(catalogControllerProvider.notifier)
+          .importProducts(drafts);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Se importaron $imported productos')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('No se pudo importar: $e')));
+    }
+  }
+
+  List<CatalogImportDraft> _parseProductCsv(String content) {
+    final lines = const LineSplitter()
+        .convert(content)
+        .where((line) => line.trim().isNotEmpty)
+        .toList();
+    if (lines.isEmpty) return const [];
+
+    final first = _parseCsvLine(lines.first);
+    final normalizedFirst = first.map(_normalizeCsvHeader).toList();
+    final hasHeader = normalizedFirst.any(
+      (value) =>
+          value == 'nombre' ||
+          value == 'producto' ||
+          value == 'precio' ||
+          value == 'costo',
+    );
+
+    int indexOf(List<String> keys, int fallback) {
+      for (final key in keys) {
+        final index = normalizedFirst.indexOf(key);
+        if (index >= 0) return index;
+      }
+      return fallback;
+    }
+
+    final nameIndex = hasHeader ? indexOf(['nombre', 'producto', 'name'], 0) : 0;
+    final priceIndex = hasHeader ? indexOf(['precio', 'price'], 1) : 1;
+    final costIndex = hasHeader ? indexOf(['costo', 'cost'], 2) : 2;
+    final stockIndex = hasHeader
+        ? indexOf(['stock', 'existencia', 'cantidad', 'quantity'], 3)
+        : 3;
+    final categoryIndex = hasHeader
+        ? indexOf(['categoria', 'category', 'familia'], 4)
+        : 4;
+
+    final dataLines = hasHeader ? lines.skip(1) : lines;
+    final drafts = <CatalogImportDraft>[];
+    for (final line in dataLines) {
+      final cells = _parseCsvLine(line);
+      String cell(int index) => index >= 0 && index < cells.length
+          ? cells[index].trim()
+          : '';
+
+      final nombre = cell(nameIndex);
+      final precio = _parseCatalogNumber(cell(priceIndex));
+      final costo = _parseCatalogNumber(cell(costIndex));
+      final stock = _parseCatalogNumber(cell(stockIndex)) ?? 0;
+      final categoria = cell(categoryIndex).isEmpty
+          ? 'Sin categoría'
+          : cell(categoryIndex);
+
+      if (nombre.isEmpty || precio == null || costo == null) continue;
+      drafts.add(
+        CatalogImportDraft(
+          nombre: nombre,
+          precio: precio,
+          costo: costo,
+          stock: stock,
+          categoria: categoria,
+        ),
+      );
+    }
+    return drafts;
+  }
+
+  String _normalizeCsvHeader(String value) {
+    return value
+        .trim()
+        .toLowerCase()
+        .replaceAll('á', 'a')
+        .replaceAll('é', 'e')
+        .replaceAll('í', 'i')
+        .replaceAll('ó', 'o')
+        .replaceAll('ú', 'u');
+  }
+
+  List<String> _parseCsvLine(String line) {
+    final values = <String>[];
+    final buffer = StringBuffer();
+    var quoted = false;
+
+    for (var i = 0; i < line.length; i++) {
+      final char = line[i];
+      if (char == '"') {
+        if (quoted && i + 1 < line.length && line[i + 1] == '"') {
+          buffer.write('"');
+          i += 1;
+        } else {
+          quoted = !quoted;
+        }
+      } else if ((char == ',' || char == ';' || char == '\t') && !quoted) {
+        values.add(buffer.toString());
+        buffer.clear();
+      } else {
+        buffer.write(char);
+      }
+    }
+    values.add(buffer.toString());
+    return values;
   }
 
   Future<void> _openCatalogSearch({
@@ -2187,6 +2362,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _priceCtrl;
   late final TextEditingController _costCtrl;
+  late final TextEditingController _stockCtrl;
   late final TextEditingController _categoryCtrl;
   Uint8List? _imageBytes;
   String? _imageName;
@@ -2202,6 +2378,9 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     _costCtrl = TextEditingController(
       text: widget.product?.costo.toStringAsFixed(2) ?? '',
     );
+    _stockCtrl = TextEditingController(
+      text: widget.product?.stock?.toStringAsFixed(2) ?? '0',
+    );
     final initialCategory = widget.product?.categoriaLabel;
     _categoryCtrl = TextEditingController(
       text: initialCategory == 'Sin categoría' ? '' : (initialCategory ?? ''),
@@ -2213,6 +2392,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     _nameCtrl.dispose();
     _priceCtrl.dispose();
     _costCtrl.dispose();
+    _stockCtrl.dispose();
     _categoryCtrl.dispose();
     super.dispose();
   }
@@ -2233,14 +2413,17 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
 
   Future<void> _submit() async {
     final name = _nameCtrl.text.trim();
-    final price = double.tryParse(_priceCtrl.text.trim());
-    final cost = double.tryParse(_costCtrl.text.trim());
+    final price = _parseCatalogNumber(_priceCtrl.text);
+    final cost = _parseCatalogNumber(_costCtrl.text);
+    final stock = _parseCatalogNumber(_stockCtrl.text);
     final category = _categoryCtrl.text.trim();
 
-    if (name.isEmpty || price == null || cost == null) {
+    if (name.isEmpty || price == null || cost == null || stock == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Completa nombre, precio y costo con valores válidos'),
+          content: Text(
+            'Completa nombre, precio, costo y stock con valores válidos',
+          ),
         ),
       );
       return;
@@ -2269,6 +2452,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
           nombre: name,
           precio: price,
           costo: cost,
+          stock: stock,
           imageBytes: _imageBytes!,
           filename: _imageName ?? 'producto.png',
           categoria: category,
@@ -2283,6 +2467,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
           nombre: name,
           precio: price,
           costo: cost,
+          stock: stock,
           newImageBytes: _imageBytes,
           newFilename: _imageName,
           categoria: category,
@@ -2343,6 +2528,12 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
             controller: _costCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(labelText: 'Costo'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _stockCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Stock disponible'),
           ),
           const SizedBox(height: 12),
           TextField(

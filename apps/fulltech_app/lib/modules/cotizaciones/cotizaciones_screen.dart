@@ -30,6 +30,7 @@ import '../clientes/cliente_model.dart';
 import '../clientes/cliente_form_screen.dart';
 import '../service_orders/service_order_models.dart';
 import '../ventas/data/ventas_repository.dart';
+import '../ventas/sales_models.dart';
 import 'ai/application/quotation_ai_controller.dart';
 import 'ai/domain/models/ai_warning.dart';
 import 'ai/domain/models/quotation_context.dart';
@@ -38,7 +39,6 @@ import 'ai/presentation/widgets/ai_chat_sheet.dart';
 import 'ai/presentation/widgets/ai_warning_banner.dart';
 import 'ai/presentation/widgets/quotation_rule_detail_sheet.dart';
 import 'cotizacion_models.dart';
-import 'data/cotizacion_catalog_local_data_source.dart';
 import 'data/cotizaciones_repository.dart';
 import 'utils/cotizacion_pdf_service.dart';
 
@@ -107,7 +107,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   StreamSubscription<CatalogRealtimeMessage>? _realtimeSubscription;
   static const Duration _liveSyncInterval = Duration(minutes: 2);
   static const Duration _silentRefreshMinInterval = Duration(seconds: 20);
-  static const Duration _catalogCacheFreshFor = Duration(minutes: 10);
 
   @override
   void initState() {
@@ -478,29 +477,19 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           .read(ventasRepositoryProvider)
           .fetchProducts(forceRefresh: forceRemote);
       final catalogVersion = buildCatalogSyncVersion(rows);
-      final cachedRows = applyCatalogSyncVersion(rows, catalogVersion);
+      final syncedRows = applyCatalogSyncVersion(rows, catalogVersion);
       final syncedAt = DateTime.now();
-
-      unawaited(
-        ref
-            .read(cotizacionCatalogLocalDataSourceProvider)
-            .saveSnapshot(
-              cachedRows,
-              syncedAt: syncedAt,
-              catalogVersion: catalogVersion,
-            ),
-      );
 
       if (!mounted) return;
       setState(() {
-        _productos = cachedRows;
+        _productos = syncedRows;
         _loadingProducts = false;
         _error = null;
       });
       unawaited(_syncQuotationAi(triggerAi: false));
       Future<void>.microtask(
         () => FulltechImageCacheManager.warmImageUrls(
-          cachedRows.map((item) => item.displayFotoUrl),
+          syncedRows.map((item) => item.displayFotoUrl),
         ),
       );
       _lastSuccessfulRemoteSyncAt = syncedAt;
@@ -519,65 +508,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Future<void> _bootstrapCatalog() async {
-    try {
-      final localDataSource = ref.read(
-        cotizacionCatalogLocalDataSourceProvider,
-      );
-      final cacheSnapshot = await localDataSource.readSnapshot();
-      final uiState = await localDataSource.readUiState();
-      if (!mounted) return;
-
-      final hasCachedProducts = cacheSnapshot.items.isNotEmpty;
-      setState(() {
-        if (hasCachedProducts) {
-          _productos = cacheSnapshot.items;
-          _loadingProducts = false;
-          _error = null;
-        }
-        if (_searchCtrl.text.trim().isEmpty &&
-            uiState.searchQuery.trim().isNotEmpty) {
-          _searchCtrl.text = uiState.searchQuery;
-        }
-        if (_selectedCategory == null &&
-            (uiState.selectedCategory ?? '').trim().isNotEmpty) {
-          _selectedCategory = uiState.selectedCategory;
-        }
-      });
-
-      if (hasCachedProducts) {
-        unawaited(_syncQuotationAi(triggerAi: false));
-        Future<void>.microtask(
-          () => FulltechImageCacheManager.warmImageUrls(
-            cacheSnapshot.items.map((item) => item.displayFotoUrl),
-          ),
-        );
-      }
-
-      final shouldRefresh =
-          !hasCachedProducts ||
-          cacheSnapshot.lastSyncedAt == null ||
-          DateTime.now().difference(cacheSnapshot.lastSyncedAt!) >
-              _catalogCacheFreshFor;
-
-      if (shouldRefresh) {
-        unawaited(_loadProducts(forceRemote: true, silent: true));
-      }
-    } catch (_) {
-      if (!mounted) return;
-      unawaited(_loadProducts(forceRemote: true, silent: true));
-    }
+    await _loadProducts(forceRemote: true);
   }
 
-  void _persistCatalogUiState() {
-    unawaited(
-      ref
-          .read(cotizacionCatalogLocalDataSourceProvider)
-          .saveUiState(
-            selectedCategory: _selectedCategory,
-            searchQuery: _searchCtrl.text,
-          ),
-    );
-  }
+  void _persistCatalogUiState() {}
 
   Future<void> _disposeControllersSafely(
     Iterable<TextEditingController> controllers,
@@ -3547,37 +3481,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
   }
 
-  Future<void> _openHistory() async {
-    final payload = await context.push<CotizacionEditorPayload>(
-      Routes.cotizacionesHistorial,
-    );
-
-    if (payload == null || !mounted) return;
-
-    _commitEditorChange(() {
-      _items
-        ..clear()
-        ..addAll(payload.source.items.map((item) => item.copyWith()));
-      _selectedClientId = payload.source.customerId;
-      _selectedClientName = payload.source.customerName;
-      _selectedClientPhone = payload.source.customerPhone;
-      _note = payload.source.note;
-      _includeItbis = payload.source.includeItbis;
-      _editingId = payload.duplicate ? null : payload.source.id;
-      _editingCreatedAt = payload.duplicate ? null : payload.source.createdAt;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          payload.duplicate
-              ? 'Cotización duplicada en editor'
-              : 'Cotización cargada para editar',
-        ),
-      ),
-    );
-  }
-
   void _openInventoryCatalog() {
     context.go('${Routes.catalogo}?tab=catalog');
   }
@@ -3612,54 +3515,41 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       return;
     }
 
-    final wasEditing = (_editingId ?? '').trim().isNotEmpty;
-    final cotizacion = _buildDraftCotizacion();
-    CotizacionModel? savedQuotation;
-    var queued = false;
     try {
-      final repository = ref.read(cotizacionesRepositoryProvider);
-      if (widget.returnSavedQuotation) {
-        savedQuotation = (_editingId ?? '').trim().isEmpty
-            ? await repository.create(cotizacion)
-            : await repository.update(_editingId!, cotizacion);
-      } else {
-        queued = (_editingId ?? '').trim().isEmpty
-            ? await repository.createOrQueue(cotizacion)
-            : await repository.updateOrQueue(_editingId!, cotizacion);
-      }
+      await ref
+          .read(ventasRepositoryProvider)
+          .createSale(
+            customerId: _selectedClientId!,
+            note: _note,
+            items: _items
+                .map(
+                  (item) => SaleDraftItem(
+                    productId: item.isExternal ? null : item.productId,
+                    name: item.nombre,
+                    imageUrl: item.imageUrl,
+                    isExternal: item.isExternal,
+                    qty: item.qty,
+                    priceSoldUnit: item.unitPrice,
+                    costUnitSnapshot: item.tracedCostUnit ?? 0,
+                  ),
+                )
+                .toList(),
+          );
 
       if (!mounted) return;
 
-      if (!widget.returnSavedQuotation) {
-        _commitEditorChange(_resetEditorState);
-        _schedulePersistEditorDraft(immediate: true);
-      }
+      _commitEditorChange(_resetEditorState);
+      _schedulePersistEditorDraft(immediate: true);
+      unawaited(_loadProducts(forceRemote: true, silent: true));
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            widget.returnSavedQuotation
-                ? wasEditing
-                      ? 'Cotización actualizada'
-                      : 'Cotización creada'
-                : queued
-                ? 'Cotización guardada localmente. Se sincronizará en segundo plano.'
-                : wasEditing
-                ? 'Cotización actualizada en nube'
-                : 'Cotización guardada en nube',
-          ),
-        ),
+        const SnackBar(content: Text('Venta guardada y stock actualizado')),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e is ApiException ? e.message : '$e')),
       );
-      return;
-    }
-
-    if (widget.returnSavedQuotation && mounted) {
-      context.pop(savedQuotation);
       return;
     }
 
@@ -4921,14 +4811,14 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             _DesktopCategoryStrip(
               categories: widget.categories,
               allProducts: widget.allProducts,
               selectedCategory: widget.selectedCategory,
               onSelectCategory: widget.onSelectCategory,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
@@ -5405,19 +5295,19 @@ class _DesktopCategoryStrip extends StatelessWidget {
     final totalItems = categories.length + (hasFilter ? 1 : 0);
 
     return SizedBox(
-      height: 48,
+      height: 38,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: EdgeInsets.zero,
         itemCount: totalItems,
-        separatorBuilder: (context, index) => const SizedBox(width: 8),
+        separatorBuilder: (context, index) => const SizedBox(width: 6),
         itemBuilder: (context, index) {
           if (hasFilter && index == 0) {
             return SizedBox(
-              width: 88,
+              width: 76,
               child: Material(
                 color: const Color(0xFF1957E6),
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: BorderRadius.circular(7),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
                   onTap: () => onSelectCategory(null),
@@ -5429,7 +5319,7 @@ class _DesktopCategoryStrip extends StatelessWidget {
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w900,
-                        fontSize: 12,
+                        fontSize: 11,
                       ),
                     ),
                   ),
@@ -5470,20 +5360,20 @@ class _DesktopCategoryStripItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final imageUrl = product?.displayFotoUrl?.trim() ?? '';
     final normalizedLabel = label.trim().toUpperCase();
-    final tileWidth = (normalizedLabel.length * 7.2 + 64).clamp(132.0, 280.0);
+    final tileWidth = (normalizedLabel.length * 6.3 + 48).clamp(108.0, 236.0);
 
     return SizedBox(
       width: tileWidth,
       child: Material(
         color: selected ? const Color(0xFFEAF1FF) : Colors.white,
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: BorderRadius.circular(7),
         child: InkWell(
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: BorderRadius.circular(7),
           onTap: onTap,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7),
+            padding: const EdgeInsets.symmetric(horizontal: 6),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(9),
+              borderRadius: BorderRadius.circular(7),
               border: Border.all(
                 color: selected
                     ? const Color(0xFF1957E6)
@@ -5494,17 +5384,17 @@ class _DesktopCategoryStripItem extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  width: 30,
-                  height: 30,
+                  width: 24,
+                  height: 24,
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: const Color(0xFFCFE0FF)),
                     boxShadow: [
                       BoxShadow(
                         color: const Color(0xFF0B2A3A).withValues(alpha: 0.08),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
                       ),
                     ],
                   ),
@@ -5513,7 +5403,7 @@ class _DesktopCategoryStripItem extends StatelessWidget {
                       ? const Icon(
                           Icons.inventory_2_outlined,
                           color: Color(0xFF8DA2B4),
-                          size: 18,
+                          size: 15,
                         )
                       : ProductNetworkImage(
                           imageUrl: imageUrl,
@@ -5525,11 +5415,11 @@ class _DesktopCategoryStripItem extends StatelessWidget {
                           fallback: const Icon(
                             Icons.inventory_2_outlined,
                             color: Color(0xFF8DA2B4),
-                            size: 18,
+                            size: 15,
                           ),
                         ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     normalizedLabel,
@@ -5539,8 +5429,8 @@ class _DesktopCategoryStripItem extends StatelessWidget {
                     style: TextStyle(
                       color: const Color(0xFF152238),
                       fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
-                      fontSize: 11.2,
-                      height: 1.05,
+                      fontSize: 10.2,
+                      height: 1.0,
                     ),
                   ),
                 ),

@@ -16,6 +16,11 @@ export class UpdateProductDto {
   costo?: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  stock?: number;
+
+  @IsOptional()
   @IsString()
   fotoUrl?: string;
 
@@ -23,4 +28,3 @@ export class UpdateProductDto {
   @IsString()
   categoria?: string;
 }
-

@@ -28,10 +28,10 @@ class _HistorialFilterState {
   });
 
   const _HistorialFilterState.clear()
-      : clientKey = null,
-        quoteTag = null,
-        fromDate = null,
-        toDate = null;
+    : clientKey = null,
+      quoteTag = null,
+      fromDate = null,
+      toDate = null;
 
   final String? clientKey;
   final String? quoteTag;
@@ -119,14 +119,20 @@ class _CotizacionesHistorialScreenState
     final customerId = (item.customerId ?? '').trim();
     if (customerId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('La cotización no tiene cliente asociado.')),
+        const SnackBar(
+          content: Text('La cotización no tiene cliente asociado.'),
+        ),
       );
       return;
     }
 
     if (item.items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('La cotización no tiene productos para crear la orden.')),
+        const SnackBar(
+          content: Text(
+            'La cotización no tiene productos para crear la orden.',
+          ),
+        ),
       );
       return;
     }
@@ -141,7 +147,9 @@ class _CotizacionesHistorialScreenState
 
     if (!mounted || opened != true) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Orden de servicio creada desde la cotización.')),
+      const SnackBar(
+        content: Text('Orden de servicio creada desde la cotización.'),
+      ),
     );
   }
 
@@ -1181,20 +1189,30 @@ class _CotizacionesHistorialScreenState
     );
   }
 
-  Widget _buildListContent(BuildContext context, List<CotizacionModel> visibleItems) {
+  Widget _buildListContent(
+    BuildContext context,
+    List<CotizacionModel> visibleItems,
+  ) {
     final phone = (widget.customerPhone ?? '').trim();
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          child: Text(
+            _error!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
         ),
       );
     }
     if (_items.isEmpty) {
       return Center(
-        child: Text(phone.isEmpty ? 'No hay cotizaciones guardadas' : 'Este cliente no tiene cotizaciones'),
+        child: Text(
+          phone.isEmpty
+              ? 'No hay cotizaciones guardadas'
+              : 'Este cliente no tiene cotizaciones',
+        ),
       );
     }
     if (visibleItems.isEmpty) {
@@ -1204,11 +1222,19 @@ class _CotizacionesHistorialScreenState
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.search_off_rounded, size: 42, color: Theme.of(context).colorScheme.primary),
+              Icon(
+                Icons.search_off_rounded,
+                size: 42,
+                color: Theme.of(context).colorScheme.primary,
+              ),
               const SizedBox(height: 10),
-              Text('Sin resultados con los filtros activos.',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                textAlign: TextAlign.center),
+              Text(
+                'Sin resultados con los filtros activos.',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 6),
               TextButton.icon(
                 onPressed: _clearFilters,
@@ -1232,7 +1258,10 @@ class _CotizacionesHistorialScreenState
           final canDuplicate = widget.pickForEditor;
           final quoteTag = _quoteTags(item).firstOrNull ?? 'General';
           final isOwnClient = _isOwnClient(item);
-          final dateFmt = DateFormat('dd/MM/yy · h:mm a', 'es_DO').format(item.createdAt);
+          final dateFmt = DateFormat(
+            'dd/MM/yy · h:mm a',
+            'es_DO',
+          ).format(item.createdAt);
           return _HistorialListCard(
             item: item,
             dateFmt: dateFmt,
@@ -1247,7 +1276,10 @@ class _CotizacionesHistorialScreenState
             onSendToServiceOrder: () => _sendToServiceOrder(item),
             onEdit: canEditOrDelete ? () => _editQuotation(item) : null,
             onDuplicate: canDuplicate
-                ? () => Navigator.pop(context, CotizacionEditorPayload(source: item, duplicate: true))
+                ? () => Navigator.pop(
+                    context,
+                    CotizacionEditorPayload(source: item, duplicate: true),
+                  )
                 : null,
             onDelete: canEditOrDelete ? () => _delete(item) : null,
           );
@@ -1267,12 +1299,18 @@ class _CotizacionesHistorialScreenState
       final totalVisible = visibleItems.fold<double>(0, (s, i) => s + i.total);
       final uniqueClients = {
         for (final item in visibleItems)
-          _clientKey(customerId: item.customerId, customerPhone: item.customerPhone, customerName: item.customerName),
+          _clientKey(
+            customerId: item.customerId,
+            customerPhone: item.customerPhone,
+            customerName: item.customerName,
+          ),
       }.length;
 
       return Scaffold(
         appBar: CustomAppBar(
-          title: phone.isEmpty ? 'Historial cotizaciones' : 'Cotizaciones · $phone',
+          title: phone.isEmpty
+              ? 'Historial cotizaciones'
+              : 'Cotizaciones · $phone',
           fallbackRoute: Routes.cotizaciones,
           showLogo: false,
           showDepartmentLabel: false,
@@ -1301,16 +1339,22 @@ class _CotizacionesHistorialScreenState
                                   icon: const Icon(Icons.close_rounded),
                                 ),
                           filled: true,
-                          fillColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+                          fillColor: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHigh,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide.none,
                           ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
                         ),
                       ),
                     ),
-                    if (_refreshing) const LinearProgressIndicator(minHeight: 2),
+                    if (_refreshing)
+                      const LinearProgressIndicator(minHeight: 2),
                     Expanded(child: _buildListContent(context, visibleItems)),
                   ],
                 ),
@@ -1318,7 +1362,9 @@ class _CotizacionesHistorialScreenState
               // ── Right: fixed sidebar ────────────────────────────────────
               Container(
                 width: 1,
-                color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.40),
+                color: Theme.of(
+                  context,
+                ).colorScheme.outlineVariant.withValues(alpha: 0.40),
               ),
               SizedBox(
                 width: 272,
@@ -1331,7 +1377,10 @@ class _CotizacionesHistorialScreenState
                   availableTags: _availableTags,
                   fromDate: _fromDate,
                   toDate: _toDate,
-                  hasActiveFilters: _activeFilterCount > 0 || _searchQuery.isNotEmpty || _ownOnly,
+                  hasActiveFilters:
+                      _activeFilterCount > 0 ||
+                      _searchQuery.isNotEmpty ||
+                      _ownOnly,
                   onToggleOwn: (v) => setState(() {
                     _ownOnly = v;
                     _selectedClientKey = null;
@@ -1444,7 +1493,10 @@ class _CotizacionesHistorialScreenState
                           final quoteTag =
                               _quoteTags(item).firstOrNull ?? 'General';
                           final isOwnClient = _isOwnClient(item);
-                          final dateFmt = DateFormat('dd/MM/yy · h:mm a', 'es_DO').format(item.createdAt);
+                          final dateFmt = DateFormat(
+                            'dd/MM/yy · h:mm a',
+                            'es_DO',
+                          ).format(item.createdAt);
 
                           return _HistorialListCard(
                             item: item,
@@ -1457,12 +1509,21 @@ class _CotizacionesHistorialScreenState
                             onTap: () => _viewDetail(item),
                             onView: () => _viewDetail(item),
                             onPdf: () => _openPdfPreview(item),
-                            onSendToServiceOrder: () => _sendToServiceOrder(item),
+                            onSendToServiceOrder: () =>
+                                _sendToServiceOrder(item),
                             onEdit: canEdit ? () => _editQuotation(item) : null,
                             onDuplicate: canDuplicate
-                                ? () => Navigator.pop(context, CotizacionEditorPayload(source: item, duplicate: true))
+                                ? () => Navigator.pop(
+                                    context,
+                                    CotizacionEditorPayload(
+                                      source: item,
+                                      duplicate: true,
+                                    ),
+                                  )
                                 : null,
-                            onDelete: canEditOrDelete ? () => _delete(item) : null,
+                            onDelete: canEditOrDelete
+                                ? () => _delete(item)
+                                : null,
                           );
                         },
                       ),
@@ -1530,11 +1591,27 @@ class _HistorialDesktopSidebar extends StatelessWidget {
             icon: Icons.dashboard_customize_outlined,
             child: Column(
               children: [
-                _HSidebarStat(icon: Icons.receipt_long_outlined, label: 'Cotizaciones', value: '$totalCount', theme: theme),
+                _HSidebarStat(
+                  icon: Icons.receipt_long_outlined,
+                  label: 'Cotizaciones',
+                  value: '$totalCount',
+                  theme: theme,
+                ),
                 const SizedBox(height: 8),
-                _HSidebarStat(icon: Icons.people_outline, label: 'Clientes únicos', value: '$uniqueClients', theme: theme),
+                _HSidebarStat(
+                  icon: Icons.people_outline,
+                  label: 'Clientes únicos',
+                  value: '$uniqueClients',
+                  theme: theme,
+                ),
                 const SizedBox(height: 8),
-                _HSidebarStat(icon: Icons.payments_outlined, label: 'Total acumulado', value: _fmt(totalAmount), theme: theme, accent: true),
+                _HSidebarStat(
+                  icon: Icons.payments_outlined,
+                  label: 'Total acumulado',
+                  value: _fmt(totalAmount),
+                  theme: theme,
+                  accent: true,
+                ),
               ],
             ),
           ),
@@ -1545,9 +1622,23 @@ class _HistorialDesktopSidebar extends StatelessWidget {
             icon: Icons.person_pin_outlined,
             child: Row(
               children: [
-                Expanded(child: _HOwnerChip(label: 'Todos', selected: !ownOnly, onTap: () => onToggleOwn(false), theme: theme)),
+                Expanded(
+                  child: _HOwnerChip(
+                    label: 'Todos',
+                    selected: !ownOnly,
+                    onTap: () => onToggleOwn(false),
+                    theme: theme,
+                  ),
+                ),
                 const SizedBox(width: 8),
-                Expanded(child: _HOwnerChip(label: 'Mis clientes', selected: ownOnly, onTap: () => onToggleOwn(true), theme: theme)),
+                Expanded(
+                  child: _HOwnerChip(
+                    label: 'Mis clientes',
+                    selected: ownOnly,
+                    onTap: () => onToggleOwn(true),
+                    theme: theme,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1561,13 +1652,20 @@ class _HistorialDesktopSidebar extends StatelessWidget {
                 spacing: 6,
                 runSpacing: 6,
                 children: [
-                  _HTagChip(label: 'Todas', selected: selectedTag == null, onTap: () => onSelectTag(null), theme: theme),
-                  ...availableTags.map((tag) => _HTagChip(
-                    label: tag,
-                    selected: selectedTag == tag,
-                    onTap: () => onSelectTag(selectedTag == tag ? null : tag),
+                  _HTagChip(
+                    label: 'Todas',
+                    selected: selectedTag == null,
+                    onTap: () => onSelectTag(null),
                     theme: theme,
-                  )),
+                  ),
+                  ...availableTags.map(
+                    (tag) => _HTagChip(
+                      label: tag,
+                      selected: selectedTag == tag,
+                      onTap: () => onSelectTag(selectedTag == tag ? null : tag),
+                      theme: theme,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1579,9 +1677,19 @@ class _HistorialDesktopSidebar extends StatelessWidget {
             icon: Icons.date_range_outlined,
             child: Column(
               children: [
-                _HDateButton(label: 'Desde', date: fromDate, onTap: onPickFrom, theme: theme),
+                _HDateButton(
+                  label: 'Desde',
+                  date: fromDate,
+                  onTap: onPickFrom,
+                  theme: theme,
+                ),
                 const SizedBox(height: 8),
-                _HDateButton(label: 'Hasta', date: toDate, onTap: onPickTo, theme: theme),
+                _HDateButton(
+                  label: 'Hasta',
+                  date: toDate,
+                  onTap: onPickTo,
+                  theme: theme,
+                ),
               ],
             ),
           ),
@@ -1606,7 +1714,11 @@ class _HistorialDesktopSidebar extends StatelessWidget {
 }
 
 class _HSidebarSection extends StatelessWidget {
-  const _HSidebarSection({required this.label, required this.icon, required this.child});
+  const _HSidebarSection({
+    required this.label,
+    required this.icon,
+    required this.child,
+  });
   final String label;
   final IconData icon;
   final Widget child;
@@ -1621,7 +1733,14 @@ class _HSidebarSection extends StatelessWidget {
           children: [
             Icon(icon, size: 13, color: theme.colorScheme.onSurfaceVariant),
             const SizedBox(width: 5),
-            Text(label.toUpperCase(), style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: 0.8, color: theme.colorScheme.onSurfaceVariant)),
+            Text(
+              label.toUpperCase(),
+              style: theme.textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.8,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -1632,7 +1751,13 @@ class _HSidebarSection extends StatelessWidget {
 }
 
 class _HSidebarStat extends StatelessWidget {
-  const _HSidebarStat({required this.icon, required this.label, required this.value, required this.theme, this.accent = false});
+  const _HSidebarStat({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.theme,
+    this.accent = false,
+  });
   final IconData icon;
   final String label;
   final String value;
@@ -1641,20 +1766,41 @@ class _HSidebarStat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = accent ? theme.colorScheme.primary : theme.colorScheme.onSurface;
+    final color = accent
+        ? theme.colorScheme.primary
+        : theme.colorScheme.onSurface;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: accent ? theme.colorScheme.primary.withValues(alpha: 0.25) : theme.colorScheme.outlineVariant.withValues(alpha: 0.50)),
+        border: Border.all(
+          color: accent
+              ? theme.colorScheme.primary.withValues(alpha: 0.25)
+              : theme.colorScheme.outlineVariant.withValues(alpha: 0.50),
+        ),
       ),
       child: Row(
         children: [
           Icon(icon, size: 14, color: color.withValues(alpha: 0.65)),
           const SizedBox(width: 8),
-          Expanded(child: Text(label, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant))),
-          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800, color: color)),
+          Expanded(
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
         ],
       ),
     );
@@ -1662,7 +1808,12 @@ class _HSidebarStat extends StatelessWidget {
 }
 
 class _HOwnerChip extends StatelessWidget {
-  const _HOwnerChip({required this.label, required this.selected, required this.onTap, required this.theme});
+  const _HOwnerChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    required this.theme,
+  });
   final String label;
   final bool selected;
   final VoidCallback onTap;
@@ -1676,13 +1827,26 @@ class _HOwnerChip extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(vertical: 9),
         decoration: BoxDecoration(
-          color: selected ? theme.colorScheme.primary : theme.colorScheme.surface,
+          color: selected
+              ? theme.colorScheme.primary
+              : theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: selected ? theme.colorScheme.primary : theme.colorScheme.outlineVariant.withValues(alpha: 0.55)),
+          border: Border.all(
+            color: selected
+                ? theme.colorScheme.primary
+                : theme.colorScheme.outlineVariant.withValues(alpha: 0.55),
+          ),
         ),
         child: Center(
-          child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700, color: selected ? Colors.white : theme.colorScheme.onSurface)),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: selected ? Colors.white : theme.colorScheme.onSurface,
+            ),
+          ),
         ),
       ),
     );
@@ -1690,7 +1854,12 @@ class _HOwnerChip extends StatelessWidget {
 }
 
 class _HTagChip extends StatelessWidget {
-  const _HTagChip({required this.label, required this.selected, required this.onTap, required this.theme});
+  const _HTagChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    required this.theme,
+  });
   final String label;
   final bool selected;
   final VoidCallback onTap;
@@ -1704,21 +1873,38 @@ class _HTagChip extends StatelessWidget {
         duration: const Duration(milliseconds: 140),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? theme.colorScheme.primary.withValues(alpha: 0.12) : theme.colorScheme.surface,
+          color: selected
+              ? theme.colorScheme.primary.withValues(alpha: 0.12)
+              : theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
-            color: selected ? theme.colorScheme.primary.withValues(alpha: 0.60) : theme.colorScheme.outlineVariant.withValues(alpha: 0.50),
+            color: selected
+                ? theme.colorScheme.primary.withValues(alpha: 0.60)
+                : theme.colorScheme.outlineVariant.withValues(alpha: 0.50),
             width: selected ? 1.5 : 1,
           ),
         ),
-        child: Text(label, style: theme.textTheme.labelMedium?.copyWith(fontWeight: selected ? FontWeight.w800 : FontWeight.w600, color: selected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant)),
+        child: Text(
+          label,
+          style: theme.textTheme.labelMedium?.copyWith(
+            fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+            color: selected
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
       ),
     );
   }
 }
 
 class _HDateButton extends StatelessWidget {
-  const _HDateButton({required this.label, required this.date, required this.onTap, required this.theme});
+  const _HDateButton({
+    required this.label,
+    required this.date,
+    required this.onTap,
+    required this.theme,
+  });
   final String label;
   final DateTime? date;
   final VoidCallback onTap;
@@ -1727,7 +1913,9 @@ class _HDateButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasDate = date != null;
-    final text = hasDate ? DateFormat('dd/MM/yyyy', 'es_DO').format(date!) : label;
+    final text = hasDate
+        ? DateFormat('dd/MM/yyyy', 'es_DO').format(date!)
+        : label;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1735,14 +1923,32 @@ class _HDateButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: hasDate ? theme.colorScheme.primary.withValues(alpha: 0.45) : theme.colorScheme.outlineVariant.withValues(alpha: 0.50)),
+          border: Border.all(
+            color: hasDate
+                ? theme.colorScheme.primary.withValues(alpha: 0.45)
+                : theme.colorScheme.outlineVariant.withValues(alpha: 0.50),
+          ),
         ),
         child: Row(
           children: [
-            Icon(Icons.event_outlined, size: 14, color: hasDate ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant),
+            Icon(
+              Icons.event_outlined,
+              size: 14,
+              color: hasDate
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(text, style: theme.textTheme.bodySmall?.copyWith(fontWeight: hasDate ? FontWeight.w700 : FontWeight.w500, color: hasDate ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant)),
+              child: Text(
+                text,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: hasDate ? FontWeight.w700 : FontWeight.w500,
+                  color: hasDate
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
             ),
           ],
         ),
@@ -1799,16 +2005,21 @@ class _HistorialListCardState extends State<_HistorialListCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final item = widget.item;
-    final clientName = item.customerName.trim().isEmpty ? 'Cliente sin nombre' : item.customerName.trim();
+    final clientName = item.customerName.trim().isEmpty
+        ? 'Cliente sin nombre'
+        : item.customerName.trim();
     final secondary = [
       widget.dateFmt,
       '${item.items.length} líneas',
       widget.quoteTag,
-      if ((item.customerPhone ?? '').trim().isNotEmpty) item.customerPhone!.trim(),
+      if ((item.customerPhone ?? '').trim().isNotEmpty)
+        item.customerPhone!.trim(),
       if (widget.isOwnClient) 'Mi cliente',
     ].join(' · ');
     final activeColor = theme.colorScheme.surfaceContainerHigh;
-    final activeBorder = theme.colorScheme.outlineVariant.withValues(alpha: 0.45);
+    final activeBorder = theme.colorScheme.outlineVariant.withValues(
+      alpha: 0.45,
+    );
     final idleBorder = theme.colorScheme.outlineVariant.withValues(alpha: 0.45);
     final iconBg = _active
         ? theme.colorScheme.primary.withValues(alpha: 0.18)
@@ -1903,21 +2114,33 @@ class _HistorialListCardState extends State<_HistorialListCard> {
                         if (value == 'delete') widget.onDelete?.call();
                       },
                       itemBuilder: (_) => [
-                        const PopupMenuItem(value: 'view', child: Text('Ver detalle')),
-                        const PopupMenuItem(value: 'pdf', child: Text('Ver PDF')),
+                        const PopupMenuItem(
+                          value: 'view',
+                          child: Text('Ver detalle'),
+                        ),
+                        const PopupMenuItem(
+                          value: 'pdf',
+                          child: Text('Ver PDF'),
+                        ),
                         const PopupMenuItem(
                           value: 'service_order',
                           child: Text('Pasar a orden de servicio'),
                         ),
                         if (widget.canEdit)
-                          const PopupMenuItem(value: 'edit', child: Text('Editar')),
+                          const PopupMenuItem(
+                            value: 'edit',
+                            child: Text('Editar'),
+                          ),
                         if (widget.canDuplicate)
                           const PopupMenuItem(
                             value: 'duplicate',
                             child: Text('Duplicar'),
                           ),
                         if (widget.onDelete != null)
-                          const PopupMenuItem(value: 'delete', child: Text('Eliminar')),
+                          const PopupMenuItem(
+                            value: 'delete',
+                            child: Text('Eliminar'),
+                          ),
                       ],
                       icon: Container(
                         padding: const EdgeInsets.all(5),

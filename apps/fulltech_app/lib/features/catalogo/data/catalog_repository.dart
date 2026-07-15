@@ -118,18 +118,19 @@ class CatalogRepository {
     required String nombre,
     required double precio,
     required double costo,
-    required String fotoUrl,
+    required double stock,
+    String? fotoUrl,
     required String categoria,
   }) async {
     try {
-      // Legacy LOCAL-only operation. Catalog reads now use /catalog/products.
       final res = await _dio.post(
         ApiRoutes.products,
         data: {
           'nombre': nombre,
           'precio': precio,
           'costo': costo,
-          'fotoUrl': fotoUrl,
+          'stock': stock,
+          if ((fotoUrl ?? '').trim().isNotEmpty) 'fotoUrl': fotoUrl!.trim(),
           'categoria': categoria,
         },
       );
@@ -147,17 +148,18 @@ class CatalogRepository {
     required String nombre,
     required double precio,
     required double costo,
+    required double stock,
     String? fotoUrl,
     String? categoria,
   }) async {
     try {
-      // Legacy LOCAL-only operation. Catalog reads now use /catalog/products.
       final res = await _dio.patch(
         ApiRoutes.updateProduct(id),
         data: {
           'nombre': nombre,
           'precio': precio,
           'costo': costo,
+          'stock': stock,
           'fotoUrl': fotoUrl,
           'categoria': categoria,
         },
@@ -173,7 +175,6 @@ class CatalogRepository {
 
   Future<void> deleteProduct(String id) async {
     try {
-      // Legacy LOCAL-only operation. Catalog reads now use /catalog/products.
       await _dio.delete(ApiRoutes.deleteProduct(id));
     } on DioException catch (e) {
       throw ApiException(

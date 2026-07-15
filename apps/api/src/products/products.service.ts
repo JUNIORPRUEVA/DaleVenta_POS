@@ -27,38 +27,9 @@ export class ProductsService {
     this.allowLocalFallback = rawFallback === '1' || rawFallback === 'true' || rawFallback === 'yes';
 
     const rawSource = (this.config.get<string>('PRODUCTS_SOURCE') ?? '').trim().toUpperCase();
-    const nodeEnv = (this.config.get<string>('NODE_ENV') ?? process.env.NODE_ENV ?? 'development').toLowerCase();
-
-    const fullposBaseUrl = (this.config.get<string>('FULLPOS_INTEGRATION_BASE_URL') ?? '').trim();
-    const fullposIntegrationToken = (this.config.get<string>('FULLPOS_INTEGRATION_TOKEN') ?? '').trim();
-    const fullposDirectDatabaseUrl = (
-      this.config.get<string>('FULLPOS_DIRECT_DATABASE_URL') ??
-      this.config.get<string>('FULLPOS_DB_URL') ??
-      ''
-    ).trim();
-    const fullposDirectCompanyId = (
-      this.config.get<string>('FULLPOS_DIRECT_COMPANY_ID') ??
-      this.config.get<string>('FULLPOS_COMPANY_ID') ??
-      ''
-    ).trim();
-    const fullposConfigured = fullposBaseUrl.length > 0 && fullposIntegrationToken.length > 0;
-    const fullposDirectConfigured =
-      fullposDirectDatabaseUrl.length > 0 && fullposDirectCompanyId.length > 0;
-
-    // Backwards-compatible default: use LOCAL unless FULLPOS is explicitly selected
-    // or is fully configured (so dev environments don't break /products).
     let computed: ProductsSource = 'LOCAL';
     if (rawSource === 'FULLPOS' || rawSource === 'FULLPOS_DIRECT' || rawSource === 'LOCAL') {
       computed = rawSource as ProductsSource;
-    } else {
-      // If direct FULLPOS DB access is configured, prefer it for product catalog reads.
-      if (fullposDirectConfigured) {
-        computed = 'FULLPOS_DIRECT';
-      } else if (nodeEnv !== 'production' && fullposConfigured) {
-        computed = 'FULLPOS';
-      } else {
-        computed = 'LOCAL';
-      }
     }
 
     this.productsSource = computed;
@@ -107,6 +78,7 @@ export class ProductsService {
         categoria: dto.categoria,
         precio: new Prisma.Decimal(dto.precio),
         costo: new Prisma.Decimal(dto.costo),
+        stock: new Prisma.Decimal(dto.stock),
         imagen: normalizedImagePath,
       };
 
@@ -193,6 +165,7 @@ export class ProductsService {
         categoria: dto.categoria,
         precio: dto.precio === undefined ? undefined : new Prisma.Decimal(dto.precio),
         costo: dto.costo === undefined ? undefined : new Prisma.Decimal(dto.costo),
+        stock: dto.stock === undefined ? undefined : new Prisma.Decimal(dto.stock),
         imagen: normalizedImagePath,
       };
 
@@ -232,8 +205,8 @@ export class ProductsService {
     return {
       ...product,
       fotoUrl,
-      stock: null,
-      cantidadDisponible: null,
+      stock: Number(product.stock ?? 0),
+      cantidadDisponible: Number(product.stock ?? 0),
       categoria: product.categoria ?? null,
       categoriaNombre: product.categoria ?? null,
     };
@@ -336,4 +309,3 @@ export class ProductsService {
   }
 
 }
-

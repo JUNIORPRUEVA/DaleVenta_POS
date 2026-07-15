@@ -70,10 +70,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
 
   double get _totalSold =>
       _cart.fold(0, (sum, item) => sum + item.subtotalSold);
-  double get _totalCost =>
-      _cart.fold(0, (sum, item) => sum + item.subtotalCost);
-  double get _totalProfit => _totalSold - _totalCost;
-  double get _commission => _totalProfit > 0 ? _totalProfit * 0.1 : 0;
 
   @override
   void initState() {
@@ -239,7 +235,9 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   Future<void> _loadProductsFromCacheIfEmpty() async {
     if (_products.isNotEmpty) return;
     try {
-      final snapshot = await ref.read(catalogLocalRepositoryProvider).readSnapshot();
+      final snapshot = await ref
+          .read(catalogLocalRepositoryProvider)
+          .readSnapshot();
       final cached = snapshot.items;
       if (!mounted || cached.isEmpty) return;
       setState(() {
@@ -255,11 +253,13 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
 
   Future<void> _saveProductsToCache(List<ProductModel> products) async {
     final catalogVersion = buildCatalogSyncVersion(products);
-    await ref.read(catalogLocalRepositoryProvider).saveSnapshot(
-      products,
-      syncedAt: DateTime.now(),
-      catalogVersion: catalogVersion,
-    );
+    await ref
+        .read(catalogLocalRepositoryProvider)
+        .saveSnapshot(
+          products,
+          syncedAt: DateTime.now(),
+          catalogVersion: catalogVersion,
+        );
   }
 
   Future<void> _clearProductsCache() async {
@@ -797,8 +797,9 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                   if (hasClient) ...[
                     Text(
                       _selectedClient!.nombre,
-                      style: Theme.of(context).textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w700),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -881,7 +882,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                           width: 24,
                                           height: 24,
                                           child: IconButton(
-                                            visualDensity: VisualDensity.compact,
+                                            visualDensity:
+                                                VisualDensity.compact,
                                             padding: EdgeInsets.zero,
                                             constraints: const BoxConstraints(
                                               minHeight: 24,
@@ -1219,59 +1221,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     }
   }
 
-  Future<void> _showTotalsDialog() async {
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Resumen de totales'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _totalsTile('Total vendido', _money(_totalSold)),
-            _totalsTile('Total costo', _money(_totalCost)),
-            _totalsTile('Total utilidad', _money(_totalProfit)),
-            _totalsTile('Comisión (10%)', _money(_commission), highlight: true),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cerrar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _totalsTile(String label, String value, {bool highlight = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontWeight: highlight ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-          ),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontWeight: highlight ? FontWeight.w800 : FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _addProduct(ProductModel product) {
     final idx = _cart.indexWhere((item) => item.product?.id == product.id);
     if (idx >= 0) {
@@ -1399,9 +1348,9 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                     return;
                   }
 
-                  Navigator.of(dialogContext).pop(
-                    item.copyWith(qty: qty, priceSoldUnit: price),
-                  );
+                  Navigator.of(
+                    dialogContext,
+                  ).pop(item.copyWith(qty: qty, priceSoldUnit: price));
                 },
                 child: const Text('Guardar cambios'),
               ),
