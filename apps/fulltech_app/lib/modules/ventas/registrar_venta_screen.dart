@@ -13,7 +13,6 @@ import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/product_network_image.dart';
-import '../../features/catalogo/data/catalog_local_repository.dart';
 import '../clientes/cliente_model.dart';
 import 'data/ventas_repository.dart';
 import 'sales_models.dart';
@@ -76,7 +75,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _subscribeRealtime();
-    unawaited(_loadProductsFromCacheIfEmpty());
     _startLiveSync();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -202,7 +200,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       _remoteRefreshInFlight = true;
     }
 
-    await _loadProductsFromCacheIfEmpty();
     if (mounted && !silent) setState(() => _loadingProducts = true);
     try {
       final fetched = await ref
@@ -215,7 +212,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
         _products = products;
         _loadingProducts = false;
       });
-      await _saveProductsToCache(products);
       _prefetchProductImages(products);
       _lastSuccessfulRemoteSyncAt = DateTime.now();
     } catch (e) {
@@ -230,40 +226,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
         _remoteRefreshInFlight = false;
       }
     }
-  }
-
-  Future<void> _loadProductsFromCacheIfEmpty() async {
-    if (_products.isNotEmpty) return;
-    try {
-      final snapshot = await ref
-          .read(catalogLocalRepositoryProvider)
-          .readSnapshot();
-      final cached = snapshot.items;
-      if (!mounted || cached.isEmpty) return;
-      setState(() {
-        _products = cached;
-        _loadingProducts = false;
-      });
-      _prefetchProductImages(cached);
-      _lastSuccessfulRemoteSyncAt = snapshot.lastSyncedAt;
-    } catch (_) {
-      // Ignore cache failures.
-    }
-  }
-
-  Future<void> _saveProductsToCache(List<ProductModel> products) async {
-    final catalogVersion = buildCatalogSyncVersion(products);
-    await ref
-        .read(catalogLocalRepositoryProvider)
-        .saveSnapshot(
-          products,
-          syncedAt: DateTime.now(),
-          catalogVersion: catalogVersion,
-        );
-  }
-
-  Future<void> _clearProductsCache() async {
-    await ref.read(catalogLocalRepositoryProvider).clearSnapshot();
   }
 
   void _prefetchProductImages(List<ProductModel> products) {
@@ -288,7 +250,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   }
 
   Future<void> _clearAllProductCache() async {
-    await _clearProductsCache();
     await FulltechImageCacheManager.clear();
     if (!mounted) return;
     ScaffoldMessenger.of(

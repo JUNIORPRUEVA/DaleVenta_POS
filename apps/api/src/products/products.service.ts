@@ -28,8 +28,10 @@ export class ProductsService {
 
     const rawSource = (this.config.get<string>('PRODUCTS_SOURCE') ?? '').trim().toUpperCase();
     let computed: ProductsSource = 'LOCAL';
-    if (rawSource === 'FULLPOS' || rawSource === 'FULLPOS_DIRECT' || rawSource === 'LOCAL') {
-      computed = rawSource as ProductsSource;
+    if (rawSource && rawSource !== 'LOCAL') {
+      this.logger.warn(
+        `PRODUCTS_SOURCE=${rawSource} ignorado: el catálogo administrado por FullTech usa fuente LOCAL.`,
+      );
     }
 
     this.productsSource = computed;
@@ -69,7 +71,7 @@ export class ProductsService {
     return false;
   }
 
-  create(dto: CreateProductDto): Promise<Product> {
+  create(dto: CreateProductDto): Promise<any> {
     this.assertWritable();
     return this.prisma.$transaction(async (tx) => {
       const normalizedImagePath = this.normalizeImagePathForStorage(dto.fotoUrl);
@@ -78,7 +80,7 @@ export class ProductsService {
         categoria: dto.categoria,
         precio: new Prisma.Decimal(dto.precio),
         costo: new Prisma.Decimal(dto.costo),
-        stock: new Prisma.Decimal(dto.stock),
+        stock: new Prisma.Decimal(dto.stock ?? 0),
         imagen: normalizedImagePath,
       };
 

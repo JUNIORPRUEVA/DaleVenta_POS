@@ -12,9 +12,10 @@ export class CreateProductDto {
   @Min(0)
   costo!: number;
 
+  @IsOptional()
   @IsNumber()
   @Min(0)
-  stock!: number;
+  stock?: number;
 
   @IsOptional()
   @IsString()

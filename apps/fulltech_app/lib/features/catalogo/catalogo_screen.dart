@@ -189,16 +189,16 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
 
     setState(() => _purgingAllDebug = true);
     try {
-      final deleted = await ref.read(catalogControllerProvider.notifier).purgeAllDebug();
+      final deleted = await ref
+          .read(catalogControllerProvider.notifier)
+          .purgeAllDebug();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Se limpiaron $deleted productos.')),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
       if (mounted) {
         setState(() => _purgingAllDebug = false);
@@ -370,9 +370,8 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                   Padding(
                     padding: const EdgeInsets.only(right: 6),
                     child: FilledButton.icon(
-                      onPressed: () => _openProductForm(
-                        categories: categoryOptions,
-                      ),
+                      onPressed: () =>
+                          _openProductForm(categories: categoryOptions),
                       icon: const Icon(Icons.add_rounded, size: 18),
                       label: const Text('Nuevo producto'),
                     ),
@@ -857,7 +856,9 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
       return fallback;
     }
 
-    final nameIndex = hasHeader ? indexOf(['nombre', 'producto', 'name'], 0) : 0;
+    final nameIndex = hasHeader
+        ? indexOf(['nombre', 'producto', 'name'], 0)
+        : 0;
     final priceIndex = hasHeader ? indexOf(['precio', 'price'], 1) : 1;
     final costIndex = hasHeader ? indexOf(['costo', 'cost'], 2) : 2;
     final stockIndex = hasHeader
@@ -871,9 +872,8 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
     final drafts = <CatalogImportDraft>[];
     for (final line in dataLines) {
       final cells = _parseCsvLine(line);
-      String cell(int index) => index >= 0 && index < cells.length
-          ? cells[index].trim()
-          : '';
+      String cell(int index) =>
+          index >= 0 && index < cells.length ? cells[index].trim() : '';
 
       final nombre = cell(nameIndex);
       final precio = _parseCatalogNumber(cell(priceIndex));

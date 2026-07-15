@@ -22,7 +22,6 @@ import 'core/startup/app_startup_controller.dart';
 import 'core/startup/initial_release_check.dart';
 import 'core/app_update/update_guard_overlay.dart';
 import 'core/widgets/fulltech_global_background.dart';
-import 'features/catalogo/application/catalog_background_sync.dart';
 import 'features/media_gallery/application/media_gallery_background_sync.dart';
 import 'features/contabilidad/contabilidad_init.dart';
 
@@ -253,7 +252,6 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     if (widget.enableBackgroundStartup && _backgroundStartupStarted) {
-      ref.watch(catalogBackgroundSyncBootstrapProvider);
       ref.watch(mediaGalleryBackgroundSyncBootstrapProvider);
       ref.watch(syncQueueBootstrapProvider);
     }

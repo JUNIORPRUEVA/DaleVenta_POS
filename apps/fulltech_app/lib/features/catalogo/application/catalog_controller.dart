@@ -129,11 +129,7 @@ class CatalogController extends StateNotifier<CatalogState> {
           : 'No se pudieron cargar los productos';
       // Keep cached/previous items (if any) so UI doesn't go blank.
       if (silent && state.items.isNotEmpty) return;
-      state = state.copyWith(
-        loading: false,
-        refreshing: false,
-        error: message,
-      );
+      state = state.copyWith(loading: false, refreshing: false, error: message);
     } finally {
       if (silent && forceRemote) {
         _remoteRefreshInFlight = false;

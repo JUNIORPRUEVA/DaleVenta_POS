@@ -11,10 +11,10 @@ import '../../core/company/company_settings_repository.dart';
 import '../../core/routing/routes.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/custom_app_bar.dart';
-import '../../features/catalogo/data/catalog_local_repository.dart';
 import '../clientes/cliente_model.dart';
 import '../clientes/data/clientes_repository.dart';
 import '../service_orders/service_order_models.dart';
+import '../ventas/data/ventas_repository.dart';
 import 'cotizacion_models.dart';
 import 'data/cotizaciones_repository.dart';
 import 'utils/cotizacion_pdf_service.dart';
@@ -218,18 +218,18 @@ class _CotizacionesHistorialScreenState
     if (user == null) return;
 
     final clientsRepo = ref.read(clientesRepositoryProvider);
-    final catalogRepo = ref.read(catalogLocalRepositoryProvider);
+    final salesRepo = ref.read(ventasRepositoryProvider);
 
     try {
       final cachedClients = await clientsRepo.getCachedClients(
         ownerId: user.id,
       );
-      final catalogSnapshot = await catalogRepo.readSnapshot();
+      final products = await salesRepo.fetchProducts(forceRefresh: true);
       if (!mounted) return;
       setState(() {
         _applyKnownClients(cachedClients, userId: user.id);
         _categoryByProductId = {
-          for (final product in catalogSnapshot.items)
+          for (final product in products)
             if ((product.categoria ?? '').trim().isNotEmpty)
               product.id: product.categoria!.trim(),
         };

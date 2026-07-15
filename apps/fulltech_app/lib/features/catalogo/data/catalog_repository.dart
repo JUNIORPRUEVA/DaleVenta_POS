@@ -192,7 +192,10 @@ class CatalogRepository {
       );
     } on DioException catch (e) {
       throw ApiException(
-        _extractMessage(e.response?.data, 'No se pudieron limpiar los productos'),
+        _extractMessage(
+          e.response?.data,
+          'No se pudieron limpiar los productos',
+        ),
         e.response?.statusCode,
       );
     }
