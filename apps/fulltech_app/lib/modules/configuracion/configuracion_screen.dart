@@ -11,6 +11,7 @@ import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
+import '../../features/settings/ui/printer_settings_page.dart';
 import '../whatsapp/company_whatsapp_panel.dart';
 import 'configuracion_usuarios_screen.dart';
 
@@ -831,6 +832,14 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
                   subtitle:
                       'Instancia de notificaciones automáticas — separada de la instancia personal de cada usuario.',
                   child: _buildWhatsappSection(),
+                ),
+                _accordion(
+                  key: 'impresora',
+                  icon: Icons.print_outlined,
+                  title: 'Impresora y tickets',
+                  subtitle:
+                      'Seleccion de impresora, ancho de papel y vista previa del ticket.',
+                  child: const PrinterSettingsPage(embedded: true),
                 ),
                 const SizedBox(height: 24),
                 Align(

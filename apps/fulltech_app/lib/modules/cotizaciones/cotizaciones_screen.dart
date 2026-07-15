@@ -4730,17 +4730,14 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
     final cashAmount = switch (_method) {
       _CheckoutPaymentMethod.cash => widget.total,
       _CheckoutPaymentMethod.transfer => 0.0,
-      _CheckoutPaymentMethod.mixed => _cashAmount
-          .clamp(0, widget.total)
-          .toDouble(),
+      _CheckoutPaymentMethod.mixed =>
+        _cashAmount.clamp(0, widget.total).toDouble(),
     };
     final transferAmount = switch (_method) {
       _CheckoutPaymentMethod.cash => 0.0,
       _CheckoutPaymentMethod.transfer => widget.total,
-      _CheckoutPaymentMethod.mixed => (widget.total - cashAmount).clamp(
-        0,
-        widget.total,
-      ).toDouble(),
+      _CheckoutPaymentMethod.mixed =>
+        (widget.total - cashAmount).clamp(0, widget.total).toDouble(),
     };
     return _CheckoutResult(
       method: _method,

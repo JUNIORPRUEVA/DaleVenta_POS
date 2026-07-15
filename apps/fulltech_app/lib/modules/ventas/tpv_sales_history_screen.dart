@@ -9,6 +9,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../core/auth/auth_provider.dart';
+import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/routing/routes.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -188,11 +189,13 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   }
 
   Future<void> _printInvoice(SaleModel sale) async {
-    final bytes = await _buildInvoicePdf(sale);
-    await Printing.layoutPdf(
-      name: 'Factura ${_invoiceNumber(sale)}',
-      onLayout: (_) async => bytes,
-    );
+    final result = await ref
+        .read(unifiedTicketPrinterProvider)
+        .reprintSale(sale: sale, items: sale.items);
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(result.message)));
   }
 
   Future<Uint8List> _buildInvoicePdf(SaleModel sale) async {

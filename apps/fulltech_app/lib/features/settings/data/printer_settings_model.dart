@@ -112,14 +112,15 @@ class PrinterSettingsModel {
     String? totalsAlignment,
   }) {
     return PrinterSettingsModel(
-      selectedPrinterName:
-          clearPrinter ? null : (selectedPrinterName ?? this.selectedPrinterName),
+      selectedPrinterName: clearPrinter
+          ? null
+          : (selectedPrinterName ?? this.selectedPrinterName),
       paperWidthMm: paperWidthMm ?? this.paperWidthMm,
       charsPerLine: charsPerLine ?? this.charsPerLine,
       autoPrintOnPayment: autoPrintOnPayment ?? this.autoPrintOnPayment,
       autoOpenDrawerOnChargeWithoutTicket:
           autoOpenDrawerOnChargeWithoutTicket ??
-              this.autoOpenDrawerOnChargeWithoutTicket,
+          this.autoOpenDrawerOnChargeWithoutTicket,
       copies: copies ?? this.copies,
       showItbis: showItbis ?? this.showItbis,
       showCashier: showCashier ?? this.showCashier,
@@ -156,43 +157,42 @@ class PrinterSettingsModel {
   }
 
   Map<String, dynamic> toMap() => {
-        'selectedPrinterName': selectedPrinterName,
-        'paperWidthMm': paperWidthMm,
-        'charsPerLine': charsPerLine,
-        'autoPrintOnPayment': autoPrintOnPayment,
-        'autoOpenDrawerOnChargeWithoutTicket':
-            autoOpenDrawerOnChargeWithoutTicket,
-        'copies': copies,
-        'showItbis': showItbis,
-        'showCashier': showCashier,
-        'showClient': showClient,
-        'showPaymentMethod': showPaymentMethod,
-        'showDiscounts': showDiscounts,
-        'showCode': showCode,
-        'showDatetime': showDatetime,
-        'headerExtra': headerExtra,
-        'footerMessage': footerMessage,
-        'warrantyPolicy': warrantyPolicy,
-        'leftMargin': leftMargin,
-        'rightMargin': rightMargin,
-        'autoCut': autoCut,
-        'itbisRate': itbisRate,
-        'fontFamily': fontFamily,
-        'fontSize': fontSize,
-        'showLogo': showLogo,
-        'logoSize': logoSize,
-        'showBusinessData': showBusinessData,
-        'showSubtotalItbisTotal': showSubtotalItbisTotal,
-        'topMargin': topMargin,
-        'bottomMargin': bottomMargin,
-        'fontSizeLevel': fontSizeLevel,
-        'lineSpacingLevel': lineSpacingLevel,
-        'sectionSpacingLevel': sectionSpacingLevel,
-        'sectionSeparatorStyle': sectionSeparatorStyle,
-        'headerAlignment': headerAlignment,
-        'detailsAlignment': detailsAlignment,
-        'totalsAlignment': totalsAlignment,
-      };
+    'selectedPrinterName': selectedPrinterName,
+    'paperWidthMm': paperWidthMm,
+    'charsPerLine': charsPerLine,
+    'autoPrintOnPayment': autoPrintOnPayment,
+    'autoOpenDrawerOnChargeWithoutTicket': autoOpenDrawerOnChargeWithoutTicket,
+    'copies': copies,
+    'showItbis': showItbis,
+    'showCashier': showCashier,
+    'showClient': showClient,
+    'showPaymentMethod': showPaymentMethod,
+    'showDiscounts': showDiscounts,
+    'showCode': showCode,
+    'showDatetime': showDatetime,
+    'headerExtra': headerExtra,
+    'footerMessage': footerMessage,
+    'warrantyPolicy': warrantyPolicy,
+    'leftMargin': leftMargin,
+    'rightMargin': rightMargin,
+    'autoCut': autoCut,
+    'itbisRate': itbisRate,
+    'fontFamily': fontFamily,
+    'fontSize': fontSize,
+    'showLogo': showLogo,
+    'logoSize': logoSize,
+    'showBusinessData': showBusinessData,
+    'showSubtotalItbisTotal': showSubtotalItbisTotal,
+    'topMargin': topMargin,
+    'bottomMargin': bottomMargin,
+    'fontSizeLevel': fontSizeLevel,
+    'lineSpacingLevel': lineSpacingLevel,
+    'sectionSpacingLevel': sectionSpacingLevel,
+    'sectionSeparatorStyle': sectionSeparatorStyle,
+    'headerAlignment': headerAlignment,
+    'detailsAlignment': detailsAlignment,
+    'totalsAlignment': totalsAlignment,
+  };
 
   factory PrinterSettingsModel.fromMap(Map<String, dynamic> map) {
     bool b(String key, bool fallback) {
@@ -217,7 +217,7 @@ class PrinterSettingsModel {
 
     String s(String key, String fallback) {
       final value = map[key]?.toString();
-      return value == null ? fallback : value;
+      return value ?? fallback;
     }
 
     return PrinterSettingsModel(
@@ -225,8 +225,10 @@ class PrinterSettingsModel {
       paperWidthMm: i('paperWidthMm', 80),
       charsPerLine: i('charsPerLine', 48),
       autoPrintOnPayment: b('autoPrintOnPayment', false),
-      autoOpenDrawerOnChargeWithoutTicket:
-          b('autoOpenDrawerOnChargeWithoutTicket', false),
+      autoOpenDrawerOnChargeWithoutTicket: b(
+        'autoOpenDrawerOnChargeWithoutTicket',
+        false,
+      ),
       copies: i('copies', 1).clamp(1, 5),
       showItbis: b('showItbis', true),
       showCashier: b('showCashier', true),

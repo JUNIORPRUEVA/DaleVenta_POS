@@ -248,7 +248,7 @@ class VentasRepository {
     }
   }
 
-  Future<void> createSale({
+  Future<SaleModel?> createSale({
     required String customerId,
     String? note,
     String? paymentMethod,
@@ -264,7 +264,7 @@ class VentasRepository {
     }
 
     try {
-      await _dio.post(
+      final res = await _dio.post(
         ApiRoutes.sales,
         data: {
           'customerId': customerId,
@@ -277,6 +277,10 @@ class VentasRepository {
           'items': items.map((item) => item.toPayload()).toList(),
         },
       );
+      if (res.data is Map) {
+        return SaleModel.fromJson((res.data as Map).cast<String, dynamic>());
+      }
+      return null;
     } on DioException catch (e) {
       throw ApiException(
         _extractMessage(e.response?.data, 'No se pudo guardar la venta'),
