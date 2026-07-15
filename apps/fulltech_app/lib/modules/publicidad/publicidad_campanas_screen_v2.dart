@@ -653,7 +653,10 @@ class _PublicidadCampanasScreenV2State
     await _runAction('Campana publicada', () async {
       final permissions = await _refreshMetaAdsPermissions();
       if (!_hasMinimumMetaAdsPermissions(permissions)) {
-        throw ApiException(_buildMetaAdsPermissionErrorMessage(permissions), 422);
+        throw ApiException(
+          _buildMetaAdsPermissionErrorMessage(permissions),
+          422,
+        );
       }
       await _saveDraftSilently(campaign.id);
       final published = await _createMetaCampaignWithProgress(campaign.id);
@@ -686,7 +689,9 @@ class _PublicidadCampanasScreenV2State
         (!requiresAdImages || permissions.canUploadAdImage);
   }
 
-  String _buildMetaAdsPermissionErrorMessage(MetaAdsPermissionsDebug permissions) {
+  String _buildMetaAdsPermissionErrorMessage(
+    MetaAdsPermissionsDebug permissions,
+  ) {
     if (_requiresAdImagesMode && !permissions.canUploadAdImage) {
       return 'El token Meta Ads no tiene permiso real para subir imágenes al Ad Account. Revisa System User, Ads Management y acceso total a la cuenta publicitaria.';
     }
@@ -1746,7 +1751,8 @@ class _PublicidadCampanasScreenV2State
   Widget _buildPublishPanel(MarketingCampaign campaign) {
     final hasAdsTokenConfigured = _metaAdsConfig.tokenPreview.trim().isNotEmpty;
     final permissions = _metaAdsPermissions;
-    final canCreateMeta = permissions != null && _hasMinimumMetaAdsPermissions(permissions);
+    final canCreateMeta =
+        permissions != null && _hasMinimumMetaAdsPermissions(permissions);
     final runtimeConfig = _metaRuntimeConfig;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1765,9 +1771,9 @@ class _PublicidadCampanasScreenV2State
             children: [
               Text(
                 'Destino: WhatsApp FullTech',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 2),
               Text(
@@ -1777,9 +1783,9 @@ class _PublicidadCampanasScreenV2State
               const SizedBox(height: 6),
               Text(
                 'Token: ${hasAdsTokenConfigured ? 'Meta Ads configurado ✅' : 'Meta Ads faltante ⚠️'}',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 6),
               Text(
@@ -2734,7 +2740,9 @@ class _MetaRuntimeConfigDialogState extends State<_MetaRuntimeConfigDialog> {
   @override
   void initState() {
     super.initState();
-    _graphVersionCtrl = TextEditingController(text: widget.initial.graphVersion);
+    _graphVersionCtrl = TextEditingController(
+      text: widget.initial.graphVersion,
+    );
     _appIdCtrl = TextEditingController(text: widget.initial.appId);
     _appSecretCtrl = TextEditingController();
     _adAccountCtrl = TextEditingController(
@@ -2743,16 +2751,20 @@ class _MetaRuntimeConfigDialogState extends State<_MetaRuntimeConfigDialog> {
           : widget.initial.adAccountId,
     );
     _pageIdCtrl = TextEditingController(text: widget.initial.pageId);
-    _instagramIdCtrl = TextEditingController(text: widget.initial.instagramBusinessId);
-    _whatsappIdCtrl = TextEditingController(text: widget.initial.whatsappPhoneNumberId);
+    _instagramIdCtrl = TextEditingController(
+      text: widget.initial.instagramBusinessId,
+    );
+    _whatsappIdCtrl = TextEditingController(
+      text: widget.initial.whatsappPhoneNumberId,
+    );
     _whatsappBusinessIdCtrl = TextEditingController(
       text: widget.initial.whatsappBusinessAccountId,
     );
     _businessIdCtrl = TextEditingController(text: widget.initial.businessId);
     _adsTokenCtrl = TextEditingController();
     _campaignMode = widget.initial.campaignMode.isEmpty
-      ? 'DIRECT_IMAGE_URL'
-      : widget.initial.campaignMode;
+        ? 'DIRECT_IMAGE_URL'
+        : widget.initial.campaignMode;
   }
 
   @override
@@ -2794,7 +2806,9 @@ class _MetaRuntimeConfigDialogState extends State<_MetaRuntimeConfigDialog> {
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: _appIdCtrl,
-                  decoration: const InputDecoration(labelText: 'META_ADS_APP_ID'),
+                  decoration: const InputDecoration(
+                    labelText: 'META_ADS_APP_ID',
+                  ),
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
@@ -2810,13 +2824,17 @@ class _MetaRuntimeConfigDialogState extends State<_MetaRuntimeConfigDialog> {
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: _adAccountCtrl,
-                  decoration: const InputDecoration(labelText: 'META_AD_ACCOUNT_ID'),
+                  decoration: const InputDecoration(
+                    labelText: 'META_AD_ACCOUNT_ID',
+                  ),
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: _campaignMode,
                   items: _campaignModeItems,
-                  decoration: const InputDecoration(labelText: 'Modo de campaña'),
+                  decoration: const InputDecoration(
+                    labelText: 'Modo de campaña',
+                  ),
                   onChanged: (value) {
                     if (value == null) return;
                     setState(() => _campaignMode = value);
@@ -2825,17 +2843,23 @@ class _MetaRuntimeConfigDialogState extends State<_MetaRuntimeConfigDialog> {
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: _pageIdCtrl,
-                  decoration: const InputDecoration(labelText: 'META_FACEBOOK_PAGE_ID'),
+                  decoration: const InputDecoration(
+                    labelText: 'META_FACEBOOK_PAGE_ID',
+                  ),
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: _instagramIdCtrl,
-                  decoration: const InputDecoration(labelText: 'META_INSTAGRAM_BUSINESS_ID'),
+                  decoration: const InputDecoration(
+                    labelText: 'META_INSTAGRAM_BUSINESS_ID',
+                  ),
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: _whatsappIdCtrl,
-                  decoration: const InputDecoration(labelText: 'META_WHATSAPP_PHONE_NUMBER_ID'),
+                  decoration: const InputDecoration(
+                    labelText: 'META_WHATSAPP_PHONE_NUMBER_ID',
+                  ),
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
@@ -2847,7 +2871,9 @@ class _MetaRuntimeConfigDialogState extends State<_MetaRuntimeConfigDialog> {
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: _businessIdCtrl,
-                  decoration: const InputDecoration(labelText: 'META_BUSINESS_ID'),
+                  decoration: const InputDecoration(
+                    labelText: 'META_BUSINESS_ID',
+                  ),
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
@@ -2855,7 +2881,8 @@ class _MetaRuntimeConfigDialogState extends State<_MetaRuntimeConfigDialog> {
                   obscureText: true,
                   decoration: InputDecoration(
                     labelText: 'Token Ads (META_ADS_ACCESS_TOKEN)',
-                    helperText: 'Actual: ${widget.initial.adsTokenPreview.isEmpty ? '-' : widget.initial.adsTokenPreview}',
+                    helperText:
+                        'Actual: ${widget.initial.adsTokenPreview.isEmpty ? '-' : widget.initial.adsTokenPreview}',
                   ),
                 ),
               ],

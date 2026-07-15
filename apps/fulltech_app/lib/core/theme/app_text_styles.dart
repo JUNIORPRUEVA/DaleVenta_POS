@@ -23,8 +23,5 @@ class AppTextStyles {
     color: AppColors.textPrimary,
   );
 
-  static const small = TextStyle(
-    fontSize: 12,
-    color: AppColors.textSecondary,
-  );
+  static const small = TextStyle(fontSize: 12, color: AppColors.textSecondary);
 }

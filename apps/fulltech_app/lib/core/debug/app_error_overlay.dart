@@ -17,10 +17,6 @@ class _AppErrorOverlayState extends State<AppErrorOverlay> {
 
   Future<void> _copyError(BuildContext context, AppErrorDetails error) async {
     await Clipboard.setData(ClipboardData(text: error.toClipboardString()));
-    if (!context.mounted) return;
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      const SnackBar(content: Text('Reporte copiado al portapapeles')),
-    );
   }
 
   Future<void> _showDetails(BuildContext context, AppErrorDetails error) async {
@@ -265,16 +261,6 @@ class _AppErrorOverlayState extends State<AppErrorOverlay> {
                                 onPressed: () async {
                                   await Clipboard.setData(
                                     ClipboardData(text: full),
-                                  );
-                                  if (!dialogContext.mounted) return;
-                                  ScaffoldMessenger.maybeOf(
-                                    dialogContext,
-                                  )?.showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Reporte copiado al portapapeles',
-                                      ),
-                                    ),
                                   );
                                 },
                                 icon: const Icon(Icons.copy_all_rounded),
@@ -653,10 +639,7 @@ class _Section extends StatelessWidget {
 }
 
 class _OverlayCloseButton extends StatelessWidget {
-  const _OverlayCloseButton({
-    required this.onTap,
-    this.compact = false,
-  });
+  const _OverlayCloseButton({required this.onTap, this.compact = false});
 
   final VoidCallback onTap;
   final bool compact;

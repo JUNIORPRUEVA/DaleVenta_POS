@@ -123,11 +123,11 @@ class ProductModel {
       json['codigo'] ?? json['sku'] ?? json['barcode'] ?? json['code'],
     );
     final foto = _asNullableString(
-      json['originalFotoUrl'] ??
-          json['fotoUrl'] ??
+      json['fotoUrl'] ??
           json['imagen'] ??
           json['imageUrl'] ??
-          json['image_url'],
+          json['image_url'] ??
+          json['originalFotoUrl'],
     );
     final createdAt = _firstParsedDate([json['createdAt'], json['created_at']]);
     final updatedAt = _firstParsedDate([

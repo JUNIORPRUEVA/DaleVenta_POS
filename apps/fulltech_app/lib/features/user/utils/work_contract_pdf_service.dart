@@ -674,7 +674,10 @@ Future<Uint8List> buildWorkContractPdf({
         ...clauses.map(
           (clause) => clause.label == 'PARRAFO I:'
               ? spacedText('${clause.label} ${clause.text}')
-              : richLabel('${clause.label} ', '${clause.title}: ${clause.text}'),
+              : richLabel(
+                  '${clause.label} ',
+                  '${clause.title}: ${clause.text}',
+                ),
         ),
 
         if (draft.additionalClauses.isNotEmpty)

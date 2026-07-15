@@ -40,17 +40,17 @@ class GalleryContentItem {
   final bool favorito;
   final String url;
   final String? thumbnailUrl;
-  
+
   // Para referencias inteligentes de productos
   final String? referenciaProductoId;
   final String? referenciaProductoNombre;
-  
+
   // Metadata enriched para IA
   final Map<String, dynamic>? metadataAI;
 
   bool get isImage => type == ContentType.imagen;
   bool get isVideo => type == ContentType.video;
-  
+
   String get originLabel {
     switch (origen) {
       case ContentOrigin.producto:
@@ -63,7 +63,7 @@ class GalleryContentItem {
         return 'IA';
     }
   }
-  
+
   List<String> get usadoEnLabels => usadoEn.map((u) {
     switch (u) {
       case ContentUsage.estados:
@@ -81,10 +81,14 @@ class GalleryContentItem {
     final typeStr = (json['tipo'] as String? ?? 'imagen').toLowerCase();
     final origenStr = (json['origen'] as String? ?? 'manual').toLowerCase();
     final usadoEnList = (json['usado_en'] is List)
-        ? (json['usado_en'] as List).map((e) => e.toString().toLowerCase()).toList()
+        ? (json['usado_en'] as List)
+              .map((e) => e.toString().toLowerCase())
+              .toList()
         : <String>[];
 
-    ContentType type = typeStr.contains('video') ? ContentType.video : ContentType.imagen;
+    ContentType type = typeStr.contains('video')
+        ? ContentType.video
+        : ContentType.imagen;
     ContentOrigin origen = _parseOrigin(origenStr);
     List<ContentUsage> usadoEn = _parseUsages(usadoEnList);
 
@@ -95,9 +99,9 @@ class GalleryContentItem {
       descripcion: json['descripcion'] as String? ?? '',
       tags: (json['tags'] is List)
           ? (json['tags'] as List)
-              .map((e) => e.toString().trim())
-              .where((e) => e.isNotEmpty)
-              .toList()
+                .map((e) => e.toString().trim())
+                .where((e) => e.isNotEmpty)
+                .toList()
           : const [],
       fecha: json['fecha'] is String
           ? DateTime.tryParse(json['fecha'] as String) ?? DateTime.now()
@@ -108,10 +112,14 @@ class GalleryContentItem {
       aprobado: json['aprobado'] == true,
       favorito: json['favorito'] == true,
       url: json['url'] as String? ?? '',
-      thumbnailUrl: (json['thumbnail_url'] as String? ?? '').isEmpty ? null : json['thumbnail_url'],
+      thumbnailUrl: (json['thumbnail_url'] as String? ?? '').isEmpty
+          ? null
+          : json['thumbnail_url'],
       referenciaProductoId: json['referencia_producto_id'] as String?,
       referenciaProductoNombre: json['referencia_producto_nombre'] as String?,
-      metadataAI: json['metadata_ai'] is Map ? json['metadata_ai'] as Map<String, dynamic> : null,
+      metadataAI: json['metadata_ai'] is Map
+          ? json['metadata_ai'] as Map<String, dynamic>
+          : null,
     );
   }
 
@@ -169,7 +177,8 @@ class GalleryContentItem {
       url: url ?? this.url,
       thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       referenciaProductoId: referenciaProductoId ?? this.referenciaProductoId,
-      referenciaProductoNombre: referenciaProductoNombre ?? this.referenciaProductoNombre,
+      referenciaProductoNombre:
+          referenciaProductoNombre ?? this.referenciaProductoNombre,
       metadataAI: metadataAI ?? this.metadataAI,
     );
   }
@@ -191,11 +200,7 @@ class GalleryContentItem {
 
 // Filter categories for sidebar
 class GalleryFilter {
-  const GalleryFilter({
-    required this.id,
-    required this.label,
-    this.icon,
-  });
+  const GalleryFilter({required this.id, required this.label, this.icon});
 
   final String id;
   final String label;

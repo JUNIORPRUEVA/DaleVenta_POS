@@ -69,9 +69,10 @@ class _MisPagosScreenState extends ConsumerState<MisPagosScreen>
 
   Future<void> _bootstrapLoad() async {
     final repo = ref.read(nominaRepositoryProvider);
-    final cached = await repo
-        .getCachedMyPayrollHistory()
-        .timeout(const Duration(milliseconds: 700), onTimeout: () => const []);
+    final cached = await repo.getCachedMyPayrollHistory().timeout(
+      const Duration(milliseconds: 700),
+      onTimeout: () => const [],
+    );
     if (!mounted) return;
     setState(() {
       _items = cached;
@@ -212,9 +213,9 @@ class _MisPagosScreenState extends ConsumerState<MisPagosScreen>
   }
 
   Future<void> _openHistoryScreen() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const _MisPagosHistoryScreen()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const _MisPagosHistoryScreen()));
     if (!mounted) return;
     await _load();
   }
@@ -259,27 +260,31 @@ class _MisPagosScreenState extends ConsumerState<MisPagosScreen>
           return paidOn.year == now.year && paidOn.month == now.month;
         })
         .fold<double>(0, (sum, item) => sum + item.netTotal);
-    final latestPaidGlobal = ([...allItems]..sort(
-          (a, b) => (b.paymentDate ?? b.periodEnd).compareTo(
-            a.paymentDate ?? a.periodEnd,
-          ),
-        ))
-        .firstWhere((item) => item.isPaid, orElse: () => PayrollHistoryItem(
-              entryId: '',
-              periodId: '',
-              periodTitle: '',
-              periodStart: DateTime.fromMillisecondsSinceEpoch(0),
-              periodEnd: DateTime.fromMillisecondsSinceEpoch(0),
-              periodStatus: 'DRAFT',
-              baseSalary: 0,
-              commissionFromSales: 0,
-              overtimeAmount: 0,
-              bonusesAmount: 0,
-              deductionsAmount: 0,
-              benefitsAmount: 0,
-              grossTotal: 0,
-              netTotal: 0,
-            ));
+    final latestPaidGlobal =
+        ([...allItems]..sort(
+              (a, b) => (b.paymentDate ?? b.periodEnd).compareTo(
+                a.paymentDate ?? a.periodEnd,
+              ),
+            ))
+            .firstWhere(
+              (item) => item.isPaid,
+              orElse: () => PayrollHistoryItem(
+                entryId: '',
+                periodId: '',
+                periodTitle: '',
+                periodStart: DateTime.fromMillisecondsSinceEpoch(0),
+                periodEnd: DateTime.fromMillisecondsSinceEpoch(0),
+                periodStatus: 'DRAFT',
+                baseSalary: 0,
+                commissionFromSales: 0,
+                overtimeAmount: 0,
+                bonusesAmount: 0,
+                deductionsAmount: 0,
+                benefitsAmount: 0,
+                grossTotal: 0,
+                netTotal: 0,
+              ),
+            );
     final hasLatestPaidGlobal = latestPaidGlobal.entryId.isNotEmpty;
     final historicalCount = allItems.length;
     final pendingCount = allItems.where((item) => !item.isPaid).length;
@@ -502,7 +507,9 @@ class _MisPagosScreenState extends ConsumerState<MisPagosScreen>
                                   _DesktopPaymentsMetric(
                                     label: 'Ultimo pago',
                                     value: hasLatestPaidGlobal
-                                        ? money.format(latestPaidGlobal.netTotal)
+                                        ? money.format(
+                                            latestPaidGlobal.netTotal,
+                                          )
                                         : 'Sin pagos',
                                     icon: Icons.update_rounded,
                                     accent: const Color(0xFF86EFAC),
@@ -634,7 +641,7 @@ class _MisPagosScreenState extends ConsumerState<MisPagosScreen>
               ),
       ),
       drawer: buildAdaptiveDrawer(context, currentUser: currentUser),
-        body: isDesktop
+      body: isDesktop
           ? RefreshIndicator(
               onRefresh: _load,
               child: _buildDesktopBody(
@@ -676,9 +683,7 @@ class _MisPagosScreenState extends ConsumerState<MisPagosScreen>
                       child: Text(
                         _error!,
                         style: TextStyle(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onErrorContainer,
+                          color: Theme.of(context).colorScheme.onErrorContainer,
                         ),
                       ),
                     ),
@@ -830,17 +835,15 @@ class _MisPagosScreenState extends ConsumerState<MisPagosScreen>
             children: [
               Text(range),
               const SizedBox(height: 8),
-              _DetailRow(
-                label: 'Estado',
-                value: item.statusLabel,
-              ),
+              _DetailRow(label: 'Estado', value: item.statusLabel),
               _DetailRow(
                 label: 'Fecha de pago',
                 value: item.paymentDate == null
                     ? 'Pendiente'
-                    : DateFormat('dd/MM/yyyy h:mm a', 'es_DO').format(
-                        item.paymentDate!,
-                      ),
+                    : DateFormat(
+                        'dd/MM/yyyy h:mm a',
+                        'es_DO',
+                      ).format(item.paymentDate!),
               ),
               _DetailRow(label: 'Salario base', value: item.baseSalary),
               _DetailRow(label: 'Comisiones', value: item.commissions),
@@ -854,9 +857,15 @@ class _MisPagosScreenState extends ConsumerState<MisPagosScreen>
               _DetailRow(label: 'Beneficios', value: item.benefitsAmount),
               _DetailRow(label: 'Deducciones', value: item.deductionsAmount),
               _DetailRow(label: 'Total bruto', value: item.totalGross),
-              _DetailRow(label: 'Total descontado', value: item.totalDiscounted),
+              _DetailRow(
+                label: 'Total descontado',
+                value: item.totalDiscounted,
+              ),
               const Divider(height: 20),
-              _DetailRow(label: 'Metodo de pago', value: item.paymentMethod ?? 'N/D'),
+              _DetailRow(
+                label: 'Metodo de pago',
+                value: item.paymentMethod ?? 'N/D',
+              ),
               _DetailRow(
                 label: 'Referencia',
                 value: item.paymentReference?.trim().isNotEmpty == true
@@ -865,23 +874,27 @@ class _MisPagosScreenState extends ConsumerState<MisPagosScreen>
               ),
               _DetailRow(
                 label: 'Notas',
-                value: item.notes?.trim().isNotEmpty == true ? item.notes! : 'N/D',
+                value: item.notes?.trim().isNotEmpty == true
+                    ? item.notes!
+                    : 'N/D',
               ),
               _DetailRow(
                 label: 'Creado',
                 value: item.createdAt == null
                     ? 'N/D'
-                    : DateFormat('dd/MM/yyyy h:mm a', 'es_DO').format(
-                        item.createdAt!,
-                      ),
+                    : DateFormat(
+                        'dd/MM/yyyy h:mm a',
+                        'es_DO',
+                      ).format(item.createdAt!),
               ),
               _DetailRow(
                 label: 'Actualizado',
                 value: item.updatedAt == null
                     ? 'N/D'
-                    : DateFormat('dd/MM/yyyy h:mm a', 'es_DO').format(
-                        item.updatedAt!,
-                      ),
+                    : DateFormat(
+                        'dd/MM/yyyy h:mm a',
+                        'es_DO',
+                      ).format(item.updatedAt!),
               ),
               const Divider(height: 20),
               _DetailRow(label: 'Neto quincena', value: net, bold: true),
@@ -997,14 +1010,14 @@ class _CurrentPeriodCard extends StatelessWidget {
     final range =
         '${DateFormat('dd/MM/yyyy').format(item!.periodStart)} - ${DateFormat('dd/MM/yyyy').format(item!.periodEnd)}';
     final statusColor = item!.isPaid
-      ? const Color(0xFF166534)
-      : const Color(0xFF9A3412);
+        ? const Color(0xFF166534)
+        : const Color(0xFF9A3412);
     final statusBg = item!.isPaid
-      ? const Color(0xFFDCFCE7)
-      : const Color(0xFFFFEDD5);
+        ? const Color(0xFFDCFCE7)
+        : const Color(0xFFFFEDD5);
     final paidDateLabel = item!.paymentDate == null
-      ? 'Pendiente de pago'
-      : 'Pagada ${DateFormat('dd/MM/yyyy h:mm a', 'es_DO').format(item!.paymentDate!)}';
+        ? 'Pendiente de pago'
+        : 'Pagada ${DateFormat('dd/MM/yyyy h:mm a', 'es_DO').format(item!.paymentDate!)}';
 
     return Container(
       width: double.infinity,
@@ -1072,11 +1085,16 @@ class _CurrentPeriodCard extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: statusBg,
                   borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: statusColor.withValues(alpha: 0.18)),
+                  border: Border.all(
+                    color: statusColor.withValues(alpha: 0.18),
+                  ),
                 ),
                 child: Text(
                   item!.statusLabel,
@@ -1113,10 +1131,7 @@ class _CurrentPeriodCard extends StatelessWidget {
             label: 'Comisiones',
             value: money.format(item!.commissions),
           ),
-          _PeriodAmountRow(
-            label: 'Bonos',
-            value: money.format(item!.bonuses),
-          ),
+          _PeriodAmountRow(label: 'Bonos', value: money.format(item!.bonuses)),
           _PeriodAmountRow(
             label: 'Descuentos',
             value: money.format(item!.totalDiscounted),
@@ -1223,11 +1238,7 @@ class _PeriodAmountRow extends StatelessWidget {
 }
 
 class _HistoryTile extends StatelessWidget {
-  const _HistoryTile({
-    required this.item,
-    required this.onTap,
-    this.onPdf,
-  });
+  const _HistoryTile({required this.item, required this.onTap, this.onPdf});
 
   final PayrollHistoryItem item;
   final VoidCallback onTap;
@@ -1260,7 +1271,9 @@ class _HistoryTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(
-                  item.isPaid ? Icons.verified_outlined : Icons.schedule_outlined,
+                  item.isPaid
+                      ? Icons.verified_outlined
+                      : Icons.schedule_outlined,
                   size: 18,
                   color: item.isPaid ? Colors.green : Colors.orange,
                 ),
@@ -1304,7 +1317,10 @@ class _HistoryTile extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: statusBg,
                     borderRadius: BorderRadius.circular(999),
@@ -1319,18 +1335,15 @@ class _HistoryTile extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                TextButton(
-                  onPressed: onTap,
-                  child: const Text('Detalles'),
-                ),
+                TextButton(onPressed: onTap, child: const Text('Detalles')),
                 if (onPdf != null)
-                  TextButton(
-                    onPressed: onPdf,
-                    child: const Text('PDF'),
-                  ),
+                  TextButton(onPressed: onPdf, child: const Text('PDF')),
               ],
             ),
-            Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.6)),
+            Divider(
+              height: 1,
+              color: scheme.outlineVariant.withValues(alpha: 0.6),
+            ),
           ],
         ),
       ),
@@ -1441,7 +1454,8 @@ class _MisPagosHistoryScreen extends ConsumerStatefulWidget {
       _MisPagosHistoryScreenState();
 }
 
-class _MisPagosHistoryScreenState extends ConsumerState<_MisPagosHistoryScreen> {
+class _MisPagosHistoryScreenState
+    extends ConsumerState<_MisPagosHistoryScreen> {
   bool _loading = true;
   String? _error;
   List<PayrollHistoryItem> _items = const [];
@@ -1467,9 +1481,11 @@ class _MisPagosHistoryScreenState extends ConsumerState<_MisPagosHistoryScreen> 
       final status = _filters.status == _HistoryStatusFilter.paid
           ? 'PAID'
           : _filters.status == _HistoryStatusFilter.pending
-              ? 'DRAFT'
-              : null;
-      final data = await ref.read(nominaRepositoryProvider).listMyPayrollHistory(
+          ? 'DRAFT'
+          : null;
+      final data = await ref
+          .read(nominaRepositoryProvider)
+          .listMyPayrollHistory(
             from: _filters.from,
             to: _filters.to,
             status: status,
@@ -1478,31 +1494,35 @@ class _MisPagosHistoryScreenState extends ConsumerState<_MisPagosHistoryScreen> 
                 : _filters.search.trim(),
           );
 
-      final filtered = data.where((item) {
-        final openCurrent = item.periodStatus.toUpperCase() == 'OPEN' && !item.isPaid;
-        if (openCurrent) return false;
+      final filtered =
+          data
+              .where((item) {
+                final openCurrent =
+                    item.periodStatus.toUpperCase() == 'OPEN' && !item.isPaid;
+                if (openCurrent) return false;
 
-        if (_filters.status == _HistoryStatusFilter.closed &&
-            item.periodStatus.toUpperCase() != 'CLOSED') {
-          return false;
-        }
+                if (_filters.status == _HistoryStatusFilter.closed &&
+                    item.periodStatus.toUpperCase() != 'CLOSED') {
+                  return false;
+                }
 
-        if (_filters.status == _HistoryStatusFilter.canceled) {
-          final statusText = item.paymentStatus.toUpperCase();
-          if (statusText != 'CANCELED' && statusText != 'CANCELLED') {
-            return false;
-          }
-        }
+                if (_filters.status == _HistoryStatusFilter.canceled) {
+                  final statusText = item.paymentStatus.toUpperCase();
+                  if (statusText != 'CANCELED' && statusText != 'CANCELLED') {
+                    return false;
+                  }
+                }
 
-        return true;
-      }).toList(growable: false)
-        ..sort((a, b) {
-          final left = a.paymentDate ?? a.periodEnd;
-          final right = b.paymentDate ?? b.periodEnd;
-          return _filters.sort == _HistorySortOrder.newest
-              ? right.compareTo(left)
-              : left.compareTo(right);
-        });
+                return true;
+              })
+              .toList(growable: false)
+            ..sort((a, b) {
+              final left = a.paymentDate ?? a.periodEnd;
+              final right = b.paymentDate ?? b.periodEnd;
+              return _filters.sort == _HistorySortOrder.newest
+                  ? right.compareTo(left)
+                  : left.compareTo(right);
+            });
 
       if (!mounted) return;
       setState(() {
@@ -1526,22 +1546,28 @@ class _MisPagosHistoryScreenState extends ConsumerState<_MisPagosHistoryScreen> 
       barrierColor: Colors.black.withValues(alpha: 0.45),
       transitionDuration: const Duration(milliseconds: 250),
       pageBuilder: (context, _, __) {
-        final width = (MediaQuery.sizeOf(context).width * 0.82).clamp(320.0, 520.0);
+        final width = (MediaQuery.sizeOf(context).width * 0.82).clamp(
+          320.0,
+          520.0,
+        );
         return Align(
           alignment: Alignment.centerRight,
           child: SizedBox(
             width: width,
-            child: SafeArea(
-              child: _HistoryFilterPanel(initial: _filters),
-            ),
+            child: SafeArea(child: _HistoryFilterPanel(initial: _filters)),
           ),
         );
       },
       transitionBuilder: (context, animation, _, child) {
-        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
         return SlideTransition(
-          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
-              .animate(curved),
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(curved),
           child: child,
         );
       },
@@ -1570,11 +1596,18 @@ class _MisPagosHistoryScreenState extends ConsumerState<_MisPagosHistoryScreen> 
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text('FULLTECH, SRL',
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
+              pw.Text(
+                'FULLTECH, SRL',
+                style: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
               pw.SizedBox(height: 8),
-              pw.Text('Comprobante de pago de nómina',
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              pw.Text(
+                'Comprobante de pago de nómina',
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              ),
               pw.SizedBox(height: 12),
               pw.Text('Empleado: $employeeName'),
               pw.Text('Quincena: ${item.periodTitle}'),
@@ -1586,8 +1619,13 @@ class _MisPagosHistoryScreenState extends ConsumerState<_MisPagosHistoryScreen> 
               pw.Text('Bonos: ${money.format(item.bonuses)}'),
               pw.Text('Descuentos: ${money.format(item.totalDiscounted)}'),
               pw.Divider(),
-              pw.Text('Neto: ${money.format(item.netTotal)}',
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+              pw.Text(
+                'Neto: ${money.format(item.netTotal)}',
+                style: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
             ],
           ),
         ),
@@ -1626,7 +1664,10 @@ class _MisPagosHistoryScreenState extends ConsumerState<_MisPagosHistoryScreen> 
                 label: 'Fecha de pago',
                 value: item.paymentDate == null
                     ? 'Pendiente'
-                    : DateFormat('dd/MM/yyyy h:mm a', 'es_DO').format(item.paymentDate!),
+                    : DateFormat(
+                        'dd/MM/yyyy h:mm a',
+                        'es_DO',
+                      ).format(item.paymentDate!),
               ),
               _DetailRow(label: 'Salario base', value: item.baseSalary),
               _DetailRow(label: 'Comisiones', value: item.commissions),
@@ -1638,10 +1679,7 @@ class _MisPagosHistoryScreenState extends ConsumerState<_MisPagosHistoryScreen> 
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => _openPdf(item),
-            child: const Text('PDF'),
-          ),
+          TextButton(onPressed: () => _openPdf(item), child: const Text('PDF')),
           FilledButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cerrar'),
@@ -1688,7 +1726,10 @@ class _MisPagosHistoryScreenState extends ConsumerState<_MisPagosHistoryScreen> 
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(999),
@@ -1870,21 +1911,22 @@ class _HistoryFilterPanelState extends State<_HistoryFilterPanel> {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: [
-                ('Todos', _HistoryStatusFilter.all),
-                ('Pagado', _HistoryStatusFilter.paid),
-                ('Pendiente', _HistoryStatusFilter.pending),
-                ('Cerrado', _HistoryStatusFilter.closed),
-                ('Cancelado', _HistoryStatusFilter.canceled),
-              ]
-                  .map(
-                    (entry) => ChoiceChip(
-                      label: Text(entry.$1),
-                      selected: _status == entry.$2,
-                      onSelected: (_) => setState(() => _status = entry.$2),
-                    ),
-                  )
-                  .toList(growable: false),
+              children:
+                  [
+                        ('Todos', _HistoryStatusFilter.all),
+                        ('Pagado', _HistoryStatusFilter.paid),
+                        ('Pendiente', _HistoryStatusFilter.pending),
+                        ('Cerrado', _HistoryStatusFilter.closed),
+                        ('Cancelado', _HistoryStatusFilter.canceled),
+                      ]
+                      .map(
+                        (entry) => ChoiceChip(
+                          label: Text(entry.$1),
+                          selected: _status == entry.$2,
+                          onSelected: (_) => setState(() => _status = entry.$2),
+                        ),
+                      )
+                      .toList(growable: false),
             ),
             const SizedBox(height: 12),
             Text('Rango de fecha', style: theme.textTheme.labelLarge),
@@ -1908,7 +1950,9 @@ class _HistoryFilterPanelState extends State<_HistoryFilterPanel> {
                     onPressed: () => _pickDate(isFrom: false),
                     icon: const Icon(Icons.event_busy_outlined, size: 16),
                     label: Text(
-                      _to == null ? 'Hasta' : DateFormat('dd/MM/yy').format(_to!),
+                      _to == null
+                          ? 'Hasta'
+                          : DateFormat('dd/MM/yy').format(_to!),
                     ),
                   ),
                 ),
@@ -1923,12 +1967,14 @@ class _HistoryFilterPanelState extends State<_HistoryFilterPanel> {
                 ChoiceChip(
                   label: const Text('Más reciente'),
                   selected: _sort == _HistorySortOrder.newest,
-                  onSelected: (_) => setState(() => _sort = _HistorySortOrder.newest),
+                  onSelected: (_) =>
+                      setState(() => _sort = _HistorySortOrder.newest),
                 ),
                 ChoiceChip(
                   label: const Text('Más antiguo'),
                   selected: _sort == _HistorySortOrder.oldest,
-                  onSelected: (_) => setState(() => _sort = _HistorySortOrder.oldest),
+                  onSelected: (_) =>
+                      setState(() => _sort = _HistorySortOrder.oldest),
                 ),
               ],
             ),

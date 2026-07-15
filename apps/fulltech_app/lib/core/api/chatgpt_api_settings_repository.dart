@@ -31,10 +31,16 @@ class ChatgptApiSettingsRepository {
     );
   }
 
-  Future<void> saveSettings({required String apiKey, required String model}) async {
+  Future<void> saveSettings({
+    required String apiKey,
+    required String model,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_apiKeyStorageKey, apiKey.trim());
-    await prefs.setString(_modelStorageKey, model.trim().isEmpty ? 'gpt-4o-mini' : model.trim());
+    await prefs.setString(
+      _modelStorageKey,
+      model.trim().isEmpty ? 'gpt-4o-mini' : model.trim(),
+    );
   }
 
   Future<void> clearApiKey() async {

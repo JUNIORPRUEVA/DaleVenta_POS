@@ -3,7 +3,9 @@ import 'package:flutter/foundation.dart';
 bool _isInvalidImageValue(String? value) {
   if (value == null) return true;
   final normalized = value.trim().toLowerCase();
-  return normalized.isEmpty || normalized == 'null' || normalized == 'undefined';
+  return normalized.isEmpty ||
+      normalized == 'null' ||
+      normalized == 'undefined';
 }
 
 String _trimTrailingSlash(String value) {
@@ -26,7 +28,9 @@ String _normalizeRawPath(String value) {
 
 bool _isAbsoluteUrl(String value) {
   final uri = Uri.tryParse(value);
-  return uri != null && uri.hasScheme && (uri.scheme == 'http' || uri.scheme == 'https');
+  return uri != null &&
+      uri.hasScheme &&
+      (uri.scheme == 'http' || uri.scheme == 'https');
 }
 
 bool _hasDifferentHost(String value, String baseUrl) {
@@ -91,21 +95,27 @@ String normalizeProductImageUrl({
   if (_isInvalidImageValue(imageUrl)) return '';
 
   final raw = imageUrl!.trim();
-  final normalizedBase = _isInvalidImageValue(baseUrl) ? '' : _trimTrailingSlash(baseUrl!);
+  final normalizedBase = _isInvalidImageValue(baseUrl)
+      ? ''
+      : _trimTrailingSlash(baseUrl!);
 
-  if (normalizedBase.isNotEmpty && (raw == normalizedBase || raw.startsWith('$normalizedBase/'))) {
+  if (normalizedBase.isNotEmpty &&
+      (raw == normalizedBase || raw.startsWith('$normalizedBase/'))) {
     return _stringifyUri(raw);
   }
 
   if (_isAbsoluteUrl(raw)) {
     final absolute = _stringifyUri(raw);
     final uploadsPath = _extractUploadsPath(raw);
-    final shouldProxyUploads = normalizedBase.isNotEmpty &&
+    final shouldProxyUploads =
+        normalizedBase.isNotEmpty &&
         uploadsPath != null &&
         (proxyUploadsOnWeb || _hasDifferentHost(absolute, normalizedBase));
     if (shouldProxyUploads) {
       final encodedUrl = Uri.encodeQueryComponent(absolute);
-      return _stringifyUri('$normalizedBase/products/image-proxy?url=$encodedUrl');
+      return _stringifyUri(
+        '$normalizedBase/products/image-proxy?url=$encodedUrl',
+      );
     }
     return absolute;
   }

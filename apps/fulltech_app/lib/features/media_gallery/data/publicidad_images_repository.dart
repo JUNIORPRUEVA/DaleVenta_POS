@@ -9,10 +9,11 @@ import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../models/publicidad_image_model.dart';
 
-final publicidadImagesRepositoryProvider =
-    Provider<PublicidadImagesRepository>((ref) {
-  return PublicidadImagesRepository(ref.watch(dioProvider));
-});
+final publicidadImagesRepositoryProvider = Provider<PublicidadImagesRepository>(
+  (ref) {
+    return PublicidadImagesRepository(ref.watch(dioProvider));
+  },
+);
 
 class PublicidadImagesRepository {
   final Dio _dio;
@@ -23,10 +24,7 @@ class PublicidadImagesRepository {
     throw ApiErrorMapper.fromDio(error, fallbackMessage: fallback, dio: _dio);
   }
 
-  Future<PublicidadImage> create({
-    required String url,
-    String? caption,
-  }) async {
+  Future<PublicidadImage> create({required String url, String? caption}) async {
     try {
       final response = await _dio.post(
         ApiRoutes.publicidadImages,
@@ -45,7 +43,8 @@ class PublicidadImagesRepository {
     try {
       final response = await _dio.get(ApiRoutes.publicidadImages);
       final List<dynamic> items =
-          (response.data is List ? response.data : response.data['items'] ?? []) as List;
+          (response.data is List ? response.data : response.data['items'] ?? [])
+              as List;
       return items
           .map((e) => PublicidadImage.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -66,9 +65,7 @@ class PublicidadImagesRepository {
     try {
       final response = await _dio.patch(
         '${ApiRoutes.publicidadImages}/$id',
-        data: {
-          if (caption != null) 'caption': caption,
-        },
+        data: {if (caption != null) 'caption': caption},
       );
       return PublicidadImage.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
@@ -86,7 +83,8 @@ class PublicidadImagesRepository {
     String? caption,
   }) async {
     try {
-      final endpoint = '${_dio.options.baseUrl}${ApiRoutes.publicidadImages}/upload';
+      final endpoint =
+          '${_dio.options.baseUrl}${ApiRoutes.publicidadImages}/upload';
       dev.log(
         '[PublicidadUpload][request] endpoint=$endpoint filename=$filename contentType=$contentType bytes=${bytes.lengthInBytes}',
         name: 'PublicidadUpload',

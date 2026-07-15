@@ -32,36 +32,39 @@ void main() {
       expect(installer.installCalls, 0);
     });
 
-    test('starts Windows automatic installation when a new release exists', () async {
-      final repository = FakeAppUpdateRepository(
-        installedRelease: const InstalledReleaseInfo(
-          platform: ReleasePlatform.windows,
-          currentVersion: '1.0.0',
-          currentBuild: 1,
-        ),
-        updateInfo: const AppUpdateInfo(
-          update: true,
-          required: false,
-          latestVersion: '1.0.1',
-          latestBuild: 2,
-          downloadUrl: 'https://example.com/fulltech-setup.exe',
-        ),
-      );
-      final installer = FakeAppUpdateInstaller(
-        onInstall: ({required onProgress}) async {
-          onProgress(0.4);
-          onProgress(1);
-        },
-      );
-      final controller = AppUpdateController(repository, installer);
+    test(
+      'starts Windows automatic installation when a new release exists',
+      () async {
+        final repository = FakeAppUpdateRepository(
+          installedRelease: const InstalledReleaseInfo(
+            platform: ReleasePlatform.windows,
+            currentVersion: '1.0.0',
+            currentBuild: 1,
+          ),
+          updateInfo: const AppUpdateInfo(
+            update: true,
+            required: false,
+            latestVersion: '1.0.1',
+            latestBuild: 2,
+            downloadUrl: 'https://example.com/fulltech-setup.exe',
+          ),
+        );
+        final installer = FakeAppUpdateInstaller(
+          onInstall: ({required onProgress}) async {
+            onProgress(0.4);
+            onProgress(1);
+          },
+        );
+        final controller = AppUpdateController(repository, installer);
 
-      await controller.checkNow(force: true);
+        await controller.checkNow(force: true);
 
-      expect(installer.installCalls, 1);
-      expect(controller.state.phase, AppUpdatePhase.installingUpdate);
-      expect(controller.state.blocksUsage, isTrue);
-      expect(controller.state.downloadProgress, 1);
-    });
+        expect(installer.installCalls, 1);
+        expect(controller.state.phase, AppUpdatePhase.installingUpdate);
+        expect(controller.state.blocksUsage, isTrue);
+        expect(controller.state.downloadProgress, 1);
+      },
+    );
 
     test('keeps Windows blocked if automatic installation fails', () async {
       final repository = FakeAppUpdateRepository(
@@ -110,7 +113,8 @@ class FakeAppUpdateRepository extends AppUpdateRepository {
   bool get isConfigured => configured;
 
   @override
-  Future<InstalledReleaseInfo?> readInstalledRelease() async => installedRelease;
+  Future<InstalledReleaseInfo?> readInstalledRelease() async =>
+      installedRelease;
 
   @override
   Future<AppUpdateInfo> checkForUpdate(
@@ -124,9 +128,8 @@ class FakeAppUpdateRepository extends AppUpdateRepository {
   }
 }
 
-typedef InstallCallback = Future<void> Function({
-  required void Function(double progress) onProgress,
-});
+typedef InstallCallback =
+    Future<void> Function({required void Function(double progress) onProgress});
 
 class FakeAppUpdateInstaller implements AppUpdateInstaller {
   FakeAppUpdateInstaller({this.onInstall});

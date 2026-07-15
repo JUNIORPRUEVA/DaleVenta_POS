@@ -47,13 +47,12 @@ class CompanyWhatsappState {
 
 final companyWhatsappControllerProvider =
     StateNotifierProvider<CompanyWhatsappController, CompanyWhatsappState>(
-  (ref) => CompanyWhatsappController(
-    ref.watch(companyWhatsappRepositoryProvider),
-  ),
-);
+      (ref) => CompanyWhatsappController(
+        ref.watch(companyWhatsappRepositoryProvider),
+      ),
+    );
 
-class CompanyWhatsappController
-    extends StateNotifier<CompanyWhatsappState> {
+class CompanyWhatsappController extends StateNotifier<CompanyWhatsappState> {
   final CompanyWhatsappRepository _repo;
   Timer? _pollTimer;
 
@@ -78,7 +77,10 @@ class CompanyWhatsappController
     }
   }
 
-  Future<void> createInstance({String? instanceName, String? phoneNumber}) async {
+  Future<void> createInstance({
+    String? instanceName,
+    String? phoneNumber,
+  }) async {
     if (state.isCreating) return;
     state = state.copyWith(isCreating: true, clearError: true);
     try {

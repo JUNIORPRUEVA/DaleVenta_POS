@@ -46,10 +46,12 @@ class WarningsListState {
       total: total ?? this.total,
       page: page ?? this.page,
       limit: limit ?? this.limit,
-      filterStatus:
-          filterStatus == _sentinel ? this.filterStatus : filterStatus as String?,
-        filterWarningType:
-          filterWarningType == _sentinel ? this.filterWarningType : filterWarningType as String?,
+      filterStatus: filterStatus == _sentinel
+          ? this.filterStatus
+          : filterStatus as String?,
+      filterWarningType: filterWarningType == _sentinel
+          ? this.filterWarningType
+          : filterWarningType as String?,
       search: search ?? this.search,
     );
   }
@@ -109,30 +111,34 @@ class WarningsListController extends StateNotifier<WarningsListState> {
 
 final warningsListControllerProvider =
     StateNotifierProvider<WarningsListController, WarningsListState>((ref) {
-  return WarningsListController(ref.watch(employeeWarningsRepositoryProvider));
-});
+      return WarningsListController(
+        ref.watch(employeeWarningsRepositoryProvider),
+      );
+    });
 
 // ── Warning detail (Admin only) ───────────────────────────────────────────────
 // Nota: Solo Admin puede acceder a detalles. Los empleados no tienen acceso.
 
-final warningDetailProvider =
-    FutureProvider.family<EmployeeWarning, String>((ref, id) async {
+final warningDetailProvider = FutureProvider.family<EmployeeWarning, String>((
+  ref,
+  id,
+) async {
   return ref.watch(employeeWarningsRepositoryProvider).getOne(id);
 });
 
 // ── Employee pending ──────────────────────────────────────────────────────────
 // Flujo de firma desactivado: badge de pendientes no se usa.
 
-final myPendingWarningsProvider =
-    FutureProvider<List<EmployeeWarning>>((ref) async {
+final myPendingWarningsProvider = FutureProvider<List<EmployeeWarning>>((
+  ref,
+) async {
   return const <EmployeeWarning>[];
 });
 
 final myPendingWarningsCountProvider = Provider<int>((ref) {
-  return ref.watch(myPendingWarningsProvider).maybeWhen(
-        data: (list) => list.length,
-        orElse: () => 0,
-      );
+  return ref
+      .watch(myPendingWarningsProvider)
+      .maybeWhen(data: (list) => list.length, orElse: () => 0);
 });
 
 // ── Verificar si usuario es Admin ─────────────────────────────────────────────

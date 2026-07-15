@@ -23,8 +23,9 @@ class CrmComercialRepository {
   final Dio _dio;
   final CrmComercialLocalDb _localDb;
 
-  static final Options _silentRequestOptions =
-      Options(extra: {'skipLoader': true, 'silent': true});
+  static final Options _silentRequestOptions = Options(
+    extra: {'skipLoader': true, 'silent': true},
+  );
 
   String _extractErrorMessage(dynamic data, String fallback) {
     if (data is String && data.trim().isNotEmpty) return data.trim();
@@ -93,7 +94,8 @@ class CrmComercialRepository {
       data: {
         if (responsableUserId != null) 'responsableUserId': responsableUserId,
         if (nextAction != null) 'nextAction': nextAction,
-        if (nextActionAt != null) 'nextActionAt': nextActionAt.toIso8601String(),
+        if (nextActionAt != null)
+          'nextActionAt': nextActionAt.toIso8601String(),
       },
     );
     return CrmComercialCustomer.fromJson(res.data ?? const {});
@@ -149,8 +151,10 @@ class CrmComercialRepository {
     );
     final rows = (res.data ?? const [])
         .whereType<Map>()
-        .map((entry) =>
-            CrmComercialUserRef.fromJson(entry.cast<String, dynamic>()))
+        .map(
+          (entry) =>
+              CrmComercialUserRef.fromJson(entry.cast<String, dynamic>()),
+        )
         .toList(growable: false);
     return rows;
   }
@@ -175,7 +179,9 @@ class CrmComercialRepository {
     return CrmCommercialLibraryListResponse.fromJson(res.data ?? const {});
   }
 
-  Future<CrmComercialLibraryItem> createLibraryItem(Map<String, dynamic> payload) async {
+  Future<CrmComercialLibraryItem> createLibraryItem(
+    Map<String, dynamic> payload,
+  ) async {
     final res = await _dio.post<Map<String, dynamic>>(
       ApiRoutes.crmCommercialLibrary,
       data: payload,
@@ -240,7 +246,8 @@ class CrmComercialRepository {
     return CrmComercialSettings.fromJson(data);
   }
 
-  Future<List<CrmComercialWhatsappInstance>> listAvailableWhatsappInstances() async {
+  Future<List<CrmComercialWhatsappInstance>>
+  listAvailableWhatsappInstances() async {
     final res = await _dio.get<List<dynamic>>(
       ApiRoutes.crmCommercialAvailableWhatsappInstances,
       options: _silentRequestOptions,
@@ -248,8 +255,9 @@ class CrmComercialRepository {
     return (res.data ?? const [])
         .whereType<Map>()
         .map(
-          (entry) =>
-              CrmComercialWhatsappInstance.fromJson(entry.cast<String, dynamic>()),
+          (entry) => CrmComercialWhatsappInstance.fromJson(
+            entry.cast<String, dynamic>(),
+          ),
         )
         .toList(growable: false);
   }
@@ -322,10 +330,7 @@ class CrmComercialRepository {
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       ApiRoutes.crmCommercialStartConversationMessage,
-      data: {
-        'phone': phone.trim(),
-        'text': text.trim(),
-      },
+      data: {'phone': phone.trim(), 'text': text.trim()},
     );
     return res.data ?? const <String, dynamic>{};
   }
@@ -343,7 +348,9 @@ class CrmComercialRepository {
       }
       final res = await _dio.post<Map<String, dynamic>>(url, data: payload);
       if (kDebugMode) {
-        debugPrint('[CRM][replyConversation] OK status=${res.statusCode} response=${res.data}');
+        debugPrint(
+          '[CRM][replyConversation] OK status=${res.statusCode} response=${res.data}',
+        );
       }
       return res.data ?? const <String, dynamic>{};
     } on DioException catch (error) {
@@ -368,7 +375,8 @@ class CrmComercialRepository {
     try {
       final payload = <String, dynamic>{
         'text': text,
-        if ((previousText ?? '').trim().isNotEmpty) 'previousText': previousText,
+        if ((previousText ?? '').trim().isNotEmpty)
+          'previousText': previousText,
       };
       final res = await _dio.post<Map<String, dynamic>>(
         ApiRoutes.crmCommercialOrthographySuggestion,
@@ -407,11 +415,14 @@ class CrmComercialRepository {
                 'text': (msg.body ?? msg.caption ?? '').trim(),
               },
             )
-            .where((entry) => (entry['text'] ?? '').toString().trim().isNotEmpty)
+            .where(
+              (entry) => (entry['text'] ?? '').toString().trim().isNotEmpty,
+            )
             .toList(growable: false),
         if ((crmStatus ?? '').trim().isNotEmpty) 'crmStatus': crmStatus,
         if (customerInfo != null) 'customerInfo': customerInfo,
-        if (availableBusinessData != null) 'availableBusinessData': availableBusinessData,
+        if (availableBusinessData != null)
+          'availableBusinessData': availableBusinessData,
       };
       final res = await _dio.post<Map<String, dynamic>>(
         ApiRoutes.crmCommercialAiSuggestReply,
@@ -420,7 +431,8 @@ class CrmComercialRepository {
       );
       final data = res.data ?? const <String, dynamic>{};
       final suggestion = CrmComercialAiReplySuggestion.fromJson(data);
-      final hasPayload = suggestion.intent.trim().isNotEmpty ||
+      final hasPayload =
+          suggestion.intent.trim().isNotEmpty ||
           suggestion.suggestedReply.trim().isNotEmpty ||
           suggestion.message?.trim().isNotEmpty == true ||
           suggestion.aiConfigured == false;
@@ -457,7 +469,10 @@ class CrmComercialRepository {
     required String messageId,
   }) async {
     final res = await _dio.delete<Map<String, dynamic>>(
-      ApiRoutes.crmCommercialConversationMessageDelete(conversationId, messageId),
+      ApiRoutes.crmCommercialConversationMessageDelete(
+        conversationId,
+        messageId,
+      ),
     );
     return res.data ?? const <String, dynamic>{};
   }
@@ -500,8 +515,9 @@ class CrmComercialRepository {
     );
     return (res.data ?? const [])
         .whereType<Map>()
-        .map((e) =>
-            CrmComercialFollowupTask.fromJson(e.cast<String, dynamic>()))
+        .map(
+          (e) => CrmComercialFollowupTask.fromJson(e.cast<String, dynamic>()),
+        )
         .toList(growable: false);
   }
 
@@ -580,17 +596,25 @@ class CrmComercialRepository {
   }
 
   /// Guarda mensajes de una conversación en caché.
-  Future<void> cacheMessages(String conversationId, List<CrmComercialInboxMessage> messages) async {
+  Future<void> cacheMessages(
+    String conversationId,
+    List<CrmComercialInboxMessage> messages,
+  ) async {
     await _localDb.saveMessages(conversationId, messages);
   }
 
   /// Obtiene mensajes de una conversación desde el caché.
-  Future<List<CrmComercialInboxMessage>> getCachedMessages(String conversationId) async {
+  Future<List<CrmComercialInboxMessage>> getCachedMessages(
+    String conversationId,
+  ) async {
     return _localDb.getMessages(conversationId);
   }
 
   /// Agrega un mensaje enviado al caché local (optimistic UI).
-  Future<void> addMessageToCache(String conversationId, CrmComercialInboxMessage message) async {
+  Future<void> addMessageToCache(
+    String conversationId,
+    CrmComercialInboxMessage message,
+  ) async {
     await _localDb.saveMessage(conversationId, message);
   }
 
@@ -611,7 +635,9 @@ class CrmComercialRepository {
   }
 
   /// Actualiza la configuración global del bot.
-  Future<Map<String, dynamic>> updateBotSettings(Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> updateBotSettings(
+    Map<String, dynamic> data,
+  ) async {
     final res = await _dio.patch<Map<String, dynamic>>(
       ApiRoutes.crmCommercialBotSettings,
       data: data,
@@ -621,7 +647,9 @@ class CrmComercialRepository {
   }
 
   /// Obtiene el estado del bot para una conversación específica.
-  Future<Map<String, dynamic>> getConversationBotStatus(String conversationId) async {
+  Future<Map<String, dynamic>> getConversationBotStatus(
+    String conversationId,
+  ) async {
     final res = await _dio.get<Map<String, dynamic>>(
       ApiRoutes.crmCommercialBotConversationStatus(conversationId),
       options: _silentRequestOptions,
@@ -643,7 +671,9 @@ class CrmComercialRepository {
   }
 
   /// Reanuda el bot para una conversación.
-  Future<Map<String, dynamic>> resumeBotForConversation(String conversationId) async {
+  Future<Map<String, dynamic>> resumeBotForConversation(
+    String conversationId,
+  ) async {
     final res = await _dio.post<Map<String, dynamic>>(
       ApiRoutes.crmCommercialBotConversationResume(conversationId),
       options: _silentRequestOptions,
@@ -652,7 +682,9 @@ class CrmComercialRepository {
   }
 
   /// Excluye un número del bot.
-  Future<Map<String, dynamic>> excludeNumberFromBot(String conversationId) async {
+  Future<Map<String, dynamic>> excludeNumberFromBot(
+    String conversationId,
+  ) async {
     final res = await _dio.post<Map<String, dynamic>>(
       ApiRoutes.crmCommercialBotConversationExclude(conversationId),
       options: _silentRequestOptions,

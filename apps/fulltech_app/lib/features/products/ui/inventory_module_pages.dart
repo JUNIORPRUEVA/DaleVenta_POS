@@ -6,9 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/api/env.dart';
 import '../../../core/auth/auth_provider.dart';
+import '../../../core/cache/fulltech_cache_manager.dart';
 import '../../../core/models/product_model.dart';
 import '../../../core/utils/money_formatters.dart';
+import '../../../core/utils/product_image_url.dart';
 import '../../../core/widgets/app_drawer.dart';
 import '../../../core/widgets/product_network_image.dart';
 import '../../catalogo/application/catalog_controller.dart';
@@ -85,12 +88,21 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     return categories;
   }
 
-  Future<void> _openProductEditor({ProductModel? product}) {
-    return _showInventoryProductEditor(
+  Future<void> _openProductEditor({ProductModel? product}) async {
+    final result = await _showInventoryProductEditor(
       context,
-      ref,
       product: product,
       categories: _categoryOptions(ref.read(catalogControllerProvider).items),
+    );
+    if (!mounted || result?.saved != true) return;
+    await ref.read(catalogControllerProvider.notifier).load(forceRemote: true);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          product == null ? 'Producto creado' : 'Producto actualizado',
+        ),
+      ),
     );
   }
 
@@ -1758,99 +1770,189 @@ Future<void> _showStockAdjustmentPanel(
   ).whenComplete(qtyCtrl.dispose);
 }
 
-Future<void> _showInventoryProductEditor(
-  BuildContext context,
-  WidgetRef ref, {
+class ProductFormResult {
+  const ProductFormResult({required this.saved});
+
+  final bool saved;
+}
+
+Future<ProductFormResult?> _showInventoryProductEditor(
+  BuildContext context, {
   ProductModel? product,
   required List<String> categories,
 }) {
-  final nameCtrl = TextEditingController(text: product?.nombre ?? '');
-  final priceCtrl = TextEditingController(
-    text: product == null ? '' : formatRdAccountingAmount(product.precio),
+  return Navigator.of(context).push<ProductFormResult>(
+    MaterialPageRoute<ProductFormResult>(
+      fullscreenDialog: true,
+      builder: (_) =>
+          InventoryProductEditorPage(product: product, categories: categories),
+    ),
   );
-  final costCtrl = TextEditingController(
-    text: product == null ? '' : formatRdAccountingAmount(product.costo),
-  );
-  final stockCtrl = TextEditingController(
-    text: product == null ? '0' : _stockText(product.stock),
-  );
-  final categoryCtrl = TextEditingController(
-    text: product == null || product.categoriaLabel == 'Sin categoría'
-        ? ''
-        : product.categoriaLabel,
-  );
-  Uint8List? imageBytes;
-  String? imageName;
-  var saving = false;
-  var pickingImage = false;
+}
 
-  Future<void> pickImage(
-    BuildContext dialogContext,
-    void Function(void Function()) setPanelState,
-  ) async {
-    if (pickingImage) return;
-    setPanelState(() => pickingImage = true);
+class InventoryProductEditorPage extends ConsumerStatefulWidget {
+  const InventoryProductEditorPage({
+    super.key,
+    required this.product,
+    required this.categories,
+  });
+
+  final ProductModel? product;
+  final List<String> categories;
+
+  @override
+  ConsumerState<InventoryProductEditorPage> createState() =>
+      _InventoryProductEditorPageState();
+}
+
+class _InventoryProductEditorPageState
+    extends ConsumerState<InventoryProductEditorPage> {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _priceCtrl;
+  late final TextEditingController _costCtrl;
+  late final TextEditingController _stockCtrl;
+  late final TextEditingController _categoryCtrl;
+  late final FocusNode _nameFocus;
+  late final FocusNode _priceFocus;
+  late final FocusNode _costFocus;
+  late final FocusNode _stockFocus;
+  late final FocusNode _categoryFocus;
+
+  Uint8List? _imageBytes;
+  String? _imageName;
+  bool _isSaving = false;
+  bool _isPickingImage = false;
+  String? _formError;
+
+  ProductModel? get _product => widget.product;
+
+  @override
+  void initState() {
+    super.initState();
+    debugPrint('[ProductForm#$hashCode] initState');
+    final product = widget.product;
+    _nameCtrl = TextEditingController(text: product?.nombre ?? '');
+    _priceCtrl = TextEditingController(
+      text: product == null ? '' : formatRdAccountingAmount(product.precio),
+    );
+    _costCtrl = TextEditingController(
+      text: product == null ? '' : formatRdAccountingAmount(product.costo),
+    );
+    _stockCtrl = TextEditingController(
+      text: product == null ? '0' : _stockText(product.stock),
+    );
+    _categoryCtrl = TextEditingController(
+      text: product == null || product.categoriaLabel == 'Sin categoría'
+          ? ''
+          : product.categoriaLabel,
+    );
+    _nameFocus = FocusNode();
+    _priceFocus = FocusNode();
+    _costFocus = FocusNode();
+    _stockFocus = FocusNode();
+    _categoryFocus = FocusNode();
+  }
+
+  @override
+  void dispose() {
+    debugPrint('[ProductForm#$hashCode] dispose');
+    _nameCtrl.dispose();
+    _priceCtrl.dispose();
+    _costCtrl.dispose();
+    _stockCtrl.dispose();
+    _categoryCtrl.dispose();
+    _nameFocus.dispose();
+    _priceFocus.dispose();
+    _costFocus.dispose();
+    _stockFocus.dispose();
+    _categoryFocus.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickImage() async {
+    if (_isPickingImage || _isSaving) return;
+    debugPrint('[ProductForm#$hashCode] pick start mounted=$mounted');
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _isPickingImage = true;
+      _formError = null;
+    });
+
     try {
-      await Future<void>.delayed(Duration.zero);
       final result = await FilePicker.platform.pickFiles(
         type: FileType.image,
         allowMultiple: false,
         withData: true,
       );
-      final file = result?.files.single;
-      if (file?.bytes == null) return;
-      if (!dialogContext.mounted) return;
-      setPanelState(() {
-        imageBytes = file!.bytes;
-        imageName = file.name;
+      if (!mounted || result == null) return;
+      final file = result.files.single;
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        throw StateError('No se pudieron leer los bytes de la imagen');
+      }
+      setState(() {
+        _imageBytes = bytes;
+        _imageName = file.name;
       });
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No se pudo leer la imagen: $e')),
-        );
-      }
+      if (!mounted) return;
+      setState(() => _formError = 'No se pudo leer la imagen: $e');
     } finally {
-      if (dialogContext.mounted) {
-        setPanelState(() => pickingImage = false);
-      } else {
-        pickingImage = false;
+      debugPrint('[ProductForm#$hashCode] pick end mounted=$mounted');
+      if (mounted) {
+        setState(() => _isPickingImage = false);
       }
     }
   }
 
-  Future<void> submit(
-    BuildContext dialogContext,
-    void Function(void Function()) setPanelState,
-  ) async {
-    final name = nameCtrl.text.trim();
-    final price = _parseInventoryNumber(priceCtrl.text);
-    final cost = _parseInventoryNumber(costCtrl.text);
-    final stock = _parseInventoryNumber(stockCtrl.text);
-    final category = categoryCtrl.text.trim();
+  Future<void> _save() async {
+    if (_isSaving) return;
+    debugPrint('[ProductForm#$hashCode] save start mounted=$mounted');
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    final name = _nameCtrl.text.trim();
+    final price = _parseInventoryNumber(_priceCtrl.text);
+    final cost = _parseInventoryNumber(_costCtrl.text);
+    final stock = _parseInventoryNumber(_stockCtrl.text);
+    final category = _categoryCtrl.text.trim();
     if (name.isEmpty ||
         price == null ||
         cost == null ||
         stock == null ||
         category.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Completa nombre, precio, costo, stock y categoría'),
-        ),
+      setState(
+        () => _formError = 'Completa nombre, precio, costo, stock y categoría',
       );
       return;
     }
 
-    setPanelState(() => saving = true);
+    setState(() {
+      _isSaving = true;
+      _formError = null;
+    });
+
     try {
       final repo = ref.read(catalogRepositoryProvider);
       String? uploadedImagePath;
-      if (imageBytes != null && imageName != null) {
+      if (_imageBytes != null && _imageName != null) {
         uploadedImagePath = await repo.uploadImage(
-          bytes: imageBytes!,
-          filename: imageName!,
+          bytes: _imageBytes!,
+          filename: _imageName!,
+        );
+        final cachedUrl = buildProductImageUrl(
+          imageUrl: uploadedImagePath,
+          baseUrl: Env.apiBaseUrl,
+        );
+        unawaited(
+          FulltechImageCacheManager.putImageBytes(
+            url: cachedUrl,
+            bytes: _imageBytes!,
+            filename: _imageName,
+          ),
         );
       }
+
+      final product = _product;
       if (product == null) {
         await repo.createProduct(
           nombre: name,
@@ -1871,273 +1973,277 @@ Future<void> _showInventoryProductEditor(
           fotoUrl: uploadedImagePath,
         );
       }
-      if (dialogContext.mounted) Navigator.pop(dialogContext);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              product == null ? 'Producto creado' : 'Producto actualizado',
-            ),
-          ),
-        );
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!context.mounted) return;
-          unawaited(
-            ref
-                .read(catalogControllerProvider.notifier)
-                .load(forceRemote: true),
-          );
-        });
-      }
+
+      if (!mounted) return;
+      debugPrint('[ProductForm#$hashCode] pop saved');
+      Navigator.of(context).pop(const ProductFormResult(saved: true));
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('No se pudo guardar: $e')));
-      }
-    } finally {
-      if (dialogContext.mounted) setPanelState(() => saving = false);
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _formError = 'No se pudo guardar: $e';
+      });
     }
   }
 
-  final existingImageUrl = product?.displayFotoUrl?.trim() ?? '';
+  void _close() {
+    if (_isSaving) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    debugPrint('[ProductForm#$hashCode] pop cancel');
+    Navigator.of(context).pop(const ProductFormResult(saved: false));
+  }
 
-  return Navigator.of(context)
-      .push<void>(
-        MaterialPageRoute<void>(
-          fullscreenDialog: true,
-          builder: (pageContext) {
-            return StatefulBuilder(
-              builder: (dialogContext, setPanelState) => Material(
-                color: Colors.white,
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 18, 14, 14),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 42,
-                            height: 42,
-                            decoration: BoxDecoration(
-                              color: _lightBlueHover,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(
-                              product == null
-                                  ? Icons.add_box_outlined
-                                  : Icons.edit_outlined,
-                              color: _primaryBlue,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              product == null
-                                  ? 'Nuevo producto'
-                                  : 'Editar producto',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 20,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () => Navigator.pop(dialogContext),
-                            icon: const Icon(Icons.close_rounded),
-                          ),
-                        ],
-                      ),
+  @override
+  Widget build(BuildContext context) {
+    final product = _product;
+    final existingImageUrl = product?.displayFotoUrl?.trim() ?? '';
+
+    return Material(
+      color: Colors.white,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 14, 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: _lightBlueHover,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    product == null
+                        ? Icons.add_box_outlined
+                        : Icons.edit_outlined,
+                    color: _primaryBlue,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    product == null ? 'Nuevo producto' : 'Editar producto',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 20,
                     ),
-                    const Divider(height: 1),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            TextField(
-                              controller: nameCtrl,
-                              decoration: const InputDecoration(
-                                labelText: 'Nombre del producto',
-                                border: OutlineInputBorder(),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: priceCtrl,
-                                    keyboardType:
-                                        const TextInputType.numberWithOptions(
-                                          decimal: true,
-                                        ),
-                                    decoration: const InputDecoration(
-                                      labelText: 'Precio',
-                                      border: OutlineInputBorder(),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: TextField(
-                                    controller: costCtrl,
-                                    keyboardType:
-                                        const TextInputType.numberWithOptions(
-                                          decimal: true,
-                                        ),
-                                    decoration: const InputDecoration(
-                                      labelText: 'Costo',
-                                      border: OutlineInputBorder(),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            TextField(
-                              controller: stockCtrl,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                    decimal: true,
-                                  ),
-                              decoration: const InputDecoration(
-                                labelText: 'Stock disponible',
-                                border: OutlineInputBorder(),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            TextField(
-                              controller: categoryCtrl,
-                              decoration: const InputDecoration(
-                                labelText: 'Categoría',
-                                border: OutlineInputBorder(),
-                              ),
-                            ),
-                            if (categories.isNotEmpty) ...[
-                              const SizedBox(height: 10),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 6,
-                                children: [
-                                  for (final category in categories)
-                                    ChoiceChip(
-                                      label: Text(category),
-                                      selected:
-                                          categoryCtrl.text.trim() == category,
-                                      onSelected: (_) {
-                                        setPanelState(
-                                          () => categoryCtrl.text = category,
-                                        );
-                                      },
-                                    ),
-                                ],
-                              ),
-                            ],
-                            const SizedBox(height: 16),
-                            OutlinedButton.icon(
-                              onPressed: saving || pickingImage
-                                  ? null
-                                  : () =>
-                                        pickImage(dialogContext, setPanelState),
-                              icon: pickingImage
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.upload_file_rounded),
-                              label: Text(
-                                pickingImage
-                                    ? 'Seleccionando imagen...'
-                                    : imageName ??
-                                          'Subir imagen desde el ordenador',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Container(
-                              height: 160,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: _lightBlueHover,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: _borderSoft),
-                              ),
-                              clipBehavior: Clip.antiAlias,
-                              child: imageBytes != null
-                                  ? Image.memory(
-                                      imageBytes!,
-                                      fit: BoxFit.cover,
-                                      width: double.infinity,
-                                    )
-                                  : (product != null &&
-                                        existingImageUrl.isNotEmpty)
-                                  ? ProductNetworkImage(
-                                      imageUrl: existingImageUrl,
-                                      productId: product.id,
-                                      productName: product.nombre,
-                                      originalUrl: product.originalFotoUrl,
-                                      fit: BoxFit.cover,
-                                      fallback: const Icon(
-                                        Icons.image_outlined,
-                                        size: 44,
-                                        color: _textSecondary,
-                                      ),
-                                    )
-                                  : const Icon(
-                                      Icons.image_outlined,
-                                      size: 44,
-                                      color: _textSecondary,
-                                    ),
-                            ),
-                          ],
-                        ),
-                      ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: _isSaving ? null : _close,
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_formError != null) ...[
+                    _FormErrorBanner(message: _formError!),
+                    const SizedBox(height: 12),
+                  ],
+                  TextField(
+                    controller: _nameCtrl,
+                    focusNode: _nameFocus,
+                    enabled: !_isSaving,
+                    decoration: const InputDecoration(
+                      labelText: 'Nombre del producto',
+                      border: OutlineInputBorder(),
                     ),
-                    const Divider(height: 1),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: saving
-                              ? null
-                              : () => submit(dialogContext, setPanelState),
-                          icon: saving
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(Icons.save_outlined),
-                          label: Text(
-                            product == null
-                                ? 'Crear producto'
-                                : 'Guardar cambios',
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _priceCtrl,
+                          focusNode: _priceFocus,
+                          enabled: !_isSaving,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: 'Precio',
+                            border: OutlineInputBorder(),
                           ),
                         ),
                       ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: _costCtrl,
+                          focusNode: _costFocus,
+                          enabled: !_isSaving,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: 'Costo',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _stockCtrl,
+                    focusNode: _stockFocus,
+                    enabled: !_isSaving,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: 'Stock disponible',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _categoryCtrl,
+                    focusNode: _categoryFocus,
+                    enabled: !_isSaving,
+                    decoration: const InputDecoration(
+                      labelText: 'Categoría',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  if (widget.categories.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        for (final category in widget.categories)
+                          ChoiceChip(
+                            label: Text(category),
+                            selected: _categoryCtrl.text.trim() == category,
+                            onSelected: _isSaving
+                                ? null
+                                : (_) {
+                                    setState(() {
+                                      _categoryCtrl.text = category;
+                                    });
+                                  },
+                          ),
+                      ],
                     ),
                   ],
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: _isSaving || _isPickingImage ? null : _pickImage,
+                    icon: _isPickingImage
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.upload_file_rounded),
+                    label: Text(
+                      _isPickingImage
+                          ? 'Seleccionando imagen...'
+                          : _imageName ?? 'Subir imagen desde el ordenador',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    height: 160,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: _lightBlueHover,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _borderSoft),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: _imageBytes != null
+                        ? Image.memory(
+                            _imageBytes!,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                          )
+                        : (product != null && existingImageUrl.isNotEmpty)
+                        ? ProductNetworkImage(
+                            imageUrl: existingImageUrl,
+                            productId: product.id,
+                            productName: product.nombre,
+                            originalUrl: product.originalFotoUrl,
+                            fit: BoxFit.cover,
+                            fallback: const Icon(
+                              Icons.image_outlined,
+                              size: 44,
+                              color: _textSecondary,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.image_outlined,
+                            size: 44,
+                            color: _textSecondary,
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _isSaving ? null : _save,
+                icon: _isSaving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.save_outlined),
+                label: Text(
+                  product == null ? 'Crear producto' : 'Guardar cambios',
                 ),
               ),
-            );
-          },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FormErrorBanner extends StatelessWidget {
+  const _FormErrorBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF1F2),
+        border: Border.all(color: const Color(0xFFFECACA)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Text(
+          message,
+          style: const TextStyle(
+            color: Color(0xFFB91C1C),
+            fontWeight: FontWeight.w700,
+          ),
         ),
-      )
-      .whenComplete(() {
-        nameCtrl.dispose();
-        priceCtrl.dispose();
-        costCtrl.dispose();
-        stockCtrl.dispose();
-        categoryCtrl.dispose();
-      });
+      ),
+    );
+  }
 }

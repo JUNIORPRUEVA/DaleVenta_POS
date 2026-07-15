@@ -44,7 +44,8 @@ class MediaGalleryItem {
         : 'Evidencia técnica';
   }
 
-  String get installationLabel => isInstallationCompleted ? 'Instalado' : 'Pendiente';
+  String get installationLabel =>
+      isInstallationCompleted ? 'Instalado' : 'Pendiente';
 
   String get orderStatusLabel {
     switch (orderStatus) {
@@ -83,8 +84,13 @@ class MediaGalleryItem {
     final cleanOrderId = orderId.replaceAll('-', '').trim().toUpperCase();
     final orderToken = cleanOrderId.isEmpty
         ? 'MEDIA'
-        : (cleanOrderId.length > 8 ? cleanOrderId.substring(0, 8) : cleanOrderId);
-    final extension = _inferFileExtension(url, fallback: isVideo ? 'mp4' : 'jpg');
+        : (cleanOrderId.length > 8
+              ? cleanOrderId.substring(0, 8)
+              : cleanOrderId);
+    final extension = _inferFileExtension(
+      url,
+      fallback: isVideo ? 'mp4' : 'jpg',
+    );
     final prefix = isVideo ? 'video' : 'imagen';
     return 'fulltech_${prefix}_$orderToken.$extension';
   }

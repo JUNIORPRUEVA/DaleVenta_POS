@@ -66,8 +66,8 @@ class ClienteProfileClient {
               true
           ? null
           : (json['locationUrl'] ?? json['location_url']) as String?,
-        latitude: parseLatitude(json['latitude']),
-        longitude: parseLongitude(json['longitude']),
+      latitude: parseLatitude(json['latitude']),
+      longitude: parseLongitude(json['longitude']),
       notas: (json['notas'] as String?)?.trim().isEmpty == true
           ? null
           : json['notas'] as String?,
@@ -211,7 +211,7 @@ class ClienteProfileMetrics {
       legacyServicesCount: (json['legacyServicesCount'] as num?)?.toInt() ?? 0,
       serviceReferencesCount:
           (json['serviceReferencesCount'] as num?)?.toInt() ?? 0,
-        legacyServicesTotal: _parseNum(json['legacyServicesTotal']),
+      legacyServicesTotal: _parseNum(json['legacyServicesTotal']),
       lastServiceAt: json['lastServiceAt'] != null
           ? DateTime.tryParse(json['lastServiceAt'].toString())
           : null,
@@ -219,7 +219,7 @@ class ClienteProfileMetrics {
           ? DateTime.tryParse(json['lastReferenceAt'].toString())
           : null,
       cotizacionesCount: (json['cotizacionesCount'] as num?)?.toInt() ?? 0,
-          cotizacionesTotal: _parseNum(json['cotizacionesTotal']),
+      cotizacionesTotal: _parseNum(json['cotizacionesTotal']),
       lastCotizacionAt: json['lastCotizacionAt'] != null
           ? DateTime.tryParse(json['lastCotizacionAt'].toString())
           : null,

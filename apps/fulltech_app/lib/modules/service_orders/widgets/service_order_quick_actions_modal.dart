@@ -1642,8 +1642,7 @@ class _ServiceOrderQuickActionsSheet extends ConsumerWidget {
 
           setModalState(() {
             isListening = true;
-            voiceCaption =
-                'Grabando... usa detener y procesar cuando termines';
+            voiceCaption = 'Grabando... usa detener y procesar cuando termines';
           });
           debugPrint('[service-order-voice] invoking listen');
 
@@ -1656,14 +1655,17 @@ class _ServiceOrderQuickActionsSheet extends ConsumerWidget {
               cancelOnError: true,
             ),
             onSoundLevelChange: (level) {
-              debugPrint('[service-order-voice] onSoundLevelChange level=$level');
+              debugPrint(
+                '[service-order-voice] onSoundLevelChange level=$level',
+              );
               if (!modalContext.mounted) return;
               if (level > 0) {
                 heardAudioDuringSession = true;
               }
               setModalState(() {
                 if (voiceSessionText.trim().isNotEmpty) {
-                  voiceCaption = 'Grabando... audio detectado y texto reconocido';
+                  voiceCaption =
+                      'Grabando... audio detectado y texto reconocido';
                 } else if (level > 0) {
                   voiceCaption = 'Grabando... audio detectado, sigue hablando';
                 } else {
@@ -1752,7 +1754,12 @@ class _ServiceOrderQuickActionsSheet extends ConsumerWidget {
                               decoration: InputDecoration(
                                 hintText: hintText,
                                 alignLabelWithHint: true,
-                                contentPadding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+                                contentPadding: const EdgeInsets.fromLTRB(
+                                  14,
+                                  16,
+                                  14,
+                                  16,
+                                ),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(14),
                                 ),

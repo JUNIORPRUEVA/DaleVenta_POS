@@ -3503,6 +3503,67 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     context.go(Routes.ventasLista);
   }
 
+  String _saleDateLabel(DateTime? date) {
+    if (date == null) return 'Sin fecha';
+    return DateFormat('dd/MM/yyyy HH:mm').format(date.toLocal());
+  }
+
+  String _saleShortId(SaleModel sale) {
+    final id = sale.id.trim();
+    if (id.length <= 8) return id;
+    return '${id.substring(0, 8)}...';
+  }
+
+  Future<void> _openRecentSalesPanel() async {
+    final repo = ref.read(ventasRepositoryProvider);
+    final now = DateTime.now();
+    final from = DateTime(now.year, now.month, now.day).subtract(
+      const Duration(days: 30),
+    );
+    final to = DateTime(now.year, now.month, now.day);
+
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Ventas recientes',
+      barrierColor: Colors.black.withValues(alpha: 0.08),
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: _RecentSalesPanel(
+            loadSales: () => repo.listSales(
+              from: from,
+              to: to,
+              includeDeleted: true,
+            ),
+            money: _money,
+            dateLabel: _saleDateLabel,
+            shortId: _saleShortId,
+            onClose: () => Navigator.of(dialogContext).pop(),
+            onOpenFullHistory: () {
+              Navigator.of(dialogContext).pop();
+              _openSalesList();
+            },
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0.08, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
+        );
+      },
+    );
+  }
+
   Future<void> _finalizeCotizacion() async {
     if (_selectedClientId == null || _selectedClientName == 'Sin cliente') {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -4325,7 +4386,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                         utilityAmount: _utilityAmount,
                         money: _money,
                         onPickClient: _openClientDialog,
-                        onOpenHistory: _openSalesList,
+                        onOpenHistory: _openRecentSalesPanel,
                         onToggleItbis: (value) =>
                             _commitEditorChange(() => _includeItbis = value),
                         onClear: !_hasEditorContent

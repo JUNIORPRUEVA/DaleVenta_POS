@@ -24,7 +24,8 @@ class ClientModel {
       telefono: json['telefono'] ?? '',
       email: json['email'] as String?,
       direccion: json['direccion'] as String? ?? json['address'] as String?,
-      locationUrl: json['locationUrl'] as String? ?? json['location_url'] as String?,
+      locationUrl:
+          json['locationUrl'] as String? ?? json['location_url'] as String?,
       notas: json['notas'] as String? ?? json['notes'] as String?,
     );
   }

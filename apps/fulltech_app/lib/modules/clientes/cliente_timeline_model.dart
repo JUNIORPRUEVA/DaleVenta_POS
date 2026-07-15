@@ -37,7 +37,7 @@ class ClienteTimelineEvent {
       eventId: (json['eventId'] ?? '').toString(),
       at: at,
       title: (json['title'] ?? '').toString(),
-        amount: _parseAmount(json['amount']),
+      amount: _parseAmount(json['amount']),
       status: (json['status'] as String?)?.trim().isEmpty == true
           ? null
           : json['status'] as String?,

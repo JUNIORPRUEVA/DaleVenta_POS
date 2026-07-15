@@ -37,9 +37,7 @@ class _ConfiguracionUsuariosScreenState
     if (!isAdmin) {
       return Scaffold(
         appBar: AppBar(title: const Text('Configuración por usuario')),
-        body: const Center(
-          child: Text('Solo administradores pueden acceder.'),
-        ),
+        body: const Center(child: Text('Solo administradores pueden acceder.')),
       );
     }
 
@@ -54,8 +52,9 @@ class _ConfiguracionUsuariosScreenState
             IconButton(
               icon: const Icon(Icons.refresh_outlined),
               tooltip: 'Actualizar',
-              onPressed: () =>
-                  ref.read(whatsappControllerProvider.notifier).loadAdminUsers(),
+              onPressed: () => ref
+                  .read(whatsappControllerProvider.notifier)
+                  .loadAdminUsers(),
             ),
         ],
       ),
@@ -64,14 +63,16 @@ class _ConfiguracionUsuariosScreenState
           : state.error != null && state.adminUsers.isEmpty
           ? _ErrorView(
               message: state.error!,
-              onRetry: () =>
-                  ref.read(whatsappControllerProvider.notifier).loadAdminUsers(),
+              onRetry: () => ref
+                  .read(whatsappControllerProvider.notifier)
+                  .loadAdminUsers(),
             )
           : state.adminUsers.isEmpty
           ? _EmptyView(theme: theme)
           : RefreshIndicator(
-              onRefresh: () =>
-                  ref.read(whatsappControllerProvider.notifier).loadAdminUsers(),
+              onRefresh: () => ref
+                  .read(whatsappControllerProvider.notifier)
+                  .loadAdminUsers(),
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
                 children: [
@@ -113,23 +114,29 @@ class _ConfiguracionUsuariosScreenState
                       ],
                     ),
                     child: Column(
-                      children: state.adminUsers.asMap().entries.map((entry) {
-                        final i = entry.key;
-                        final u = entry.value;
-                        final isLast = i == state.adminUsers.length - 1;
-                        return _UserRow(
-                          user: u,
-                          isFirst: i == 0,
-                          isLast: isLast,
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) =>
-                                  ConfiguracionUsuarioDetalleScreen(user: u),
-                            ),
-                          ),
-                        );
-                      }).toList(growable: false),
+                      children: state.adminUsers
+                          .asMap()
+                          .entries
+                          .map((entry) {
+                            final i = entry.key;
+                            final u = entry.value;
+                            final isLast = i == state.adminUsers.length - 1;
+                            return _UserRow(
+                              user: u,
+                              isFirst: i == 0,
+                              isLast: isLast,
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute<void>(
+                                  builder: (_) =>
+                                      ConfiguracionUsuarioDetalleScreen(
+                                        user: u,
+                                      ),
+                                ),
+                              ),
+                            );
+                          })
+                          .toList(growable: false),
                     ),
                   ),
                 ],
@@ -154,12 +161,11 @@ class _WhatsappSummaryBadges extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final connected =
-        users.where((u) => u.whatsapp?.isConnected == true).length;
+    final connected = users
+        .where((u) => u.whatsapp?.isConnected == true)
+        .length;
     final pending = users
-        .where(
-          (u) => u.whatsapp != null && u.whatsapp!.isConnected == false,
-        )
+        .where((u) => u.whatsapp != null && u.whatsapp!.isConnected == false)
         .length;
 
     return Row(
@@ -193,8 +199,11 @@ class _Dot extends StatelessWidget {
   const _Dot({required this.color});
   final Color color;
   @override
-  Widget build(BuildContext context) =>
-      Container(width: 7, height: 7, decoration: BoxDecoration(color: color, shape: BoxShape.circle));
+  Widget build(BuildContext context) => Container(
+    width: 7,
+    height: 7,
+    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+  );
 }
 
 // ─── USER ROW ────────────────────────────────────────────────────────────────

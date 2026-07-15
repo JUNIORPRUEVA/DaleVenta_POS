@@ -68,10 +68,10 @@ class GalleryContentState {
 
 final galleryContentControllerProvider =
     StateNotifierProvider<GalleryContentController, GalleryContentState>((ref) {
-  // In a real app, inject Dio via ref.read(dioProvider)
-  // For now, this would be wired in your main app setup
-  throw UnimplementedError('Provide GalleryContentApi instance');
-});
+      // In a real app, inject Dio via ref.read(dioProvider)
+      // For now, this would be wired in your main app setup
+      throw UnimplementedError('Provide GalleryContentApi instance');
+    });
 
 class GalleryContentController extends StateNotifier<GalleryContentState> {
   GalleryContentController(this._api) : super(const GalleryContentState()) {
@@ -88,7 +88,7 @@ class GalleryContentController extends StateNotifier<GalleryContentState> {
 
   Future<void> loadContent({bool refresh = false}) async {
     if (state.loading) return;
-    
+
     state = state.copyWith(
       loading: true,
       clearError: refresh,
@@ -113,10 +113,7 @@ class GalleryContentController extends StateNotifier<GalleryContentState> {
         hasMore: items.length == 50,
       );
     } catch (error) {
-      state = state.copyWith(
-        loading: false,
-        error: _formatError(error),
-      );
+      state = state.copyWith(loading: false, error: _formatError(error));
     }
   }
 
@@ -147,11 +144,7 @@ class GalleryContentController extends StateNotifier<GalleryContentState> {
   }
 
   void clearSearch() {
-    state = state.copyWith(
-      searchQuery: '',
-      selectedItems: const {},
-      page: 1,
-    );
+    state = state.copyWith(searchQuery: '', selectedItems: const {}, page: 1);
     loadContent(refresh: true);
   }
 
@@ -186,18 +179,12 @@ class GalleryContentController extends StateNotifier<GalleryContentState> {
       await _api.toggleFavorite(id, favorite: !item.favorito);
 
       final updated = state.allItems
-          .map((i) =>
-              i.id == id
-                  ? i.copyWith(favorito: !i.favorito)
-                  : i)
+          .map((i) => i.id == id ? i.copyWith(favorito: !i.favorito) : i)
           .toList();
 
       final filtered = _filterItems(updated);
 
-      state = state.copyWith(
-        allItems: updated,
-        filteredItems: filtered,
-      );
+      state = state.copyWith(allItems: updated, filteredItems: filtered);
     } catch (error) {
       state = state.copyWith(error: _formatError(error));
     }
@@ -213,10 +200,11 @@ class GalleryContentController extends StateNotifier<GalleryContentState> {
       );
 
       final updated = state.allItems
-          .map((i) =>
-              state.selectedItems.contains(i.id)
-                  ? i.copyWith(favorito: favorite)
-                  : i)
+          .map(
+            (i) => state.selectedItems.contains(i.id)
+                ? i.copyWith(favorito: favorite)
+                : i,
+          )
           .toList();
 
       final filtered = _filterItems(updated);
@@ -263,10 +251,7 @@ class GalleryContentController extends StateNotifier<GalleryContentState> {
         busy: false,
       );
     } catch (error) {
-      state = state.copyWith(
-        busy: false,
-        error: _formatError(error),
-      );
+      state = state.copyWith(busy: false, error: _formatError(error));
     }
   }
 
@@ -301,10 +286,7 @@ class GalleryContentController extends StateNotifier<GalleryContentState> {
         uploading: false,
       );
     } catch (error) {
-      state = state.copyWith(
-        uploading: false,
-        error: _formatError(error),
-      );
+      state = state.copyWith(uploading: false, error: _formatError(error));
     }
   }
 
@@ -327,10 +309,7 @@ class GalleryContentController extends StateNotifier<GalleryContentState> {
         busy: false,
       );
     } catch (error) {
-      state = state.copyWith(
-        busy: false,
-        error: _formatError(error),
-      );
+      state = state.copyWith(busy: false, error: _formatError(error));
     }
   }
 
@@ -340,8 +319,7 @@ class GalleryContentController extends StateNotifier<GalleryContentState> {
     try {
       state = state.copyWith(busy: true, clearError: true);
 
-      final imported =
-          await _api.importFromGlobalGallery(mediaIds: mediaIds);
+      final imported = await _api.importFromGlobalGallery(mediaIds: mediaIds);
 
       final allItems = [...imported, ...state.allItems];
       final filtered = _filterItems(allItems);
@@ -352,10 +330,7 @@ class GalleryContentController extends StateNotifier<GalleryContentState> {
         busy: false,
       );
     } catch (error) {
-      state = state.copyWith(
-        busy: false,
-        error: _formatError(error),
-      );
+      state = state.copyWith(busy: false, error: _formatError(error));
     }
   }
 
@@ -382,10 +357,7 @@ class GalleryContentController extends StateNotifier<GalleryContentState> {
         busy: false,
       );
     } catch (error) {
-      state = state.copyWith(
-        busy: false,
-        error: _formatError(error),
-      );
+      state = state.copyWith(busy: false, error: _formatError(error));
     }
   }
 
@@ -403,10 +375,12 @@ class GalleryContentController extends StateNotifier<GalleryContentState> {
     if (state.searchQuery.isNotEmpty) {
       final query = state.searchQuery.toLowerCase();
       filtered = filtered
-          .where((item) =>
-              item.descripcion.toLowerCase().contains(query) ||
-              item.categoria.toLowerCase().contains(query) ||
-              item.tags.any((t) => t.toLowerCase().contains(query)))
+          .where(
+            (item) =>
+                item.descripcion.toLowerCase().contains(query) ||
+                item.categoria.toLowerCase().contains(query) ||
+                item.tags.any((t) => t.toLowerCase().contains(query)),
+          )
           .toList();
     }
 
@@ -426,36 +400,37 @@ class GalleryContentController extends StateNotifier<GalleryContentState> {
         return items.where((i) => i.origen == ContentOrigin.producto).toList();
       case 'instalaciones':
         return items
-            .where((i) =>
-                i.categoria.toLowerCase().contains('instalación') ||
-                i.tags.any((t) => t.toLowerCase().contains('instalación')))
+            .where(
+              (i) =>
+                  i.categoria.toLowerCase().contains('instalación') ||
+                  i.tags.any((t) => t.toLowerCase().contains('instalación')),
+            )
             .toList();
       case 'estados_publicados':
         return items
-            .where((i) =>
-                i.publicado &&
-                i.usadoEn.contains(ContentUsage.estados))
+            .where(
+              (i) => i.publicado && i.usadoEn.contains(ContentUsage.estados),
+            )
             .toList();
       case 'campanas_publicadas':
         return items
-            .where((i) =>
-                i.publicado &&
-                i.usadoEn.contains(ContentUsage.campanas))
+            .where(
+              (i) => i.publicado && i.usadoEn.contains(ContentUsage.campanas),
+            )
             .toList();
       case 'marketplace_publicado':
         return items
-            .where((i) =>
-                i.publicado &&
-                i.usadoEn.contains(ContentUsage.marketplace))
+            .where(
+              (i) =>
+                  i.publicado && i.usadoEn.contains(ContentUsage.marketplace),
+            )
             .toList();
       case 'favoritos':
         return items.where((i) => i.favorito).toList();
       case 'recientes':
         final now = DateTime.now();
         final sevenDaysAgo = now.subtract(const Duration(days: 7));
-        return items
-            .where((i) => i.fecha.isAfter(sevenDaysAgo))
-            .toList()
+        return items.where((i) => i.fecha.isAfter(sevenDaysAgo)).toList()
           ..sort((a, b) => b.fecha.compareTo(a.fecha));
       default:
         return items;

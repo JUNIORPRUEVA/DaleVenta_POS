@@ -146,8 +146,9 @@ class CotizacionesLocalRepository {
 
   Future<List<CotizacionModel>> listAll() async {
     if (kIsWeb) {
-      final items = _memoryQuotes.where((item) => !_isDraft(item)).toList(growable: false)
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      final items =
+          _memoryQuotes.where((item) => !_isDraft(item)).toList(growable: false)
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return items;
     }
 
@@ -175,7 +176,10 @@ class CotizacionesLocalRepository {
 
   Future<void> upsert(CotizacionModel cotizacion) async {
     if (kIsWeb) {
-      final next = [..._memoryQuotes.where((item) => item.id != cotizacion.id), cotizacion];
+      final next = [
+        ..._memoryQuotes.where((item) => item.id != cotizacion.id),
+        cotizacion,
+      ];
       next.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       _memoryQuotes = next;
       if (_memoryDraft?.id == cotizacion.id) {
@@ -253,7 +257,9 @@ class CotizacionesLocalRepository {
 
   Future<void> deleteById(String id) async {
     if (kIsWeb) {
-      _memoryQuotes = _memoryQuotes.where((item) => item.id != id).toList(growable: false);
+      _memoryQuotes = _memoryQuotes
+          .where((item) => item.id != id)
+          .toList(growable: false);
       if (_memoryDraft?.id == id) {
         _memoryDraft = null;
       }
@@ -262,7 +268,11 @@ class CotizacionesLocalRepository {
 
     final db = await _db;
     await db.transaction((txn) async {
-      await txn.delete(_tableItems, where: 'cotizacion_id = ?', whereArgs: [id]);
+      await txn.delete(
+        _tableItems,
+        where: 'cotizacion_id = ?',
+        whereArgs: [id],
+      );
       await txn.delete(_tableCotizaciones, where: 'id = ?', whereArgs: [id]);
     });
   }
@@ -282,7 +292,10 @@ class CotizacionesLocalRepository {
     });
   }
 
-  Future<void> _upsert(CotizacionModel cotizacion, {required bool isDraft}) async {
+  Future<void> _upsert(
+    CotizacionModel cotizacion, {
+    required bool isDraft,
+  }) async {
     final db = await _db;
     final now = DateTime.now().toIso8601String();
 
@@ -347,10 +360,14 @@ class CotizacionesLocalRepository {
     return result;
   }
 
-  CotizacionModel _toModel(Map<String, Object?> row, List<Map<String, Object?>> itemRows) {
+  CotizacionModel _toModel(
+    Map<String, Object?> row,
+    List<Map<String, Object?>> itemRows,
+  ) {
     return CotizacionModel(
       id: (row['id'] ?? '').toString(),
-      createdAt: DateTime.tryParse((row['created_at'] ?? '').toString()) ??
+      createdAt:
+          DateTime.tryParse((row['created_at'] ?? '').toString()) ??
           DateTime.now(),
       customerId: row['customer_id']?.toString(),
       customerName: (row['customer_name'] ?? '').toString(),
@@ -368,15 +385,14 @@ class CotizacionesLocalRepository {
               productId: (itemRow['product_id'] ?? '').toString(),
               nombre: (itemRow['nombre'] ?? '').toString(),
               imageUrl: itemRow['image_url']?.toString(),
-              originalUnitPrice:
-                  (itemRow['original_unit_price'] as num?)?.toDouble(),
+              originalUnitPrice: (itemRow['original_unit_price'] as num?)
+                  ?.toDouble(),
               costUnit: (itemRow['cost_unit'] as num?)?.toDouble(),
-              externalCostUnit:
-                  (itemRow['external_cost_unit'] as num?)?.toDouble(),
-              subtotalCostSnapshot:
-                  (itemRow['subtotal_cost_snapshot'] as num?)?.toDouble(),
-              profitSnapshot:
-                  (itemRow['profit_snapshot'] as num?)?.toDouble(),
+              externalCostUnit: (itemRow['external_cost_unit'] as num?)
+                  ?.toDouble(),
+              subtotalCostSnapshot: (itemRow['subtotal_cost_snapshot'] as num?)
+                  ?.toDouble(),
+              profitSnapshot: (itemRow['profit_snapshot'] as num?)?.toDouble(),
               unitPrice: (itemRow['unit_price'] as num?)?.toDouble() ?? 0,
               qty: (itemRow['qty'] as num?)?.toDouble() ?? 0,
             ),

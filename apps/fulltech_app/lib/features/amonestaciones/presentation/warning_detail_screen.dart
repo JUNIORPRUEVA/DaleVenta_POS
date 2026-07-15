@@ -15,7 +15,8 @@ class WarningDetailScreen extends ConsumerStatefulWidget {
   const WarningDetailScreen({super.key, required this.warningId});
 
   @override
-  ConsumerState<WarningDetailScreen> createState() => _WarningDetailScreenState();
+  ConsumerState<WarningDetailScreen> createState() =>
+      _WarningDetailScreenState();
 }
 
 class _WarningDetailScreenState extends ConsumerState<WarningDetailScreen> {
@@ -30,13 +31,16 @@ class _WarningDetailScreenState extends ConsumerState<WarningDetailScreen> {
     if (!isAdmin) {
       return Scaffold(
         appBar: AppBar(title: const Text('Detalle amonestacion')),
-        body: const Center(child: Text('Acceso no permitido para este usuario')),
+        body: const Center(
+          child: Text('Acceso no permitido para este usuario'),
+        ),
       );
     }
 
     final async = ref.watch(warningDetailProvider(widget.warningId));
     return async.when(
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, _) => Scaffold(
         appBar: AppBar(title: const Text('Detalle amonestacion')),
         body: Center(child: Text('Error: $e')),
@@ -56,11 +60,7 @@ class _WarningDetailScreenState extends ConsumerState<WarningDetailScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              w.warningNumber,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            Text(w.warningNumber, maxLines: 1, overflow: TextOverflow.ellipsis),
             Text(
               '$_companyHeaderName | Tel: $_companyHeaderPhone | RNC: $_companyHeaderRnc',
               maxLines: 1,
@@ -111,7 +111,10 @@ class _WarningDetailScreenState extends ConsumerState<WarningDetailScreen> {
                 Expanded(
                   child: Text(
                     reason.isEmpty ? 'Sin motivo' : reason,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
                   ),
                 ),
                 _Pill(
@@ -122,32 +125,66 @@ class _WarningDetailScreenState extends ConsumerState<WarningDetailScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          _InfoPanel(title: 'Empleado', rows: [
-            ('Nombre', _v(w.employeeNameSnapshot ?? w.employeeUser?.nombreCompleto)),
-            ('Cedula', _v(w.employeeCedulaSnapshot ?? w.employeeUser?.cedula)),
-            ('Cargo', _v(w.employeePositionSnapshot ?? w.employeeUser?.workContractJobTitle)),
-            ('Departamento/Area', _v(w.employeeDepartmentSnapshot)),
-            ('Telefono', _v(w.employeePhoneSnapshot ?? w.employeeUser?.telefono)),
-          ]),
+          _InfoPanel(
+            title: 'Empleado',
+            rows: [
+              (
+                'Nombre',
+                _v(w.employeeNameSnapshot ?? w.employeeUser?.nombreCompleto),
+              ),
+              (
+                'Cedula',
+                _v(w.employeeCedulaSnapshot ?? w.employeeUser?.cedula),
+              ),
+              (
+                'Cargo',
+                _v(
+                  w.employeePositionSnapshot ??
+                      w.employeeUser?.workContractJobTitle,
+                ),
+              ),
+              ('Departamento/Area', _v(w.employeeDepartmentSnapshot)),
+              (
+                'Telefono',
+                _v(w.employeePhoneSnapshot ?? w.employeeUser?.telefono),
+              ),
+            ],
+          ),
           const SizedBox(height: 10),
-          _InfoPanel(title: 'Documento', rows: [
-            ('Fecha amonestacion', WarningLabels.fmt(w.warningDate)),
-            ('Fecha del hecho', WarningLabels.fmt(w.incidentDate)),
-            ('Hora aproximada', _v(w.incidentTime)),
-            ('Lugar', _v(w.incidentPlace)),
-            (
-              'Tipo',
-              WarningLabels.warningType[w.warningType ?? ''] ?? _v(w.warningType),
-            ),
-            ('Encargado', _v(w.issuedByNameSnapshot ?? w.createdByUser?.nombreCompleto)),
-            ('Cargo encargado', _v(w.issuedByPositionSnapshot ?? w.createdByUser?.workContractJobTitle)),
-          ]),
+          _InfoPanel(
+            title: 'Documento',
+            rows: [
+              ('Fecha amonestacion', WarningLabels.fmt(w.warningDate)),
+              ('Fecha del hecho', WarningLabels.fmt(w.incidentDate)),
+              ('Hora aproximada', _v(w.incidentTime)),
+              ('Lugar', _v(w.incidentPlace)),
+              (
+                'Tipo',
+                WarningLabels.warningType[w.warningType ?? ''] ??
+                    _v(w.warningType),
+              ),
+              (
+                'Encargado',
+                _v(w.issuedByNameSnapshot ?? w.createdByUser?.nombreCompleto),
+              ),
+              (
+                'Cargo encargado',
+                _v(
+                  w.issuedByPositionSnapshot ??
+                      w.createdByUser?.workContractJobTitle,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 10),
-          _InfoPanel(title: 'Empresa', rows: [
-            ('Nombre', _v(w.companyNameSnapshot)),
-            ('RNC', _v(w.companyRncSnapshot)),
-            ('Direccion', _v(w.companyAddressSnapshot)),
-          ]),
+          _InfoPanel(
+            title: 'Empresa',
+            rows: [
+              ('Nombre', _v(w.companyNameSnapshot)),
+              ('RNC', _v(w.companyRncSnapshot)),
+              ('Direccion', _v(w.companyAddressSnapshot)),
+            ],
+          ),
           const SizedBox(height: 10),
           _TextPanel(title: 'Motivo', text: reason),
           const SizedBox(height: 10),
@@ -155,11 +192,16 @@ class _WarningDetailScreenState extends ConsumerState<WarningDetailScreen> {
           const SizedBox(height: 10),
           _TextPanel(
             title: 'Texto completo generado',
-            text: (w.generatedText ?? '').trim().isEmpty ? details : (w.generatedText ?? '').trim(),
+            text: (w.generatedText ?? '').trim().isEmpty
+                ? details
+                : (w.generatedText ?? '').trim(),
           ),
           if ((w.internalNotes ?? '').trim().isNotEmpty) ...[
             const SizedBox(height: 10),
-            _TextPanel(title: 'Observaciones internas', text: (w.internalNotes ?? '').trim()),
+            _TextPanel(
+              title: 'Observaciones internas',
+              text: (w.internalNotes ?? '').trim(),
+            ),
           ],
           const SizedBox(height: 10),
           _PdfPanel(
@@ -170,7 +212,8 @@ class _WarningDetailScreenState extends ConsumerState<WarningDetailScreen> {
             const SizedBox(height: 10),
             _TextPanel(
               title: 'Firma legacy (historico)',
-              text: 'Este registro conserva datos de firma historicos del flujo anterior.',
+              text:
+                  'Este registro conserva datos de firma historicos del flujo anterior.',
             ),
           ],
           const SizedBox(height: 40),
@@ -205,8 +248,14 @@ class _WarningDetailScreenState extends ConsumerState<WarningDetailScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
-          ElevatedButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Anular')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Anular'),
+          ),
         ],
       ),
     );
@@ -215,11 +264,16 @@ class _WarningDetailScreenState extends ConsumerState<WarningDetailScreen> {
 
     setState(() => _actionLoading = true);
     try {
-      await ref.read(employeeWarningsRepositoryProvider).annul(w.id, reasonCtrl.text.trim());
+      await ref
+          .read(employeeWarningsRepositoryProvider)
+          .annul(w.id, reasonCtrl.text.trim());
       ref.invalidate(warningDetailProvider(w.id));
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Amonestacion anulada'), backgroundColor: Colors.green),
+        const SnackBar(
+          content: Text('Amonestacion anulada'),
+          backgroundColor: Colors.green,
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -238,8 +292,14 @@ class _WarningDetailScreenState extends ConsumerState<WarningDetailScreen> {
         title: const Text('Eliminar amonestacion'),
         content: const Text('Esta accion no se puede deshacer.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
-          ElevatedButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Eliminar')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Eliminar'),
+          ),
         ],
       ),
     );
@@ -274,7 +334,10 @@ class _WarningDetailScreenState extends ConsumerState<WarningDetailScreen> {
       ref.invalidate(warningDetailProvider(w.id));
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('PDF regenerado'), backgroundColor: Colors.green),
+        const SnackBar(
+          content: Text('PDF regenerado'),
+          backgroundColor: Colors.green,
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -287,9 +350,9 @@ class _WarningDetailScreenState extends ConsumerState<WarningDetailScreen> {
   }
 
   void _openEdit(BuildContext context, EmployeeWarning w) async {
-    final result = await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => WarningCreateScreen(existing: w)),
-    );
+    final result = await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => WarningCreateScreen(existing: w)));
     if (result == true && mounted) {
       ref.invalidate(warningDetailProvider(w.id));
     }
@@ -297,10 +360,12 @@ class _WarningDetailScreenState extends ConsumerState<WarningDetailScreen> {
 
   Future<Uint8List> _loadPdfBytes(EmployeeWarning w) {
     final rawPdfUrl = (w.pdfUrl ?? w.signedPdfUrl ?? '').trim();
-    return ref.read(employeeWarningsRepositoryProvider).getMyWarningPdfBytes(
-      id: w.id,
-      rawPdfUrl: rawPdfUrl.isEmpty ? null : rawPdfUrl,
-    );
+    return ref
+        .read(employeeWarningsRepositoryProvider)
+        .getMyWarningPdfBytes(
+          id: w.id,
+          rawPdfUrl: rawPdfUrl.isEmpty ? null : rawPdfUrl,
+        );
   }
 
   Future<void> _openPdfInApp(EmployeeWarning w) async {
@@ -378,9 +443,9 @@ class _WarningDetailScreenState extends ConsumerState<WarningDetailScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo abrir el PDF: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('No se pudo abrir el PDF: $e')));
     }
   }
 
@@ -390,9 +455,9 @@ class _WarningDetailScreenState extends ConsumerState<WarningDetailScreen> {
       await Printing.layoutPdf(onLayout: (_) async => bytes);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo imprimir el PDF: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('No se pudo imprimir el PDF: $e')));
     }
   }
 }
@@ -404,34 +469,36 @@ class _InfoPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _Container(
-        title: title,
-        child: Column(
-          children: rows
-              .map(
-                (r) => Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 130,
-                        child: Text(
-                          r.$1,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
+    title: title,
+    child: Column(
+      children: rows
+          .map(
+            (r) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 130,
+                    child: Text(
+                      r.$1,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade600,
                       ),
-                      Expanded(child: Text(r.$2, style: const TextStyle(fontSize: 12))),
-                    ],
+                    ),
                   ),
-                ),
-              )
-              .toList(),
-        ),
-      );
+                  Expanded(
+                    child: Text(r.$2, style: const TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
+          )
+          .toList(),
+    ),
+  );
 }
 
 class _TextPanel extends StatelessWidget {
@@ -441,12 +508,12 @@ class _TextPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _Container(
-        title: title,
-        child: Text(
-          text.trim().isEmpty ? 'No registrado' : text.trim(),
-          style: const TextStyle(fontSize: 13, height: 1.45),
-        ),
-      );
+    title: title,
+    child: Text(
+      text.trim().isEmpty ? 'No registrado' : text.trim(),
+      style: const TextStyle(fontSize: 13, height: 1.45),
+    ),
+  );
 }
 
 class _PdfPanel extends StatelessWidget {
@@ -456,27 +523,27 @@ class _PdfPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _Container(
-        title: 'Documento PDF',
-        child: Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: onOpenInApp,
-                icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
-                label: const Text('Ver amonestacion'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: onPrint,
-                icon: const Icon(Icons.print_outlined, size: 16),
-                label: const Text('Imprimir'),
-              ),
-            ),
-          ],
+    title: 'Documento PDF',
+    child: Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: onOpenInApp,
+            icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+            label: const Text('Ver amonestacion'),
+          ),
         ),
-      );
+        const SizedBox(width: 8),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: onPrint,
+            icon: const Icon(Icons.print_outlined, size: 16),
+            label: const Text('Imprimir'),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _Container extends StatelessWidget {
@@ -519,9 +586,14 @@ class _Pill extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
-      child: Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color)),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
     );
   }
 }
-
-

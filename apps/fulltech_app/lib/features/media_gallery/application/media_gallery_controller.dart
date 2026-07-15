@@ -35,20 +35,24 @@ class MediaGalleryState {
   final MediaGalleryInstallationFilter installationFilter;
 
   List<MediaGalleryItem> get visibleItems {
-    return uniqueMediaGalleryItems(items).where((item) {
-      final matchesType = switch (typeFilter) {
-        MediaGalleryTypeFilter.all => true,
-        MediaGalleryTypeFilter.image => item.isImage,
-        MediaGalleryTypeFilter.video => item.isVideo,
-      };
-      if (!matchesType) return false;
+    return uniqueMediaGalleryItems(items)
+        .where((item) {
+          final matchesType = switch (typeFilter) {
+            MediaGalleryTypeFilter.all => true,
+            MediaGalleryTypeFilter.image => item.isImage,
+            MediaGalleryTypeFilter.video => item.isVideo,
+          };
+          if (!matchesType) return false;
 
-      return switch (installationFilter) {
-        MediaGalleryInstallationFilter.all => true,
-        MediaGalleryInstallationFilter.completed => item.isInstallationCompleted,
-        MediaGalleryInstallationFilter.pending => !item.isInstallationCompleted,
-      };
-    }).toList(growable: false);
+          return switch (installationFilter) {
+            MediaGalleryInstallationFilter.all => true,
+            MediaGalleryInstallationFilter.completed =>
+              item.isInstallationCompleted,
+            MediaGalleryInstallationFilter.pending =>
+              !item.isInstallationCompleted,
+          };
+        })
+        .toList(growable: false);
   }
 
   MediaGalleryState copyWith({
@@ -117,12 +121,14 @@ class MediaGalleryController extends StateNotifier<MediaGalleryState> {
     required DateTime syncedAt,
     required String? nextCursor,
   }) {
-    return ref.read(mediaGalleryLocalRepositoryProvider).saveSnapshot(
-      viewerUserId: _viewerUserId,
-      items: items,
-      syncedAt: syncedAt,
-      nextCursor: nextCursor,
-    );
+    return ref
+        .read(mediaGalleryLocalRepositoryProvider)
+        .saveSnapshot(
+          viewerUserId: _viewerUserId,
+          items: items,
+          syncedAt: syncedAt,
+          nextCursor: nextCursor,
+        );
   }
 
   String _friendlyMessage(Object error) {
@@ -141,8 +147,10 @@ class MediaGalleryController extends StateNotifier<MediaGalleryState> {
       return Future.value();
     }
     if (_inFlightLoad != null) return _inFlightLoad!;
-    _inFlightLoad = _loadImpl(refresh: refresh, forceRemote: forceRemote)
-        .whenComplete(() => _inFlightLoad = null);
+    _inFlightLoad = _loadImpl(
+      refresh: refresh,
+      forceRemote: forceRemote,
+    ).whenComplete(() => _inFlightLoad = null);
     return _inFlightLoad!;
   }
 
@@ -200,10 +208,9 @@ class MediaGalleryController extends StateNotifier<MediaGalleryState> {
     );
 
     try {
-      final page = await ref.read(mediaGalleryRepositoryProvider).fetchPage(
-        limit: _pageSize,
-        forceRefresh: forceRemote || refresh,
-      );
+      final page = await ref
+          .read(mediaGalleryRepositoryProvider)
+          .fetchPage(limit: _pageSize, forceRefresh: forceRemote || refresh);
       final previousItems = state.items.isEmpty
           ? uniqueMediaGalleryItems(snapshot.items)
           : uniqueMediaGalleryItems(state.items);
@@ -213,8 +220,8 @@ class MediaGalleryController extends StateNotifier<MediaGalleryState> {
       );
       final syncedAt = DateTime.now();
       final previousCursor = state.nextCursor ?? snapshot.nextCursor;
-      final nextCursor = previousItems.length > page.items.length &&
-              previousCursor != null
+      final nextCursor =
+          previousItems.length > page.items.length && previousCursor != null
           ? previousCursor
           : page.nextCursor;
 
@@ -268,10 +275,9 @@ class MediaGalleryController extends StateNotifier<MediaGalleryState> {
 
     state = state.copyWith(loadingMore: true, clearError: true);
     try {
-      final page = await ref.read(mediaGalleryRepositoryProvider).fetchPage(
-        cursor: cursor,
-        limit: _pageSize,
-      );
+      final page = await ref
+          .read(mediaGalleryRepositoryProvider)
+          .fetchPage(cursor: cursor, limit: _pageSize);
       final merged = mergeMediaGalleryItems(
         previousItems: state.items,
         freshItems: page.items,
@@ -316,7 +322,9 @@ class MediaGalleryController extends StateNotifier<MediaGalleryState> {
     if (!_canViewGallery) return;
     try {
       await ref.read(mediaGalleryRepositoryProvider).deleteItem(id);
-      final updatedItems = state.items.where((item) => item.id != id).toList(growable: false);
+      final updatedItems = state.items
+          .where((item) => item.id != id)
+          .toList(growable: false);
       state = state.copyWith(items: updatedItems);
       // Update local cache
       final syncedAt = state.lastSyncedAt ?? DateTime.now();
@@ -334,21 +342,23 @@ class MediaGalleryController extends StateNotifier<MediaGalleryState> {
     if (!_canViewGallery) return;
     try {
       await ref.read(mediaGalleryRepositoryProvider).markForPublicidad(id);
-      final updatedItems = state.items.map((item) {
-        if (item.id != id) return item;
-        return MediaGalleryItem(
-          id: item.id,
-          url: item.url,
-          type: item.type,
-          comment: item.comment,
-          orderId: item.orderId,
-          createdAt: item.createdAt,
-          uploadedByRole: item.uploadedByRole,
-          orderStatus: item.orderStatus,
-          isInstallationCompleted: item.isInstallationCompleted,
-          forPublicidad: true,
-        );
-      }).toList(growable: false);
+      final updatedItems = state.items
+          .map((item) {
+            if (item.id != id) return item;
+            return MediaGalleryItem(
+              id: item.id,
+              url: item.url,
+              type: item.type,
+              comment: item.comment,
+              orderId: item.orderId,
+              createdAt: item.createdAt,
+              uploadedByRole: item.uploadedByRole,
+              orderStatus: item.orderStatus,
+              isInstallationCompleted: item.isInstallationCompleted,
+              forPublicidad: true,
+            );
+          })
+          .toList(growable: false);
       state = state.copyWith(items: updatedItems);
       await _persistSnapshot(
         items: updatedItems,

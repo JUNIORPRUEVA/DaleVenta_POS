@@ -89,6 +89,8 @@ class MarketingSocialAccount {
           ? whatsappNumber!.trim()
           : 'Sin numero';
     }
-    return (username ?? '').trim().isNotEmpty ? username!.trim() : 'Sin usuario';
+    return (username ?? '').trim().isNotEmpty
+        ? username!.trim()
+        : 'Sin usuario';
   }
 }

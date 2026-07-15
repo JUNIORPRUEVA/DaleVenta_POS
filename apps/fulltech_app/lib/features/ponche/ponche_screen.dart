@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -125,7 +125,10 @@ class _PoncheScreenState extends ConsumerState<PoncheScreen> {
         _attendanceFuture = _loadAttendanceDetail();
       });
       if (!mounted) return;
-      final time = DateFormat('h:mm a', 'es_DO').format(punch.timestamp.toLocal());
+      final time = DateFormat(
+        'h:mm a',
+        'es_DO',
+      ).format(punch.timestamp.toLocal());
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Ponche "${type.label}" registrado a las $time'),
@@ -407,8 +410,9 @@ class _PoncheScreenState extends ConsumerState<PoncheScreen> {
     final statusLabel = _statusLabelFrom(lastPunch);
     final statusColor = _statusColorFrom(lastPunch);
     final statusIcon = _statusIconFrom(lastPunch);
-    final chipForeground =
-        statusColor.computeLuminance() > 0.70 ? Colors.black87 : statusColor;
+    final chipForeground = statusColor.computeLuminance() > 0.70
+        ? Colors.black87
+        : statusColor;
 
     final timeString = DateFormat('h:mm a', 'es_DO').format(_now);
     final dateString = DateFormat("EEEE, d 'de' MMMM", 'es_DO').format(_now);
@@ -504,11 +508,7 @@ class _PoncheScreenState extends ConsumerState<PoncheScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
-                                statusIcon,
-                                color: chipForeground,
-                                size: 22,
-                              ),
+                              Icon(statusIcon, color: chipForeground, size: 22),
                               const SizedBox(width: 8),
                               Text(
                                 statusLabel,
@@ -974,7 +974,9 @@ class _PunchHistoryScreenState extends ConsumerState<PunchHistoryScreen> {
             final detail = snapshot.data!;
             final totals = detail.totals;
             final balanceColor = _balanceColor(totals.balanceMinutes);
-            final recentPunches = detail.punches.take(20).toList(growable: false);
+            final recentPunches = detail.punches
+                .take(20)
+                .toList(growable: false);
 
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -988,16 +990,14 @@ class _PunchHistoryScreenState extends ConsumerState<PunchHistoryScreen> {
                       children: [
                         Text(
                           'Resumen del historial',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w900,
-                          ),
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w900),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Consulta todos tus balances, jornadas y registros recientes en una vista completa.',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: const Color(0xFF64748B),
-                          ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: const Color(0xFF64748B)),
                         ),
                         const SizedBox(height: 16),
                         Row(
@@ -1013,7 +1013,9 @@ class _PunchHistoryScreenState extends ConsumerState<PunchHistoryScreen> {
                             Expanded(
                               child: _AttendanceSummaryTile(
                                 label: 'Horas en contra',
-                                value: _formatMinutes(totals.unfavorableMinutes),
+                                value: _formatMinutes(
+                                  totals.unfavorableMinutes,
+                                ),
                                 color: Colors.red.shade700,
                               ),
                             ),
@@ -1042,9 +1044,8 @@ class _PunchHistoryScreenState extends ConsumerState<PunchHistoryScreen> {
                         const SizedBox(height: 24),
                         Text(
                           'Balance por día',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 12),
                         if (detail.days.isEmpty && recentPunches.isEmpty)
@@ -1066,9 +1067,7 @@ class _PunchHistoryScreenState extends ConsumerState<PunchHistoryScreen> {
                             const SizedBox(height: 24),
                             Text(
                               'Últimos registros',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
+                              style: Theme.of(context).textTheme.titleMedium
                                   ?.copyWith(fontWeight: FontWeight.w800),
                             ),
                             const SizedBox(height: 8),
@@ -1747,13 +1746,19 @@ class _PunchActionPanel extends StatelessWidget {
                 label: 'Entrada de hoy',
                 value: today?.entry == null
                     ? 'Pendiente'
-                    : DateFormat('h:mm a', 'es_DO').format(today!.entry!.toLocal()),
+                    : DateFormat(
+                        'h:mm a',
+                        'es_DO',
+                      ).format(today!.entry!.toLocal()),
               ),
               _PunchMiniMetric(
                 label: 'Salida de hoy',
                 value: today?.exit == null
                     ? 'Pendiente'
-                    : DateFormat('h:mm a', 'es_DO').format(today!.exit!.toLocal()),
+                    : DateFormat(
+                        'h:mm a',
+                        'es_DO',
+                      ).format(today!.exit!.toLocal()),
               ),
             ],
           ),

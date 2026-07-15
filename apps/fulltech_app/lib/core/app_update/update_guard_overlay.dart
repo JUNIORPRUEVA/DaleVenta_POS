@@ -34,27 +34,25 @@ class UpdateGuardOverlay extends ConsumerWidget {
         ? null
         : '${updateInfo.latestVersion ?? 'Nueva versión'}${updateInfo.latestBuild == null ? '' : '+${updateInfo.latestBuild}'}';
     final title = isWindows
-      ? (isDownloading
-          ? 'Descargando actualización de Windows'
-          : isInstalling
-          ? 'Instalando actualización de Windows'
-          : 'Actualización requerida en Windows')
-      : 'Actualización obligatoria';
+        ? (isDownloading
+              ? 'Descargando actualización de Windows'
+              : isInstalling
+              ? 'Instalando actualización de Windows'
+              : 'Actualización requerida en Windows')
+        : 'Actualización obligatoria';
     final description = isWindows
-      ? (isDownloading
-          ? 'FullTech está descargando el instalador más reciente de Windows.'
-          : isInstalling
-          ? 'FullTech inició la instalación automática. Espera unos segundos mientras se cierra la app.'
-          : 'Debes actualizar FullTech en Windows para continuar usando la app.')
-      : 'Debes actualizar FullTech en $platformName para continuar usando la app.';
+        ? (isDownloading
+              ? 'FullTech está descargando el instalador más reciente de Windows.'
+              : isInstalling
+              ? 'FullTech inició la instalación automática. Espera unos segundos mientras se cierra la app.'
+              : 'Debes actualizar FullTech en Windows para continuar usando la app.')
+        : 'Debes actualizar FullTech en $platformName para continuar usando la app.';
     final primaryLabel = isWindows
-      ? (isDownloading || isInstalling
-          ? 'Actualizando...'
-          : 'Reintentar instalación')
-      : 'Descargar APK';
-    final secondaryLabel = isWindows
-      ? 'Revalidar release'
-      : 'Reintentar';
+        ? (isDownloading || isInstalling
+              ? 'Actualizando...'
+              : 'Reintentar instalación')
+        : 'Descargar APK';
+    final secondaryLabel = isWindows ? 'Revalidar release' : 'Reintentar';
 
     return Positioned.fill(
       child: ColoredBox(
@@ -217,7 +215,9 @@ class UpdateGuardOverlay extends ConsumerWidget {
                                         ? null
                                         : () {
                                             ref
-                                                .read(appUpdateProvider.notifier)
+                                                .read(
+                                                  appUpdateProvider.notifier,
+                                                )
                                                 .retryBlockedUpdate();
                                           })
                                   : (canOpenDownload

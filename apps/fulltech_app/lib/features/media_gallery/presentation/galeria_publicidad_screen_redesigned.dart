@@ -124,8 +124,7 @@ class _GaleriaPublicidadScreenState
                     if (_selectedItemId != null)
                       _GalleryDetailPanel(
                         itemId: _selectedItemId!,
-                        onClose: () =>
-                            setState(() => _selectedItemId = null),
+                        onClose: () => setState(() => _selectedItemId = null),
                       ),
                   ],
                 ),
@@ -198,25 +197,27 @@ class _GalleryHeader extends StatelessWidget {
                 _handleImportSource(context, source);
               },
               itemBuilder: (_) => ContentImportSource.sources
-                  .map((source) => PopupMenuItem(
-                        value: source.id,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${source.icon} ${source.name}',
-                              style: const TextStyle(fontSize: 12),
+                  .map(
+                    (source) => PopupMenuItem(
+                      value: source.id,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${source.icon} ${source.name}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          Text(
+                            source.descripcion,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey,
                             ),
-                            Text(
-                              source.descripcion,
-                              style: const TextStyle(
-                                fontSize: 10,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ))
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
                   .toList(),
               child: FilledButton.icon(
                 onPressed: onShowImportMenu,
@@ -233,9 +234,9 @@ class _GalleryHeader extends StatelessWidget {
   void _handleImportSource(BuildContext context, String sourceId) {
     // Implement import logic based on source
     // This would show dialogs for selecting products, uploading files, etc.
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Importación desde: $sourceId')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Importación desde: $sourceId')));
   }
 }
 
@@ -260,9 +261,7 @@ class _GallerySidebarState extends State<_GallerySidebar> {
     return Container(
       width: 280,
       decoration: BoxDecoration(
-        border: Border(
-          right: BorderSide(color: scheme.outlineVariant),
-        ),
+        border: Border(right: BorderSide(color: scheme.outlineVariant)),
       ),
       child: ListView(
         padding: const EdgeInsets.all(12),
@@ -288,9 +287,7 @@ class _GallerySidebarState extends State<_GallerySidebar> {
       return Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Material(
-          color: isSelected
-              ? scheme.primaryContainer
-              : Colors.transparent,
+          color: isSelected ? scheme.primaryContainer : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           child: InkWell(
             onTap: () {
@@ -299,10 +296,7 @@ class _GallerySidebarState extends State<_GallerySidebar> {
             },
             borderRadius: BorderRadius.circular(8),
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Row(
                 spacing: 8,
                 children: [
@@ -313,10 +307,10 @@ class _GallerySidebarState extends State<_GallerySidebar> {
                       filter.label,
                       style: TextStyle(
                         fontSize: 13,
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                        color: isSelected
-                            ? scheme.primary
-                            : scheme.onSurface,
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        color: isSelected ? scheme.primary : scheme.onSurface,
                       ),
                     ),
                   ),
@@ -482,7 +476,10 @@ class _GalleryGridItemState extends State<_GalleryGridItem> {
                           'Contenido ${widget.index + 1}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         Text(
                           'Categoría • Hace 2 días',
@@ -523,10 +520,7 @@ class _GalleryGridItemState extends State<_GalleryGridItem> {
 // ─── Badge Component ────────────────────────────────────────────────────────
 
 class _Badge extends StatelessWidget {
-  const _Badge({
-    required this.label,
-    required this.size,
-  });
+  const _Badge({required this.label, required this.size});
 
   final String label;
   final String size;
@@ -560,10 +554,7 @@ class _Badge extends StatelessWidget {
 // ─── Right Detail Panel ──────────────────────────────────────────────────────
 
 class _GalleryDetailPanel extends ConsumerWidget {
-  const _GalleryDetailPanel({
-    required this.itemId,
-    required this.onClose,
-  });
+  const _GalleryDetailPanel({required this.itemId, required this.onClose});
 
   final String itemId;
   final VoidCallback onClose;
@@ -576,9 +567,7 @@ class _GalleryDetailPanel extends ConsumerWidget {
     return Container(
       width: 360,
       decoration: BoxDecoration(
-        border: Border(
-          left: BorderSide(color: scheme.outlineVariant),
-        ),
+        border: Border(left: BorderSide(color: scheme.outlineVariant)),
       ),
       child: Column(
         children: [
@@ -586,17 +575,12 @@ class _GalleryDetailPanel extends ConsumerWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: scheme.outlineVariant),
-              ),
+              border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Detalles',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
+                Text('Detalles', style: Theme.of(context).textTheme.titleSmall),
                 IconButton(
                   icon: const Icon(Icons.close, size: 20),
                   onPressed: onClose,
@@ -617,11 +601,7 @@ class _GalleryDetailPanel extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Center(
-                    child: Icon(
-                      Icons.image,
-                      size: 64,
-                      color: scheme.outline,
-                    ),
+                    child: Icon(Icons.image, size: 64, color: scheme.outline),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -630,7 +610,10 @@ class _GalleryDetailPanel extends ConsumerWidget {
                 _MetadataField(label: 'Categoría', value: 'Instalaciones'),
                 _MetadataField(label: 'Origen', value: 'Manual', badge: true),
                 const SizedBox(height: 8),
-                _MetadataField(label: 'Descripción', value: 'Descripción del contenido...'),
+                _MetadataField(
+                  label: 'Descripción',
+                  value: 'Descripción del contenido...',
+                ),
                 const SizedBox(height: 8),
                 _MetadataField(label: 'Tags', value: 'tag1, tag2, tag3'),
                 const SizedBox(height: 16),
@@ -661,10 +644,7 @@ class _GalleryDetailPanel extends ConsumerWidget {
                   child: const Text('Agregar a favoritos'),
                 ),
                 const SizedBox(height: 8),
-                OutlinedButton(
-                  onPressed: () {},
-                  child: const Text('Eliminar'),
-                ),
+                OutlinedButton(onPressed: () {}, child: const Text('Eliminar')),
               ],
             ),
           ),
@@ -695,10 +675,7 @@ class _MetadataField extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: 4,
       children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.labelSmall,
-        ),
+        Text(label, style: Theme.of(context).textTheme.labelSmall),
         if (badge)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -708,19 +685,13 @@ class _MetadataField extends StatelessWidget {
             ),
             child: Text(
               value,
-              style: TextStyle(
-                fontSize: 12,
-                color: scheme.onTertiaryContainer,
-              ),
+              style: TextStyle(fontSize: 12, color: scheme.onTertiaryContainer),
             ),
           )
         else
           Text(
             value,
-            style: TextStyle(
-              fontSize: 12,
-              color: scheme.onSurfaceVariant,
-            ),
+            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
           ),
       ],
     );
@@ -730,10 +701,7 @@ class _MetadataField extends StatelessWidget {
 // ─── Usage Chip ────────────────────────────────────────────────────────────
 
 class _UsageChip extends StatelessWidget {
-  const _UsageChip({
-    required this.label,
-    required this.selected,
-  });
+  const _UsageChip({required this.label, required this.selected});
 
   final String label;
   final bool selected;
@@ -745,13 +713,9 @@ class _UsageChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: selected
-            ? scheme.secondaryContainer
-            : scheme.surfaceContainer,
+        color: selected ? scheme.secondaryContainer : scheme.surfaceContainer,
         border: Border.all(
-          color: selected
-              ? scheme.secondary
-              : scheme.outlineVariant,
+          color: selected ? scheme.secondary : scheme.outlineVariant,
         ),
         borderRadius: BorderRadius.circular(6),
       ),

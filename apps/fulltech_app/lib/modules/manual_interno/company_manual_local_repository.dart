@@ -130,7 +130,8 @@ class CompanyManualLocalRepository {
     required String id,
   }) async {
     if (kIsWeb) {
-      final entries = _memoryEntriesByUser[viewerUserId] ?? const <CompanyManualEntry>[];
+      final entries =
+          _memoryEntriesByUser[viewerUserId] ?? const <CompanyManualEntry>[];
       for (final entry in entries) {
         if (entry.id == id) return entry;
       }
@@ -185,7 +186,9 @@ class CompanyManualLocalRepository {
     required CompanyManualEntry entry,
   }) async {
     if (kIsWeb) {
-      final current = [...(_memoryEntriesByUser[viewerUserId] ?? const <CompanyManualEntry>[])];
+      final current = [
+        ...(_memoryEntriesByUser[viewerUserId] ?? const <CompanyManualEntry>[]),
+      ];
       final index = current.indexWhere((item) => item.id == entry.id);
       if (index >= 0) {
         current[index] = entry;
@@ -245,9 +248,10 @@ class CompanyManualLocalRepository {
     required DateTime? seenAt,
   }) async {
     if (kIsWeb) {
-      final entries = (_memoryEntriesByUser[viewerUserId] ?? const <CompanyManualEntry>[])
-          .where((entry) => entry.published)
-          .toList(growable: false);
+      final entries =
+          (_memoryEntriesByUser[viewerUserId] ?? const <CompanyManualEntry>[])
+              .where((entry) => entry.published)
+              .toList(growable: false);
       final totalCount = entries.length;
       DateTime? latestUpdatedAt;
       for (final entry in entries) {

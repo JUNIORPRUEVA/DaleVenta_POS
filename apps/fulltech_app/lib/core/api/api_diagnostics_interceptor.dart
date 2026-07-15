@@ -9,10 +9,7 @@ class ApiDiagnosticsInterceptor extends Interceptor {
   static const String _stopwatchKey = '__api_trace_stopwatch';
 
   @override
-  void onRequest(
-    RequestOptions options,
-    RequestInterceptorHandler handler,
-  ) {
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     final traceId = TraceLog.nextSeq();
     final stopwatch = Stopwatch()..start();
     options.extra[_traceKey] = traceId;

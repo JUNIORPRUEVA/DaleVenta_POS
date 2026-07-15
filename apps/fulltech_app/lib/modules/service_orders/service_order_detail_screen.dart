@@ -225,8 +225,7 @@ class _ServiceOrderDetailScreenState
         onRefresh: controller.refresh,
         onOpenTechnicianActions: role.isTechnician && order != null
             ? () {
-                final useMobilePanel =
-                    MediaQuery.sizeOf(context).width < 720;
+                final useMobilePanel = MediaQuery.sizeOf(context).width < 720;
                 showServiceOrderQuickActionsModal(
                   context: context,
                   ref: ref,
@@ -801,10 +800,7 @@ class _DetailFloatingActionsButtonState
           ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(13),
-            side: BorderSide(
-              color: buttonBorder,
-              width: 1,
-            ),
+            side: BorderSide(color: buttonBorder, width: 1),
           ),
           icon: const Icon(Icons.tune_rounded, size: 18),
           label: const Text(

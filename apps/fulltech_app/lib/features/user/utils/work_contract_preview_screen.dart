@@ -37,7 +37,9 @@ class _WorkContractPreviewScreenState
     _pdfFuture = _buildPdf(_employee);
   }
 
-  Future<_ContractBuildContext> _buildContractContext(UserModel employee) async {
+  Future<_ContractBuildContext> _buildContractContext(
+    UserModel employee,
+  ) async {
     final company = await ref
         .read(companySettingsRepositoryProvider)
         .getSettings();
@@ -329,7 +331,9 @@ class _WorkContractPreviewScreenState
                   FutureBuilder<_ContractBuildContext>(
                     future: _buildContractContext(_employee),
                     builder: (context, snapshot) {
-                      final clauses = snapshot.data?.clauses ?? const <WorkContractClause>[];
+                      final clauses =
+                          snapshot.data?.clauses ??
+                          const <WorkContractClause>[];
                       return ExpansionTile(
                         tilePadding: EdgeInsets.zero,
                         childrenPadding: EdgeInsets.zero,
@@ -533,7 +537,9 @@ class _WorkContractPreviewScreenState
                         if (previewContext.fields.additionalClauses.isNotEmpty)
                           ListTile(
                             contentPadding: EdgeInsets.zero,
-                            title: const Text('DECIMO SEGUNDO: Cláusulas Especiales'),
+                            title: const Text(
+                              'DECIMO SEGUNDO: Cláusulas Especiales',
+                            ),
                             subtitle: Text(
                               previewContext.fields.additionalClauses,
                             ),
@@ -546,7 +552,9 @@ class _WorkContractPreviewScreenState
             ),
             actions: [
               TextButton(
-                onPressed: submitting ? null : () => Navigator.of(dialogContext).pop(),
+                onPressed: submitting
+                    ? null
+                    : () => Navigator.of(dialogContext).pop(),
                 child: const Text('Cancelar'),
               ),
               FilledButton(
@@ -574,9 +582,8 @@ class _WorkContractPreviewScreenState
                               .applyAiWorkContractEdit(
                                 userId: _employee.id,
                                 instruction: instruction,
-                                currentFields: previewContext.fields.toApiPayload(
-                                  _employee,
-                                ),
+                                currentFields: previewContext.fields
+                                    .toApiPayload(_employee),
                                 currentClauses: previewContext.clauses
                                     .map(
                                       (clause) => {

@@ -14,7 +14,8 @@ class WarningCreateScreen extends ConsumerStatefulWidget {
   const WarningCreateScreen({super.key, this.existing});
 
   @override
-  ConsumerState<WarningCreateScreen> createState() => _WarningCreateScreenState();
+  ConsumerState<WarningCreateScreen> createState() =>
+      _WarningCreateScreenState();
 }
 
 class _WarningCreateScreenState extends ConsumerState<WarningCreateScreen> {
@@ -59,7 +60,9 @@ class _WarningCreateScreenState extends ConsumerState<WarningCreateScreen> {
     _internalNotesCtrl.text = (w.internalNotes ?? '').trim();
     _warningDate = w.warningDate;
     _incidentDate = w.incidentDate;
-    _warningType = (w.warningType ?? 'WRITTEN').trim().isEmpty ? 'WRITTEN' : (w.warningType ?? 'WRITTEN');
+    _warningType = (w.warningType ?? 'WRITTEN').trim().isEmpty
+        ? 'WRITTEN'
+        : (w.warningType ?? 'WRITTEN');
     _saveAsDraft = w.status == 'DRAFT';
   }
 
@@ -71,7 +74,9 @@ class _WarningCreateScreenState extends ConsumerState<WarningCreateScreen> {
         _employees = all;
         final existing = widget.existing;
         if (existing != null) {
-          _selectedEmployee = all.where((u) => u.id == existing.employeeUserId).firstOrNull;
+          _selectedEmployee = all
+              .where((u) => u.id == existing.employeeUserId)
+              .firstOrNull;
         }
       });
     } catch (_) {
@@ -101,7 +106,10 @@ class _WarningCreateScreenState extends ConsumerState<WarningCreateScreen> {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedEmployee == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecciona un empleado.'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('Selecciona un empleado.'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
@@ -166,7 +174,9 @@ class _WarningCreateScreenState extends ConsumerState<WarningCreateScreen> {
     if (!isAdmin) {
       return Scaffold(
         appBar: AppBar(title: const Text('Nueva amonestacion')),
-        body: const Center(child: Text('Acceso no permitido para este usuario')),
+        body: const Center(
+          child: Text('Acceso no permitido para este usuario'),
+        ),
       );
     }
 
@@ -175,7 +185,11 @@ class _WarningCreateScreenState extends ConsumerState<WarningCreateScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF7F8FC),
       appBar: AppBar(
-        title: Text(widget.existing == null ? 'Nueva amonestacion' : 'Editar amonestacion'),
+        title: Text(
+          widget.existing == null
+              ? 'Nueva amonestacion'
+              : 'Editar amonestacion',
+        ),
         backgroundColor: const Color(0xFF1a1a2e),
         foregroundColor: Colors.white,
       ),
@@ -190,12 +204,17 @@ class _WarningCreateScreenState extends ConsumerState<WarningCreateScreen> {
                 DropdownButtonFormField<UserModel>(
                   value: selected,
                   isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Buscar/seleccionar empleado'),
+                  decoration: const InputDecoration(
+                    labelText: 'Buscar/seleccionar empleado',
+                  ),
                   items: _employees
                       .map(
                         (u) => DropdownMenuItem<UserModel>(
                           value: u,
-                          child: Text(u.nombreCompleto, overflow: TextOverflow.ellipsis),
+                          child: Text(
+                            u.nombreCompleto,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       )
                       .toList(),
@@ -206,7 +225,10 @@ class _WarningCreateScreenState extends ConsumerState<WarningCreateScreen> {
                 _InfoRow(label: 'Nombre', value: selected?.nombreCompleto),
                 _InfoRow(label: 'Cedula', value: selected?.cedula),
                 _InfoRow(label: 'Cargo', value: selected?.workContractJobTitle),
-                _InfoRow(label: 'Departamento/Area', value: selected?.workContractWorkLocation),
+                _InfoRow(
+                  label: 'Departamento/Area',
+                  value: selected?.workContractWorkLocation,
+                ),
                 _InfoRow(label: 'Telefono', value: selected?.telefono),
               ],
             ),
@@ -236,7 +258,9 @@ class _WarningCreateScreenState extends ConsumerState<WarningCreateScreen> {
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   value: _warningType,
-                  decoration: const InputDecoration(labelText: 'Tipo de amonestacion'),
+                  decoration: const InputDecoration(
+                    labelText: 'Tipo de amonestacion',
+                  ),
                   items: WarningLabels.warningType.entries
                       .map(
                         (e) => DropdownMenuItem<String>(
@@ -245,58 +269,81 @@ class _WarningCreateScreenState extends ConsumerState<WarningCreateScreen> {
                         ),
                       )
                       .toList(),
-                  onChanged: (v) => setState(() => _warningType = v ?? _warningType),
+                  onChanged: (v) =>
+                      setState(() => _warningType = v ?? _warningType),
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: _reasonCtrl,
-                  decoration: const InputDecoration(labelText: 'Motivo o causa'),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Motivo requerido' : null,
+                  decoration: const InputDecoration(
+                    labelText: 'Motivo o causa',
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Motivo requerido'
+                      : null,
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: _detailsCtrl,
                   maxLines: 5,
-                  decoration: const InputDecoration(labelText: 'Detalle de los hechos'),
+                  decoration: const InputDecoration(
+                    labelText: 'Detalle de los hechos',
+                  ),
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Detalle requerido';
-                    if (v.trim().length < 10) return 'Especifica un detalle mas claro';
+                    if (v == null || v.trim().isEmpty)
+                      return 'Detalle requerido';
+                    if (v.trim().length < 10)
+                      return 'Especifica un detalle mas claro';
                     return null;
                   },
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: _incidentTimeCtrl,
-                  decoration: const InputDecoration(labelText: 'Hora aproximada (opcional)'),
+                  decoration: const InputDecoration(
+                    labelText: 'Hora aproximada (opcional)',
+                  ),
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: _incidentPlaceCtrl,
-                  decoration: const InputDecoration(labelText: 'Lugar o area (opcional)'),
+                  decoration: const InputDecoration(
+                    labelText: 'Lugar o area (opcional)',
+                  ),
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: _issuerNameCtrl,
-                  decoration: const InputDecoration(labelText: 'Encargado que emite'),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Encargado requerido' : null,
+                  decoration: const InputDecoration(
+                    labelText: 'Encargado que emite',
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Encargado requerido'
+                      : null,
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: _issuerRoleCtrl,
-                  decoration: const InputDecoration(labelText: 'Cargo del encargado'),
+                  decoration: const InputDecoration(
+                    labelText: 'Cargo del encargado',
+                  ),
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: _internalNotesCtrl,
                   maxLines: 3,
-                  decoration: const InputDecoration(labelText: 'Observaciones internas (opcional)'),
+                  decoration: const InputDecoration(
+                    labelText: 'Observaciones internas (opcional)',
+                  ),
                 ),
                 const SizedBox(height: 8),
                 SwitchListTile.adaptive(
                   value: _saveAsDraft,
                   onChanged: (v) => setState(() => _saveAsDraft = v),
                   title: const Text('Guardar como borrador'),
-                  subtitle: const Text('Si no se marca, se guarda como emitida'),
+                  subtitle: const Text(
+                    'Si no se marca, se guarda como emitida',
+                  ),
                   contentPadding: EdgeInsets.zero,
                 ),
               ],
@@ -315,7 +362,10 @@ class _WarningCreateScreenState extends ConsumerState<WarningCreateScreen> {
                     ? const SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
                     : const Text('Guardar amonestacion'),
               ),
@@ -365,8 +415,16 @@ class _InfoRow extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         children: [
-          SizedBox(width: 130, child: Text(label, style: const TextStyle(fontSize: 12))),
-          Expanded(child: Text(v.isEmpty ? 'No registrado' : v, style: const TextStyle(fontSize: 12))),
+          SizedBox(
+            width: 130,
+            child: Text(label, style: const TextStyle(fontSize: 12)),
+          ),
+          Expanded(
+            child: Text(
+              v.isEmpty ? 'No registrado' : v,
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
         ],
       ),
     );
@@ -377,7 +435,11 @@ class _DateInput extends StatelessWidget {
   final String label;
   final DateTime date;
   final VoidCallback onTap;
-  const _DateInput({required this.label, required this.date, required this.onTap});
+  const _DateInput({
+    required this.label,
+    required this.date,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {

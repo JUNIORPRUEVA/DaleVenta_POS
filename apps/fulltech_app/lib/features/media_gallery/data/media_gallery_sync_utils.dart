@@ -22,12 +22,11 @@ List<MediaGalleryItem> uniqueMediaGalleryItems(List<MediaGalleryItem> items) {
     dedupedByContent.putIfAbsent(key, () => item);
   }
 
-  return dedupedByContent.values.toList(growable: false)
-    ..sort((a, b) {
-      final createdAtCompare = b.createdAt.compareTo(a.createdAt);
-      if (createdAtCompare != 0) return createdAtCompare;
-      return b.id.compareTo(a.id);
-    });
+  return dedupedByContent.values.toList(growable: false)..sort((a, b) {
+    final createdAtCompare = b.createdAt.compareTo(a.createdAt);
+    if (createdAtCompare != 0) return createdAtCompare;
+    return b.id.compareTo(a.id);
+  });
 }
 
 String _mediaContentKey(MediaGalleryItem item) {

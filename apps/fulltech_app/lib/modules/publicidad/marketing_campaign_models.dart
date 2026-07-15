@@ -504,7 +504,8 @@ class MetaWhatsappDebug {
       hasFacebookPageId: json['hasFacebookPageId'] == true,
       hasInstagramBusinessId: json['hasInstagramBusinessId'] == true,
       hasWhatsappPhoneNumberId: json['hasWhatsappPhoneNumberId'] == true,
-      hasWhatsappBusinessAccountId: json['hasWhatsappBusinessAccountId'] == true,
+      hasWhatsappBusinessAccountId:
+          json['hasWhatsappBusinessAccountId'] == true,
       whatsappPhoneNumberId: '${json['whatsappPhoneNumberId'] ?? ''}',
       whatsappBusinessAccountId: '${json['whatsappBusinessAccountId'] ?? ''}',
       businessId: '${json['businessId'] ?? ''}',

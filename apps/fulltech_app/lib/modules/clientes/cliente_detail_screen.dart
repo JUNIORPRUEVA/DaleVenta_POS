@@ -123,10 +123,9 @@ class _ClienteDetailScreenState extends ConsumerState<ClienteDetailScreen> {
     }
 
     if (!mounted) return;
-    final effectiveLocalClient =
-        localSnapshot.profile == null
-            ? cachedClient
-            : _profileToClient(localSnapshot.profile!, fallback: cachedClient);
+    final effectiveLocalClient = localSnapshot.profile == null
+        ? cachedClient
+        : _profileToClient(localSnapshot.profile!, fallback: cachedClient);
 
     if (effectiveLocalClient != null || localSnapshot.hasData) {
       setState(() {
@@ -530,783 +529,794 @@ class _ClienteDetailScreenState extends ConsumerState<ClienteDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-          final profile = _profile;
-          final profileClient = profile?.client;
-          final metrics = profile?.metrics;
-          final fallbackLocation = parseClientLocationPreview(_cliente?.locationUrl);
-          final resolvedClientId =
-              (profileClient?.id ?? _cliente?.id ?? widget.clienteId).trim();
-          final displayName =
-              (profileClient?.nombre ?? _cliente?.nombre ?? 'Detalle del cliente')
-                  .trim();
-          final displayPhone = (profileClient?.telefono ?? _cliente?.telefono ?? '')
-              .trim();
-          final displayEmail = profileClient?.email ?? _cliente?.correo;
-          final displayLocationUrl =
-              profileClient?.locationUrl ?? _cliente?.locationUrl;
-          final displayLatitude =
-              profileClient?.latitude ?? _cliente?.latitude ?? fallbackLocation.latitude;
-          final displayLongitude =
-              profileClient?.longitude ??
-              _cliente?.longitude ??
-              fallbackLocation.longitude;
-          final displayNote = (profileClient?.notas ?? '').trim();
-          final lastActivityAt =
-              metrics?.lastActivityAt ?? profileClient?.lastActivityAt;
-          final recentTimeline = _timeline.take(5).toList(growable: false);
-          final importantInfo = <_SimpleDetailRowData>[
-            _SimpleDetailRowData(
-              label: 'Correo',
-              value: (displayEmail ?? '').trim(),
-            ),
-            _SimpleDetailRowData(
-              label: 'Direccion',
-              value: (profileClient?.direccion ?? _cliente?.direccion ?? '').trim(),
-            ),
-            _SimpleDetailRowData(
-              label: 'Creado por',
-              value: (profile?.createdBy?.label ?? '').trim(),
-            ),
-            _SimpleDetailRowData(
-              label: 'Creado',
-              value: profileClient?.createdAt == null
-                  ? ''
-                  : _formatDate(profileClient?.createdAt),
-            ),
-            _SimpleDetailRowData(
-              label: 'Ultima actividad',
-              value: lastActivityAt == null ? '' : _formatDate(lastActivityAt),
-            ),
-            _SimpleDetailRowData(
-              label: 'Estado',
-              value: (profileClient?.isDeleted ?? _cliente?.isDeleted ?? false)
-                  ? 'Eliminado'
-                  : 'Activo',
-            ),
-          ].where((row) => row.value.isNotEmpty && row.value != '-').toList(growable: false);
+    final profile = _profile;
+    final profileClient = profile?.client;
+    final metrics = profile?.metrics;
+    final fallbackLocation = parseClientLocationPreview(_cliente?.locationUrl);
+    final resolvedClientId =
+        (profileClient?.id ?? _cliente?.id ?? widget.clienteId).trim();
+    final displayName =
+        (profileClient?.nombre ?? _cliente?.nombre ?? 'Detalle del cliente')
+            .trim();
+    final displayPhone = (profileClient?.telefono ?? _cliente?.telefono ?? '')
+        .trim();
+    final displayEmail = profileClient?.email ?? _cliente?.correo;
+    final displayLocationUrl =
+        profileClient?.locationUrl ?? _cliente?.locationUrl;
+    final displayLatitude =
+        profileClient?.latitude ??
+        _cliente?.latitude ??
+        fallbackLocation.latitude;
+    final displayLongitude =
+        profileClient?.longitude ??
+        _cliente?.longitude ??
+        fallbackLocation.longitude;
+    final displayNote = (profileClient?.notas ?? '').trim();
+    final lastActivityAt =
+        metrics?.lastActivityAt ?? profileClient?.lastActivityAt;
+    final recentTimeline = _timeline.take(5).toList(growable: false);
+    final importantInfo =
+        <_SimpleDetailRowData>[
+              _SimpleDetailRowData(
+                label: 'Correo',
+                value: (displayEmail ?? '').trim(),
+              ),
+              _SimpleDetailRowData(
+                label: 'Direccion',
+                value: (profileClient?.direccion ?? _cliente?.direccion ?? '')
+                    .trim(),
+              ),
+              _SimpleDetailRowData(
+                label: 'Creado por',
+                value: (profile?.createdBy?.label ?? '').trim(),
+              ),
+              _SimpleDetailRowData(
+                label: 'Creado',
+                value: profileClient?.createdAt == null
+                    ? ''
+                    : _formatDate(profileClient?.createdAt),
+              ),
+              _SimpleDetailRowData(
+                label: 'Ultima actividad',
+                value: lastActivityAt == null
+                    ? ''
+                    : _formatDate(lastActivityAt),
+              ),
+              _SimpleDetailRowData(
+                label: 'Estado',
+                value:
+                    (profileClient?.isDeleted ?? _cliente?.isDeleted ?? false)
+                    ? 'Eliminado'
+                    : 'Activo',
+              ),
+            ]
+            .where((row) => row.value.isNotEmpty && row.value != '-')
+            .toList(growable: false);
 
-          return Scaffold(
-            body: SafeArea(
-              bottom: false,
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _error != null
-                  ? Center(child: Text(_error!))
-                  : RefreshIndicator(
-                      onRefresh: _load,
-                      child: ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(14, 10, 14, 28),
-                        children: [
-                          _CompactDetailHeader(
-                            name: displayName.isEmpty ? 'Cliente' : displayName,
-                            phone: displayPhone,
-                            deleted:
-                                profileClient?.isDeleted ?? _cliente?.isDeleted ?? false,
-                            deleting: _deleting,
-                            onBack: () => AppNavigator.goBack(
-                              context,
-                              fallbackRoute: Routes.clientes,
+    return Scaffold(
+      body: SafeArea(
+        bottom: false,
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+            ? Center(child: Text(_error!))
+            : RefreshIndicator(
+                onRefresh: _load,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 28),
+                  children: [
+                    _CompactDetailHeader(
+                      name: displayName.isEmpty ? 'Cliente' : displayName,
+                      phone: displayPhone,
+                      deleted:
+                          profileClient?.isDeleted ??
+                          _cliente?.isDeleted ??
+                          false,
+                      deleting: _deleting,
+                      onBack: () => AppNavigator.goBack(
+                        context,
+                        fallbackRoute: Routes.clientes,
+                      ),
+                      onActionSelected: (action) {
+                        switch (action) {
+                          case _ClienteHeaderAction.edit:
+                            if (resolvedClientId.isNotEmpty && !_deleting) {
+                              context.push(
+                                Routes.clienteEdit(resolvedClientId),
+                              );
+                            }
+                            break;
+                          case _ClienteHeaderAction.delete:
+                            if (_cliente != null && !_deleting) {
+                              _deleteClient();
+                            }
+                            break;
+                        }
+                      },
+                    ),
+                    if (_refreshing) ...[
+                      const SizedBox(height: 8),
+                      const LinearProgressIndicator(),
+                    ],
+                    const SizedBox(height: 18),
+                    _MetricGrid(items: _buildMetricItems(profile)),
+                    const SizedBox(height: 22),
+                    const _SectionLabel(title: 'Datos importantes del cliente'),
+                    const SizedBox(height: 10),
+                    _SimpleDetailList(rows: importantInfo),
+                    if (displayNote.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      _InlineNoteCard(note: displayNote),
+                    ],
+                    const SizedBox(height: 22),
+                    _LocationDetailCard(
+                      locationUrl: displayLocationUrl,
+                      latitude: displayLatitude,
+                      longitude: displayLongitude,
+                    ),
+                    const SizedBox(height: 22),
+                    _TimelineSection(
+                      title: 'Ultimos movimientos',
+                      emptyLabel:
+                          'No hay ventas, cotizaciones o servicios registrados para este cliente.',
+                      children: recentTimeline
+                          .map(
+                            (event) => _TimelineEventCard(
+                              icon: _timelineIcon(event.eventType),
+                              title: event.title,
+                              summary: _timelineSummary(event),
+                              date: _formatDate(event.at),
+                              amount: event.amount == null
+                                  ? null
+                                  : _formatMoney(event.amount),
+                              statusLabel: _timelineStatusLabel(event),
+                              statusColor: _timelineStatusColor(context, event),
+                              enabled: _canOpenEvent(event),
+                              onTap: () => _openEvent(event),
                             ),
-                            onActionSelected: (action) {
-                              switch (action) {
-                                case _ClienteHeaderAction.edit:
-                                  if (resolvedClientId.isNotEmpty && !_deleting) {
-                                    context.push(Routes.clienteEdit(resolvedClientId));
-                                  }
-                                  break;
-                                case _ClienteHeaderAction.delete:
-                                  if (_cliente != null && !_deleting) {
-                                    _deleteClient();
-                                  }
-                                  break;
-                              }
-                            },
-                          ),
-                          if (_refreshing) ...[
-                            const SizedBox(height: 8),
-                            const LinearProgressIndicator(),
-                          ],
-                          const SizedBox(height: 18),
-                          _MetricGrid(items: _buildMetricItems(profile)),
-                          const SizedBox(height: 22),
-                          const _SectionLabel(title: 'Datos importantes del cliente'),
-                          const SizedBox(height: 10),
-                          _SimpleDetailList(rows: importantInfo),
-                          if (displayNote.isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            _InlineNoteCard(note: displayNote),
-                          ],
-                          const SizedBox(height: 22),
-                          _LocationDetailCard(
-                            locationUrl: displayLocationUrl,
-                            latitude: displayLatitude,
-                            longitude: displayLongitude,
-                          ),
-                          const SizedBox(height: 22),
-                          _TimelineSection(
-                            title: 'Ultimos movimientos',
-                            emptyLabel:
-                                'No hay ventas, cotizaciones o servicios registrados para este cliente.',
-                            children: recentTimeline
-                                .map(
-                                  (event) => _TimelineEventCard(
-                                    icon: _timelineIcon(event.eventType),
-                                    title: event.title,
-                                    summary: _timelineSummary(event),
-                                    date: _formatDate(event.at),
-                                    amount: event.amount == null
-                                        ? null
-                                        : _formatMoney(event.amount),
-                                    statusLabel: _timelineStatusLabel(event),
-                                    statusColor: _timelineStatusColor(
-                                      context,
-                                      event,
-                                    ),
-                                    enabled: _canOpenEvent(event),
-                                    onTap: () => _openEvent(event),
-                                  ),
-                                )
-                                .toList(growable: false),
-                          ),
-                        ],
+                          )
+                          .toList(growable: false),
+                    ),
+                  ],
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+enum _ClienteHeaderAction { edit, delete }
+
+class _CompactDetailHeader extends StatelessWidget {
+  const _CompactDetailHeader({
+    required this.name,
+    required this.phone,
+    required this.deleted,
+    required this.deleting,
+    required this.onBack,
+    required this.onActionSelected,
+  });
+
+  final String name;
+  final String phone;
+  final bool deleted;
+  final bool deleting;
+  final VoidCallback onBack;
+  final ValueChanged<_ClienteHeaderAction> onActionSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Row(
+      children: [
+        IconButton(
+          tooltip: 'Regresar',
+          onPressed: onBack,
+          style: IconButton.styleFrom(
+            minimumSize: const Size(36, 36),
+            padding: EdgeInsets.zero,
+          ),
+          icon: const Icon(Icons.arrow_back_rounded, size: 20),
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  if (phone.isNotEmpty)
+                    Flexible(
+                      child: Text(
+                        phone,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
-            ),
-          );
-        }
-      }
-
-      enum _ClienteHeaderAction { edit, delete }
-
-      class _CompactDetailHeader extends StatelessWidget {
-        const _CompactDetailHeader({
-          required this.name,
-          required this.phone,
-          required this.deleted,
-          required this.deleting,
-          required this.onBack,
-          required this.onActionSelected,
-        });
-
-        final String name;
-        final String phone;
-        final bool deleted;
-        final bool deleting;
-        final VoidCallback onBack;
-        final ValueChanged<_ClienteHeaderAction> onActionSelected;
-
-        @override
-        Widget build(BuildContext context) {
-          final theme = Theme.of(context);
-
-          return Row(
-            children: [
-              IconButton(
-                tooltip: 'Regresar',
-                onPressed: onBack,
-                style: IconButton.styleFrom(
-                  minimumSize: const Size(36, 36),
-                  padding: EdgeInsets.zero,
-                ),
-                icon: const Icon(Icons.arrow_back_rounded, size: 20),
+                  if (deleted) ...[
+                    if (phone.isNotEmpty) const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.errorContainer,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        'Eliminado',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onErrorContainer,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(width: 4),
-              Expanded(
+            ],
+          ),
+        ),
+        PopupMenuButton<_ClienteHeaderAction>(
+          tooltip: 'Opciones',
+          enabled: !deleting,
+          onSelected: onActionSelected,
+          itemBuilder: (context) => const [
+            PopupMenuItem(
+              value: _ClienteHeaderAction.edit,
+              child: Text('Editar'),
+            ),
+            PopupMenuItem(
+              value: _ClienteHeaderAction.delete,
+              child: Text('Eliminar'),
+            ),
+          ],
+          icon: deleting
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.more_vert_rounded),
+        ),
+      ],
+    );
+  }
+}
+
+class _ClientMetricData {
+  const _ClientMetricData({
+    required this.label,
+    required this.value,
+    required this.helper,
+  });
+
+  final String label;
+  final String value;
+  final String helper;
+}
+
+class _MetricGrid extends StatelessWidget {
+  const _MetricGrid({required this.items});
+
+  final List<_ClientMetricData> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final itemWidth = (constraints.maxWidth - 12) / 2;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final item in items)
+              SizedBox(
+                width: itemWidth,
+                child: _MetricCard(
+                  label: item.label,
+                  value: item.value,
+                  helper: item.helper,
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({
+    required this.label,
+    required this.value,
+    required this.helper,
+  });
+
+  final String label;
+  final String value;
+  final String helper;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.24),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.shadow.withValues(alpha: 0.05),
+            blurRadius: 14,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 34,
+              height: 4,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.45),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              value,
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w900,
+                height: 1,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              helper,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      title,
+      style: theme.textTheme.titleSmall?.copyWith(
+        fontWeight: FontWeight.w900,
+        letterSpacing: 0.1,
+      ),
+    );
+  }
+}
+
+class _SimpleDetailRowData {
+  const _SimpleDetailRowData({required this.label, required this.value});
+
+  final String label;
+  final String value;
+}
+
+class _SimpleDetailList extends StatelessWidget {
+  const _SimpleDetailList({required this.rows});
+
+  final List<_SimpleDetailRowData> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final itemWidth = (constraints.maxWidth - 14) / 2;
+        return Wrap(
+          spacing: 14,
+          runSpacing: 14,
+          children: [
+            for (final row in rows)
+              SizedBox(
+                width: itemWidth,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
+                      row.label,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        if (phone.isNotEmpty)
-                          Flexible(
-                            child: Text(
-                              phone,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                        if (deleted) ...[
-                          if (phone.isNotEmpty) const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 7,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.errorContainer,
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              'Eliminado',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: theme.colorScheme.onErrorContainer,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
+                    const SizedBox(height: 3),
+                    Text(
+                      row.value,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        height: 1.35,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),
               ),
-              PopupMenuButton<_ClienteHeaderAction>(
-                tooltip: 'Opciones',
-                enabled: !deleting,
-                onSelected: onActionSelected,
-                itemBuilder: (context) => const [
-                  PopupMenuItem(
-                    value: _ClienteHeaderAction.edit,
-                    child: Text('Editar'),
-                  ),
-                  PopupMenuItem(
-                    value: _ClienteHeaderAction.delete,
-                    child: Text('Eliminar'),
-                  ),
-                ],
-                icon: deleting
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                      : const Icon(Icons.more_vert_rounded),
-              ),
-            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _InlineNoteCard extends StatelessWidget {
+  const _InlineNoteCard({required this.note});
+
+  final String note;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Notas',
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(note, style: theme.textTheme.bodySmall?.copyWith(height: 1.45)),
+      ],
+    );
+  }
+}
+
+class _LocationDetailCard extends StatelessWidget {
+  const _LocationDetailCard({
+    required this.locationUrl,
+    this.latitude,
+    this.longitude,
+  });
+
+  final String? locationUrl;
+  final double? latitude;
+  final double? longitude;
+
+  String? _coordinateLabel(ClientLocationPreview preview) {
+    final latitude = preview.latitude;
+    final longitude = preview.longitude;
+    if (!preview.hasCoordinates || latitude == null || longitude == null) {
+      return null;
+    }
+    return '${latitude.toStringAsFixed(6)}, ${longitude.toStringAsFixed(6)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final normalizedUrl = normalizeClientLocationUrl(locationUrl);
+    final uri = normalizedUrl.isEmpty ? null : Uri.tryParse(normalizedUrl);
+    final parsedPreview = parseClientLocationPreview(normalizedUrl);
+    final directPreview = parsedPreview.hasCoordinates
+        ? parsedPreview
+        : ClientLocationPreview(
+            latitude: latitude,
+            longitude: longitude,
+            resolvedUrl: normalizedUrl.isEmpty ? null : normalizedUrl,
           );
-        }
-      }
+    final coordinateLabel = _coordinateLabel(directPreview);
 
-      class _ClientMetricData {
-        const _ClientMetricData({
-          required this.label,
-          required this.value,
-          required this.helper,
-        });
+    if (normalizedUrl.isEmpty && !directPreview.hasCoordinates) {
+      return const SizedBox.shrink();
+    }
 
-        final String label;
-        final String value;
-        final String helper;
-      }
-
-      class _MetricGrid extends StatelessWidget {
-        const _MetricGrid({required this.items});
-
-        final List<_ClientMetricData> items;
-
-        @override
-        Widget build(BuildContext context) {
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              final itemWidth = (constraints.maxWidth - 12) / 2;
-              return Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  for (final item in items)
-                    SizedBox(
-                      width: itemWidth,
-                      child: _MetricCard(
-                        label: item.label,
-                        value: item.value,
-                        helper: item.helper,
-                      ),
-                    ),
-                ],
-              );
-            },
-          );
-        }
-      }
-
-      class _MetricCard extends StatelessWidget {
-        const _MetricCard({
-          required this.label,
-          required this.value,
-          required this.helper,
-        });
-
-        final String label;
-        final String value;
-        final String helper;
-
-        @override
-        Widget build(BuildContext context) {
-          final theme = Theme.of(context);
-          return DecoratedBox(
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.24),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: theme.colorScheme.shadow.withValues(alpha: 0.05),
-                  blurRadius: 14,
-                  offset: const Offset(0, 8),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionLabel(title: 'Ubicacion GPS'),
+        const SizedBox(height: 10),
+        if (directPreview.hasCoordinates) ...[
+          ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: SizedBox(
+              height: 210,
+              child: FlutterMap(
+                options: MapOptions(
+                  initialCenter: LatLng(
+                    directPreview.latitude!,
+                    directPreview.longitude!,
+                  ),
+                  initialZoom: 15,
                 ),
-              ],
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    width: 34,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.45),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
+                  TileLayer(
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.fulltech.app',
                   ),
-                  const SizedBox(height: 10),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    value,
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      height: 1,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    helper,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      height: 1.3,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-      }
-
-      class _SectionLabel extends StatelessWidget {
-        const _SectionLabel({required this.title});
-
-        final String title;
-
-        @override
-        Widget build(BuildContext context) {
-          final theme = Theme.of(context);
-          return Text(
-            title,
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0.1,
-            ),
-          );
-        }
-      }
-
-      class _SimpleDetailRowData {
-        const _SimpleDetailRowData({
-          required this.label,
-          required this.value,
-        });
-
-        final String label;
-        final String value;
-      }
-
-      class _SimpleDetailList extends StatelessWidget {
-        const _SimpleDetailList({required this.rows});
-
-        final List<_SimpleDetailRowData> rows;
-
-        @override
-        Widget build(BuildContext context) {
-          if (rows.isEmpty) return const SizedBox.shrink();
-
-          final theme = Theme.of(context);
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              final itemWidth = (constraints.maxWidth - 14) / 2;
-              return Wrap(
-                spacing: 14,
-                runSpacing: 14,
-                children: [
-                  for (final row in rows)
-                    SizedBox(
-                      width: itemWidth,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            row.label,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            row.value,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              height: 1.35,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              );
-            },
-          );
-        }
-      }
-
-      class _InlineNoteCard extends StatelessWidget {
-        const _InlineNoteCard({required this.note});
-
-        final String note;
-
-        @override
-        Widget build(BuildContext context) {
-          final theme = Theme.of(context);
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Notas',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                note,
-                style: theme.textTheme.bodySmall?.copyWith(height: 1.45),
-              ),
-            ],
-          );
-        }
-      }
-
-      class _LocationDetailCard extends StatelessWidget {
-        const _LocationDetailCard({
-          required this.locationUrl,
-          this.latitude,
-          this.longitude,
-        });
-
-        final String? locationUrl;
-        final double? latitude;
-        final double? longitude;
-
-        String? _coordinateLabel(ClientLocationPreview preview) {
-          final latitude = preview.latitude;
-          final longitude = preview.longitude;
-          if (!preview.hasCoordinates || latitude == null || longitude == null) {
-            return null;
-          }
-          return '${latitude.toStringAsFixed(6)}, ${longitude.toStringAsFixed(6)}';
-        }
-
-        @override
-        Widget build(BuildContext context) {
-          final theme = Theme.of(context);
-          final normalizedUrl = normalizeClientLocationUrl(locationUrl);
-          final uri = normalizedUrl.isEmpty ? null : Uri.tryParse(normalizedUrl);
-          final parsedPreview = parseClientLocationPreview(normalizedUrl);
-          final directPreview = parsedPreview.hasCoordinates
-              ? parsedPreview
-              : ClientLocationPreview(
-                  latitude: latitude,
-                  longitude: longitude,
-                  resolvedUrl: normalizedUrl.isEmpty ? null : normalizedUrl,
-                );
-          final coordinateLabel = _coordinateLabel(directPreview);
-
-          if (normalizedUrl.isEmpty && !directPreview.hasCoordinates) {
-            return const SizedBox.shrink();
-          }
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const _SectionLabel(title: 'Ubicacion GPS'),
-              const SizedBox(height: 10),
-              if (directPreview.hasCoordinates) ...[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: SizedBox(
-                    height: 210,
-                    child: FlutterMap(
-                      options: MapOptions(
-                        initialCenter: LatLng(
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: LatLng(
                           directPreview.latitude!,
                           directPreview.longitude!,
                         ),
-                        initialZoom: 15,
+                        width: 40,
+                        height: 40,
+                        child: Icon(
+                          Icons.location_pin,
+                          color: theme.colorScheme.error,
+                          size: 38,
+                        ),
                       ),
-                      children: [
-                        TileLayer(
-                          urlTemplate:
-                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          userAgentPackageName: 'com.fulltech.app',
-                        ),
-                        MarkerLayer(
-                          markers: [
-                            Marker(
-                              point: LatLng(
-                                directPreview.latitude!,
-                                directPreview.longitude!,
-                              ),
-                              width: 40,
-                              height: 40,
-                              child: Icon(
-                                Icons.location_pin,
-                                color: theme.colorScheme.error,
-                                size: 38,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (coordinateLabel != null)
+            Text(
+              coordinateLabel,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+        ] else
+          Text(
+            normalizedUrl.isEmpty
+                ? 'Sin coordenadas registradas.'
+                : 'La ubicacion fue guardada como enlace, pero no tiene coordenadas para mostrar el mapa aqui.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        if (uri != null) ...[
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: () => safeOpenUrl(context, uri),
+            icon: const Icon(Icons.open_in_new_rounded, size: 16),
+            label: const Text('Abrir ubicacion'),
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, 0),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              alignment: Alignment.centerLeft,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _TimelineSection extends StatelessWidget {
+  const _TimelineSection({
+    required this.title,
+    required this.emptyLabel,
+    required this.children,
+  });
+
+  final String title;
+  final String emptyLabel;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (children.isEmpty)
+          Text(
+            emptyLabel,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          )
+        else
+          Column(
+            children: [
+              for (var index = 0; index < children.length; index++) ...[
+                if (index > 0)
+                  Divider(
+                    height: 14,
+                    color: theme.colorScheme.outlineVariant.withValues(
+                      alpha: 0.35,
                     ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                if (coordinateLabel != null)
-                  Text(
-                    coordinateLabel,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-              ] else
-                Text(
-                  normalizedUrl.isEmpty
-                      ? 'Sin coordenadas registradas.'
-                      : 'La ubicacion fue guardada como enlace, pero no tiene coordenadas para mostrar el mapa aqui.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              if (uri != null) ...[
-                const SizedBox(height: 8),
-                TextButton.icon(
-                  onPressed: () => safeOpenUrl(context, uri),
-                  icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                  label: const Text('Abrir ubicacion'),
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(0, 0),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    alignment: Alignment.centerLeft,
-                  ),
-                ),
+                children[index],
               ],
             ],
-          );
-        }
-      }
+          ),
+      ],
+    );
+  }
+}
 
-      class _TimelineSection extends StatelessWidget {
-        const _TimelineSection({
-          required this.title,
-          required this.emptyLabel,
-          required this.children,
-        });
+class _TimelineEventCard extends StatelessWidget {
+  const _TimelineEventCard({
+    required this.icon,
+    required this.title,
+    required this.summary,
+    required this.date,
+    required this.amount,
+    required this.statusLabel,
+    required this.statusColor,
+    required this.enabled,
+    required this.onTap,
+  });
 
-        final String title;
-        final String emptyLabel;
-        final List<Widget> children;
+  final IconData icon;
+  final String title;
+  final String summary;
+  final String date;
+  final String? amount;
+  final String statusLabel;
+  final Color statusColor;
+  final bool enabled;
+  final VoidCallback onTap;
 
-        @override
-        Widget build(BuildContext context) {
-          final theme = Theme.of(context);
-          return Column(
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
+              Container(
+                width: 26,
+                height: 26,
+                margin: const EdgeInsets.only(top: 1),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer.withValues(
+                    alpha: 0.75,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  icon,
+                  size: 14,
+                  color: theme.colorScheme.onPrimaryContainer,
                 ),
               ),
-              const SizedBox(height: 10),
-              if (children.isEmpty)
-                Text(
-                  emptyLabel,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                )
-              else
-                Column(
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (var index = 0; index < children.length; index++) ...[
-                      if (index > 0)
-                        Divider(
-                          height: 14,
-                          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ),
-                      children[index],
+                        if (amount != null) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            amount!,
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      date,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    if (summary.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        summary,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          height: 1.35,
+                        ),
+                      ),
                     ],
                   ],
                 ),
-            ],
-          );
-        }
-      }
-
-      class _TimelineEventCard extends StatelessWidget {
-        const _TimelineEventCard({
-          required this.icon,
-          required this.title,
-          required this.summary,
-          required this.date,
-          required this.amount,
-          required this.statusLabel,
-          required this.statusColor,
-          required this.enabled,
-          required this.onTap,
-        });
-
-        final IconData icon;
-        final String title;
-        final String summary;
-        final String date;
-        final String? amount;
-        final String statusLabel;
-        final Color statusColor;
-        final bool enabled;
-        final VoidCallback onTap;
-
-        @override
-        Widget build(BuildContext context) {
-          final theme = Theme.of(context);
-
-          return Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: enabled ? onTap : null,
-              borderRadius: BorderRadius.circular(16),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 26,
-                      height: 26,
-                      margin: const EdgeInsets.only(top: 1),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.75),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      alignment: Alignment.center,
-                      child: Icon(
-                        icon,
-                        size: 14,
-                        color: theme.colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                              if (amount != null) ...[
-                                const SizedBox(width: 8),
-                                Text(
-                                  amount!,
-                                  style: theme.textTheme.labelMedium?.copyWith(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            date,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          if (summary.isNotEmpty) ...[
-                            const SizedBox(height: 3),
-                            Text(
-                              summary,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodySmall?.copyWith(height: 1.35),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          statusLabel,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: statusColor,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Icon(
-                          enabled ? Icons.chevron_right_rounded : Icons.remove_rounded,
-                          size: 16,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
               ),
-            ),
-          );
-        }
-      }
-
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    statusLabel,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: statusColor,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Icon(
+                    enabled
+                        ? Icons.chevron_right_rounded
+                        : Icons.remove_rounded,
+                    size: 16,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

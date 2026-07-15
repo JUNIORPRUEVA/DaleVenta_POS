@@ -193,7 +193,8 @@ class PayrollEmployee {
           (map['seguro_ley_monto'] as num?)?.toDouble() ??
           (map['seguro_ley_pct'] as num?)?.toDouble() ??
           0,
-      seguroLeyMontoLocked: (map['seguro_ley_monto_locked'] ?? 0) == 1 ||
+      seguroLeyMontoLocked:
+          (map['seguro_ley_monto_locked'] ?? 0) == 1 ||
           map['seguro_ley_monto_locked'] == true,
       activo: (map['activo'] ?? 1) == 1,
       createdAt: map['created_at'] != null
@@ -648,33 +649,37 @@ class PayrollHistoryItem {
     required this.netTotal,
   });
 
-    bool get isPaid {
+  bool get isPaid {
     final status = paymentStatus.trim().toUpperCase();
     if (status == 'PAID') return true;
     return periodStatus.trim().toUpperCase() == 'PAID';
-    }
+  }
 
-    String get statusLabel {
-      final status = paymentStatus.trim().toUpperCase();
-      if (status == 'PAID') return 'Pagado';
-      if (status == 'DRAFT') return 'Pendiente';
-      return status.isEmpty ? 'Pendiente' : status;
-    }
+  String get statusLabel {
+    final status = paymentStatus.trim().toUpperCase();
+    if (status == 'PAID') return 'Pagado';
+    if (status == 'DRAFT') return 'Pendiente';
+    return status.isEmpty ? 'Pendiente' : status;
+  }
 
   factory PayrollHistoryItem.fromMap(Map<String, dynamic> map) {
-    final baseSalary = (map['base_salary'] as num?)?.toDouble() ??
-      (map['salary_base'] as num?)?.toDouble() ??
-      0;
-    final gross = (map['gross_total'] as num?)?.toDouble() ??
-      (map['total_gross'] as num?)?.toDouble() ??
-      0;
-    final deducted = (map['deductions_amount'] as num?)?.toDouble() ??
-      (map['total_discounted'] as num?)?.toDouble() ??
-      (map['discounts'] as num?)?.toDouble() ??
-      0;
-    final net = (map['net_total'] as num?)?.toDouble() ??
-      (map['total_net_paid'] as num?)?.toDouble() ??
-      0;
+    final baseSalary =
+        (map['base_salary'] as num?)?.toDouble() ??
+        (map['salary_base'] as num?)?.toDouble() ??
+        0;
+    final gross =
+        (map['gross_total'] as num?)?.toDouble() ??
+        (map['total_gross'] as num?)?.toDouble() ??
+        0;
+    final deducted =
+        (map['deductions_amount'] as num?)?.toDouble() ??
+        (map['total_discounted'] as num?)?.toDouble() ??
+        (map['discounts'] as num?)?.toDouble() ??
+        0;
+    final net =
+        (map['net_total'] as num?)?.toDouble() ??
+        (map['total_net_paid'] as num?)?.toDouble() ??
+        0;
 
     return PayrollHistoryItem(
       entryId: (map['entry_id'] ?? '').toString(),
@@ -686,32 +691,36 @@ class PayrollHistoryItem {
       periodEnd: DateTime.parse((map['period_end']).toString()),
       periodStatus: (map['period_status'] ?? 'DRAFT').toString(),
       paymentStatus: (map['payment_status'] ?? map['period_status'] ?? 'DRAFT')
-        .toString(),
+          .toString(),
       paymentDate: map['payment_date'] != null
-        ? DateTime.tryParse(map['payment_date'].toString())
-        : null,
+          ? DateTime.tryParse(map['payment_date'].toString())
+          : null,
       paymentMethod: map['payment_method']?.toString(),
       paymentReference: map['reference']?.toString(),
       notes: map['notes']?.toString(),
       createdAt: map['created_at'] != null
-        ? DateTime.tryParse(map['created_at'].toString())
-        : null,
+          ? DateTime.tryParse(map['created_at'].toString())
+          : null,
       updatedAt: map['updated_at'] != null
-        ? DateTime.tryParse(map['updated_at'].toString())
-        : null,
+          ? DateTime.tryParse(map['updated_at'].toString())
+          : null,
       baseSalary: baseSalary,
-      commissions: (map['commissions'] as num?)?.toDouble() ??
-        (map['commission_from_sales'] as num?)?.toDouble() ??
-        0,
-      bonuses: (map['bonuses'] as num?)?.toDouble() ??
-        (map['bonuses_amount'] as num?)?.toDouble() ??
-        0,
+      commissions:
+          (map['commissions'] as num?)?.toDouble() ??
+          (map['commission_from_sales'] as num?)?.toDouble() ??
+          0,
+      bonuses:
+          (map['bonuses'] as num?)?.toDouble() ??
+          (map['bonuses_amount'] as num?)?.toDouble() ??
+          0,
       discounts: (map['discounts'] as num?)?.toDouble() ?? deducted,
-      overtime: (map['overtime'] as num?)?.toDouble() ??
-        (map['overtime_amount'] as num?)?.toDouble() ??
-        0,
+      overtime:
+          (map['overtime'] as num?)?.toDouble() ??
+          (map['overtime_amount'] as num?)?.toDouble() ??
+          0,
       totalGross: (map['total_gross'] as num?)?.toDouble() ?? gross,
-      totalDiscounted: (map['total_discounted'] as num?)?.toDouble() ?? deducted,
+      totalDiscounted:
+          (map['total_discounted'] as num?)?.toDouble() ?? deducted,
       totalNetPaid: (map['total_net_paid'] as num?)?.toDouble() ?? net,
       commissionFromSales:
           (map['commission_from_sales'] as num?)?.toDouble() ?? 0,

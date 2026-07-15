@@ -37,14 +37,14 @@ class WhatsappInstanceModel {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'userId': userId,
-        'instanceName': instanceName,
-        'status': status,
-        if (phoneNumber != null) 'phoneNumber': phoneNumber,
-        if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
-        if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
-      };
+    'id': id,
+    'userId': userId,
+    'instanceName': instanceName,
+    'status': status,
+    if (phoneNumber != null) 'phoneNumber': phoneNumber,
+    if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
+    if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
+  };
 
   WhatsappInstanceModel copyWith({
     String? id,

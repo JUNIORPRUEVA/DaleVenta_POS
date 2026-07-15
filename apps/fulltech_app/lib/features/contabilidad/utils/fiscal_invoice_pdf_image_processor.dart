@@ -66,13 +66,15 @@ img.Image _trimUniformBorders(img.Image source) {
   while (left < marginX && _columnLooksLikeBackground(source, left)) {
     left += 1;
   }
-  while (right > width - marginX - 1 && _columnLooksLikeBackground(source, right)) {
+  while (right > width - marginX - 1 &&
+      _columnLooksLikeBackground(source, right)) {
     right -= 1;
   }
   while (top < marginY && _rowLooksLikeBackground(source, top)) {
     top += 1;
   }
-  while (bottom > height - marginY - 1 && _rowLooksLikeBackground(source, bottom)) {
+  while (bottom > height - marginY - 1 &&
+      _rowLooksLikeBackground(source, bottom)) {
     bottom -= 1;
   }
 

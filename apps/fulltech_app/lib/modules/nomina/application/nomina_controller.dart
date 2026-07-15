@@ -78,8 +78,8 @@ class NominaHomeController extends StateNotifier<NominaHomeState> {
       await _repo.ensureCurrentOpenPeriod();
       final periods = await _repo.listPeriods();
       final employees = await _repo.listEmployees(activeOnly: false);
-      final pendingServiceCommissionRequests =
-          await _repo.listPendingServiceCommissionRequests();
+      final pendingServiceCommissionRequests = await _repo
+          .listPendingServiceCommissionRequests();
 
       double? openTotal;
       PayrollPeriod? openPeriod;

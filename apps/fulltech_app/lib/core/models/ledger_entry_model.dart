@@ -5,7 +5,13 @@ class LedgerEntryModel {
   final double amount;
   final DateTime date;
 
-  LedgerEntryModel({required this.id, required this.type, required this.description, required this.amount, required this.date});
+  LedgerEntryModel({
+    required this.id,
+    required this.type,
+    required this.description,
+    required this.amount,
+    required this.date,
+  });
 
   factory LedgerEntryModel.fromJson(Map<String, dynamic> json) {
     return LedgerEntryModel(
@@ -13,7 +19,9 @@ class LedgerEntryModel {
       type: json['type'] ?? 'income',
       description: json['description'] ?? '',
       amount: (json['amount'] ?? 0).toDouble(),
-      date: DateTime.tryParse(json['date'] ?? json['createdAt'] ?? '') ?? DateTime.now(),
+      date:
+          DateTime.tryParse(json['date'] ?? json['createdAt'] ?? '') ??
+          DateTime.now(),
     );
   }
 }

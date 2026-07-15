@@ -1,6 +1,7 @@
-﻿import '../../../core/models/punch_model.dart';
+import '../../../core/models/punch_model.dart';
 
-DateTime? _parseDate(String? value) => value == null ? null : DateTime.tryParse(value);
+DateTime? _parseDate(String? value) =>
+    value == null ? null : DateTime.tryParse(value);
 
 class AttendanceIncident {
   final String type;
@@ -85,9 +86,9 @@ class AttendanceDayMetrics {
       isWeekend: json['isWeekend'] ?? false,
       incidents: incidentsJson != null
           ? incidentsJson
-              .whereType<Map<String, dynamic>>()
-              .map(AttendanceIncident.fromJson)
-              .toList()
+                .whereType<Map<String, dynamic>>()
+                .map(AttendanceIncident.fromJson)
+                .toList()
           : const [],
     );
   }
@@ -171,11 +172,13 @@ class AttendanceUserSummary {
       user: AttendanceUser.fromJson(json['user'] as Map<String, dynamic>),
       days: daysJson != null
           ? daysJson
-              .whereType<Map<String, dynamic>>()
-              .map(AttendanceDayMetrics.fromJson)
-              .toList()
+                .whereType<Map<String, dynamic>>()
+                .map(AttendanceDayMetrics.fromJson)
+                .toList()
           : const [],
-      aggregate: AttendanceAggregateMetrics.fromJson(json['aggregate'] as Map<String, dynamic>? ?? {}),
+      aggregate: AttendanceAggregateMetrics.fromJson(
+        json['aggregate'] as Map<String, dynamic>? ?? {},
+      ),
     );
   }
 }
@@ -230,18 +233,20 @@ class AttendanceSummaryModel {
     final usersJson = json['users'] as List<dynamic>?;
     final perDayJson = json['perDay'] as List<dynamic>?;
     return AttendanceSummaryModel(
-      totals: AttendanceSummaryTotals.fromJson(json['totals'] as Map<String, dynamic>? ?? {}),
+      totals: AttendanceSummaryTotals.fromJson(
+        json['totals'] as Map<String, dynamic>? ?? {},
+      ),
       users: usersJson != null
           ? usersJson
-              .whereType<Map<String, dynamic>>()
-              .map(AttendanceUserSummary.fromJson)
-              .toList()
+                .whereType<Map<String, dynamic>>()
+                .map(AttendanceUserSummary.fromJson)
+                .toList()
           : const [],
       perDay: perDayJson != null
           ? perDayJson
-              .whereType<Map<String, dynamic>>()
-              .map(AttendanceDayMetrics.fromJson)
-              .toList()
+                .whereType<Map<String, dynamic>>()
+                .map(AttendanceDayMetrics.fromJson)
+                .toList()
           : const [],
     );
   }
@@ -267,17 +272,19 @@ class AttendanceDetailModel {
       user: AttendanceUser.fromJson(json['user'] as Map<String, dynamic>),
       punches: punchesJson != null
           ? punchesJson
-              .whereType<Map<String, dynamic>>()
-              .map(PunchModel.fromJson)
-              .toList()
+                .whereType<Map<String, dynamic>>()
+                .map(PunchModel.fromJson)
+                .toList()
           : const [],
       days: daysJson != null
           ? daysJson
-              .whereType<Map<String, dynamic>>()
-              .map(AttendanceDayMetrics.fromJson)
-              .toList()
+                .whereType<Map<String, dynamic>>()
+                .map(AttendanceDayMetrics.fromJson)
+                .toList()
           : const [],
-      totals: AttendanceAggregateMetrics.fromJson(json['totals'] as Map<String, dynamic>? ?? {}),
+      totals: AttendanceAggregateMetrics.fromJson(
+        json['totals'] as Map<String, dynamic>? ?? {},
+      ),
     );
   }
 }

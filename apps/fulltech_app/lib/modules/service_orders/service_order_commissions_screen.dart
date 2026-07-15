@@ -123,64 +123,71 @@ class ServiceOrderCommissionsScreen extends ConsumerWidget {
                   if (useCompactCards) {
                     final List<Widget> compactCards = [];
                     if (state.summary.totalServices > 0) {
-                      compactCards.add(Expanded(
-                        child: _SummaryCard(
-                          title: 'Servicios',
-                          value: '${state.summary.totalServices}',
-                          subtitle: 'Finalizados',
-                          icon: Icons.assignment_turned_in_outlined,
-                          compact: true,
-                          onTap: () => _showSummaryCardDialog(
-                            context,
-                            title: 'Servicios finalizados',
+                      compactCards.add(
+                        Expanded(
+                          child: _SummaryCard(
+                            title: 'Servicios',
                             value: '${state.summary.totalServices}',
-                            subtitle: 'Órdenes cerradas en el período activo.',
+                            subtitle: 'Finalizados',
                             icon: Icons.assignment_turned_in_outlined,
+                            compact: true,
+                            onTap: () => _showSummaryCardDialog(
+                              context,
+                              title: 'Servicios finalizados',
+                              value: '${state.summary.totalServices}',
+                              subtitle:
+                                  'Órdenes cerradas en el período activo.',
+                              icon: Icons.assignment_turned_in_outlined,
+                            ),
                           ),
                         ),
-                      ));
+                      );
                     }
                     if (state.summary.totalSold > 0) {
-                      compactCards.add(Expanded(
-                        child: _SummaryCard(
-                          title: 'Vendido',
-                          value: currency.format(state.summary.totalSold),
-                          subtitle: 'Periodo',
-                          icon: Icons.payments_outlined,
-                          compact: true,
-                          onTap: () => _showSummaryCardDialog(
-                            context,
-                            title: 'Monto total vendido',
+                      compactCards.add(
+                        Expanded(
+                          child: _SummaryCard(
+                            title: 'Vendido',
                             value: currency.format(state.summary.totalSold),
-                            subtitle:
-                                'Suma total vendida dentro de la quincena seleccionada.',
+                            subtitle: 'Periodo',
                             icon: Icons.payments_outlined,
+                            compact: true,
+                            onTap: () => _showSummaryCardDialog(
+                              context,
+                              title: 'Monto total vendido',
+                              value: currency.format(state.summary.totalSold),
+                              subtitle:
+                                  'Suma total vendida dentro de la quincena seleccionada.',
+                              icon: Icons.payments_outlined,
+                            ),
                           ),
                         ),
-                      ));
+                      );
                     }
                     if (state.summary.visibleCommissionTotal > 0) {
-                      compactCards.add(Expanded(
-                        child: _SummaryCard(
-                          title: 'Comisión',
-                          value: currency.format(
-                            state.summary.visibleCommissionTotal,
-                          ),
-                          subtitle: 'Visible',
-                          icon: Icons.account_balance_wallet_outlined,
-                          compact: true,
-                          onTap: () => _showSummaryCardDialog(
-                            context,
-                            title: 'Comisión estimada',
+                      compactCards.add(
+                        Expanded(
+                          child: _SummaryCard(
+                            title: 'Comisión',
                             value: currency.format(
                               state.summary.visibleCommissionTotal,
                             ),
-                            subtitle:
-                                'Total de comisión visible según el rol actual.',
+                            subtitle: 'Visible',
                             icon: Icons.account_balance_wallet_outlined,
+                            compact: true,
+                            onTap: () => _showSummaryCardDialog(
+                              context,
+                              title: 'Comisión estimada',
+                              value: currency.format(
+                                state.summary.visibleCommissionTotal,
+                              ),
+                              subtitle:
+                                  'Total de comisión visible según el rol actual.',
+                              icon: Icons.account_balance_wallet_outlined,
+                            ),
                           ),
                         ),
-                      ));
+                      );
                     }
                     if (compactCards.isEmpty) return const SizedBox.shrink();
                     final List<Widget> rowChildren = [];

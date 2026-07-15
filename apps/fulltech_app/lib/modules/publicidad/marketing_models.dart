@@ -1,4 +1,4 @@
-﻿class MarketingFlowConfig {
+class MarketingFlowConfig {
   const MarketingFlowConfig({
     required this.id,
     required this.active,
@@ -58,13 +58,7 @@ enum MarketingPublishTarget {
   instagramPost,
 }
 
-enum MarketingImageStatus {
-  pending,
-  queued,
-  processing,
-  generated,
-  failed,
-}
+enum MarketingImageStatus { pending, queued, processing, generated, failed }
 
 MarketingStoryType parseStoryType(String? value) {
   final normalized = (value ?? '').trim().toUpperCase();
@@ -229,25 +223,25 @@ class MarketingMediaAsset {
               .where((item) => item.isNotEmpty)
               .toList(growable: false)
         : const <String>[];
-      final latestStoryRaw = json['latestStory'];
-      final latestStory = latestStoryRaw is Map
+    final latestStoryRaw = json['latestStory'];
+    final latestStory = latestStoryRaw is Map
         ? latestStoryRaw.cast<String, dynamic>()
         : const <String, dynamic>{};
-      final rawFileUrl = '${json['fileUrl'] ?? json['imageUrl'] ?? ''}'.trim();
-      final rawImageUrl = '${json['imageUrl'] ?? json['fileUrl'] ?? ''}'.trim();
-      final contentGalleryItemId =
+    final rawFileUrl = '${json['fileUrl'] ?? json['imageUrl'] ?? ''}'.trim();
+    final rawImageUrl = '${json['imageUrl'] ?? json['fileUrl'] ?? ''}'.trim();
+    final contentGalleryItemId =
         '${json['contentGalleryItemId'] ?? ''}'.trim().isEmpty
         ? null
         : '${json['contentGalleryItemId']}';
-      final mediaAssetId = '${json['mediaAssetId'] ?? ''}'.trim().isEmpty
+    final mediaAssetId = '${json['mediaAssetId'] ?? ''}'.trim().isEmpty
         ? null
         : '${json['mediaAssetId']}';
     return MarketingMediaAsset(
       id: '${json['id'] ?? ''}',
-        contentGalleryItemId: contentGalleryItemId,
-        mediaAssetId: mediaAssetId,
-        fileUrl: rawFileUrl,
-        imageUrl: rawImageUrl,
+      contentGalleryItemId: contentGalleryItemId,
+      mediaAssetId: mediaAssetId,
+      fileUrl: rawFileUrl,
+      imageUrl: rawImageUrl,
       thumbnailUrl: (json['thumbnailUrl'] ?? '').toString().trim().isEmpty
           ? null
           : '${json['thumbnailUrl']}',
@@ -261,10 +255,10 @@ class MarketingMediaAsset {
       description: (json['description'] ?? '').toString().trim().isEmpty
           ? null
           : '${json['description']}',
-        origin: '${json['origin'] ?? ''}'.trim().isEmpty
+      origin: '${json['origin'] ?? ''}'.trim().isEmpty
           ? null
           : '${json['origin']}',
-        isAuthorizedForPublicidad: json['isAuthorizedForPublicidad'] != false,
+      isAuthorizedForPublicidad: json['isAuthorizedForPublicidad'] != false,
       isActive: json['isActive'] != false,
       isFeatured: json['isFeatured'] == true,
       useCount: (json['useCount'] as num?)?.toInt() ?? 0,
@@ -332,9 +326,8 @@ class MarketingLearningStats {
       topInsights: rows
           .whereType<Map>()
           .map(
-            (item) => MarketingLearningInsight.fromJson(
-              item.cast<String, dynamic>(),
-            ),
+            (item) =>
+                MarketingLearningInsight.fromJson(item.cast<String, dynamic>()),
           )
           .toList(growable: false),
     );
@@ -398,7 +391,8 @@ class MarketingResearchDetail {
       mainFocus: '${json['mainFocus'] ?? ''}',
       researchPrompt: '${json['researchPrompt'] ?? ''}',
       marketSummary: '${json['marketSummary'] ?? ''}',
-      competitorPublishingPatterns: '${json['competitorPublishingPatterns'] ?? ''}',
+      competitorPublishingPatterns:
+          '${json['competitorPublishingPatterns'] ?? ''}',
       commonOffers: '${json['commonOffers'] ?? ''}',
       observedPriceRanges: '${json['observedPriceRanges'] ?? ''}',
       contentOpportunities: '${json['contentOpportunities'] ?? ''}',
@@ -592,65 +586,74 @@ class MarketingStory {
       imageStatus: parseImageStatus('${json['imageStatus'] ?? ''}'),
       generatedImageUrl: '${json['generatedImageUrl'] ?? ''}',
       generatedImageProvider: '${json['generatedImageProvider'] ?? ''}',
-        imageGenerationMetadata: (json['imageGenerationMetadata'] is Map)
+      imageGenerationMetadata: (json['imageGenerationMetadata'] is Map)
           ? (json['imageGenerationMetadata'] as Map).cast<String, dynamic>()
           : const <String, dynamic>{},
       usedResearchAngle: '${json['usedResearchAngle'] ?? ''}',
       usedOffer: '${json['usedOffer'] ?? ''}',
       usedCTA: '${json['usedCTA'] ?? ''}',
-        publishedAt: DateTime.tryParse('${json['publishedAt'] ?? ''}'),
-        facebookPostId: '${json['facebookPostId'] ?? ''}'.trim().isEmpty
+      publishedAt: DateTime.tryParse('${json['publishedAt'] ?? ''}'),
+      facebookPostId: '${json['facebookPostId'] ?? ''}'.trim().isEmpty
           ? null
           : '${json['facebookPostId']}',
-        instagramPostId: '${json['instagramPostId'] ?? json['instagramMediaId'] ?? ''}'.trim().isEmpty
+      instagramPostId:
+          '${json['instagramPostId'] ?? json['instagramMediaId'] ?? ''}'
+              .trim()
+              .isEmpty
           ? null
           : '${json['instagramPostId'] ?? json['instagramMediaId']}',
-        instagramMediaId: '${json['instagramMediaId'] ?? json['instagramPostId'] ?? ''}'.trim().isEmpty
+      instagramMediaId:
+          '${json['instagramMediaId'] ?? json['instagramPostId'] ?? ''}'
+              .trim()
+              .isEmpty
           ? null
           : '${json['instagramMediaId'] ?? json['instagramPostId']}',
-        instagramStoryId: '${json['instagramStoryId'] ?? ''}'.trim().isEmpty
+      instagramStoryId: '${json['instagramStoryId'] ?? ''}'.trim().isEmpty
           ? null
           : '${json['instagramStoryId']}',
-        facebookStoryId: '${json['facebookStoryId'] ?? ''}'.trim().isEmpty
+      facebookStoryId: '${json['facebookStoryId'] ?? ''}'.trim().isEmpty
           ? null
           : '${json['facebookStoryId']}',
-        facebookStoryStatus: '${json['facebookStoryStatus'] ?? ''}'.trim().isEmpty
+      facebookStoryStatus: '${json['facebookStoryStatus'] ?? ''}'.trim().isEmpty
           ? null
           : '${json['facebookStoryStatus']}',
-        facebookStoryError: '${json['facebookStoryError'] ?? ''}'.trim().isEmpty
+      facebookStoryError: '${json['facebookStoryError'] ?? ''}'.trim().isEmpty
           ? null
           : '${json['facebookStoryError']}',
-        instagramStoryStatus: '${json['instagramStoryStatus'] ?? ''}'.trim().isEmpty
+      instagramStoryStatus:
+          '${json['instagramStoryStatus'] ?? ''}'.trim().isEmpty
           ? null
           : '${json['instagramStoryStatus']}',
-        facebookPostStatus: '${json['facebookPostStatus'] ?? ''}'.trim().isEmpty
+      facebookPostStatus: '${json['facebookPostStatus'] ?? ''}'.trim().isEmpty
           ? null
           : '${json['facebookPostStatus']}',
-        instagramPostStatus: '${json['instagramPostStatus'] ?? ''}'.trim().isEmpty
+      instagramPostStatus: '${json['instagramPostStatus'] ?? ''}'.trim().isEmpty
           ? null
           : '${json['instagramPostStatus']}',
-        instagramContainerId: '${json['instagramContainerId'] ?? ''}'.trim().isEmpty
+      instagramContainerId:
+          '${json['instagramContainerId'] ?? ''}'.trim().isEmpty
           ? null
           : '${json['instagramContainerId']}',
-        instagramStoryContainerId:
-            '${json['instagramStoryContainerId'] ?? ''}'.trim().isEmpty
+      instagramStoryContainerId:
+          '${json['instagramStoryContainerId'] ?? ''}'.trim().isEmpty
           ? null
           : '${json['instagramStoryContainerId']}',
-        instagramStoryPublishedAt:
-            DateTime.tryParse('${json['instagramStoryPublishedAt'] ?? ''}'),
-        publishedChannels: parsePublishTargets(json['publishedChannels']),
-        publishTargets: parsePublishTargets(json['publishTargets']),
-        publishStatus: parsePublishStatus('${json['publishStatus'] ?? ''}'),
-        publishError: '${json['publishError'] ?? ''}'.trim().isEmpty
+      instagramStoryPublishedAt: DateTime.tryParse(
+        '${json['instagramStoryPublishedAt'] ?? ''}',
+      ),
+      publishedChannels: parsePublishTargets(json['publishedChannels']),
+      publishTargets: parsePublishTargets(json['publishTargets']),
+      publishStatus: parsePublishStatus('${json['publishStatus'] ?? ''}'),
+      publishError: '${json['publishError'] ?? ''}'.trim().isEmpty
           ? null
           : '${json['publishError']}',
-        publishErrorCode: '${json['publishErrorCode'] ?? ''}'.trim().isEmpty
+      publishErrorCode: '${json['publishErrorCode'] ?? ''}'.trim().isEmpty
           ? null
           : '${json['publishErrorCode']}',
-        publishErrorDetails: (json['publishErrorDetails'] is Map)
+      publishErrorDetails: (json['publishErrorDetails'] is Map)
           ? (json['publishErrorDetails'] as Map).cast<String, dynamic>()
           : const <String, dynamic>{},
-        retryCount: (json['retryCount'] as num?)?.toInt() ?? 0,
+      retryCount: (json['retryCount'] as num?)?.toInt() ?? 0,
       mediaAsset: rawAsset is Map
           ? MarketingMediaAsset.fromJson(rawAsset.cast<String, dynamic>())
           : null,
@@ -821,7 +824,7 @@ class MarketingPublishedAsset {
           ? null
           : '${json['mediaAssetId']}',
       generatedImageUrl: '${json['generatedImageUrl'] ?? ''}',
-        imageUrl: '${json['imageUrl'] ?? ''}',
+      imageUrl: '${json['imageUrl'] ?? ''}',
       headline: '${json['headline'] ?? ''}',
       shortText: '${json['shortText'] ?? ''}',
       cta: '${json['cta'] ?? ''}',
@@ -861,9 +864,11 @@ class MarketingResetCleanSummary {
   factory MarketingResetCleanSummary.fromJson(Map<String, dynamic> json) {
     return MarketingResetCleanSummary(
       storiesDeleted: (json['storiesDeleted'] as num?)?.toInt() ?? 0,
-      generatedImagesDeleted: (json['generatedImagesDeleted'] as num?)?.toInt() ?? 0,
+      generatedImagesDeleted:
+          (json['generatedImagesDeleted'] as num?)?.toInt() ?? 0,
       activityLogsDeleted: (json['activityLogsDeleted'] as num?)?.toInt() ?? 0,
-      publishedDraftsDeleted: (json['publishedDraftsDeleted'] as num?)?.toInt() ?? 0,
+      publishedDraftsDeleted:
+          (json['publishedDraftsDeleted'] as num?)?.toInt() ?? 0,
       researchKept: (json['researchKept'] as num?)?.toInt() ?? 0,
       mediaAssetsKept: (json['mediaAssetsKept'] as num?)?.toInt() ?? 0,
     );
@@ -901,14 +906,20 @@ class MarketingRepairIncompleteSummary {
   final List<MarketingRepairIncompleteError> failed;
 
   factory MarketingRepairIncompleteSummary.fromJson(Map<String, dynamic> json) {
-    final rawFailed = (json['failed'] is List) ? (json['failed'] as List) : const [];
+    final rawFailed = (json['failed'] is List)
+        ? (json['failed'] as List)
+        : const [];
     return MarketingRepairIncompleteSummary(
       date: '${json['date'] ?? ''}',
       targeted: (json['targeted'] as num?)?.toInt() ?? 0,
       repaired: (json['repaired'] as num?)?.toInt() ?? 0,
       failed: rawFailed
           .whereType<Map>()
-          .map((item) => MarketingRepairIncompleteError.fromJson(item.cast<String, dynamic>()))
+          .map(
+            (item) => MarketingRepairIncompleteError.fromJson(
+              item.cast<String, dynamic>(),
+            ),
+          )
           .toList(growable: false),
     );
   }

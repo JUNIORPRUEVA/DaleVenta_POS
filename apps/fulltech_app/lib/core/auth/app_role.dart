@@ -5,14 +5,7 @@ import 'package:flutter/foundation.dart';
 /// Backend uses Prisma enum-like roles (e.g. `ADMIN`, `TECNICO`).
 /// Some legacy payloads may contain synonyms (e.g. `technician`, `técnico`).
 /// We normalize those here so the rest of the app never compares raw strings.
-enum AppRole {
-  admin,
-  asistente,
-  vendedor,
-  marketing,
-  tecnico,
-  unknown,
-}
+enum AppRole { admin, asistente, vendedor, marketing, tecnico, unknown }
 
 String _stripDiacritics(String input) {
   // Minimal normalization without extra deps.

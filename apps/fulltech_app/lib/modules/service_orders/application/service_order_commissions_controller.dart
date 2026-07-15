@@ -66,8 +66,9 @@ class ServiceOrderCommissionsState {
   }
 }
 
-final serviceOrderCommissionsControllerProvider =
-    StateNotifierProvider.autoDispose.family<
+final serviceOrderCommissionsControllerProvider = StateNotifierProvider
+    .autoDispose
+    .family<
       ServiceOrderCommissionsController,
       ServiceOrderCommissionsState,
       String?

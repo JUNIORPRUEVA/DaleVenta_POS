@@ -35,10 +35,7 @@ class KpiChip extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                label,
-                style: TextStyle(fontSize: 12, color: labelColor),
-              ),
+              Text(label, style: TextStyle(fontSize: 12, color: labelColor)),
               const SizedBox(height: 2),
               Text(
                 value,

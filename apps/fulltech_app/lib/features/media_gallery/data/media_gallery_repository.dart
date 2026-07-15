@@ -41,10 +41,7 @@ class MediaGalleryRepository {
           if ((cursor ?? '').trim().isNotEmpty) 'cursor': cursor!.trim(),
         },
         options: _backgroundOptions.copyWith(
-          extra: {
-            ...?_backgroundOptions.extra,
-            'silent': silent,
-          },
+          extra: {...?_backgroundOptions.extra, 'silent': silent},
         ),
       );
       return MediaGalleryPage.fromJson(
@@ -113,7 +110,8 @@ class MediaGalleryRepository {
       _rethrow(error, 'No se pudo cargar la galería de publicidad');
     } catch (error) {
       throw ApiException.detailed(
-        message: 'No se pudo cargar la galería de publicidad. Formato inválido.',
+        message:
+            'No se pudo cargar la galería de publicidad. Formato inválido.',
         type: ApiErrorType.parse,
         displayCode: 'PARSE_ERROR',
         technicalDetails: error.toString(),

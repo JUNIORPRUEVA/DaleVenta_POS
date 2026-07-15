@@ -14,7 +14,7 @@ export class SalesAdminController {
 
   @Get()
   listByUser(@Query() query: SalesRangeQueryDto) {
-    return this.sales.listByUser(query.userId ?? '', query.from, query.to, query.customerId);
+    return this.sales.listByUser(query.userId ?? '', query.from, query.to, query.customerId, query.includeDeleted === 'true');
   }
 
   @Get('summary')

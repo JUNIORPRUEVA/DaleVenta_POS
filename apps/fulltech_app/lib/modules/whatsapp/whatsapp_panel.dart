@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -45,9 +45,11 @@ class _WhatsappPanelState extends ConsumerState<WhatsappPanel> {
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(
-        text: _sanitize(widget.defaultInstanceName ?? ''));
+      text: _sanitize(widget.defaultInstanceName ?? ''),
+    );
     _phoneCtrl = TextEditingController(
-        text: _prefixPhone(widget.defaultPhoneNumber ?? ''));
+      text: _prefixPhone(widget.defaultPhoneNumber ?? ''),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(whatsappControllerProvider.notifier).loadInstance();
@@ -79,12 +81,15 @@ class _WhatsappPanelState extends ConsumerState<WhatsappPanel> {
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.white),
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
               ),
               SizedBox(width: 12),
               Expanded(
                 child: Text(
-                    'Espera un momento para que escanees el código QR…'),
+                  'Espera un momento para que escanees el código QR…',
+                ),
               ),
             ],
           ),
@@ -97,7 +102,9 @@ class _WhatsappPanelState extends ConsumerState<WhatsappPanel> {
     final name = _nameCtrl.text.trim();
     final phone = _phoneCtrl.text.trim();
 
-    await ref.read(whatsappControllerProvider.notifier).createInstance(
+    await ref
+        .read(whatsappControllerProvider.notifier)
+        .createInstance(
           instanceName: name.isEmpty ? null : name,
           phoneNumber: phone.isEmpty ? null : phone,
         );
@@ -260,8 +267,9 @@ class _WaCreateCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(14),
-        border:
-            Border.all(color: scheme.outlineVariant.withValues(alpha: 0.60)),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.60),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -275,31 +283,43 @@ class _WaCreateCard extends StatelessWidget {
                   color: const Color(0xFF25D366).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(13),
                 ),
-                child: const Icon(Icons.chat_rounded,
-                    color: Color(0xFF25D366), size: 22),
+                child: const Icon(
+                  Icons.chat_rounded,
+                  color: Color(0xFF25D366),
+                  size: 22,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Conectar WhatsApp',
-                        style: theme.textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w800)),
+                    Text(
+                      'Conectar WhatsApp',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                     const SizedBox(height: 2),
-                    Text('Sin instancia registrada',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w500)),
+                    Text(
+                      'Sin instancia registrada',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ],
                 ),
               ),
             ],
           ),
           const SizedBox(height: 16),
-          Text('Nombre de la instancia',
-              style: theme.textTheme.labelMedium
-                  ?.copyWith(fontWeight: FontWeight.w700)),
+          Text(
+            'Nombre de la instancia',
+            style: theme.textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           const SizedBox(height: 6),
           TextField(
             controller: nameCtrl,
@@ -309,17 +329,23 @@ class _WaCreateCard extends StatelessWidget {
               hintText: 'ej: mi_empresa',
               prefixIcon: const Icon(Icons.label_rounded, size: 18),
               isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 10,
+                horizontal: 12,
+              ),
               border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10)),
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             style: theme.textTheme.bodyMedium,
           ),
           const SizedBox(height: 12),
-          Text('Número de teléfono (con código de país)',
-              style: theme.textTheme.labelMedium
-                  ?.copyWith(fontWeight: FontWeight.w700)),
+          Text(
+            'Número de teléfono (con código de país)',
+            style: theme.textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           const SizedBox(height: 6),
           TextField(
             controller: phoneCtrl,
@@ -330,31 +356,39 @@ class _WaCreateCard extends StatelessWidget {
               hintText: 'ej: 18095551234',
               prefixIcon: const Icon(Icons.phone_rounded, size: 18),
               isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 10,
+                horizontal: 12,
+              ),
               border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10)),
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             style: theme.textTheme.bodyMedium,
           ),
           if (error != null) ...[
             const SizedBox(height: 12),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: scheme.errorContainer.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.error_outline_rounded,
-                      color: scheme.onErrorContainer, size: 16),
+                  Icon(
+                    Icons.error_outline_rounded,
+                    color: scheme.onErrorContainer,
+                    size: 16,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(error!,
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: scheme.onErrorContainer)),
+                    child: Text(
+                      error!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onErrorContainer,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -370,7 +404,9 @@ class _WaCreateCard extends StatelessWidget {
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
                   : const Icon(Icons.link_rounded),
               label: Text(isConnecting ? 'Conectando...' : 'Conectar'),
@@ -425,22 +461,31 @@ class _WaConnectedCard extends StatelessWidget {
                   color: statusColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(13),
                 ),
-                child: const Icon(Icons.check_circle_rounded,
-                    color: statusColor, size: 22),
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  color: statusColor,
+                  size: 22,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('WhatsApp',
-                        style: theme.textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w800)),
+                    Text(
+                      'WhatsApp',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                     const SizedBox(height: 2),
-                    Text('Conectado',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                            color: statusColor,
-                            fontWeight: FontWeight.w600)),
+                    Text(
+                      'Conectado',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: statusColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -449,16 +494,18 @@ class _WaConnectedCard extends StatelessWidget {
           if ((instance?.phoneNumber ?? '').isNotEmpty) ...[
             const SizedBox(height: 10),
             _InfoRow(
-                icon: Icons.phone_outlined,
-                label: 'Número',
-                value: instance!.phoneNumber!),
+              icon: Icons.phone_outlined,
+              label: 'Número',
+              value: instance!.phoneNumber!,
+            ),
           ],
           if ((instance?.instanceName ?? '').isNotEmpty) ...[
             const SizedBox(height: 6),
             _InfoRow(
-                icon: Icons.memory_rounded,
-                label: 'Instancia',
-                value: instance!.instanceName!),
+              icon: Icons.memory_rounded,
+              label: 'Instancia',
+              value: instance!.instanceName!,
+            ),
           ],
           const SizedBox(height: 14),
           Wrap(
@@ -473,11 +520,12 @@ class _WaConnectedCard extends StatelessWidget {
               OutlinedButton.icon(
                 onPressed: onDisconnect,
                 icon: Icon(Icons.link_off_rounded, color: scheme.error),
-                label: Text('Desconectar',
-                    style: TextStyle(color: scheme.error)),
+                label: Text(
+                  'Desconectar',
+                  style: TextStyle(color: scheme.error),
+                ),
                 style: OutlinedButton.styleFrom(
-                  side: BorderSide(
-                      color: scheme.error.withValues(alpha: 0.4)),
+                  side: BorderSide(color: scheme.error.withValues(alpha: 0.4)),
                 ),
               ),
             ],
@@ -515,8 +563,9 @@ class _WaPendingCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(14),
-        border:
-            Border.all(color: scheme.outlineVariant.withValues(alpha: 0.60)),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.60),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -530,57 +579,65 @@ class _WaPendingCard extends StatelessWidget {
                   color: statusColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(13),
                 ),
-                child: const Icon(Icons.qr_code_scanner_rounded,
-                    color: statusColor, size: 22),
+                child: const Icon(
+                  Icons.qr_code_scanner_rounded,
+                  color: statusColor,
+                  size: 22,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('WhatsApp',
-                        style: theme.textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w800)),
+                    Text(
+                      'WhatsApp',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                     const SizedBox(height: 2),
-                    Text('Pendiente — sin conectar',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                            color: statusColor,
-                            fontWeight: FontWeight.w600)),
+                    Text(
+                      'Pendiente — sin conectar',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: statusColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ],
                 ),
               ),
             ],
           ),
-          if ((instance?.instanceName ?? '').isNotEmpty) ...[  
+          if ((instance?.instanceName ?? '').isNotEmpty) ...[
             const SizedBox(height: 10),
             _InfoRow(
-                icon: Icons.memory_rounded,
-                label: 'Instancia',
-                value: instance!.instanceName!),
+              icon: Icons.memory_rounded,
+              label: 'Instancia',
+              value: instance!.instanceName!,
+            ),
           ],
           const SizedBox(height: 12),
           // Warning banner
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               color: statusColor.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(10),
-              border:
-                  Border.all(color: statusColor.withValues(alpha: 0.30)),
+              border: Border.all(color: statusColor.withValues(alpha: 0.30)),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.warning_amber_rounded,
-                    color: statusColor, size: 16),
+                Icon(Icons.warning_amber_rounded, color: statusColor, size: 16),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Esta instancia no está activa en el servidor de WhatsApp. '
                     'Si el QR falla, usa "Reiniciar" para borrarla y crear una nueva.',
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: statusColor),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: statusColor,
+                    ),
                   ),
                 ),
               ],
@@ -595,8 +652,9 @@ class _WaPendingCard extends StatelessWidget {
               icon: const Icon(Icons.restart_alt_rounded),
               label: const Text('Reiniciar y crear nueva instancia'),
               style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF25D366),
-                  padding: const EdgeInsets.symmetric(vertical: 13)),
+                backgroundColor: const Color(0xFF25D366),
+                padding: const EdgeInsets.symmetric(vertical: 13),
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -628,8 +686,7 @@ class _WaLoadingCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(14),
-        border:
-            Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: const Center(child: CircularProgressIndicator()),
     );
@@ -639,8 +696,11 @@ class _WaLoadingCard extends StatelessWidget {
 // ─── Info row ─────────────────────────────────────────────────────────────────
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow(
-      {required this.icon, required this.label, required this.value});
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 
   final IconData icon;
   final String label;
@@ -653,16 +713,20 @@ class _InfoRow extends StatelessWidget {
       children: [
         Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
         const SizedBox(width: 6),
-        Text('$label: ',
-            style: theme.textTheme.labelSmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        Text(
+          '$label: ',
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
         Expanded(
           child: Text(
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style:
-                theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700),
+            style: theme.textTheme.labelSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ],
@@ -709,8 +773,9 @@ class _WhatsappQrSheetState extends ConsumerState<WhatsappQrSheet> {
     final qr = state.qr;
 
     return Container(
-      constraints:
-          BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.85,
+      ),
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -720,8 +785,9 @@ class _WhatsappQrSheetState extends ConsumerState<WhatsappQrSheet> {
                 ? '¡Gracias, ya está conectado!'
                 : 'Escanea el código QR',
             textAlign: TextAlign.center,
-            style: theme.textTheme.titleLarge
-                ?.copyWith(fontWeight: FontWeight.w800),
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
           ),
           const SizedBox(height: 6),
           Text(
@@ -729,8 +795,9 @@ class _WhatsappQrSheetState extends ConsumerState<WhatsappQrSheet> {
                 ? 'Tu WhatsApp fue conectado exitosamente.'
                 : 'Abre WhatsApp → Menú → Dispositivos vinculados → Vincular.',
             textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium
-                ?.copyWith(color: scheme.onSurfaceVariant),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 24),
           if (isConnected)
@@ -741,8 +808,11 @@ class _WhatsappQrSheetState extends ConsumerState<WhatsappQrSheet> {
                 color: const Color(0xFF25D366).withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.check_circle_rounded,
-                  color: Color(0xFF25D366), size: 52),
+              child: const Icon(
+                Icons.check_circle_rounded,
+                color: Color(0xFF25D366),
+                size: 52,
+              ),
             )
           else if (state.qrError != null)
             _QrErrorView(
@@ -762,8 +832,9 @@ class _WhatsappQrSheetState extends ConsumerState<WhatsappQrSheet> {
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () =>
-                            ref.read(whatsappControllerProvider.notifier).refreshQr(),
+                        onPressed: () => ref
+                            .read(whatsappControllerProvider.notifier)
+                            .refreshQr(),
                         icon: const Icon(Icons.refresh_rounded),
                         label: const Text('Actualizar QR'),
                       ),
@@ -777,7 +848,7 @@ class _WhatsappQrSheetState extends ConsumerState<WhatsappQrSheet> {
                     ),
                   ],
                 ),
-                if (state.qrError != null) ...[  
+                if (state.qrError != null) ...[
                   const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,
@@ -788,13 +859,18 @@ class _WhatsappQrSheetState extends ConsumerState<WhatsappQrSheet> {
                             .deleteInstance();
                         if (context.mounted) Navigator.pop(context);
                       },
-                      icon: Icon(Icons.restart_alt_rounded,
-                          color: scheme.error),
-                      label: Text('Reiniciar instancia',
-                          style: TextStyle(color: scheme.error)),
+                      icon: Icon(
+                        Icons.restart_alt_rounded,
+                        color: scheme.error,
+                      ),
+                      label: Text(
+                        'Reiniciar instancia',
+                        style: TextStyle(color: scheme.error),
+                      ),
                       style: OutlinedButton.styleFrom(
                         side: BorderSide(
-                            color: scheme.error.withValues(alpha: 0.5)),
+                          color: scheme.error.withValues(alpha: 0.5),
+                        ),
                       ),
                     ),
                   ),
@@ -809,8 +885,9 @@ class _WhatsappQrSheetState extends ConsumerState<WhatsappQrSheet> {
                 icon: const Icon(Icons.thumb_up_alt_rounded),
                 label: const Text('¡Listo!'),
                 style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF25D366),
-                    padding: const EdgeInsets.symmetric(vertical: 14)),
+                  backgroundColor: const Color(0xFF25D366),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
               ),
             ),
         ],
@@ -829,16 +906,18 @@ class _QrImageView extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     try {
-      final bytes =
-          base64Decode(base64.contains(',') ? base64.split(',').last : base64);
+      final bytes = base64Decode(
+        base64.contains(',') ? base64.split(',').last : base64,
+      );
       return Container(
         width: 230,
         height: 230,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border:
-              Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+          border: Border.all(
+            color: scheme.outlineVariant.withValues(alpha: 0.5),
+          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.08),
@@ -868,17 +947,19 @@ class _QrLoadingView extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(16),
-        border:
-            Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const CircularProgressIndicator(),
           const SizedBox(height: 12),
-          Text('Generando código QR…',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant)),
+          Text(
+            'Generando código QR…',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+          ),
         ],
       ),
     );
@@ -901,13 +982,19 @@ class _QrErrorView extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Icon(Icons.error_outline_rounded,
-              color: theme.colorScheme.onErrorContainer, size: 32),
+          Icon(
+            Icons.error_outline_rounded,
+            color: theme.colorScheme.onErrorContainer,
+            size: 32,
+          ),
           const SizedBox(height: 8),
-          Text(error,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onErrorContainer)),
+          Text(
+            error,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onErrorContainer,
+            ),
+          ),
           const SizedBox(height: 10),
           TextButton(onPressed: onRetry, child: const Text('Reintentar')),
         ],

@@ -85,7 +85,9 @@ class PunchModel {
       id: json['id'] ?? '',
       type: _fromApi(json['type'] ?? ''),
       timestamp: DateTime.tryParse(json['timestamp'] ?? '') ?? DateTime.now(),
-      createdAt: DateTime.tryParse(json['createdAt'] ?? json['timestamp'] ?? '') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse(json['createdAt'] ?? json['timestamp'] ?? '') ??
+          DateTime.now(),
       user: userJson is Map<String, dynamic>
           ? UserModel.fromJson(userJson)
           : null,

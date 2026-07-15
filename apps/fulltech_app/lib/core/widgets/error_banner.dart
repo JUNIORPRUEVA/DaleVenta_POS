@@ -16,12 +16,17 @@ class ErrorBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.error_outline, color: Theme.of(context).colorScheme.onErrorContainer),
+          Icon(
+            Icons.error_outline,
+            color: Theme.of(context).colorScheme.onErrorContainer,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
-              style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onErrorContainer,
+              ),
             ),
           ),
         ],

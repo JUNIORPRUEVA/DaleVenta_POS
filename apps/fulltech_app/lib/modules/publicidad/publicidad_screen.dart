@@ -1,4 +1,4 @@
-﻿// ignore_for_file: unused_element, unused_element_parameter
+// ignore_for_file: unused_element, unused_element_parameter
 
 import 'dart:async';
 import 'dart:convert';
@@ -2332,8 +2332,9 @@ class _DailyStoriesTabState extends State<_DailyStoriesTab> {
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
-              color: Theme.of(context).colorScheme.surfaceContainerHighest
-                  .withValues(alpha: 0.35),
+              color: Theme.of(
+                context,
+              ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
             ),
             child: Row(
               children: [
@@ -2381,7 +2382,9 @@ class _DailyStoriesTabState extends State<_DailyStoriesTab> {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.35),
+                color: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.35),
               ),
             ),
             child: Column(
@@ -2389,9 +2392,9 @@ class _DailyStoriesTabState extends State<_DailyStoriesTab> {
               children: [
                 Text(
                   'Modo rápido listo',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -2416,7 +2419,9 @@ class _DailyStoriesTabState extends State<_DailyStoriesTab> {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.35),
+                color: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.35),
               ),
             ),
             child: Column(
@@ -2424,9 +2429,9 @@ class _DailyStoriesTabState extends State<_DailyStoriesTab> {
               children: [
                 Text(
                   'Modo video listo',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -2446,172 +2451,176 @@ class _DailyStoriesTabState extends State<_DailyStoriesTab> {
           const SizedBox(height: 10),
         if (widget.compactActions || _viewMode == _EstadosViewMode.normal)
           SegmentedButton<_EstadosPhase>(
-          showSelectedIcon: false,
-          style: ButtonStyle(
-            visualDensity: VisualDensity.compact,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            padding: const WidgetStatePropertyAll(
-              EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            ),
-            textStyle: WidgetStatePropertyAll(
-              Theme.of(context).textTheme.labelSmall?.copyWith(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
+            showSelectedIcon: false,
+            style: ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              padding: const WidgetStatePropertyAll(
+                EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              ),
+              textStyle: WidgetStatePropertyAll(
+                Theme.of(context).textTheme.labelSmall?.copyWith(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
-          ),
-          segments: const [
-            ButtonSegment<_EstadosPhase>(
-              value: _EstadosPhase.crearDiseno,
-              icon: Icon(Icons.design_services_rounded),
-              label: Text('1 Crear diseño'),
-            ),
-            ButtonSegment<_EstadosPhase>(
-              value: _EstadosPhase.copys,
-              icon: Icon(Icons.text_fields_rounded),
-              label: Text('2 Copy final'),
-            ),
-            ButtonSegment<_EstadosPhase>(
-              value: _EstadosPhase.aprobarPublicar,
-              icon: Icon(Icons.publish_rounded),
-              label: Text('3 Publicar'),
-            ),
-          ],
-          selected: {_phase},
-          onSelectionChanged: (next) {
-            if (next.isEmpty) return;
-            setState(() => _phase = next.first);
-          },
+            segments: const [
+              ButtonSegment<_EstadosPhase>(
+                value: _EstadosPhase.crearDiseno,
+                icon: Icon(Icons.design_services_rounded),
+                label: Text('1 Crear diseño'),
+              ),
+              ButtonSegment<_EstadosPhase>(
+                value: _EstadosPhase.copys,
+                icon: Icon(Icons.text_fields_rounded),
+                label: Text('2 Copy final'),
+              ),
+              ButtonSegment<_EstadosPhase>(
+                value: _EstadosPhase.aprobarPublicar,
+                icon: Icon(Icons.publish_rounded),
+                label: Text('3 Publicar'),
+              ),
+            ],
+            selected: {_phase},
+            onSelectionChanged: (next) {
+              if (next.isEmpty) return;
+              setState(() => _phase = next.first);
+            },
           ),
         if (widget.compactActions || _viewMode == _EstadosViewMode.normal)
           const SizedBox(height: 10),
         if (widget.compactActions || _viewMode == _EstadosViewMode.normal)
           LayoutBuilder(
-          builder: (context, constraints) {
-            const spacing = 12.0;
-            final width = constraints.maxWidth;
-            final columns = width >= 1380
-                ? 3
-                : width >= 860
-                ? 2
-                : 1;
-            final cardWidth = (width - (spacing * (columns - 1))) / columns;
-            return Wrap(
-              spacing: spacing,
-              runSpacing: spacing,
-              children: [
-                for (final story in stories)
-                  SizedBox(
-                    width: cardWidth,
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.outlineVariant.withValues(alpha: 0.35),
+            builder: (context, constraints) {
+              const spacing = 12.0;
+              final width = constraints.maxWidth;
+              final columns = width >= 1380
+                  ? 3
+                  : width >= 860
+                  ? 2
+                  : 1;
+              final cardWidth = (width - (spacing * (columns - 1))) / columns;
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: [
+                  for (final story in stories)
+                    SizedBox(
+                      width: cardWidth,
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outlineVariant
+                                .withValues(alpha: 0.35),
+                          ),
                         ),
-                      ),
-                      child: _StoryCard(
-                        story: story,
-                        phase: _phase,
-                        usedResearch: _findResearch(story.researchId),
-                        busy: widget.busy,
-                        imageBusy: widget.imageBusyStoryIds.contains(story.id),
-                        compactActions: widget.compactActions,
-                        mediaAssets: widget.mediaAssets,
-                        onApprove: (publishTargets) =>
-                            widget.onApprove(story.id, publishTargets),
-                        onReject: () => widget.onReject(story.id),
-                        onRegenerate: () => widget.onRegenerate(story.id),
-                        onRegenerateImage: () =>
-                            widget.onRegenerateImage(story.id),
-                        onConfirmBaseImage: () =>
-                            widget.onConfirmBaseImage(story.id),
-                        onGenerateDesign: () =>
-                            widget.onGenerateDesign(story.id),
-                        onRegenerateCopyFromDesign: () =>
-                            widget.onRegenerateCopyFromDesign(story.id),
-                        onRetryPublish: () => widget.onRetryPublish(story.id),
-                        onChangeBaseImage: () async {
-                          final chosen = await showDialog<String>(
-                            context: context,
-                            builder: (_) => _PickMediaAssetDialog(
-                              assets: widget.mediaAssets,
-                              selectedId: story.mediaAssetId,
-                            ),
-                          );
-                          if (chosen != null && chosen.isNotEmpty) {
-                            await widget.onChangeBaseImage(story.id, chosen);
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Imagen base seleccionada. Confirma imagen para continuar.',
-                                ),
+                        child: _StoryCard(
+                          story: story,
+                          phase: _phase,
+                          usedResearch: _findResearch(story.researchId),
+                          busy: widget.busy,
+                          imageBusy: widget.imageBusyStoryIds.contains(
+                            story.id,
+                          ),
+                          compactActions: widget.compactActions,
+                          mediaAssets: widget.mediaAssets,
+                          onApprove: (publishTargets) =>
+                              widget.onApprove(story.id, publishTargets),
+                          onReject: () => widget.onReject(story.id),
+                          onRegenerate: () => widget.onRegenerate(story.id),
+                          onRegenerateImage: () =>
+                              widget.onRegenerateImage(story.id),
+                          onConfirmBaseImage: () =>
+                              widget.onConfirmBaseImage(story.id),
+                          onGenerateDesign: () =>
+                              widget.onGenerateDesign(story.id),
+                          onRegenerateCopyFromDesign: () =>
+                              widget.onRegenerateCopyFromDesign(story.id),
+                          onRetryPublish: () => widget.onRetryPublish(story.id),
+                          onChangeBaseImage: () async {
+                            final chosen = await showDialog<String>(
+                              context: context,
+                              builder: (_) => _PickMediaAssetDialog(
+                                assets: widget.mediaAssets,
+                                selectedId: story.mediaAssetId,
                               ),
                             );
-                          }
-                        },
-                        onEdit: () async {
-                          final payload = await showDialog<_EditStoryPayload>(
-                            context: context,
-                            builder: (_) => _EditStoryDialog(
-                              story: story,
-                              mediaAssets: widget.mediaAssets,
-                              onUploadImage: widget.onUploadDesignImage,
-                            ),
-                          );
-                          if (payload != null) {
-                            await widget.onEdit(story, payload);
-                          }
-                        },
-                        onUploadFinalDesign: widget.onUploadDesignImage == null
-                            ? null
-                            : (ctx) async {
-                                final uploadedUrl =
-                                    await widget.onUploadDesignImage!(ctx);
-                                if (uploadedUrl == null ||
-                                    uploadedUrl.isEmpty) {
-                                  return;
-                                }
-                                // Save imageUrl to story
-                                await widget.onEdit(
-                                  story,
-                                  _EditStoryPayload(
-                                    title: story.title,
-                                    shortText: story.shortText,
-                                    longText: story.longText,
-                                    hashtags: List<String>.from(story.hashtags),
-                                    imagePrompt: story.imagePrompt,
-                                    imageUrl: uploadedUrl,
+                            if (chosen != null && chosen.isNotEmpty) {
+                              await widget.onChangeBaseImage(story.id, chosen);
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Imagen base seleccionada. Confirma imagen para continuar.',
                                   ),
-                                );
-                                // Trigger AI copy regeneration using the uploaded design image
-                                await widget.onRegenerateCopyFromDesign(
-                                  story.id,
-                                );
-                                if (ctx.mounted) {
-                                  ScaffoldMessenger.of(ctx).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Diseño guardado. Analizando imagen para generar copy alineado...',
+                                ),
+                              );
+                            }
+                          },
+                          onEdit: () async {
+                            final payload = await showDialog<_EditStoryPayload>(
+                              context: context,
+                              builder: (_) => _EditStoryDialog(
+                                story: story,
+                                mediaAssets: widget.mediaAssets,
+                                onUploadImage: widget.onUploadDesignImage,
+                              ),
+                            );
+                            if (payload != null) {
+                              await widget.onEdit(story, payload);
+                            }
+                          },
+                          onUploadFinalDesign:
+                              widget.onUploadDesignImage == null
+                              ? null
+                              : (ctx) async {
+                                  final uploadedUrl =
+                                      await widget.onUploadDesignImage!(ctx);
+                                  if (uploadedUrl == null ||
+                                      uploadedUrl.isEmpty) {
+                                    return;
+                                  }
+                                  // Save imageUrl to story
+                                  await widget.onEdit(
+                                    story,
+                                    _EditStoryPayload(
+                                      title: story.title,
+                                      shortText: story.shortText,
+                                      longText: story.longText,
+                                      hashtags: List<String>.from(
+                                        story.hashtags,
                                       ),
-                                      behavior: SnackBarBehavior.floating,
-                                      duration: Duration(seconds: 5),
+                                      imagePrompt: story.imagePrompt,
+                                      imageUrl: uploadedUrl,
                                     ),
                                   );
-                                }
-                              },
+                                  // Trigger AI copy regeneration using the uploaded design image
+                                  await widget.onRegenerateCopyFromDesign(
+                                    story.id,
+                                  );
+                                  if (ctx.mounted) {
+                                    ScaffoldMessenger.of(ctx).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Diseño guardado. Analizando imagen para generar copy alineado...',
+                                        ),
+                                        behavior: SnackBarBehavior.floating,
+                                        duration: Duration(seconds: 5),
+                                      ),
+                                    );
+                                  }
+                                },
+                        ),
                       ),
                     ),
-                  ),
-              ],
-            );
-          },
-        ),
+                ],
+              );
+            },
+          ),
       ],
     );
   }
@@ -2713,7 +2722,9 @@ class _EstadoRapidoScreenState extends State<_EstadoRapidoScreen> {
         rethrow;
       }
       if (mounted) {
-        setState(() => _status = 'Detectado envío parcial, reintentando faltantes...');
+        setState(
+          () => _status = 'Detectado envío parcial, reintentando faltantes...',
+        );
       }
       await widget.onRetryPublish(storyId);
     }
@@ -2726,7 +2737,8 @@ class _EstadoRapidoScreenState extends State<_EstadoRapidoScreen> {
         .map((item) => item.trim())
         .where((item) => item.isNotEmpty)
         .toList(growable: false);
-    final hasAnyCopy = shortText.isNotEmpty || longText.isNotEmpty || hashtags.isNotEmpty;
+    final hasAnyCopy =
+        shortText.isNotEmpty || longText.isNotEmpty || hashtags.isNotEmpty;
 
     return Container(
       width: double.infinity,
@@ -2740,9 +2752,9 @@ class _EstadoRapidoScreenState extends State<_EstadoRapidoScreen> {
         children: [
           Text(
             'Copy generado',
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 8),
           if (!hasAnyCopy)
@@ -2753,35 +2765,43 @@ class _EstadoRapidoScreenState extends State<_EstadoRapidoScreen> {
           if (hasAnyCopy && shortText.isNotEmpty) ...[
             Text(
               'Texto principal',
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 4),
-            SelectableText(shortText, style: Theme.of(context).textTheme.bodyMedium),
+            SelectableText(
+              shortText,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
             const SizedBox(height: 8),
           ],
           if (hasAnyCopy && longText.isNotEmpty) ...[
             Text(
               'Copy largo',
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 4),
-            SelectableText(longText, style: Theme.of(context).textTheme.bodyMedium),
+            SelectableText(
+              longText,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
             const SizedBox(height: 8),
           ],
           if (hasAnyCopy && hashtags.isNotEmpty) ...[
             Text(
               'Hashtags',
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 4),
             SelectableText(
-              hashtags.map((tag) => tag.startsWith('#') ? tag : '#$tag').join(' '),
+              hashtags
+                  .map((tag) => tag.startsWith('#') ? tag : '#$tag')
+                  .join(' '),
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ],
@@ -2821,7 +2841,9 @@ class _EstadoRapidoScreenState extends State<_EstadoRapidoScreen> {
     if (_running || widget.busy) return;
     if (_selectedPublishTargets.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecciona al menos un canal para publicar.')),
+        const SnackBar(
+          content: Text('Selecciona al menos un canal para publicar.'),
+        ),
       );
       return;
     }
@@ -2849,19 +2871,21 @@ class _EstadoRapidoScreenState extends State<_EstadoRapidoScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Flujo rápido completado: publicación enviada a los canales seleccionados.'),
+          content: Text(
+            'Flujo rápido completado: publicación enviada a los canales seleccionados.',
+          ),
         ),
       );
     } on ApiException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${error.message}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${error.message}')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $error')));
     } finally {
       if (mounted) {
         setState(() {
@@ -2887,14 +2911,14 @@ class _EstadoRapidoScreenState extends State<_EstadoRapidoScreen> {
       );
     } on ApiException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${error.message}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${error.message}')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $error')));
     } finally {
       if (mounted) {
         setState(() {
@@ -2910,7 +2934,9 @@ class _EstadoRapidoScreenState extends State<_EstadoRapidoScreen> {
     if (story == null || _running || widget.busy) return;
     if (_selectedPublishTargets.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecciona al menos un canal para publicar.')),
+        const SnackBar(
+          content: Text('Selecciona al menos un canal para publicar.'),
+        ),
       );
       return;
     }
@@ -2922,18 +2948,20 @@ class _EstadoRapidoScreenState extends State<_EstadoRapidoScreen> {
       await _publishWithRecovery(story.id, _selectedPublishTargets.toList());
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Publicación enviada a los canales seleccionados.')),
+        const SnackBar(
+          content: Text('Publicación enviada a los canales seleccionados.'),
+        ),
       );
     } on ApiException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${error.message}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${error.message}')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $error')));
     } finally {
       if (mounted) {
         setState(() {
@@ -2966,18 +2994,20 @@ class _EstadoRapidoScreenState extends State<_EstadoRapidoScreen> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Imagen subida. Copy generado automáticamente.')),
+        const SnackBar(
+          content: Text('Imagen subida. Copy generado automáticamente.'),
+        ),
       );
     } on ApiException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${error.message}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${error.message}')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $error')));
     } finally {
       if (mounted) {
         setState(() {
@@ -3064,12 +3094,19 @@ class _EstadoRapidoScreenState extends State<_EstadoRapidoScreen> {
                                   alignment: Alignment.center,
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(10),
-                                    color: Theme.of(context).colorScheme.surface,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.surface,
                                   ),
-                                  child: const Text('Aún no hay diseño final subido/generado'),
+                                  child: const Text(
+                                    'Aún no hay diseño final subido/generado',
+                                  ),
                                 );
 
-                          final copyWidget = _buildGeneratedCopyPanel(context, story);
+                          final copyWidget = _buildGeneratedCopyPanel(
+                            context,
+                            story,
+                          );
                           final desktopLike = constraints.maxWidth >= 900;
 
                           if (!desktopLike) {
@@ -3109,28 +3146,32 @@ class _EstadoRapidoScreenState extends State<_EstadoRapidoScreen> {
                     children: [
                       Text(
                         'Canales de publicación',
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 8),
                       CheckboxListTile(
                         dense: true,
                         contentPadding: EdgeInsets.zero,
                         title: const Text('Facebook Story'),
-                        subtitle: const Text('Publica como historia en Facebook Page'),
-                        value: _selectedPublishTargets
-                            .contains(MarketingPublishTarget.facebookStory),
+                        subtitle: const Text(
+                          'Publica como historia en Facebook Page',
+                        ),
+                        value: _selectedPublishTargets.contains(
+                          MarketingPublishTarget.facebookStory,
+                        ),
                         onChanged: _running || widget.busy
                             ? null
                             : (value) {
                                 setState(() {
                                   if (value == true) {
-                                    _selectedPublishTargets
-                                        .add(MarketingPublishTarget.facebookStory);
+                                    _selectedPublishTargets.add(
+                                      MarketingPublishTarget.facebookStory,
+                                    );
                                   } else {
-                                    _selectedPublishTargets
-                                        .remove(MarketingPublishTarget.facebookStory);
+                                    _selectedPublishTargets.remove(
+                                      MarketingPublishTarget.facebookStory,
+                                    );
                                   }
                                 });
                               },
@@ -3139,19 +3180,24 @@ class _EstadoRapidoScreenState extends State<_EstadoRapidoScreen> {
                         dense: true,
                         contentPadding: EdgeInsets.zero,
                         title: const Text('Instagram Story'),
-                        subtitle: const Text('Publica como historia en Instagram Business'),
-                        value: _selectedPublishTargets
-                            .contains(MarketingPublishTarget.instagramStory),
+                        subtitle: const Text(
+                          'Publica como historia en Instagram Business',
+                        ),
+                        value: _selectedPublishTargets.contains(
+                          MarketingPublishTarget.instagramStory,
+                        ),
                         onChanged: _running || widget.busy
                             ? null
                             : (value) {
                                 setState(() {
                                   if (value == true) {
-                                    _selectedPublishTargets
-                                        .add(MarketingPublishTarget.instagramStory);
+                                    _selectedPublishTargets.add(
+                                      MarketingPublishTarget.instagramStory,
+                                    );
                                   } else {
-                                    _selectedPublishTargets
-                                        .remove(MarketingPublishTarget.instagramStory);
+                                    _selectedPublishTargets.remove(
+                                      MarketingPublishTarget.instagramStory,
+                                    );
                                   }
                                 });
                               },
@@ -3161,18 +3207,21 @@ class _EstadoRapidoScreenState extends State<_EstadoRapidoScreen> {
                         contentPadding: EdgeInsets.zero,
                         title: const Text('Facebook Post'),
                         subtitle: const Text('Publica en la Facebook Page'),
-                        value: _selectedPublishTargets
-                            .contains(MarketingPublishTarget.facebookPost),
+                        value: _selectedPublishTargets.contains(
+                          MarketingPublishTarget.facebookPost,
+                        ),
                         onChanged: _running || widget.busy
                             ? null
                             : (value) {
                                 setState(() {
                                   if (value == true) {
-                                    _selectedPublishTargets
-                                        .add(MarketingPublishTarget.facebookPost);
+                                    _selectedPublishTargets.add(
+                                      MarketingPublishTarget.facebookPost,
+                                    );
                                   } else {
-                                    _selectedPublishTargets
-                                        .remove(MarketingPublishTarget.facebookPost);
+                                    _selectedPublishTargets.remove(
+                                      MarketingPublishTarget.facebookPost,
+                                    );
                                   }
                                 });
                               },
@@ -3181,19 +3230,24 @@ class _EstadoRapidoScreenState extends State<_EstadoRapidoScreen> {
                         dense: true,
                         contentPadding: EdgeInsets.zero,
                         title: const Text('Instagram Post'),
-                        subtitle: const Text('Publica en el feed del Instagram Business'),
-                        value: _selectedPublishTargets
-                            .contains(MarketingPublishTarget.instagramPost),
+                        subtitle: const Text(
+                          'Publica en el feed del Instagram Business',
+                        ),
+                        value: _selectedPublishTargets.contains(
+                          MarketingPublishTarget.instagramPost,
+                        ),
                         onChanged: _running || widget.busy
                             ? null
                             : (value) {
                                 setState(() {
                                   if (value == true) {
-                                    _selectedPublishTargets
-                                        .add(MarketingPublishTarget.instagramPost);
+                                    _selectedPublishTargets.add(
+                                      MarketingPublishTarget.instagramPost,
+                                    );
                                   } else {
-                                    _selectedPublishTargets
-                                        .remove(MarketingPublishTarget.instagramPost);
+                                    _selectedPublishTargets.remove(
+                                      MarketingPublishTarget.instagramPost,
+                                    );
                                   }
                                 });
                               },
@@ -3207,17 +3261,23 @@ class _EstadoRapidoScreenState extends State<_EstadoRapidoScreen> {
                   runSpacing: 8,
                   children: [
                     OutlinedButton.icon(
-                      onPressed: _running || widget.busy ? null : _uploadImageOnly,
+                      onPressed: _running || widget.busy
+                          ? null
+                          : _uploadImageOnly,
                       icon: const Icon(Icons.upload_rounded),
                       label: const Text('Subir imagen'),
                     ),
                     OutlinedButton.icon(
-                      onPressed: _running || widget.busy ? null : _generateCopyOnly,
+                      onPressed: _running || widget.busy
+                          ? null
+                          : _generateCopyOnly,
                       icon: const Icon(Icons.auto_awesome_rounded),
                       label: const Text('Generar copy'),
                     ),
                     FilledButton.icon(
-                      onPressed: _running || widget.busy ? null : _publishAllOnly,
+                      onPressed: _running || widget.busy
+                          ? null
+                          : _publishAllOnly,
                       icon: const Icon(Icons.publish_rounded),
                       label: const Text('Publicar ahora'),
                     ),
@@ -3351,18 +3411,20 @@ class _EstadoVideoScreenState extends State<_EstadoVideoScreen> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Video asignado correctamente al estado.')),
+        const SnackBar(
+          content: Text('Video asignado correctamente al estado.'),
+        ),
       );
     } on ApiException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${error.message}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${error.message}')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $error')));
     } finally {
       if (mounted) {
         setState(() {
@@ -3378,7 +3440,9 @@ class _EstadoVideoScreenState extends State<_EstadoVideoScreen> {
     if (story == null || _running || widget.busy) return;
     if (_selectedPublishTargets.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecciona al menos un canal para publicar.')),
+        const SnackBar(
+          content: Text('Selecciona al menos un canal para publicar.'),
+        ),
       );
       return;
     }
@@ -3390,18 +3454,20 @@ class _EstadoVideoScreenState extends State<_EstadoVideoScreen> {
       await widget.onApprove(story.id, _selectedPublishTargets.toList());
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Publicación de video enviada correctamente.')),
+        const SnackBar(
+          content: Text('Publicación de video enviada correctamente.'),
+        ),
       );
     } on ApiException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${error.message}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${error.message}')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $error')));
     } finally {
       if (mounted) {
         setState(() {
@@ -3417,7 +3483,9 @@ class _EstadoVideoScreenState extends State<_EstadoVideoScreen> {
     if (story == null || _running || widget.busy) return;
     if (_selectedPublishTargets.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecciona al menos un canal para publicar.')),
+        const SnackBar(
+          content: Text('Selecciona al menos un canal para publicar.'),
+        ),
       );
       return;
     }
@@ -3442,19 +3510,21 @@ class _EstadoVideoScreenState extends State<_EstadoVideoScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Flujo de video completado: video publicado en canales seleccionados.'),
+          content: Text(
+            'Flujo de video completado: video publicado en canales seleccionados.',
+          ),
         ),
       );
     } on ApiException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${error.message}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${error.message}')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $error')));
     } finally {
       if (mounted) {
         setState(() {
@@ -3524,9 +3594,8 @@ class _EstadoVideoScreenState extends State<_EstadoVideoScreen> {
                       const SizedBox(height: 8),
                       Text(
                         'Copy actual para publicación:',
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -3546,9 +3615,8 @@ class _EstadoVideoScreenState extends State<_EstadoVideoScreen> {
                       const SizedBox(height: 8),
                       Text(
                         'Media actual:',
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -3588,9 +3656,8 @@ class _EstadoVideoScreenState extends State<_EstadoVideoScreen> {
                     children: [
                       Text(
                         'Canales de publicación',
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 8),
                       CheckboxListTile(
@@ -3694,12 +3761,16 @@ class _EstadoVideoScreenState extends State<_EstadoVideoScreen> {
                   runSpacing: 8,
                   children: [
                     OutlinedButton.icon(
-                      onPressed: _running || widget.busy ? null : _uploadVideoOnly,
+                      onPressed: _running || widget.busy
+                          ? null
+                          : _uploadVideoOnly,
                       icon: const Icon(Icons.upload_file_rounded),
                       label: const Text('Subir video'),
                     ),
                     OutlinedButton.icon(
-                      onPressed: _running || widget.busy ? null : _publishVideoOnly,
+                      onPressed: _running || widget.busy
+                          ? null
+                          : _publishVideoOnly,
                       icon: const Icon(Icons.publish_rounded),
                       label: const Text('Publicar video'),
                     ),
@@ -5493,7 +5564,8 @@ class _StoryVideoViewState extends State<_StoryVideoView> {
 
   void _initController(String rawUrl) {
     final source = rawUrl.trim();
-    if (source.isEmpty || !(source.startsWith('http://') || source.startsWith('https://'))) {
+    if (source.isEmpty ||
+        !(source.startsWith('http://') || source.startsWith('https://'))) {
       return;
     }
     final controller = VideoPlayerController.networkUrl(Uri.parse(source));

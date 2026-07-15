@@ -16,7 +16,7 @@ export class SalesController {
   @Get()
   listMine(@Req() req: Request, @Query() query: SalesRangeQueryDto) {
     const user = req.user as { id: string; role: string };
-    return this.sales.listMine(user.id, query.from, query.to, query.customerId);
+    return this.sales.listMine(user.id, query.from, query.to, query.customerId, query.includeDeleted === 'true');
   }
 
   @Get('summary')
@@ -42,5 +42,11 @@ export class SalesController {
   remove(@Req() req: Request, @Param('id') id: string) {
     const user = req.user as { id: string; role: string };
     return this.sales.remove(user.id, id);
+  }
+
+  @Post(':id/return')
+  returnSale(@Req() req: Request, @Param('id') id: string) {
+    const user = req.user as { id: string; role: string };
+    return this.sales.returnSale(user.id, id);
   }
 }

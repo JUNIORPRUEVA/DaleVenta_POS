@@ -11,8 +11,9 @@ final whatsappNavigationVisibilityProvider = FutureProvider<bool>((ref) async {
   if (user.appRole == AppRole.admin) return true;
 
   try {
-    final status =
-        await ref.watch(whatsappInstanceRepositoryProvider).getInstanceStatus();
+    final status = await ref
+        .watch(whatsappInstanceRepositoryProvider)
+        .getInstanceStatus();
     return needsWhatsappSetup(status);
   } catch (_) {
     // If the app cannot verify the status, keep the entry visible so the user

@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../errors/api_exception.dart';
@@ -106,20 +107,37 @@ class AppErrorReporter {
 
   List<AppErrorDetails> get history => List.unmodifiable(_history);
 
-  void _setNotifierValueAfterFrame<T>(ValueNotifier<T> notifier, T value) {
-    final binding = WidgetsBinding.instance;
-
-    void apply() {
-      if (notifier.value == value) return;
-      notifier.value = value;
-    }
-
-    binding.addPostFrameCallback((_) => apply());
-    binding.scheduleFrame();
-  }
+  AppErrorDetails? _pendingLastError;
+  bool _lastErrorUpdateScheduled = false;
 
   void _setLastError(AppErrorDetails? value) {
-    _setNotifierValueAfterFrame<AppErrorDetails?>(lastError, value);
+    _pendingLastError = value;
+
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    final canNotifyNow =
+        phase == SchedulerPhase.idle ||
+        phase == SchedulerPhase.postFrameCallbacks;
+
+    if (canNotifyNow) {
+      _flushLastError();
+      return;
+    }
+
+    if (_lastErrorUpdateScheduled) return;
+    _lastErrorUpdateScheduled = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _lastErrorUpdateScheduled = false;
+      _flushLastError();
+    });
+  }
+
+  void _flushLastError() {
+    final value = _pendingLastError;
+    _pendingLastError = null;
+
+    if (lastError.value == value) return;
+    lastError.value = value;
   }
 
   void clear() => _setLastError(null);
@@ -165,7 +183,8 @@ class AppErrorReporter {
       (_, at) => now.difference(at) > const Duration(minutes: 2),
     );
     final lastSeenAt = _recentDedupe[key];
-    if (lastSeenAt != null && now.difference(lastSeenAt) < const Duration(minutes: 2)) {
+    if (lastSeenAt != null &&
+        now.difference(lastSeenAt) < const Duration(minutes: 2)) {
       return true;
     }
     _recentDedupe[key] = now;
@@ -200,7 +219,7 @@ class AppErrorReporter {
     final eventId = ++_eventSeq;
     final resolvedTitle = _clean(title) ?? _defaultTitleForSeverity(severity);
     final resolvedUserMessage =
-      _clean(userMessage) ?? _defaultUserMessageForSeverity(severity);
+        _clean(userMessage) ?? _defaultUserMessageForSeverity(severity);
 
     if (error is ApiException) {
       return AppErrorDetails(
@@ -214,7 +233,8 @@ class AppErrorReporter {
         endpointUrl: error.uri?.toString(),
         method: _clean(error.method),
         apiResponse: _clean(error.responseBody),
-        technicalDetails: _clean(technicalDetails) ?? _clean(error.technicalDetails),
+        technicalDetails:
+            _clean(technicalDetails) ?? _clean(error.technicalDetails),
         errorType: error.runtimeType.toString(),
         severity: severity,
         retryLabel: _clean(retryLabel),
@@ -236,7 +256,8 @@ class AppErrorReporter {
         endpointUrl: error.requestOptions.uri.toString(),
         method: _clean(error.requestOptions.method.toUpperCase()),
         apiResponse: _clean(_stringifyApiResponse(error.response?.data)),
-        technicalDetails: _clean(technicalDetails) ?? _clean(error.error?.toString()),
+        technicalDetails:
+            _clean(technicalDetails) ?? _clean(error.error?.toString()),
         errorType: error.runtimeType.toString(),
         severity: severity,
         retryLabel: _clean(retryLabel),
@@ -274,7 +295,8 @@ class AppErrorReporter {
         stack,
         context: 'FlutterError',
         title: 'Incidencia de teclado detectada',
-        userMessage: 'Se detectó una incidencia menor de teclado en Windows y fue manejada automáticamente.',
+        userMessage:
+            'Se detectó una incidencia menor de teclado en Windows y fue manejada automáticamente.',
         technicalDetails: exceptionMessage,
         severity: AppErrorSeverity.warning,
         dedupeKey: 'flutter-windows-raw-keyboard-alt-left',
@@ -315,12 +337,14 @@ class AppErrorReporter {
         .trim();
   }
 
-        bool _isKnownWindowsRawKeyboardStateIssue(String value) {
-          final normalized = value.toLowerCase();
-          return normalized.contains('raw_keyboard.dart') &&
-          normalized.contains('attempted to send a key down event when no keys are in keyspressed') &&
-          normalized.contains('alt left');
-        }
+  bool _isKnownWindowsRawKeyboardStateIssue(String value) {
+    final normalized = value.toLowerCase();
+    return normalized.contains('raw_keyboard.dart') &&
+        normalized.contains(
+          'attempted to send a key down event when no keys are in keyspressed',
+        ) &&
+        normalized.contains('alt left');
+  }
 
   String _defaultTitleForSeverity(AppErrorSeverity severity) {
     switch (severity) {

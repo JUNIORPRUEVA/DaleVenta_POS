@@ -141,7 +141,9 @@ class ClienteDetailLocalRepository {
 
     return decoded
         .whereType<Map>()
-        .map((item) => ClienteTimelineEvent.fromJson(item.cast<String, dynamic>()))
+        .map(
+          (item) => ClienteTimelineEvent.fromJson(item.cast<String, dynamic>()),
+        )
         .toList(growable: false);
   }
 }

@@ -106,9 +106,8 @@ class MediaGalleryLocalRepository {
           .map(jsonDecode)
           .whereType<Map>()
           .map(
-            (payload) => MediaGalleryItem.fromJson(
-              payload.cast<String, dynamic>(),
-            ),
+            (payload) =>
+                MediaGalleryItem.fromJson(payload.cast<String, dynamic>()),
           )
           .toList(growable: false),
       lastSyncedAt: DateTime.tryParse(meta[_metaLastSyncedAt] ?? ''),

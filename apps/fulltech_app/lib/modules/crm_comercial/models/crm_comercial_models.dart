@@ -173,15 +173,23 @@ class CrmComercialCustomer {
           : null,
       statusHistory: ((json['statusHistory'] as List<dynamic>?) ?? const [])
           .whereType<Map>()
-          .map((entry) => CrmComercialStatusEntry.fromJson(entry.cast<String, dynamic>()))
+          .map(
+            (entry) =>
+                CrmComercialStatusEntry.fromJson(entry.cast<String, dynamic>()),
+          )
           .toList(growable: false),
       notes: ((json['notes'] as List<dynamic>?) ?? const [])
           .whereType<Map>()
-          .map((entry) => CrmComercialNote.fromJson(entry.cast<String, dynamic>()))
+          .map(
+            (entry) => CrmComercialNote.fromJson(entry.cast<String, dynamic>()),
+          )
           .toList(growable: false),
       activities: ((json['activities'] as List<dynamic>?) ?? const [])
           .whereType<Map>()
-          .map((entry) => CrmComercialActivity.fromJson(entry.cast<String, dynamic>()))
+          .map(
+            (entry) =>
+                CrmComercialActivity.fromJson(entry.cast<String, dynamic>()),
+          )
           .toList(growable: false),
     );
   }
@@ -204,7 +212,10 @@ class CrmComercialCustomerListResponse {
     return CrmComercialCustomerListResponse(
       items: ((json['items'] as List<dynamic>?) ?? const [])
           .whereType<Map>()
-          .map((entry) => CrmComercialCustomer.fromJson(entry.cast<String, dynamic>()))
+          .map(
+            (entry) =>
+                CrmComercialCustomer.fromJson(entry.cast<String, dynamic>()),
+          )
           .toList(growable: false),
       total: (json['total'] as num?)?.toInt() ?? 0,
       page: (json['page'] as num?)?.toInt() ?? 1,
@@ -276,10 +287,10 @@ class CrmComercialSettings {
     return CrmComercialSettings(
       id: (json['id'] ?? 'global').toString(),
       enabled: json['enabled'] == true,
-      selectedWhatsappInstanceId:
-          json['selectedWhatsappInstanceId']?.toString(),
-      selectedWhatsappInstanceName:
-          json['selectedWhatsappInstanceName']?.toString(),
+      selectedWhatsappInstanceId: json['selectedWhatsappInstanceId']
+          ?.toString(),
+      selectedWhatsappInstanceName: json['selectedWhatsappInstanceName']
+          ?.toString(),
       updatedAt: DateTime.tryParse((json['updatedAt'] ?? '').toString()),
       selectedInstanceExists: json['selectedInstanceExists'] is bool
           ? json['selectedInstanceExists'] as bool
@@ -393,7 +404,9 @@ class CrmComercialInboxConversation {
       remotePhone: json['remotePhone']?.toString(),
       remoteJid: json['remoteJid']?.toString(),
       remoteAvatarUrl: json['remoteAvatarUrl']?.toString(),
-      lastMessageAt: DateTime.tryParse((json['lastMessageAt'] ?? '').toString()),
+      lastMessageAt: DateTime.tryParse(
+        (json['lastMessageAt'] ?? '').toString(),
+      ),
       lastMessagePreview: json['lastMessagePreview']?.toString(),
       lastMessageType: json['lastMessageType']?.toString(),
       lastMessageDirection: json['lastMessageDirection']?.toString(),
@@ -468,7 +481,9 @@ class CrmComercialInboxMessage {
       mediaStorageKey: json['mediaStorageKey']?.toString(),
       mediaStatus: json['mediaStatus']?.toString(),
       originalFileName: json['originalFileName']?.toString(),
-      mediaFileSize: json['mediaFileSize'] is int ? json['mediaFileSize'] as int : null,
+      mediaFileSize: json['mediaFileSize'] is int
+          ? json['mediaFileSize'] as int
+          : null,
     );
   }
 }
@@ -488,8 +503,11 @@ class CrmComercialInboxConversationListResponse {
     return CrmComercialInboxConversationListResponse(
       items: ((json['items'] as List<dynamic>?) ?? const [])
           .whereType<Map>()
-          .map((entry) =>
-              CrmComercialInboxConversation.fromJson(entry.cast<String, dynamic>()))
+          .map(
+            (entry) => CrmComercialInboxConversation.fromJson(
+              entry.cast<String, dynamic>(),
+            ),
+          )
           .toList(growable: false),
       warning: json['warning']?.toString(),
     );
@@ -515,8 +533,9 @@ class CrmComercialInboxMessageListResponse {
       items: ((json['items'] as List<dynamic>?) ?? const [])
           .whereType<Map>()
           .map(
-            (entry) =>
-                CrmComercialInboxMessage.fromJson(entry.cast<String, dynamic>()),
+            (entry) => CrmComercialInboxMessage.fromJson(
+              entry.cast<String, dynamic>(),
+            ),
           )
           .toList(growable: false),
       conversation: conversationJson is Map<String, dynamic>
@@ -562,7 +581,9 @@ class CrmComercialAiReplySuggestion {
           .map((entry) => entry.toString())
           .where((entry) => entry.trim().isNotEmpty)
           .toList(growable: false),
-      aiConfigured: json['aiConfigured'] is bool ? json['aiConfigured'] as bool : null,
+      aiConfigured: json['aiConfigured'] is bool
+          ? json['aiConfigured'] as bool
+          : null,
       message: json['message']?.toString(),
     );
   }
@@ -613,7 +634,12 @@ class CrmComercialLibraryItem {
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
-  bool get isMedia => const {'IMAGE', 'VIDEO', 'AUDIO', 'DOCUMENT'}.contains(type.toUpperCase());
+  bool get isMedia => const {
+    'IMAGE',
+    'VIDEO',
+    'AUDIO',
+    'DOCUMENT',
+  }.contains(type.toUpperCase());
   bool get isTextual => !isMedia;
 
   factory CrmComercialLibraryItem.fromJson(Map<String, dynamic> json) {
@@ -654,74 +680,80 @@ class CrmCommercialLibraryListResponse {
     return CrmCommercialLibraryListResponse(
       items: ((json['items'] as List<dynamic>?) ?? const [])
           .whereType<Map>()
-          .map((entry) => CrmComercialLibraryItem.fromJson(entry.cast<String, dynamic>()))
+          .map(
+            (entry) =>
+                CrmComercialLibraryItem.fromJson(entry.cast<String, dynamic>()),
+          )
           .toList(growable: false),
     );
   }
 }
 
 class CrmComercialFollowupTask {
-    const CrmComercialFollowupTask({
-      required this.id,
-      required this.customerId,
-      required this.title,
-      required this.status,
-      required this.effectiveStatus,
-      required this.priority,
-      this.description,
-      this.dueDate,
-      this.completedAt,
-      this.createdAt,
-      this.assignedTo,
-      this.createdBy,
-      this.completedBy,
-    });
+  const CrmComercialFollowupTask({
+    required this.id,
+    required this.customerId,
+    required this.title,
+    required this.status,
+    required this.effectiveStatus,
+    required this.priority,
+    this.description,
+    this.dueDate,
+    this.completedAt,
+    this.createdAt,
+    this.assignedTo,
+    this.createdBy,
+    this.completedBy,
+  });
 
-    final String id;
-    final String customerId;
-    final String title;
-    final String status;
-    final String effectiveStatus;
-    final String priority;
-    final String? description;
-    final DateTime? dueDate;
-    final DateTime? completedAt;
-    final DateTime? createdAt;
-    final CrmComercialUserRef? assignedTo;
-    final CrmComercialUserRef? createdBy;
-    final CrmComercialUserRef? completedBy;
+  final String id;
+  final String customerId;
+  final String title;
+  final String status;
+  final String effectiveStatus;
+  final String priority;
+  final String? description;
+  final DateTime? dueDate;
+  final DateTime? completedAt;
+  final DateTime? createdAt;
+  final CrmComercialUserRef? assignedTo;
+  final CrmComercialUserRef? createdBy;
+  final CrmComercialUserRef? completedBy;
 
-    bool get isPending => effectiveStatus == 'PENDIENTE';
-    bool get isOverdue => effectiveStatus == 'VENCIDA';
-    bool get isCompleted => status == 'COMPLETADA';
-    bool get isCancelled => status == 'CANCELADA';
-    bool get isActive => status == 'PENDIENTE';
+  bool get isPending => effectiveStatus == 'PENDIENTE';
+  bool get isOverdue => effectiveStatus == 'VENCIDA';
+  bool get isCompleted => status == 'COMPLETADA';
+  bool get isCancelled => status == 'CANCELADA';
+  bool get isActive => status == 'PENDIENTE';
 
-    factory CrmComercialFollowupTask.fromJson(Map<String, dynamic> json) {
-      return CrmComercialFollowupTask(
-        id: (json['id'] ?? '').toString(),
-        customerId: (json['customerId'] ?? '').toString(),
-        title: (json['title'] ?? '').toString(),
-        status: (json['status'] ?? 'PENDIENTE').toString(),
-        effectiveStatus:
-            (json['effectiveStatus'] ?? json['status'] ?? 'PENDIENTE').toString(),
-        priority: (json['priority'] ?? 'NORMAL').toString(),
-        description: json['description']?.toString(),
-        dueDate: DateTime.tryParse((json['dueDate'] ?? '').toString()),
-        completedAt: DateTime.tryParse((json['completedAt'] ?? '').toString()),
-        createdAt: DateTime.tryParse((json['createdAt'] ?? '').toString()),
-        assignedTo: (json['assignedUser'] is Map<String, dynamic>)
-            ? CrmComercialUserRef.fromJson(
-                json['assignedUser'] as Map<String, dynamic>)
-            : null,
-        createdBy: (json['createdByUser'] is Map<String, dynamic>)
-            ? CrmComercialUserRef.fromJson(
-                json['createdByUser'] as Map<String, dynamic>)
-            : null,
-        completedBy: (json['completedByUser'] is Map<String, dynamic>)
-            ? CrmComercialUserRef.fromJson(
-                json['completedByUser'] as Map<String, dynamic>)
-            : null,
-      );
-    }
+  factory CrmComercialFollowupTask.fromJson(Map<String, dynamic> json) {
+    return CrmComercialFollowupTask(
+      id: (json['id'] ?? '').toString(),
+      customerId: (json['customerId'] ?? '').toString(),
+      title: (json['title'] ?? '').toString(),
+      status: (json['status'] ?? 'PENDIENTE').toString(),
+      effectiveStatus:
+          (json['effectiveStatus'] ?? json['status'] ?? 'PENDIENTE').toString(),
+      priority: (json['priority'] ?? 'NORMAL').toString(),
+      description: json['description']?.toString(),
+      dueDate: DateTime.tryParse((json['dueDate'] ?? '').toString()),
+      completedAt: DateTime.tryParse((json['completedAt'] ?? '').toString()),
+      createdAt: DateTime.tryParse((json['createdAt'] ?? '').toString()),
+      assignedTo: (json['assignedUser'] is Map<String, dynamic>)
+          ? CrmComercialUserRef.fromJson(
+              json['assignedUser'] as Map<String, dynamic>,
+            )
+          : null,
+      createdBy: (json['createdByUser'] is Map<String, dynamic>)
+          ? CrmComercialUserRef.fromJson(
+              json['createdByUser'] as Map<String, dynamic>,
+            )
+          : null,
+      completedBy: (json['completedByUser'] is Map<String, dynamic>)
+          ? CrmComercialUserRef.fromJson(
+              json['completedByUser'] as Map<String, dynamic>,
+            )
+          : null,
+    );
   }
+}

@@ -110,85 +110,87 @@ class EmployeeWarning {
   });
 
   factory EmployeeWarning.fromJson(Map<String, dynamic> j) => EmployeeWarning(
-        id: j['id'] as String,
-        companyId: j['companyId'] as String,
-        employeeUserId: j['employeeUserId'] as String,
-        createdByUserId: j['createdByUserId'] as String,
-        warningNumber: j['warningNumber'] as String,
-        warningDate: DateTime.parse(j['warningDate'] as String),
-        incidentDate: DateTime.parse(j['incidentDate'] as String),
-        title: j['title'] as String,
-        warningType: j['warningType'] as String?,
-        reason: j['reason'] as String?,
-        details: j['details'] as String?,
-        incidentTime: j['incidentTime'] as String?,
-        incidentPlace: j['incidentPlace'] as String?,
-        issuedByUserId: j['issuedByUserId'] as String?,
-        issuedByNameSnapshot: j['issuedByNameSnapshot'] as String?,
-        issuedByPositionSnapshot: j['issuedByPositionSnapshot'] as String?,
-        internalNotes: j['internalNotes'] as String?,
-        generatedText: j['generatedText'] as String?,
-        employeeNameSnapshot: j['employeeNameSnapshot'] as String?,
-        employeeCedulaSnapshot: j['employeeCedulaSnapshot'] as String?,
-        employeePositionSnapshot: j['employeePositionSnapshot'] as String?,
-        employeeDepartmentSnapshot: j['employeeDepartmentSnapshot'] as String?,
-        employeePhoneSnapshot: j['employeePhoneSnapshot'] as String?,
-        companyNameSnapshot: j['companyNameSnapshot'] as String?,
-        companyRncSnapshot: j['companyRncSnapshot'] as String?,
-        companyAddressSnapshot: j['companyAddressSnapshot'] as String?,
-        category: j['category'] as String,
-        severity: j['severity'] as String,
-        legalBasis: j['legalBasis'] as String?,
-        internalRuleReference: j['internalRuleReference'] as String?,
-        description: j['description'] as String,
-        employeeExplanation: j['employeeExplanation'] as String?,
-        correctiveAction: j['correctiveAction'] as String?,
-        consequenceNote: j['consequenceNote'] as String?,
-        evidenceNotes: j['evidenceNotes'] as String?,
-        status: j['status'] as String,
-        pdfUrl: j['pdfUrl'] as String?,
-        signedPdfUrl: j['signedPdfUrl'] as String?,
-        createdAt: DateTime.parse(j['createdAt'] as String),
-        updatedAt: DateTime.parse(j['updatedAt'] as String),
-        submittedAt: j['submittedAt'] != null
-            ? DateTime.parse(j['submittedAt'] as String)
-            : null,
-        signedAt: j['signedAt'] != null
-            ? DateTime.parse(j['signedAt'] as String)
-            : null,
-        refusedAt: j['refusedAt'] != null
-            ? DateTime.parse(j['refusedAt'] as String)
-            : null,
-        annulledAt: j['annulledAt'] != null
-            ? DateTime.parse(j['annulledAt'] as String)
-            : null,
-        annulledByUserId: j['annulledByUserId'] as String?,
-        annulmentReason: j['annulmentReason'] as String?,
-        employeeUser: j['employeeUser'] != null
-            ? EmployeeWarningUser.fromJson(
-                j['employeeUser'] as Map<String, dynamic>)
-            : null,
-        createdByUser: j['createdByUser'] != null
-            ? EmployeeWarningUser.fromJson(
-                j['createdByUser'] as Map<String, dynamic>)
-            : null,
-        annulledByUser: j['annulledByUser'] != null
-            ? EmployeeWarningUser.fromJson(
-                j['annulledByUser'] as Map<String, dynamic>)
-            : null,
-        evidences: (j['evidences'] as List<dynamic>? ?? [])
-            .map((e) =>
-                EmployeeWarningEvidence.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        signatures: (j['signatures'] as List<dynamic>? ?? [])
-            .map((e) =>
-                EmployeeWarningSignature.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        auditLogs: (j['auditLogs'] as List<dynamic>? ?? [])
-            .map((e) =>
-                EmployeeWarningAuditLog.fromJson(e as Map<String, dynamic>))
-            .toList(),
-      );
+    id: j['id'] as String,
+    companyId: j['companyId'] as String,
+    employeeUserId: j['employeeUserId'] as String,
+    createdByUserId: j['createdByUserId'] as String,
+    warningNumber: j['warningNumber'] as String,
+    warningDate: DateTime.parse(j['warningDate'] as String),
+    incidentDate: DateTime.parse(j['incidentDate'] as String),
+    title: j['title'] as String,
+    warningType: j['warningType'] as String?,
+    reason: j['reason'] as String?,
+    details: j['details'] as String?,
+    incidentTime: j['incidentTime'] as String?,
+    incidentPlace: j['incidentPlace'] as String?,
+    issuedByUserId: j['issuedByUserId'] as String?,
+    issuedByNameSnapshot: j['issuedByNameSnapshot'] as String?,
+    issuedByPositionSnapshot: j['issuedByPositionSnapshot'] as String?,
+    internalNotes: j['internalNotes'] as String?,
+    generatedText: j['generatedText'] as String?,
+    employeeNameSnapshot: j['employeeNameSnapshot'] as String?,
+    employeeCedulaSnapshot: j['employeeCedulaSnapshot'] as String?,
+    employeePositionSnapshot: j['employeePositionSnapshot'] as String?,
+    employeeDepartmentSnapshot: j['employeeDepartmentSnapshot'] as String?,
+    employeePhoneSnapshot: j['employeePhoneSnapshot'] as String?,
+    companyNameSnapshot: j['companyNameSnapshot'] as String?,
+    companyRncSnapshot: j['companyRncSnapshot'] as String?,
+    companyAddressSnapshot: j['companyAddressSnapshot'] as String?,
+    category: j['category'] as String,
+    severity: j['severity'] as String,
+    legalBasis: j['legalBasis'] as String?,
+    internalRuleReference: j['internalRuleReference'] as String?,
+    description: j['description'] as String,
+    employeeExplanation: j['employeeExplanation'] as String?,
+    correctiveAction: j['correctiveAction'] as String?,
+    consequenceNote: j['consequenceNote'] as String?,
+    evidenceNotes: j['evidenceNotes'] as String?,
+    status: j['status'] as String,
+    pdfUrl: j['pdfUrl'] as String?,
+    signedPdfUrl: j['signedPdfUrl'] as String?,
+    createdAt: DateTime.parse(j['createdAt'] as String),
+    updatedAt: DateTime.parse(j['updatedAt'] as String),
+    submittedAt: j['submittedAt'] != null
+        ? DateTime.parse(j['submittedAt'] as String)
+        : null,
+    signedAt: j['signedAt'] != null
+        ? DateTime.parse(j['signedAt'] as String)
+        : null,
+    refusedAt: j['refusedAt'] != null
+        ? DateTime.parse(j['refusedAt'] as String)
+        : null,
+    annulledAt: j['annulledAt'] != null
+        ? DateTime.parse(j['annulledAt'] as String)
+        : null,
+    annulledByUserId: j['annulledByUserId'] as String?,
+    annulmentReason: j['annulmentReason'] as String?,
+    employeeUser: j['employeeUser'] != null
+        ? EmployeeWarningUser.fromJson(
+            j['employeeUser'] as Map<String, dynamic>,
+          )
+        : null,
+    createdByUser: j['createdByUser'] != null
+        ? EmployeeWarningUser.fromJson(
+            j['createdByUser'] as Map<String, dynamic>,
+          )
+        : null,
+    annulledByUser: j['annulledByUser'] != null
+        ? EmployeeWarningUser.fromJson(
+            j['annulledByUser'] as Map<String, dynamic>,
+          )
+        : null,
+    evidences: (j['evidences'] as List<dynamic>? ?? [])
+        .map((e) => EmployeeWarningEvidence.fromJson(e as Map<String, dynamic>))
+        .toList(),
+    signatures: (j['signatures'] as List<dynamic>? ?? [])
+        .map(
+          (e) => EmployeeWarningSignature.fromJson(e as Map<String, dynamic>),
+        )
+        .toList(),
+    auditLogs: (j['auditLogs'] as List<dynamic>? ?? [])
+        .map((e) => EmployeeWarningAuditLog.fromJson(e as Map<String, dynamic>))
+        .toList(),
+  );
 }
 
 class EmployeeWarningUser {
@@ -313,7 +315,8 @@ class EmployeeWarningAuditLog {
         createdAt: DateTime.parse(j['createdAt'] as String),
         actorUser: j['actorUser'] != null
             ? EmployeeWarningUser.fromJson(
-                j['actorUser'] as Map<String, dynamic>)
+                j['actorUser'] as Map<String, dynamic>,
+              )
             : null,
       );
 }

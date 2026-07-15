@@ -5,10 +5,11 @@ import '../../../core/auth/auth_repository.dart';
 import '../../../core/errors/api_exception.dart';
 import '../whatsapp_instance_model.dart';
 
-final whatsappInstanceRepositoryProvider =
-    Provider<WhatsappInstanceRepository>((ref) {
-  return WhatsappInstanceRepository(ref.watch(dioProvider));
-});
+final whatsappInstanceRepositoryProvider = Provider<WhatsappInstanceRepository>(
+  (ref) {
+    return WhatsappInstanceRepository(ref.watch(dioProvider));
+  },
+);
 
 class WhatsappInstanceRepository {
   final Dio _dio;
@@ -95,9 +96,11 @@ class WhatsappInstanceRepository {
       final res = await _dio.get('/whatsapp/admin/users');
       final list = res.data as List;
       return list
-          .map((item) => WhatsappAdminUserEntry.fromJson(
-                (item as Map).cast<String, dynamic>(),
-              ))
+          .map(
+            (item) => WhatsappAdminUserEntry.fromJson(
+              (item as Map).cast<String, dynamic>(),
+            ),
+          )
           .toList(growable: false);
     } on DioException catch (e) {
       throw _mapError(e, 'No se pudo obtener los usuarios de WhatsApp');

@@ -91,11 +91,7 @@ class LocationTracker {
           'speedMps': pos.speed,
           'recordedAt': pos.timestamp.toUtc().toIso8601String(),
         },
-        options: Options(
-          extra: <String, Object?>{
-            'silent': true,
-          },
-        ),
+        options: Options(extra: <String, Object?>{'silent': true}),
       );
     } catch (_) {
       // Silencioso: no debe romper la app si no se puede leer/enviar ubicación.

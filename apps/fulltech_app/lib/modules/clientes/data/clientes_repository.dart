@@ -351,7 +351,10 @@ class ClientesRepository {
       );
     } on DioException catch (e) {
       throw ApiException(
-        _extractMessage(e.response?.data, 'No se pudieron limpiar los clientes'),
+        _extractMessage(
+          e.response?.data,
+          'No se pudieron limpiar los clientes',
+        ),
         e.response?.statusCode,
       );
     }

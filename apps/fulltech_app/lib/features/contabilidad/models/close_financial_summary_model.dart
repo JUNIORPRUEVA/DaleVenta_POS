@@ -53,12 +53,11 @@ class CloseFinancialSummaryModel {
 
   factory CloseFinancialSummaryModel.fromJson(Map<String, dynamic> json) {
     final range = (json['range'] as Map? ?? const {}).cast<String, dynamic>();
-    final totals =
-        (json['totals'] as Map? ?? const {}).cast<String, dynamic>();
-    final available =
-        (json['availableForDeposit'] as Map? ?? const {}).cast<String, dynamic>();
-    final depositStatus =
-        (json['depositStatus'] as Map? ?? const {}).cast<String, dynamic>();
+    final totals = (json['totals'] as Map? ?? const {}).cast<String, dynamic>();
+    final available = (json['availableForDeposit'] as Map? ?? const {})
+        .cast<String, dynamic>();
+    final depositStatus = (json['depositStatus'] as Map? ?? const {})
+        .cast<String, dynamic>();
 
     return CloseFinancialSummaryModel(
       fromDate: _asDate(range['fromDate']),
@@ -104,9 +103,10 @@ class CloseFinancialSummaryModel {
             ? null
             : _asDate(depositStatus['lastDepositDate']),
         destinationBank:
-            (depositStatus['destinationBank'] as String?)?.trim().isEmpty == true
-                ? null
-                : depositStatus['destinationBank'] as String?,
+            (depositStatus['destinationBank'] as String?)?.trim().isEmpty ==
+                true
+            ? null
+            : depositStatus['destinationBank'] as String?,
       ),
     );
   }

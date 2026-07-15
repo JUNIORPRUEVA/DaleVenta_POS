@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -62,9 +62,7 @@ class _WhatsappScreenState extends ConsumerState<WhatsappScreen> {
           context.go(RouteAccess.defaultHomeForRole(user.appRole));
         });
 
-        return const Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        );
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
       }
     }
 
@@ -99,7 +97,10 @@ class _WhatsappScreenState extends ConsumerState<WhatsappScreen> {
               // Admin users section
               if (isAdmin) ...[
                 const SizedBox(height: 28),
-                _AdminSectionHeader(theme: theme, count: state.adminUsers.length),
+                _AdminSectionHeader(
+                  theme: theme,
+                  count: state.adminUsers.length,
+                ),
                 const SizedBox(height: 12),
                 if (state.adminUsersLoading)
                   const _LoadingCard()
@@ -114,7 +115,6 @@ class _WhatsappScreenState extends ConsumerState<WhatsappScreen> {
       ),
     );
   }
-
 }
 
 // â”€â”€â”€ WIDGETS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -213,7 +213,9 @@ class _LoadingCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.40),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.40,
+        ),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: theme.colorScheme.outlineVariant.withValues(alpha: 0.40),
@@ -234,7 +236,9 @@ class _EmptyAdminCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.40),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.40,
+        ),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: theme.colorScheme.outlineVariant.withValues(alpha: 0.40),
@@ -266,9 +270,7 @@ class _AdminUsersCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.5),
-        ),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -278,12 +280,16 @@ class _AdminUsersCard extends StatelessWidget {
         ],
       ),
       child: Column(
-        children: users.asMap().entries.map((entry) {
-          final i = entry.key;
-          final user = entry.value;
-          final isLast = i == users.length - 1;
-          return _AdminUserRow(user: user, isLast: isLast);
-        }).toList(growable: false),
+        children: users
+            .asMap()
+            .entries
+            .map((entry) {
+              final i = entry.key;
+              final user = entry.value;
+              final isLast = i == users.length - 1;
+              return _AdminUserRow(user: user, isLast: isLast);
+            })
+            .toList(growable: false),
       ),
     );
   }
@@ -306,20 +312,20 @@ class _AdminUserRow extends StatelessWidget {
     final statusColor = isConnected
         ? const Color(0xFF16A34A)
         : hasInstance
-            ? const Color(0xFFF59E0B)
-            : scheme.onSurfaceVariant.withValues(alpha: 0.5);
+        ? const Color(0xFFF59E0B)
+        : scheme.onSurfaceVariant.withValues(alpha: 0.5);
 
     final statusIcon = isConnected
         ? Icons.check_circle_rounded
         : hasInstance
-            ? Icons.schedule_rounded
-            : Icons.radio_button_unchecked_rounded;
+        ? Icons.schedule_rounded
+        : Icons.radio_button_unchecked_rounded;
 
     final statusLabel = isConnected
         ? 'Conectado'
         : hasInstance
-            ? 'Pendiente'
-            : 'Sin instancia';
+        ? 'Pendiente'
+        : 'Sin instancia';
 
     return Container(
       decoration: BoxDecoration(
@@ -396,4 +402,3 @@ class _AdminUserRow extends StatelessWidget {
     );
   }
 }
-

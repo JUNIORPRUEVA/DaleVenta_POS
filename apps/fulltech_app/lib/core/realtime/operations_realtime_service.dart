@@ -138,7 +138,8 @@ class OperationsRealtimeService {
 
     socket.on('client.event', (data) {
       if (data is! Map) return;
-      final payload = Map<String, dynamic>.from(data);      final eventId = payload['eventId']?.toString() ?? '';
+      final payload = Map<String, dynamic>.from(data);
+      final eventId = payload['eventId']?.toString() ?? '';
       if (eventId.isNotEmpty && !_seenEventIds.add(eventId)) {
         return;
       }

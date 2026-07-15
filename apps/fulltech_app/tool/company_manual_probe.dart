@@ -10,16 +10,20 @@ Future<void> main(List<String> args) async {
       _readEnvFromDotEnv('apps/fulltech_app/.env', 'API_BASE_URL') ??
       Platform.environment['API_BASE_URL'];
   if (baseUrl == null || baseUrl.trim().isEmpty) {
-    stderr.writeln('Missing API_BASE_URL in apps/fulltech_app/.env or env var.');
+    stderr.writeln(
+      'Missing API_BASE_URL in apps/fulltech_app/.env or env var.',
+    );
     exitCode = 2;
     return;
   }
 
-    final identifier = Platform.environment['ADMIN_EMAIL'] ??
+  final identifier =
+      Platform.environment['ADMIN_EMAIL'] ??
       _readEnvFromDotEnv('../api/.env', 'ADMIN_EMAIL') ??
       _readEnvFromDotEnv('apps/api/.env', 'ADMIN_EMAIL') ??
       'admin@fulltech.local';
-    final password = Platform.environment['ADMIN_PASSWORD'] ??
+  final password =
+      Platform.environment['ADMIN_PASSWORD'] ??
       _readEnvFromDotEnv('../api/.env', 'ADMIN_PASSWORD') ??
       _readEnvFromDotEnv('apps/api/.env', 'ADMIN_PASSWORD');
 
@@ -46,15 +50,16 @@ Future<void> main(List<String> args) async {
     final res = await dio.get<dynamic>(
       '/company-manual',
       queryParameters: {'includeHidden': 'true'},
-      options: options.copyWith(headers: {
-        ...?options.headers,
-        'Authorization': 'Bearer $token',
-      }),
+      options: options.copyWith(
+        headers: {...?options.headers, 'Authorization': 'Bearer $token'},
+      ),
     );
 
     stdout.writeln('Status: ${res.statusCode}');
     stdout.writeln('Content-Type: ${res.headers.value('content-type')}');
-    stdout.writeln('Content-Encoding: ${res.headers.value('content-encoding')}');
+    stdout.writeln(
+      'Content-Encoding: ${res.headers.value('content-encoding')}',
+    );
     stdout.writeln('Content-Length: ${res.headers.value('content-length')}');
     stdout.writeln('DataType: ${res.data.runtimeType}');
 
@@ -70,14 +75,18 @@ Future<void> main(List<String> args) async {
     if (bytes != null) {
       stdout.writeln('BytesLen: ${bytes.length}');
       final take = bytes.length > 32 ? bytes.sublist(0, 32) : bytes;
-      final hex = take.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+      final hex = take
+          .map((b) => b.toRadixString(16).padLeft(2, '0'))
+          .join(' ');
       stdout.writeln('FirstBytes(hex): $hex');
 
       final preview = utf8.decode(
         bytes.length > 200 ? bytes.sublist(0, 200) : bytes,
         allowMalformed: true,
       );
-      stdout.writeln('Preview(utf8, malformed ok): ${preview.replaceAll(RegExp(r"\s+"), " ")}');
+      stdout.writeln(
+        'Preview(utf8, malformed ok): ${preview.replaceAll(RegExp(r"\s+"), " ")}',
+      );
 
       try {
         final decoded = jsonDecode(utf8.decode(bytes));
@@ -92,7 +101,9 @@ Future<void> main(List<String> args) async {
 
     if (text != null) {
       stdout.writeln('TextLen: ${text.length}');
-      stdout.writeln('TextPreview: ${text.substring(0, text.length > 200 ? 200 : text.length).replaceAll(RegExp(r"\s+"), " ")}');
+      stdout.writeln(
+        'TextPreview: ${text.substring(0, text.length > 200 ? 200 : text.length).replaceAll(RegExp(r"\s+"), " ")}',
+      );
       try {
         final decoded = jsonDecode(text);
         stdout.writeln('jsonDecode OK: ${decoded.runtimeType}');

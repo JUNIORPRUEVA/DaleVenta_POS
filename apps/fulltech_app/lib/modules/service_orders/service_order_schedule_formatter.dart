@@ -10,14 +10,15 @@ enum ServiceScheduleDayBucket {
   past,
 }
 
-String formatServiceScheduledDateTime(
-  DateTime value, {
-  DateTime? now,
-}) {
+String formatServiceScheduledDateTime(DateTime value, {DateTime? now}) {
   final local = value.toLocal();
   final referenceNow = (now ?? DateTime.now()).toLocal();
 
-  final today = DateTime(referenceNow.year, referenceNow.month, referenceNow.day);
+  final today = DateTime(
+    referenceNow.year,
+    referenceNow.month,
+    referenceNow.day,
+  );
   final targetDay = DateTime(local.year, local.month, local.day);
   final dayDiff = targetDay.difference(today).inDays;
   final timeLabel = DateFormat('h:mm a', 'en_US').format(local).toUpperCase();
@@ -55,7 +56,11 @@ ServiceScheduleDayBucket resolveServiceScheduleDayBucket(
   final local = value.toLocal();
   final referenceNow = (now ?? DateTime.now()).toLocal();
 
-  final today = DateTime(referenceNow.year, referenceNow.month, referenceNow.day);
+  final today = DateTime(
+    referenceNow.year,
+    referenceNow.month,
+    referenceNow.day,
+  );
   final targetDay = DateTime(local.year, local.month, local.day);
   final dayDiff = targetDay.difference(today).inDays;
 

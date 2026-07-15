@@ -45,13 +45,15 @@ class _CampaignCollapsibleSectionState extends State<CampaignCollapsibleSection>
       vsync: this,
     );
 
-    _heightAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
-    );
+    _heightAnimation = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
 
-    _rotationAnimation = Tween<double>(begin: 0, end: 0.5).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
-    );
+    _rotationAnimation = Tween<double>(
+      begin: 0,
+      end: 0.5,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
 
     if (_isExpanded) {
       _controller.forward();
@@ -85,9 +87,7 @@ class _CampaignCollapsibleSectionState extends State<CampaignCollapsibleSection>
       decoration: BoxDecoration(
         color: scheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.2),
-        ),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.2)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.03),
@@ -108,7 +108,10 @@ class _CampaignCollapsibleSectionState extends State<CampaignCollapsibleSection>
                 topRight: Radius.circular(12),
               ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
                 child: Row(
                   children: [
                     if (widget.icon != null)
@@ -158,7 +161,10 @@ class _CampaignCollapsibleSectionState extends State<CampaignCollapsibleSection>
             ),
           ),
           // Divider
-          Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.15)),
+          Divider(
+            height: 1,
+            color: scheme.outlineVariant.withValues(alpha: 0.15),
+          ),
           // Content (collapsible)
           AnimatedBuilder(
             animation: _heightAnimation,
@@ -226,7 +232,8 @@ class _CompactFormFieldState extends State<CompactFormField> {
   @override
   void initState() {
     super.initState();
-    _controller = widget.controller ??
+    _controller =
+        widget.controller ??
         TextEditingController(text: widget.initialValue ?? '');
     _controller.addListener(() {
       widget.onChanged?.call(_controller.text);
@@ -255,19 +262,20 @@ class _CompactFormFieldState extends State<CompactFormField> {
         maxLines: widget.maxLines,
         minLines: widget.minLines,
         obscureText: widget.obscureText,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontSize: 13,
-            ),
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 13),
         decoration: InputDecoration(
           labelText: widget.label,
           hintText: widget.hint,
           labelStyle: Theme.of(context).textTheme.labelSmall,
           hintStyle: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
-              ),
+            color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
+          ),
           prefixIcon: widget.prefix,
           suffixIcon: widget.suffix,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 8,
+          ),
           isDense: true,
           filled: true,
           fillColor: _isFocused
@@ -287,23 +295,15 @@ class _CompactFormFieldState extends State<CompactFormField> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(
-              color: scheme.primary,
-              width: 1.5,
-            ),
+            borderSide: BorderSide(color: scheme.primary, width: 1.5),
           ),
           errorBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(
-              color: scheme.error,
-            ),
+            borderSide: BorderSide(color: scheme.error),
           ),
           focusedErrorBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(
-              color: scheme.error,
-              width: 1.5,
-            ),
+            borderSide: BorderSide(color: scheme.error, width: 1.5),
           ),
         ),
       ),

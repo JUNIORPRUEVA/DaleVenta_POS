@@ -89,7 +89,8 @@ class CotizacionItem {
     'productName': nombre,
     if (imageUrl != null && imageUrl!.trim().isNotEmpty)
       'productImageSnapshot': imageUrl,
-    if (originalUnitPrice != null) 'originalUnitPriceSnapshot': originalUnitPrice,
+    if (originalUnitPrice != null)
+      'originalUnitPriceSnapshot': originalUnitPrice,
     'qty': qty,
     'unitPrice': unitPrice,
     if ((costUnit ?? externalCostUnit) != null)
@@ -132,7 +133,7 @@ class CotizacionItem {
         ? null
         : _asDouble(rawCostSnapshot);
     final rawOriginalUnitPrice =
-      map['originalUnitPriceSnapshot'] ?? map['originalUnitPrice'];
+        map['originalUnitPriceSnapshot'] ?? map['originalUnitPrice'];
     final isExternalItem = !_isUuid((map['productId'] ?? '').toString());
     return CotizacionItem(
       productId: (map['productId'] ?? '').toString(),
@@ -145,7 +146,7 @@ class CotizacionItem {
       imageUrl:
           (map['productImageSnapshot'] ?? map['imageUrl'] ?? map['image_url'])
               ?.toString(),
-        originalUnitPrice: rawOriginalUnitPrice == null
+      originalUnitPrice: rawOriginalUnitPrice == null
           ? null
           : _asDouble(rawOriginalUnitPrice),
       unitPrice: _asDouble(map['unitPrice']),
@@ -298,17 +299,19 @@ class CotizacionModel {
     final createdBy = map['createdBy'];
     final user = map['user'];
     final createdByUserId =
-      map['createdByUserId']?.toString() ??
-      map['createdById']?.toString() ??
-      map['userId']?.toString() ??
-      (createdBy is Map ? createdBy['id']?.toString() : null) ??
-      (user is Map ? user['id']?.toString() : null);
+        map['createdByUserId']?.toString() ??
+        map['createdById']?.toString() ??
+        map['userId']?.toString() ??
+        (createdBy is Map ? createdBy['id']?.toString() : null) ??
+        (user is Map ? user['id']?.toString() : null);
     final createdByUserName =
-      map['createdByUserName']?.toString() ??
-      (createdBy is Map
-        ? (createdBy['nombreCompleto'] ?? createdBy['email'])?.toString()
-        : null) ??
-      (user is Map ? (user['nombreCompleto'] ?? user['email'])?.toString() : null);
+        map['createdByUserName']?.toString() ??
+        (createdBy is Map
+            ? (createdBy['nombreCompleto'] ?? createdBy['email'])?.toString()
+            : null) ??
+        (user is Map
+            ? (user['nombreCompleto'] ?? user['email'])?.toString()
+            : null);
     return CotizacionModel(
       id: (map['id'] ?? '').toString(),
       createdAt:
@@ -323,8 +326,8 @@ class CotizacionModel {
       includeItbis: map['includeItbis'] == true,
       itbisRate: _asDouble(map['itbisRate'], 0.18),
       globalDiscountAmount: _asDouble(map['globalDiscountAmount']),
-        totalCost: map['totalCost'] == null ? null : _asDouble(map['totalCost']),
-        totalProfit: map['totalProfit'] == null
+      totalCost: map['totalCost'] == null ? null : _asDouble(map['totalCost']),
+      totalProfit: map['totalProfit'] == null
           ? null
           : _asDouble(map['totalProfit']),
       items: rawItems

@@ -130,11 +130,11 @@ class _ClientesMapScreenState extends ConsumerState<ClientesMapScreen> {
     );
     final filteredOrders = _applyOrderFilters(ordersState.items);
     final hasActiveFilters =
-      _selectedSellerId != null ||
-      _selectedOrderScope != _MapOrderScope.all ||
-      _selectedDatePreset != _MapDatePreset.all ||
-      _dateFrom != null ||
-      _dateTo != null;
+        _selectedSellerId != null ||
+        _selectedOrderScope != _MapOrderScope.all ||
+        _selectedDatePreset != _MapDatePreset.all ||
+        _dateFrom != null ||
+        _dateTo != null;
 
     final nextSignature = clientsState.items
         .map(
@@ -218,7 +218,11 @@ class _ClientesMapScreenState extends ConsumerState<ClientesMapScreen> {
                               _dateFrom = null;
                               _dateTo = null;
                             case _MapDatePreset.today:
-                              _dateFrom = DateTime(now.year, now.month, now.day);
+                              _dateFrom = DateTime(
+                                now.year,
+                                now.month,
+                                now.day,
+                              );
                               _dateTo = end;
                             case _MapDatePreset.last7Days:
                               final start = DateTime(
@@ -483,7 +487,10 @@ String? _resolveSellerName({
       .where((order) => order.status == ServiceOrderStatus.finalizado)
       .toList(growable: false);
 
-  ServiceOrderModel pickMostRecent(ServiceOrderModel current, ServiceOrderModel next) {
+  ServiceOrderModel pickMostRecent(
+    ServiceOrderModel current,
+    ServiceOrderModel next,
+  ) {
     final currentAt = current.finalizedAt ?? current.updatedAt;
     final nextAt = next.finalizedAt ?? next.updatedAt;
     return nextAt.isAfter(currentAt) ? next : current;
@@ -521,16 +528,26 @@ List<_SellerFilterOption> _buildSellerFilters({
     countsBySellerId.update(sellerId, (count) => count + 1, ifAbsent: () => 1);
   }
 
-  final options = countsBySellerId.entries.map((entry) {
-    final userName = (usersById[entry.key]?.nombreCompleto ?? entry.key).trim();
-    final shortName = userName.isEmpty ? entry.key : _extractFirstName(userName);
-    return _SellerFilterOption(
-      sellerId: entry.key,
-      sellerLabel: shortName,
-      orderCount: entry.value,
-    );
-  }).toList(growable: false)
-    ..sort((a, b) => a.sellerLabel.toLowerCase().compareTo(b.sellerLabel.toLowerCase()));
+  final options =
+      countsBySellerId.entries
+          .map((entry) {
+            final userName = (usersById[entry.key]?.nombreCompleto ?? entry.key)
+                .trim();
+            final shortName = userName.isEmpty
+                ? entry.key
+                : _extractFirstName(userName);
+            return _SellerFilterOption(
+              sellerId: entry.key,
+              sellerLabel: shortName,
+              orderCount: entry.value,
+            );
+          })
+          .toList(growable: false)
+        ..sort(
+          (a, b) => a.sellerLabel.toLowerCase().compareTo(
+            b.sellerLabel.toLowerCase(),
+          ),
+        );
 
   return options;
 }
@@ -960,10 +977,7 @@ class _MapMarker extends StatelessWidget {
               constraints: const BoxConstraints(maxWidth: 84),
               child: Container(
                 margin: const EdgeInsets.only(bottom: 3),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 5,
-                  vertical: 2,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.48),
                   borderRadius: BorderRadius.circular(999),
@@ -1308,11 +1322,7 @@ class _MapFiltersFloatingButton extends StatelessWidget {
                 ),
               ),
               if (hasActiveFilters)
-                const Positioned(
-                  right: 7,
-                  top: 7,
-                  child: _ActiveFilterDot(),
-                ),
+                const Positioned(right: 7, top: 7, child: _ActiveFilterDot()),
             ],
           ),
         ),
@@ -1367,11 +1377,10 @@ class _MapFiltersFloatingButton extends StatelessWidget {
         return FadeTransition(
           opacity: curved,
           child: SlideTransition(
-            position:
-                Tween<Offset>(
-                  begin: const Offset(0, -0.03),
-                  end: Offset.zero,
-                ).animate(curved),
+            position: Tween<Offset>(
+              begin: const Offset(0, -0.03),
+              end: Offset.zero,
+            ).animate(curved),
             child: child,
           ),
         );
@@ -1437,7 +1446,11 @@ class _MapFiltersPanel extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(Icons.tune_rounded, size: 16, color: Color(0xFF0F172A)),
+                const Icon(
+                  Icons.tune_rounded,
+                  size: 16,
+                  color: Color(0xFF0F172A),
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(

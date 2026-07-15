@@ -287,9 +287,7 @@ class NominaRepository {
   }) async {
     final data = await _postMap(
       ApiRoutes.payrollRejectServiceCommission(requestId),
-      {
-        if ((note ?? '').trim().isNotEmpty) 'note': note!.trim(),
-      },
+      {if ((note ?? '').trim().isNotEmpty) 'note': note!.trim()},
     );
     return PayrollServiceCommissionRequest.fromMap(data);
   }
@@ -394,7 +392,9 @@ class NominaRepository {
     if (_currentUserId.isEmpty) return const [];
 
     if (kIsWeb) {
-      final cached = await _cache.readMap(_myPayrollHistoryCacheKey(_currentUserId));
+      final cached = await _cache.readMap(
+        _myPayrollHistoryCacheKey(_currentUserId),
+      );
       final items = cached?['items'];
       if (items is! List) return const [];
       return items
@@ -408,7 +408,9 @@ class NominaRepository {
           .listCachedPayrollHistoryForUser(_currentUserId)
           .timeout(_localCacheTimeout);
     } catch (_) {
-      final cached = await _cache.readMap(_myPayrollHistoryCacheKey(_currentUserId));
+      final cached = await _cache.readMap(
+        _myPayrollHistoryCacheKey(_currentUserId),
+      );
       final items = cached?['items'];
       if (items is! List) return const [];
       return items
@@ -426,7 +428,9 @@ class NominaRepository {
       };
       await _cache.writeMap(_myPayrollHistoryCacheKey(_currentUserId), payload);
       if (!kIsWeb) {
-        unawaited(_localDb.replaceCachedPayrollHistoryForUser(_currentUserId, rows));
+        unawaited(
+          _localDb.replaceCachedPayrollHistoryForUser(_currentUserId, rows),
+        );
       }
     }
     return rows;

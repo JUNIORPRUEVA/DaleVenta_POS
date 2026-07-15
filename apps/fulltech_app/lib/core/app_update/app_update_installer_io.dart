@@ -10,7 +10,8 @@ import '../debug/trace_log.dart';
 import 'app_update_installer_contract.dart';
 import 'app_update_models.dart';
 
-AppUpdateInstaller createAppUpdateInstaller() => const WindowsAppUpdateInstaller();
+AppUpdateInstaller createAppUpdateInstaller() =>
+    const WindowsAppUpdateInstaller();
 
 class WindowsAppUpdateInstaller implements AppUpdateInstaller {
   const WindowsAppUpdateInstaller();
@@ -63,7 +64,11 @@ class WindowsAppUpdateInstaller implements AppUpdateInstaller {
       onProgress(1);
       await _launchInstaller(targetFile.path);
 
-      TraceLog.log('AppUpdate', 'windows auto-update installer launched', seq: seq);
+      TraceLog.log(
+        'AppUpdate',
+        'windows auto-update installer launched',
+        seq: seq,
+      );
       unawaited(
         Future<void>.delayed(const Duration(milliseconds: 900), () {
           exit(0);
@@ -117,7 +122,8 @@ class WindowsAppUpdateInstaller implements AppUpdateInstaller {
       return sanitized;
     }
 
-    final buildSuffix = updateInfo.latestBuild?.toString() ??
+    final buildSuffix =
+        updateInfo.latestBuild?.toString() ??
         DateTime.now().millisecondsSinceEpoch.toString();
     return 'fulltech_update_$buildSuffix.exe';
   }

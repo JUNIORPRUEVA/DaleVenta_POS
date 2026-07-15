@@ -235,10 +235,7 @@ pw.Widget _detailSection(
               bold: true,
             ),
             _bodyCell(qtyFmt.format(item.qty), align: pw.TextAlign.center),
-            _bodyCell(
-              money.format(item.unitPrice),
-              align: pw.TextAlign.right,
-            ),
+            _bodyCell(money.format(item.unitPrice), align: pw.TextAlign.right),
             _bodyCell(money.format(item.total), align: pw.TextAlign.right),
           ],
         ),
@@ -348,7 +345,10 @@ pw.Widget _totalsPanel(CotizacionModel cotizacion, NumberFormat money) {
             valueColor: PdfColor.fromHex('#B42318'),
           ),
         if (cotizacion.hasDiscount)
-          _totalLine('Subtotal con descuento', money.format(cotizacion.subtotal)),
+          _totalLine(
+            'Subtotal con descuento',
+            money.format(cotizacion.subtotal),
+          ),
         if (cotizacion.includeItbis)
           _totalLine('ITBIS', money.format(cotizacion.itbisAmount)),
         pw.Padding(
@@ -488,10 +488,7 @@ pw.Widget _logoBox({
 pw.Widget _companyLine(String text) {
   return pw.Padding(
     padding: const pw.EdgeInsets.only(bottom: 2),
-    child: pw.Text(
-      text,
-      style: pw.TextStyle(fontSize: 8.5, color: _textMuted),
-    ),
+    child: pw.Text(text, style: pw.TextStyle(fontSize: 8.5, color: _textMuted)),
   );
 }
 
@@ -521,30 +518,18 @@ pw.Widget _quoteFactsPanel({
         pw.SizedBox(height: 6),
         pw.Text(
           dateText,
-          style: pw.TextStyle(
-            fontSize: 8.7,
-            color: _textPrimary,
-          ),
+          style: pw.TextStyle(fontSize: 8.7, color: _textPrimary),
         ),
         if (taxText != null && taxText.trim().isNotEmpty) ...[
           pw.SizedBox(height: 5),
-          pw.Text(
-            taxText,
-            style: pw.TextStyle(
-              fontSize: 8,
-              color: _textMuted,
-            ),
-          ),
+          pw.Text(taxText, style: pw.TextStyle(fontSize: 8, color: _textMuted)),
         ],
       ],
     ),
   );
 }
 
-pw.Widget _personInfoPanel({
-  required String primary,
-  String? secondary,
-}) {
+pw.Widget _personInfoPanel({required String primary, String? secondary}) {
   return pw.Container(
     padding: const pw.EdgeInsets.fromLTRB(10, 9, 10, 9),
     decoration: pw.BoxDecoration(
@@ -578,10 +563,7 @@ pw.Widget _personInfoPanel({
                 pw.SizedBox(height: 4),
                 pw.Text(
                   secondary.trim(),
-                  style: pw.TextStyle(
-                    fontSize: 8.1,
-                    color: _textMuted,
-                  ),
+                  style: pw.TextStyle(fontSize: 8.1, color: _textMuted),
                 ),
               ],
             ],
@@ -598,8 +580,8 @@ pw.Widget _headerCell(String text, {pw.TextAlign align = pw.TextAlign.center}) {
     alignment: align == pw.TextAlign.left
         ? pw.Alignment.centerLeft
         : align == pw.TextAlign.right
-            ? pw.Alignment.centerRight
-            : pw.Alignment.center,
+        ? pw.Alignment.centerRight
+        : pw.Alignment.center,
     child: pw.Text(
       text,
       textAlign: align,
@@ -622,8 +604,8 @@ pw.Widget _bodyCell(
     alignment: align == pw.TextAlign.center
         ? pw.Alignment.center
         : align == pw.TextAlign.right
-            ? pw.Alignment.centerRight
-            : pw.Alignment.centerLeft,
+        ? pw.Alignment.centerRight
+        : pw.Alignment.centerLeft,
     child: pw.Text(
       text,
       textAlign: align,
@@ -639,18 +621,11 @@ pw.Widget _bodyCell(
 pw.Widget _emptyCell(String text) {
   return pw.Container(
     padding: const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 7),
-    child: pw.Text(
-      text,
-      style: pw.TextStyle(fontSize: 8, color: _textMuted),
-    ),
+    child: pw.Text(text, style: pw.TextStyle(fontSize: 8, color: _textMuted)),
   );
 }
 
-pw.Widget _totalLine(
-  String label,
-  String value, {
-  PdfColor? valueColor,
-}) {
+pw.Widget _totalLine(String label, String value, {PdfColor? valueColor}) {
   return pw.Padding(
     padding: const pw.EdgeInsets.symmetric(vertical: 3),
     child: pw.Row(
@@ -666,7 +641,9 @@ pw.Widget _totalLine(
           style: pw.TextStyle(
             fontSize: 9.1,
             color: valueColor ?? _textPrimary,
-            fontWeight: valueColor != null ? pw.FontWeight.bold : pw.FontWeight.normal,
+            fontWeight: valueColor != null
+                ? pw.FontWeight.bold
+                : pw.FontWeight.normal,
           ),
         ),
       ],

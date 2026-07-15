@@ -356,7 +356,8 @@ class _GaleriaPublicidadScreenState
   String _resolveImportedProductImageUrl(String rawUrl) {
     final value = rawUrl.trim();
     if (value.isEmpty) return value;
-    if (value.startsWith('http://') || value.startsWith('https://')) return value;
+    if (value.startsWith('http://') || value.startsWith('https://'))
+      return value;
 
     final base = Env.apiBaseUrl.trim().replaceAll(RegExp(r'/+$'), '');
     if (base.isEmpty) return value;

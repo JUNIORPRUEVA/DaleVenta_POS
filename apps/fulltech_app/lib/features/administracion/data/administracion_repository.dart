@@ -6,7 +6,9 @@ import '../../../core/auth/auth_repository.dart';
 import '../../../core/errors/api_exception.dart';
 import '../models/admin_panel_models.dart';
 
-final administracionRepositoryProvider = Provider<AdministracionRepository>((ref) {
+final administracionRepositoryProvider = Provider<AdministracionRepository>((
+  ref,
+) {
   return AdministracionRepository(ref.watch(dioProvider));
 });
 
@@ -66,7 +68,10 @@ class AdministracionRepository {
         );
       }
       throw ApiException(
-        _extractMessage(e.response?.data, 'No se pudo cargar resumen de administración'),
+        _extractMessage(
+          e.response?.data,
+          'No se pudo cargar resumen de administración',
+        ),
         e.response?.statusCode,
       );
     }
@@ -79,7 +84,9 @@ class AdministracionRepository {
         queryParameters: {'days': days},
         options: Options(extra: const {'skipLoader': true}),
       );
-      return AdminAiInsights.fromJson((res.data as Map).cast<String, dynamic>());
+      return AdminAiInsights.fromJson(
+        (res.data as Map).cast<String, dynamic>(),
+      );
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) {
         final attendance = await getAttendanceSummary(days: days);
@@ -126,7 +133,10 @@ class AdministracionRepository {
       return (res.data as Map).cast<String, dynamic>();
     } on DioException catch (e) {
       throw ApiException(
-        _extractMessage(e.response?.data, 'No se pudo cargar resumen de ponches'),
+        _extractMessage(
+          e.response?.data,
+          'No se pudo cargar resumen de ponches',
+        ),
         e.response?.statusCode,
       );
     }
@@ -147,7 +157,10 @@ class AdministracionRepository {
       return (res.data as Map).cast<String, dynamic>();
     } on DioException catch (e) {
       throw ApiException(
-        _extractMessage(e.response?.data, 'No se pudo cargar resumen de ventas'),
+        _extractMessage(
+          e.response?.data,
+          'No se pudo cargar resumen de ventas',
+        ),
         e.response?.statusCode,
       );
     }

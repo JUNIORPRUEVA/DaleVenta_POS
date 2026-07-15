@@ -137,9 +137,7 @@ class DocumentFlowOrderSummary {
       status: (json['status'] ?? '').toString(),
       serviceType: (json['serviceType'] ?? '').toString(),
       category: (json['category'] ?? '').toString(),
-      client: DocumentFlowClientSummary.fromJson(
-        _asMap(json['client']),
-      ),
+      client: DocumentFlowClientSummary.fromJson(_asMap(json['client'])),
       scheduledFor: _asDateTime(json['scheduledFor']),
       finalizedAt: _asDateTime(json['finalizedAt']),
       createdAt: _asDateTime(json['createdAt']),

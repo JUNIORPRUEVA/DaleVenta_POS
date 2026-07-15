@@ -19,10 +19,7 @@ class GalleryContentApi {
     int limit = 50,
   }) async {
     try {
-      final params = <String, dynamic>{
-        'page': page,
-        'limit': limit,
-      };
+      final params = <String, dynamic>{'page': page, 'limit': limit};
       if (filterId != null && filterId.isNotEmpty) {
         params['filter'] = filterId;
       }
@@ -36,7 +33,9 @@ class GalleryContentApi {
       );
 
       final items = (response.data ?? [])
-          .map((item) => GalleryContentItem.fromJson(item as Map<String, dynamic>))
+          .map(
+            (item) => GalleryContentItem.fromJson(item as Map<String, dynamic>),
+          )
           .toList();
       return items;
     } catch (e) {
@@ -46,9 +45,7 @@ class GalleryContentApi {
 
   Future<GalleryContentItem> loadItem(String id) async {
     try {
-      final response = await _dio.get<Map<String, dynamic>>(
-        '$_baseUrl/$id',
-      );
+      final response = await _dio.get<Map<String, dynamic>>('$_baseUrl/$id');
       return GalleryContentItem.fromJson(response.data ?? {});
     } catch (e) {
       rethrow;
@@ -67,7 +64,9 @@ class GalleryContentApi {
       );
 
       final items = (response.data ?? [])
-          .map((item) => GalleryContentItem.fromJson(item as Map<String, dynamic>))
+          .map(
+            (item) => GalleryContentItem.fromJson(item as Map<String, dynamic>),
+          )
           .toList();
       return items;
     } catch (e) {
@@ -87,7 +86,9 @@ class GalleryContentApi {
       );
 
       final items = (response.data ?? [])
-          .map((item) => GalleryContentItem.fromJson(item as Map<String, dynamic>))
+          .map(
+            (item) => GalleryContentItem.fromJson(item as Map<String, dynamic>),
+          )
           .toList();
       return items;
     } catch (e) {
@@ -159,10 +160,7 @@ class GalleryContentApi {
 
   Future<void> toggleFavorite(String id, {required bool favorite}) async {
     try {
-      await _dio.patch(
-        '$_baseUrl/$id/favorite',
-        data: {'favorito': favorite},
-      );
+      await _dio.patch('$_baseUrl/$id/favorite', data: {'favorito': favorite});
     } catch (e) {
       rethrow;
     }
@@ -200,10 +198,7 @@ class GalleryContentApi {
     try {
       await _dio.patch(
         '$_baseUrl/bulk/favorite',
-        data: {
-          'ids': ids,
-          'favorito': favorite,
-        },
+        data: {'ids': ids, 'favorito': favorite},
       );
     } catch (e) {
       rethrow;
@@ -212,10 +207,7 @@ class GalleryContentApi {
 
   Future<void> bulkDelete(List<String> ids) async {
     try {
-      await _dio.post(
-        '$_baseUrl/bulk/delete',
-        data: {'ids': ids},
-      );
+      await _dio.post('$_baseUrl/bulk/delete', data: {'ids': ids});
     } catch (e) {
       rethrow;
     }

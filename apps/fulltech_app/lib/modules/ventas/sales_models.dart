@@ -97,9 +97,8 @@ class AdminSalesUsersSummary {
       items: rawItems
           .whereType<Map>()
           .map(
-            (item) => AdminSalesUserSummary.fromJson(
-              item.cast<String, dynamic>(),
-            ),
+            (item) =>
+                AdminSalesUserSummary.fromJson(item.cast<String, dynamic>()),
           )
           .toList(growable: false),
       totals: SalesSummaryModel.fromJson(
@@ -163,6 +162,8 @@ class SaleModel {
   final double totalCost;
   final double totalProfit;
   final double commissionAmount;
+  final bool isDeleted;
+  final DateTime? deletedAt;
   final List<SaleItemModel> items;
 
   const SaleModel({
@@ -176,6 +177,8 @@ class SaleModel {
     required this.totalCost,
     required this.totalProfit,
     required this.commissionAmount,
+    required this.isDeleted,
+    required this.deletedAt,
     required this.items,
   });
 
@@ -202,6 +205,10 @@ class SaleModel {
       totalCost: _toDouble(json['totalCost']),
       totalProfit: _toDouble(json['totalProfit']),
       commissionAmount: _toDouble(json['commissionAmount']),
+      isDeleted: json['isDeleted'] == true,
+      deletedAt: json['deletedAt'] != null
+          ? DateTime.tryParse(json['deletedAt'].toString())
+          : null,
       items: rawItems
           .whereType<Map>()
           .map((item) => SaleItemModel.fromJson(item.cast<String, dynamic>()))

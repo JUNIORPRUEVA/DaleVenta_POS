@@ -17,12 +17,19 @@ class DateRangePickerField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = value == null ? 'Seleccionar' : '${_format(value!.start)} → ${_format(value!.end)}';
+    final text = value == null
+        ? 'Seleccionar'
+        : '${_format(value!.start)} → ${_format(value!.end)}';
 
     return OutlinedButton.icon(
       onPressed: () async {
         final now = DateTime.now();
-        final initial = value ?? DateTimeRange(start: DateTime(now.year, now.month, now.day), end: DateTime(now.year, now.month, now.day));
+        final initial =
+            value ??
+            DateTimeRange(
+              start: DateTime(now.year, now.month, now.day),
+              end: DateTime(now.year, now.month, now.day),
+            );
         final picked = await showDateRangePicker(
           context: context,
           firstDate: DateTime(now.year - 2),

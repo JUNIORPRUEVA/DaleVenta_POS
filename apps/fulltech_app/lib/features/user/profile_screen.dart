@@ -333,9 +333,10 @@ class _ProfileContent extends StatelessWidget {
       items.add(('Edad', '${user.edad} años'));
     }
     if (user.fechaNacimiento != null) {
-      items.add(
-        ('Nacimiento', DateFormat('dd/MM/yyyy').format(user.fechaNacimiento!)),
-      );
+      items.add((
+        'Nacimiento',
+        DateFormat('dd/MM/yyyy').format(user.fechaNacimiento!),
+      ));
     }
     items.add(('Estado civil', user.estaCasado == true ? 'Casado' : 'Soltero'));
     items.add(('Hijos', user.tieneHijos == true ? 'Sí' : 'No'));
@@ -353,9 +354,10 @@ class _ProfileContent extends StatelessWidget {
   Widget _buildHrSection(int cols) {
     final items = <(String, String)>[];
     if (user.fechaIngreso != null) {
-      items.add(
-        ('Ingreso', DateFormat('dd/MM/yyyy').format(user.fechaIngreso!)),
-      );
+      items.add((
+        'Ingreso',
+        DateFormat('dd/MM/yyyy').format(user.fechaIngreso!),
+      ));
       items.add(('En empresa', '${user.diasEnEmpresa ?? 0} días'));
     }
     items.add(('Lic. conducir', user.licenciaConducir == true ? 'Sí' : 'No'));
@@ -365,9 +367,10 @@ class _ProfileContent extends StatelessWidget {
       items.add(('Nómina', user.cuentaNominaPreferencial!.trim()));
     }
     if (user.createdAt != null) {
-      items.add(
-        ('Miembro desde', DateFormat('dd/MM/yyyy').format(user.createdAt!)),
-      );
+      items.add((
+        'Miembro desde',
+        DateFormat('dd/MM/yyyy').format(user.createdAt!),
+      ));
     }
     return _CompactSection(
       icon: Icons.work_outline_rounded,
@@ -411,12 +414,14 @@ class _ProfileContent extends StatelessWidget {
         icon: Icons.photo_library_outlined,
         title: 'Documentos',
         child: Row(
-          children: docs.map((doc) {
-            return Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: _DocThumbnail(label: doc.$1, url: doc.$2),
-            );
-          }).toList(growable: false),
+          children: docs
+              .map((doc) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: _DocThumbnail(label: doc.$1, url: doc.$2),
+                );
+              })
+              .toList(growable: false),
         ),
       ),
     ];
@@ -568,18 +573,12 @@ class _HeaderCard extends StatelessWidget {
                       if (email.isNotEmpty && phone.isNotEmpty)
                         Text(
                           ' · ',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: scheme.outline,
-                          ),
+                          style: TextStyle(fontSize: 12, color: scheme.outline),
                         ),
                       if (phone.isNotEmpty)
                         Text(
                           phone,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: scheme.outline,
-                          ),
+                          style: TextStyle(fontSize: 12, color: scheme.outline),
                         ),
                     ],
                   ),
@@ -645,18 +644,13 @@ class _CompactSection extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Expanded(
-              child: Divider(height: 1, color: scheme.outlineVariant),
-            ),
+            Expanded(child: Divider(height: 1, color: scheme.outlineVariant)),
           ],
         ),
         const SizedBox(height: 10),
         Card(
           margin: EdgeInsets.zero,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: child,
-          ),
+          child: Padding(padding: const EdgeInsets.all(14), child: child),
         ),
       ],
     );
@@ -680,12 +674,14 @@ class _DataGrid extends StatelessWidget {
         return Wrap(
           spacing: spacing,
           runSpacing: 14,
-          children: items.map((item) {
-            return SizedBox(
-              width: itemW,
-              child: _DataCell(label: item.$1, value: item.$2),
-            );
-          }).toList(growable: false),
+          children: items
+              .map((item) {
+                return SizedBox(
+                  width: itemW,
+                  child: _DataCell(label: item.$1, value: item.$2),
+                );
+              })
+              .toList(growable: false),
         );
       },
     );
@@ -813,8 +809,7 @@ class _StatusPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final bg = blocked ? scheme.errorContainer : scheme.secondaryContainer;
-    final fg =
-        blocked ? scheme.onErrorContainer : scheme.onSecondaryContainer;
+    final fg = blocked ? scheme.onErrorContainer : scheme.onSecondaryContainer;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: bg,

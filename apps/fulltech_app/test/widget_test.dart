@@ -24,9 +24,7 @@ void main() {
 
   testWidgets('App builds (smoke test)', (WidgetTester tester) async {
     await tester.pumpWidget(
-      const ProviderScope(
-        child: MyApp(enableBackgroundStartup: false),
-      ),
+      const ProviderScope(child: MyApp(enableBackgroundStartup: false)),
     );
     await tester.pump();
 

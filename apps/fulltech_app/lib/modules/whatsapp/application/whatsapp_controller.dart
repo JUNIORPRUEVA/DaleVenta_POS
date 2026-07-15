@@ -59,8 +59,8 @@ class WhatsappState {
 
 final whatsappControllerProvider =
     StateNotifierProvider<WhatsappController, WhatsappState>((ref) {
-  return WhatsappController(ref.watch(whatsappInstanceRepositoryProvider));
-});
+      return WhatsappController(ref.watch(whatsappInstanceRepositoryProvider));
+    });
 
 class WhatsappController extends StateNotifier<WhatsappState> {
   final WhatsappInstanceRepository _repo;

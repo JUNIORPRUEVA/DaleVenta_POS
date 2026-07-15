@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/api/env.dart';
 import '../../../core/cache/fulltech_cache_manager.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/models/product_model.dart';
+import '../../../core/utils/product_image_url.dart';
 import '../data/catalog_repository.dart';
 import '../data/catalog_sync_utils.dart';
 
@@ -152,6 +156,17 @@ class CatalogController extends StateNotifier<CatalogState> {
       String? path;
       if (imageBytes != null && filename != null) {
         path = await repo.uploadImage(bytes: imageBytes, filename: filename);
+        final cachedUrl = buildProductImageUrl(
+          imageUrl: path,
+          baseUrl: Env.apiBaseUrl,
+        );
+        unawaited(
+          FulltechImageCacheManager.putImageBytes(
+            url: cachedUrl,
+            bytes: imageBytes,
+            filename: filename,
+          ),
+        );
       }
       final created = await repo.createProduct(
         nombre: nombre,
@@ -221,6 +236,17 @@ class CatalogController extends StateNotifier<CatalogState> {
         fotoUrl = await repo.uploadImage(
           bytes: newImageBytes,
           filename: newFilename,
+        );
+        final cachedUrl = buildProductImageUrl(
+          imageUrl: fotoUrl,
+          baseUrl: Env.apiBaseUrl,
+        );
+        unawaited(
+          FulltechImageCacheManager.putImageBytes(
+            url: cachedUrl,
+            bytes: newImageBytes,
+            filename: newFilename,
+          ),
         );
       }
       final updated = await repo.updateProduct(

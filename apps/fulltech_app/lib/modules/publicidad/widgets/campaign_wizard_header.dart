@@ -18,12 +18,7 @@ class CampaignWizardStep {
 }
 
 /// Visual state of a wizard step
-enum WizardStepState {
-  locked,
-  current,
-  completed,
-  error,
-}
+enum WizardStepState { locked, current, completed, error }
 
 /// Premium wizard header showing campaign phases
 class CampaignWizardHeader extends StatelessWidget {
@@ -143,14 +138,9 @@ class CampaignWizardHeader extends StatelessWidget {
                   if (i > 0)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 6),
-                      child: _StepConnector(
-                        state: _getStepState(i),
-                      ),
+                      child: _StepConnector(state: _getStepState(i)),
                     ),
-                  _StepItem(
-                    step: steps[i],
-                    state: _getStepState(i),
-                  ),
+                  _StepItem(step: steps[i], state: _getStepState(i)),
                 ],
               ],
             ),
@@ -166,16 +156,14 @@ class _StepItem extends StatefulWidget {
   final CampaignWizardStep step;
   final WizardStepState state;
 
-  const _StepItem({
-    required this.step,
-    required this.state,
-  });
+  const _StepItem({required this.step, required this.state});
 
   @override
   State<_StepItem> createState() => _StepItemState();
 }
 
-class _StepItemState extends State<_StepItem> with SingleTickerProviderStateMixin {
+class _StepItemState extends State<_StepItem>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<double> _scaleAnimation;
 
@@ -186,9 +174,10 @@ class _StepItemState extends State<_StepItem> with SingleTickerProviderStateMixi
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 0.8,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
     _controller.forward();
   }
 
@@ -254,23 +243,11 @@ class _StepItemState extends State<_StepItem> with SingleTickerProviderStateMixi
                 alignment: Alignment.center,
                 children: [
                   if (isCompleted)
-                    Icon(
-                      Icons.check_rounded,
-                      size: 24,
-                      color: scheme.primary,
-                    )
+                    Icon(Icons.check_rounded, size: 24, color: scheme.primary)
                   else if (isError)
-                    Icon(
-                      Icons.error_rounded,
-                      size: 24,
-                      color: scheme.error,
-                    )
+                    Icon(Icons.error_rounded, size: 24, color: scheme.error)
                   else
-                    Icon(
-                      widget.step.icon,
-                      size: 20,
-                      color: iconColor,
-                    ),
+                    Icon(widget.step.icon, size: 20, color: iconColor),
                   if (isActive)
                     SizedBox.expand(
                       child: Material(
@@ -298,14 +275,13 @@ class _StepItemState extends State<_StepItem> with SingleTickerProviderStateMixi
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: isLocked
-                          ? Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant
-                              .withValues(alpha: 0.5)
-                          : null,
-                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                    ),
+                  color: isLocked
+                      ? Theme.of(
+                          context,
+                        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5)
+                      : null,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                ),
               ),
             ),
           ],
@@ -344,10 +320,7 @@ class _StatusBadge extends StatelessWidget {
   final MarketingCampaignStatus status;
   final bool hasError;
 
-  const _StatusBadge({
-    required this.status,
-    required this.hasError,
-  });
+  const _StatusBadge({required this.status, required this.hasError});
 
   String _getStatusLabel(MarketingCampaignStatus status) {
     switch (status) {
@@ -397,9 +370,7 @@ class _StatusBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -430,9 +401,9 @@ class _StatusBadge extends StatelessWidget {
             ),
           Text(
             label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
           ),
         ],
       ),

@@ -166,7 +166,9 @@ class CompanyManualRepository {
           .whereType<Map>()
           .map((row) => CompanyManualEntry.fromMap(row.cast<String, dynamic>()))
           .toList(growable: false);
-      if (kind == null && audience == null && (moduleKey ?? '').trim().isEmpty) {
+      if (kind == null &&
+          audience == null &&
+          (moduleKey ?? '').trim().isEmpty) {
         await _local.replaceEntries(
           viewerUserId: _viewerUserId(),
           entries: mapped,
@@ -176,7 +178,10 @@ class CompanyManualRepository {
           await _local.upsertEntry(viewerUserId: _viewerUserId(), entry: entry);
         }
       }
-      await _cache.writeMap(_summaryCacheKey(), (await _buildLocalSummary()).toMap());
+      await _cache.writeMap(
+        _summaryCacheKey(),
+        (await _buildLocalSummary()).toMap(),
+      );
       return mapped;
     } on ApiException {
       rethrow;
@@ -222,14 +227,20 @@ class CompanyManualRepository {
     );
 
     await _local.upsertEntry(viewerUserId: _viewerUserId(), entry: optimistic);
-    await _cache.writeMap(_summaryCacheKey(), (await _buildLocalSummary()).toMap());
+    await _cache.writeMap(
+      _summaryCacheKey(),
+      (await _buildLocalSummary()).toMap(),
+    );
     ref.invalidate(companyManualSummaryProvider);
 
     try {
       final remote = await _createEntryRemote(entry);
       await _local.deleteEntry(viewerUserId: _viewerUserId(), id: localId);
       await _local.upsertEntry(viewerUserId: _viewerUserId(), entry: remote);
-      await _cache.writeMap(_summaryCacheKey(), (await _buildLocalSummary()).toMap());
+      await _cache.writeMap(
+        _summaryCacheKey(),
+        (await _buildLocalSummary()).toMap(),
+      );
       ref.invalidate(companyManualSummaryProvider);
       return remote;
     } on ApiException catch (e) {
@@ -247,7 +258,10 @@ class CompanyManualRepository {
   Future<CompanyManualEntry> updateEntry(CompanyManualEntry entry) async {
     final optimistic = entry.copyWith(updatedAt: DateTime.now().toUtc());
     await _local.upsertEntry(viewerUserId: _viewerUserId(), entry: optimistic);
-    await _cache.writeMap(_summaryCacheKey(), (await _buildLocalSummary()).toMap());
+    await _cache.writeMap(
+      _summaryCacheKey(),
+      (await _buildLocalSummary()).toMap(),
+    );
     ref.invalidate(companyManualSummaryProvider);
 
     if (_isLocalId(entry.id)) {
@@ -263,7 +277,10 @@ class CompanyManualRepository {
     try {
       final remote = await _updateEntryRemote(entry.id, entry);
       await _local.upsertEntry(viewerUserId: _viewerUserId(), entry: remote);
-      await _cache.writeMap(_summaryCacheKey(), (await _buildLocalSummary()).toMap());
+      await _cache.writeMap(
+        _summaryCacheKey(),
+        (await _buildLocalSummary()).toMap(),
+      );
       ref.invalidate(companyManualSummaryProvider);
       return remote;
     } on ApiException catch (e) {
@@ -280,7 +297,10 @@ class CompanyManualRepository {
 
   Future<void> deleteEntry(String id) async {
     await _local.deleteEntry(viewerUserId: _viewerUserId(), id: id);
-    await _cache.writeMap(_summaryCacheKey(), (await _buildLocalSummary()).toMap());
+    await _cache.writeMap(
+      _summaryCacheKey(),
+      (await _buildLocalSummary()).toMap(),
+    );
     ref.invalidate(companyManualSummaryProvider);
 
     if (_isLocalId(id)) {
@@ -412,7 +432,8 @@ class CompanyManualRepository {
       final currentUpdated = item.updatedAt ?? item.createdAt;
       final existingUpdated = existing.updatedAt ?? existing.createdAt;
       if (currentUpdated != null &&
-          (existingUpdated == null || currentUpdated.isAfter(existingUpdated))) {
+          (existingUpdated == null ||
+              currentUpdated.isAfter(existingUpdated))) {
         byId[item.id] = item;
       }
     }
@@ -464,7 +485,9 @@ class CompanyManualRepository {
     return deduped;
   }
 
-  Future<CompanyManualEntry> _createEntryRemote(CompanyManualEntry entry) async {
+  Future<CompanyManualEntry> _createEntryRemote(
+    CompanyManualEntry entry,
+  ) async {
     final data = await _postMap(
       ApiRoutes.companyManualEntries,
       entry.toUpsertDto(),

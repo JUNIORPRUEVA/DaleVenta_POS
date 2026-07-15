@@ -223,7 +223,9 @@ class _ManualInternoScreenState extends ConsumerState<ManualInternoScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Eliminar múltiples entradas'),
-        content: Text('¿Estás seguro que deseas eliminar $count regla${count > 1 ? 's' : ''}?'),
+        content: Text(
+          '¿Estás seguro que deseas eliminar $count regla${count > 1 ? 's' : ''}?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -248,7 +250,9 @@ class _ManualInternoScreenState extends ConsumerState<ManualInternoScreen> {
       if (mounted) {
         setState(() => _selectedForBulkDelete.clear());
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Se eliminaron $count regla${count > 1 ? 's' : ''}')),
+          SnackBar(
+            content: Text('Se eliminaron $count regla${count > 1 ? 's' : ''}'),
+          ),
         );
       }
     } catch (e) {
@@ -351,58 +355,55 @@ class _ManualInternoScreenState extends ConsumerState<ManualInternoScreen> {
         showLogo: false,
         darkerTone: true,
         actions: [
-          if (canManage && _selectedForBulkDelete.isNotEmpty) ...
-            [
-              IconButton(
-                tooltip: 'Seleccionar todas',
-                onPressed: _toggleAllBulkSelection,
-                icon: Icon(
-                  _selectedForBulkDelete.length == _visibleEntries.length
-                      ? Icons.check_circle_rounded
-                      : Icons.circle_outlined,
+          if (canManage && _selectedForBulkDelete.isNotEmpty) ...[
+            IconButton(
+              tooltip: 'Seleccionar todas',
+              onPressed: _toggleAllBulkSelection,
+              icon: Icon(
+                _selectedForBulkDelete.length == _visibleEntries.length
+                    ? Icons.check_circle_rounded
+                    : Icons.circle_outlined,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Eliminar seleccionadas',
+              icon: const Icon(Icons.delete_rounded),
+              onPressed: _saving ? null : _deleteBulkSelected,
+            ),
+            IconButton(
+              tooltip: 'Cancelar selección',
+              icon: const Icon(Icons.close_rounded),
+              onPressed: () => setState(() => _selectedForBulkDelete.clear()),
+            ),
+          ] else ...[
+            IconButton(
+              tooltip: 'Buscar',
+              onPressed: null, // Búsqueda avanzada eliminada
+              icon: const Icon(Icons.search_rounded),
+            ),
+            PopupMenuButton<CompanyManualEntryKind?>(
+              tooltip: 'Filtrar',
+              initialValue: _kindFilter,
+              onSelected: (kind) {
+                setState(() {
+                  _kindFilter = kind;
+                });
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem<CompanyManualEntryKind?>(
+                  value: null,
+                  child: Text('Todo'),
                 ),
-              ),
-              IconButton(
-                tooltip: 'Eliminar seleccionadas',
-                icon: const Icon(Icons.delete_rounded),
-                onPressed: _saving ? null : _deleteBulkSelected,
-              ),
-              IconButton(
-                tooltip: 'Cancelar selección',
-                icon: const Icon(Icons.close_rounded),
-                onPressed: () => setState(() => _selectedForBulkDelete.clear()),
-              ),
-            ]
-          else ...
-            [
-              IconButton(
-                tooltip: 'Buscar',
-                onPressed: null, // Búsqueda avanzada eliminada
-                icon: const Icon(Icons.search_rounded),
-              ),
-              PopupMenuButton<CompanyManualEntryKind?>(
-                tooltip: 'Filtrar',
-                initialValue: _kindFilter,
-                onSelected: (kind) {
-                  setState(() {
-                    _kindFilter = kind;
-                  });
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem<CompanyManualEntryKind?>(
-                    value: null,
-                    child: Text('Todo'),
+                ...CompanyManualEntryKind.values.map(
+                  (kind) => PopupMenuItem<CompanyManualEntryKind?>(
+                    value: kind,
+                    child: Text(kind.label),
                   ),
-                  ...CompanyManualEntryKind.values.map(
-                    (kind) => PopupMenuItem<CompanyManualEntryKind?>(
-                      value: kind,
-                      child: Text(kind.label),
-                    ),
-                  ),
-                ],
-                icon: const Icon(Icons.tune_rounded),
-              ),
-            ],
+                ),
+              ],
+              icon: const Icon(Icons.tune_rounded),
+            ),
+          ],
         ],
       ),
       drawer: buildAdaptiveDrawer(context, currentUser: user),

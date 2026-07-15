@@ -65,7 +65,9 @@ class _AdminPunchRegistryScreenState
     }
 
     try {
-      final summary = await ref.read(punchRepositoryProvider).fetchAttendanceSummary(
+      final summary = await ref
+          .read(punchRepositoryProvider)
+          .fetchAttendanceSummary(
             from: DateTime(_from.year, _from.month, _from.day),
             to: DateTime(_to.year, _to.month, _to.day),
           );
@@ -156,11 +158,13 @@ class _AdminPunchRegistryScreenState
     final query = _searchCtrl.text.trim().toLowerCase();
     if (query.isEmpty) return users;
 
-    return users.where((item) {
-      return item.user.nombreCompleto.toLowerCase().contains(query) ||
-          item.user.email.toLowerCase().contains(query) ||
-          item.user.role.toLowerCase().contains(query);
-    }).toList(growable: false);
+    return users
+        .where((item) {
+          return item.user.nombreCompleto.toLowerCase().contains(query) ||
+              item.user.email.toLowerCase().contains(query) ||
+              item.user.role.toLowerCase().contains(query);
+        })
+        .toList(growable: false);
   }
 
   Future<void> _openUserDetail(AttendanceUserSummary summary) async {
@@ -315,7 +319,9 @@ class _AdminPunchRegistryScreenState
                             color: scheme.surface,
                             borderRadius: BorderRadius.circular(18),
                             border: Border.all(
-                              color: scheme.outlineVariant.withValues(alpha: 0.28),
+                              color: scheme.outlineVariant.withValues(
+                                alpha: 0.28,
+                              ),
                             ),
                           ),
                           child: Column(
@@ -376,44 +382,45 @@ class _AdminPunchRegistryScreenState
                           onRetryNow: _retryNow,
                         )
                       : visible.isEmpty
-                          ? Center(
-                              child: Text(
-                                'No hay usuarios con ponches para mostrar en este período.',
-                                style: theme.textTheme.bodyLarge?.copyWith(
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                              ),
-                            )
-                          : RefreshIndicator(
-                              onRefresh: _load,
-                              child: ListView.separated(
-                                physics: const AlwaysScrollableScrollPhysics(),
-                                padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
-                                itemCount: visible.length,
-                                separatorBuilder: (_, __) => const SizedBox(height: 6),
-                                itemBuilder: (context, index) {
-                                  final item = visible[index];
-                                  final balance = item.aggregate.balanceMinutes;
-                                  final accentColor = balance >= 0
-                                      ? const Color(0xFF0F766E)
-                                      : const Color(0xFFB91C1C);
-
-                                  return _AdminPunchUserCard(
-                                    summary: item,
-                                    accentColor: accentColor,
-                                    dateRangeLabel:
-                                        '${_dateOnlyText(_from)} - ${_dateOnlyText(_to)}',
-                                    workedLabel: _formatMinutes(
-                                      item.aggregate.workedMinutes,
-                                    ),
-                                    balanceLabel: _formatMinutes(balance),
-                                    incidentLabel:
-                                        '${item.aggregate.incidentsCount} incidentes',
-                                    onTap: () => _openUserDetail(item),
-                                  );
-                                },
-                              ),
+                      ? Center(
+                          child: Text(
+                            'No hay usuarios con ponches para mostrar en este período.',
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              color: scheme.onSurfaceVariant,
                             ),
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _load,
+                          child: ListView.separated(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
+                            itemCount: visible.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 6),
+                            itemBuilder: (context, index) {
+                              final item = visible[index];
+                              final balance = item.aggregate.balanceMinutes;
+                              final accentColor = balance >= 0
+                                  ? const Color(0xFF0F766E)
+                                  : const Color(0xFFB91C1C);
+
+                              return _AdminPunchUserCard(
+                                summary: item,
+                                accentColor: accentColor,
+                                dateRangeLabel:
+                                    '${_dateOnlyText(_from)} - ${_dateOnlyText(_to)}',
+                                workedLabel: _formatMinutes(
+                                  item.aggregate.workedMinutes,
+                                ),
+                                balanceLabel: _formatMinutes(balance),
+                                incidentLabel:
+                                    '${item.aggregate.incidentsCount} incidentes',
+                                onTap: () => _openUserDetail(item),
+                              );
+                            },
+                          ),
+                        ),
                 ),
               ],
             );
@@ -522,7 +529,9 @@ class _AdminPunchUserDetailScreenState
     }
 
     try {
-      final detail = await ref.read(punchRepositoryProvider).fetchAttendanceDetail(
+      final detail = await ref
+          .read(punchRepositoryProvider)
+          .fetchAttendanceDetail(
             widget.user.id,
             from: DateTime(_from.year, _from.month, _from.day),
             to: DateTime(_to.year, _to.month, _to.day),
@@ -564,8 +573,10 @@ class _AdminPunchUserDetailScreenState
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
     final d = DateTime(date.year, date.month, date.day);
-    if (d == today) return 'Hoy, ${DateFormat('d MMMM yyyy', 'es_DO').format(date)}';
-    if (d == yesterday) return 'Ayer, ${DateFormat('d MMMM yyyy', 'es_DO').format(date)}';
+    if (d == today)
+      return 'Hoy, ${DateFormat('d MMMM yyyy', 'es_DO').format(date)}';
+    if (d == yesterday)
+      return 'Ayer, ${DateFormat('d MMMM yyyy', 'es_DO').format(date)}';
     return DateFormat('EEEE, d MMMM yyyy', 'es_DO').format(date);
   }
 
@@ -581,35 +592,43 @@ class _AdminPunchUserDetailScreenState
     final detail = _detail;
     if (detail == null) return const <PunchModel>[];
     final query = _searchCtrl.text.trim().toLowerCase();
-    final rows = [...detail.punches]..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-    return rows.where((item) {
-      if (_selectedType != null && item.type != _selectedType) return false;
-      if (query.isEmpty) return true;
-      return item.type.label.toLowerCase().contains(query) ||
-          _dateTimeText(item.timestamp).toLowerCase().contains(query);
-    }).toList(growable: false);
+    final rows = [...detail.punches]
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    return rows
+        .where((item) {
+          if (_selectedType != null && item.type != _selectedType) return false;
+          if (query.isEmpty) return true;
+          return item.type.label.toLowerCase().contains(query) ||
+              _dateTimeText(item.timestamp).toLowerCase().contains(query);
+        })
+        .toList(growable: false);
   }
 
   List<_PunchDayGroup> get _visibleDayGroups {
     final buckets = <DateTime, List<PunchModel>>{};
     for (final punch in _visiblePunches) {
       final day = DateTime(
-          punch.timestamp.year, punch.timestamp.month, punch.timestamp.day);
+        punch.timestamp.year,
+        punch.timestamp.month,
+        punch.timestamp.day,
+      );
       buckets.putIfAbsent(day, () => <PunchModel>[]).add(punch);
     }
-    final groups = buckets.entries.map((entry) {
-      final punches = [...entry.value]
-        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      return _PunchDayGroup(date: entry.key, punches: punches);
-    }).toList(growable: false)
-      ..sort((a, b) => b.date.compareTo(a.date));
+    final groups =
+        buckets.entries
+            .map((entry) {
+              final punches = [...entry.value]
+                ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+              return _PunchDayGroup(date: entry.key, punches: punches);
+            })
+            .toList(growable: false)
+          ..sort((a, b) => b.date.compareTo(a.date));
     return groups;
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop =
-        MediaQuery.sizeOf(context).width >= _desktopBreakpoint;
+    final isDesktop = MediaQuery.sizeOf(context).width >= _desktopBreakpoint;
 
     if (isDesktop) return _buildDesktopLayout();
     return _buildMobileLayout();
@@ -686,49 +705,47 @@ class _AdminPunchUserDetailScreenState
                             onRetryNow: _load,
                           )
                         : detail == null && !_loading
-                            ? const SizedBox.shrink()
-                            : visible.isEmpty && !_loading
-                                ? Center(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.punch_clock_outlined,
-                                          size: 48,
-                                          color: scheme.onSurfaceVariant
-                                              .withValues(alpha: 0.35),
-                                        ),
-                                        const SizedBox(height: 10),
-                                        Text(
-                                          'Sin ponches para este filtro',
-                                          style: theme.textTheme.bodyLarge
-                                              ?.copyWith(
-                                            color: scheme.onSurfaceVariant,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  )
-                                : RefreshIndicator(
-                                    onRefresh: _load,
-                                    child: ListView.separated(
-                                      physics:
-                                          const AlwaysScrollableScrollPhysics(),
-                                      padding: const EdgeInsets.fromLTRB(
-                                          16, 4, 8, 32),
-                                      itemCount: visible.length,
-                                      separatorBuilder: (_, __) =>
-                                          const SizedBox(height: 14),
-                                      itemBuilder: (context, index) {
-                                        final group = visible[index];
-                                        return _AdminPunchDaySection(
-                                          dateLabel: _dateLabelFor(group.date),
-                                          punches: group.punches,
-                                          dateTextBuilder: _dateTimeText,
-                                        );
-                                      },
-                                    ),
+                        ? const SizedBox.shrink()
+                        : visible.isEmpty && !_loading
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.punch_clock_outlined,
+                                  size: 48,
+                                  color: scheme.onSurfaceVariant.withValues(
+                                    alpha: 0.35,
                                   ),
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  'Sin ponches para este filtro',
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: _load,
+                            child: ListView.separated(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.fromLTRB(16, 4, 8, 32),
+                              itemCount: visible.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 14),
+                              itemBuilder: (context, index) {
+                                final group = visible[index];
+                                return _AdminPunchDaySection(
+                                  dateLabel: _dateLabelFor(group.date),
+                                  punches: group.punches,
+                                  dateTextBuilder: _dateTimeText,
+                                );
+                              },
+                            ),
+                          ),
                   ),
                   // Right: fixed sidebar
                   _UserDetailSidebar(
@@ -805,36 +822,33 @@ class _AdminPunchUserDetailScreenState
                       onRetryNow: _load,
                     )
                   : detail == null
-                      ? const SizedBox.shrink()
-                      : visible.isEmpty
-                          ? Center(
-                              child: Text(
-                                'No hay ponches para este filtro.',
-                                style: theme.textTheme.bodyLarge?.copyWith(
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                              ),
-                            )
-                          : RefreshIndicator(
-                              onRefresh: _load,
-                              child: ListView.separated(
-                                physics:
-                                    const AlwaysScrollableScrollPhysics(),
-                                padding:
-                                    const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                                itemCount: visible.length,
-                                separatorBuilder: (_, __) =>
-                                    const SizedBox(height: 18),
-                                itemBuilder: (context, index) {
-                                  final group = visible[index];
-                                  return _AdminPunchDaySection(
-                                    dateLabel: _dateLabelFor(group.date),
-                                    punches: group.punches,
-                                    dateTextBuilder: _dateTimeText,
-                                  );
-                                },
-                              ),
-                            ),
+                  ? const SizedBox.shrink()
+                  : visible.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No hay ponches para este filtro.',
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _load,
+                      child: ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                        itemCount: visible.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 18),
+                        itemBuilder: (context, index) {
+                          final group = visible[index];
+                          return _AdminPunchDaySection(
+                            dateLabel: _dateLabelFor(group.date),
+                            punches: group.punches,
+                            dateTextBuilder: _dateTimeText,
+                          );
+                        },
+                      ),
+                    ),
             ),
           ],
         ),
@@ -907,18 +921,24 @@ class _AdminPunchUserDetailScreenState
               final picked = await showDateRangePicker(
                 context: ctx,
                 initialDateRange: DateTimeRange(start: tempFrom, end: tempTo),
-                firstDate: DateTime.now()
-                    .subtract(const Duration(days: 365 * 3)),
-                lastDate:
-                    DateTime.now().add(const Duration(days: 30)),
+                firstDate: DateTime.now().subtract(
+                  const Duration(days: 365 * 3),
+                ),
+                lastDate: DateTime.now().add(const Duration(days: 30)),
               );
               if (picked == null) return;
               setModal(() {
                 tempPreset = _UserDetailDatePreset.personalizado;
-                tempFrom = DateTime(picked.start.year, picked.start.month,
-                    picked.start.day);
-                tempTo = DateTime(picked.end.year, picked.end.month,
-                    picked.end.day);
+                tempFrom = DateTime(
+                  picked.start.year,
+                  picked.start.month,
+                  picked.start.day,
+                );
+                tempTo = DateTime(
+                  picked.end.year,
+                  picked.end.month,
+                  picked.end.day,
+                );
               });
             }
 
@@ -927,8 +947,7 @@ class _AdminPunchUserDetailScreenState
                 left: 16,
                 right: 16,
                 top: 20,
-                bottom:
-                    MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
+                bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -956,8 +975,7 @@ class _AdminPunchUserDetailScreenState
                       return _DatePresetChip(
                         label: _presetLabel(p),
                         selected: tempPreset == p,
-                        onTap: () => p ==
-                                _UserDetailDatePreset.personalizado
+                        onTap: () => p == _UserDetailDatePreset.personalizado
                             ? pickRange()
                             : triggerPreset(p),
                       );
@@ -992,15 +1010,13 @@ class _AdminPunchUserDetailScreenState
                       _AdminTypeFilterChip(
                         label: 'Todos',
                         selected: tempType == null,
-                        onTap: () =>
-                            setModal(() => tempType = null),
+                        onTap: () => setModal(() => tempType = null),
                       ),
                       ...PunchType.values.map(
                         (type) => _AdminTypeFilterChip(
                           label: type.label,
                           selected: tempType == type,
-                          onTap: () =>
-                              setModal(() => tempType = type),
+                          onTap: () => setModal(() => tempType = type),
                         ),
                       ),
                     ],
@@ -1102,8 +1118,7 @@ class _UserDetailSidebar extends StatelessWidget {
                     children: [
                       CircleAvatar(
                         radius: 18,
-                        backgroundColor:
-                            scheme.primaryContainer,
+                        backgroundColor: scheme.primaryContainer,
                         child: Text(
                           _initials(user.nombreCompleto),
                           style: theme.textTheme.labelLarge?.copyWith(
@@ -1115,23 +1130,19 @@ class _UserDetailSidebar extends StatelessWidget {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               user.nombreCompleto,
                               maxLines: 2,
-                              overflow:
-                                  TextOverflow.ellipsis,
-                              style: theme.textTheme.bodyMedium
-                                  ?.copyWith(
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodyMedium?.copyWith(
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
                             Text(
                               user.role.toUpperCase(),
-                              style: theme.textTheme.labelSmall
-                                  ?.copyWith(
+                              style: theme.textTheme.labelSmall?.copyWith(
                                 color: scheme.primary,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -1152,8 +1163,7 @@ class _UserDetailSidebar extends StatelessWidget {
                     _SidebarStatRow(
                       icon: Icons.timelapse_outlined,
                       label: 'Horas trabajadas',
-                      value: formatMinutes(
-                          detail!.totals.workedMinutes),
+                      value: formatMinutes(detail!.totals.workedMinutes),
                     ),
                     const SizedBox(height: 5),
                     _SidebarStatRow(
@@ -1166,12 +1176,10 @@ class _UserDetailSidebar extends StatelessWidget {
                       _SidebarStatRow(
                         icon: Icons.balance_rounded,
                         label: 'Balance',
-                        value: formatMinutes(
-                            detail!.totals.balanceMinutes),
-                        valueColor:
-                            detail!.totals.balanceMinutes >= 0
-                                ? const Color(0xFF0F766E)
-                                : const Color(0xFFDC2626),
+                        value: formatMinutes(detail!.totals.balanceMinutes),
+                        valueColor: detail!.totals.balanceMinutes >= 0
+                            ? const Color(0xFF0F766E)
+                            : const Color(0xFFDC2626),
                       ),
                     ],
                   ],
@@ -1194,8 +1202,7 @@ class _UserDetailSidebar extends StatelessWidget {
                         label: _presetLabel(p),
                         icon: _presetIcon(p),
                         selected: isSelected,
-                        onTap: () => p ==
-                                _UserDetailDatePreset.personalizado
+                        onTap: () => p == _UserDetailDatePreset.personalizado
                             ? onPickCustomRange()
                             : onPresetChanged(p),
                       ),
@@ -1206,29 +1213,28 @@ class _UserDetailSidebar extends StatelessWidget {
                       padding: const EdgeInsets.only(top: 4),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 6),
+                          horizontal: 8,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
-                          color: scheme.primaryContainer
-                              .withValues(alpha: 0.4),
-                          borderRadius:
-                              BorderRadius.circular(8),
+                          color: scheme.primaryContainer.withValues(alpha: 0.4),
+                          borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: scheme.primary
-                                .withValues(alpha: 0.2),
+                            color: scheme.primary.withValues(alpha: 0.2),
                           ),
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.date_range_rounded,
-                                size: 13,
-                                color: scheme.primary),
+                            Icon(
+                              Icons.date_range_rounded,
+                              size: 13,
+                              color: scheme.primary,
+                            ),
                             const SizedBox(width: 5),
                             Expanded(
                               child: Text(
                                 '${DateFormat('dd/MM/yy').format(from)} → ${DateFormat('dd/MM/yy').format(to)}',
-                                style: theme.textTheme
-                                    .labelSmall
-                                    ?.copyWith(
+                                style: theme.textTheme.labelSmall?.copyWith(
                                   color: scheme.primary,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -1285,14 +1291,13 @@ class _UserDetailSidebar extends StatelessWidget {
                 decoration: InputDecoration(
                   isDense: true,
                   hintText: 'Tipo o fecha...',
-                  prefixIcon:
-                      const Icon(Icons.search_rounded, size: 18),
+                  prefixIcon: const Icon(Icons.search_rounded, size: 18),
                   filled: true,
-                  fillColor:
-                      scheme.surfaceContainerLowest,
-                  contentPadding:
-                      const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 10),
+                  fillColor: scheme.surfaceContainerLowest,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 10,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
@@ -1365,8 +1370,7 @@ class _SidebarPresetTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-              horizontal: 10, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: Row(
             children: [
               Icon(
@@ -1379,20 +1383,13 @@ class _SidebarPresetTile extends StatelessWidget {
                 child: Text(
                   label,
                   style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight:
-                        selected ? FontWeight.w800 : FontWeight.w500,
-                    color: selected
-                        ? scheme.primary
-                        : scheme.onSurface,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                    color: selected ? scheme.primary : scheme.onSurface,
                   ),
                 ),
               ),
               if (selected)
-                Icon(
-                  Icons.check_rounded,
-                  size: 14,
-                  color: scheme.primary,
-                ),
+                Icon(Icons.check_rounded, size: 14, color: scheme.primary),
             ],
           ),
         ),
@@ -1462,16 +1459,13 @@ class _DatePresetChip extends StatelessWidget {
     final scheme = theme.colorScheme;
 
     return Material(
-      color: selected
-          ? scheme.primary.withValues(alpha: 0.12)
-          : scheme.surface,
+      color: selected ? scheme.primary.withValues(alpha: 0.12) : scheme.surface,
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(999),
         child: Ink(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
@@ -1592,11 +1586,7 @@ class _CompactTopActionButton extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(14),
-          child: SizedBox(
-            width: 44,
-            height: 44,
-            child: Icon(icon, size: 20),
-          ),
+          child: SizedBox(width: 44, height: 44, child: Icon(icon, size: 20)),
         ),
       ),
     );
@@ -1754,11 +1744,9 @@ class _AdminPunchDaySection extends StatelessWidget {
               ),
             ),
             Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 8, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: scheme.secondaryContainer
-                    .withValues(alpha: 0.55),
+                color: scheme.secondaryContainer.withValues(alpha: 0.55),
                 borderRadius: BorderRadius.circular(99),
               ),
               child: Text(
@@ -1795,8 +1783,7 @@ class _AdminPunchDaySection extends StatelessWidget {
                     Divider(
                       height: 1,
                       indent: 44,
-                      color: scheme.outlineVariant
-                          .withValues(alpha: 0.2),
+                      color: scheme.outlineVariant.withValues(alpha: 0.2),
                     ),
                 ],
               );
@@ -1830,8 +1817,10 @@ class _AdminPunchLineItem extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final color = _colorFor(punch.type);
-    final timeStr = DateFormat('h:mm a', 'es_DO')
-        .format(punch.timestamp.toLocal());
+    final timeStr = DateFormat(
+      'h:mm a',
+      'es_DO',
+    ).format(punch.timestamp.toLocal());
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1844,15 +1833,9 @@ class _AdminPunchLineItem extends StatelessWidget {
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(9),
-              border: Border.all(
-                color: color.withValues(alpha: 0.2),
-              ),
+              border: Border.all(color: color.withValues(alpha: 0.2)),
             ),
-            child: Icon(
-              _iconFor(punch.type),
-              size: 16,
-              color: color,
-            ),
+            child: Icon(_iconFor(punch.type), size: 16, color: color),
           ),
           const SizedBox(width: 10),
           // Type + date
@@ -1869,8 +1852,10 @@ class _AdminPunchLineItem extends StatelessWidget {
                 ),
                 const SizedBox(height: 1),
                 Text(
-                  DateFormat('dd/MM/yyyy', 'es_DO')
-                      .format(punch.timestamp.toLocal()),
+                  DateFormat(
+                    'dd/MM/yyyy',
+                    'es_DO',
+                  ).format(punch.timestamp.toLocal()),
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                     fontSize: 10,
@@ -1881,8 +1866,7 @@ class _AdminPunchLineItem extends StatelessWidget {
           ),
           // Time badge
           Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 8, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(8),
@@ -1922,7 +1906,9 @@ class _AdminPunchInfoChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.24)),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.24),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1993,9 +1979,7 @@ class _AdminTypeFilterChip extends StatelessWidget {
     final scheme = theme.colorScheme;
 
     return Material(
-      color: selected
-          ? scheme.primary.withValues(alpha: 0.12)
-          : scheme.surface,
+      color: selected ? scheme.primary.withValues(alpha: 0.12) : scheme.surface,
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         onTap: onTap,

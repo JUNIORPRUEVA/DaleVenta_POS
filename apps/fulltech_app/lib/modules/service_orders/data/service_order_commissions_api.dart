@@ -67,11 +67,16 @@ class ServiceOrderCommissionsApi {
       );
       final raw = (res.data as Map?)?.cast<String, dynamic>();
       if (raw == null) {
-        throw ApiException('No se pudo cargar el resumen administrativo de servicios');
+        throw ApiException(
+          'No se pudo cargar el resumen administrativo de servicios',
+        );
       }
       return AdminServiceCommissionUsersSummary.fromJson(raw);
     } on DioException catch (error) {
-      _rethrow(error, 'No se pudo cargar el resumen administrativo de servicios');
+      _rethrow(
+        error,
+        'No se pudo cargar el resumen administrativo de servicios',
+      );
     }
   }
 

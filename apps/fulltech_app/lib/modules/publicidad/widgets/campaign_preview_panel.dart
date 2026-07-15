@@ -3,12 +3,7 @@ import 'package:flutter/material.dart';
 import '../marketing_campaign_models.dart';
 
 /// Campaign preview types
-enum PreviewType {
-  facebookFeed,
-  instagramFeed,
-  instagramStory,
-  instagramReels,
-}
+enum PreviewType { facebookFeed, instagramFeed, instagramStory, instagramReels }
 
 /// Premium campaign preview panel - shows ads as they appear in Meta platforms
 class CampaignPreviewPanel extends StatefulWidget {
@@ -67,28 +62,32 @@ class _CampaignPreviewPanelState extends State<CampaignPreviewPanel> {
                   icon: Icons.feed_rounded,
                   label: 'Feed FB',
                   isSelected: _currentType == PreviewType.facebookFeed,
-                  onTap: () => setState(() => _currentType = PreviewType.facebookFeed),
+                  onTap: () =>
+                      setState(() => _currentType = PreviewType.facebookFeed),
                 ),
                 _PreviewTypeButton(
                   type: PreviewType.instagramFeed,
                   icon: Icons.grid_3x3_rounded,
                   label: 'Feed IG',
                   isSelected: _currentType == PreviewType.instagramFeed,
-                  onTap: () => setState(() => _currentType = PreviewType.instagramFeed),
+                  onTap: () =>
+                      setState(() => _currentType = PreviewType.instagramFeed),
                 ),
                 _PreviewTypeButton(
                   type: PreviewType.instagramStory,
                   icon: Icons.rectangle_rounded,
                   label: 'Story',
                   isSelected: _currentType == PreviewType.instagramStory,
-                  onTap: () => setState(() => _currentType = PreviewType.instagramStory),
+                  onTap: () =>
+                      setState(() => _currentType = PreviewType.instagramStory),
                 ),
                 _PreviewTypeButton(
                   type: PreviewType.instagramReels,
                   icon: Icons.play_arrow_rounded,
                   label: 'Reels',
                   isSelected: _currentType == PreviewType.instagramReels,
-                  onTap: () => setState(() => _currentType = PreviewType.instagramReels),
+                  onTap: () =>
+                      setState(() => _currentType = PreviewType.instagramReels),
                 ),
               ],
             ),
@@ -102,9 +101,7 @@ class _CampaignPreviewPanelState extends State<CampaignPreviewPanel> {
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(12),
-              child: Center(
-                child: _buildPreview(context),
-              ),
+              child: Center(child: _buildPreview(context)),
             ),
           ),
         ],
@@ -197,15 +194,21 @@ class _PreviewTypeButtonState extends State<_PreviewTypeButton>
                 Icon(
                   widget.icon,
                   size: 20,
-                  color: widget.isSelected ? scheme.primary : scheme.onSurfaceVariant,
+                  color: widget.isSelected
+                      ? scheme.primary
+                      : scheme.onSurfaceVariant,
                 ),
                 const SizedBox(height: 2),
                 Text(
                   widget.label,
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: widget.isSelected ? scheme.primary : scheme.onSurfaceVariant,
-                        fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.w500,
-                      ),
+                    color: widget.isSelected
+                        ? scheme.primary
+                        : scheme.onSurfaceVariant,
+                    fontWeight: widget.isSelected
+                        ? FontWeight.w600
+                        : FontWeight.w500,
+                  ),
                 ),
               ],
             ),
@@ -253,15 +256,14 @@ class _FacebookFeedPreview extends StatelessWidget {
                     children: [
                       Text(
                         'Tu Negocio',
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       Text(
                         'Anuncio patrocinado',
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
-                            ),
+                          color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
+                        ),
                       ),
                     ],
                   ),
@@ -280,7 +282,10 @@ class _FacebookFeedPreview extends StatelessWidget {
                 campaign.finalDesignUrl!,
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => Center(
-                  child: Text('Imagen no disponible', style: Theme.of(context).textTheme.labelSmall),
+                  child: Text(
+                    'Imagen no disponible',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
                 ),
               ),
             ),
@@ -294,8 +299,8 @@ class _FacebookFeedPreview extends StatelessWidget {
                   Text(
                     campaign.headline!,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 if ((campaign.primaryText ?? '').isNotEmpty)
                   Padding(
@@ -311,8 +316,8 @@ class _FacebookFeedPreview extends StatelessWidget {
                     child: Text(
                       campaign.description!,
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
+                        color: scheme.onSurfaceVariant,
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -330,9 +335,9 @@ class _FacebookFeedPreview extends StatelessWidget {
                       child: Text(
                         'Enviar WhatsApp',
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: scheme.onPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
+                          color: scheme.onPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ),
@@ -383,15 +388,15 @@ class _InstagramFeedPreview extends StatelessWidget {
                       Text(
                         'tu_negocio',
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       Text(
                         'Patrocinado',
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
-                              fontSize: 10,
-                            ),
+                          color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
+                          fontSize: 10,
+                        ),
                       ),
                     ],
                   ),
@@ -409,7 +414,10 @@ class _InstagramFeedPreview extends StatelessWidget {
                 campaign.finalDesignUrl!,
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => Center(
-                  child: Text('Imagen no disponible', style: Theme.of(context).textTheme.labelSmall),
+                  child: Text(
+                    'Imagen no disponible',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
                 ),
               ),
             ),
@@ -421,14 +429,30 @@ class _InstagramFeedPreview extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.favorite_border, size: 18, color: scheme.onSurfaceVariant),
+                    Icon(
+                      Icons.favorite_border,
+                      size: 18,
+                      color: scheme.onSurfaceVariant,
+                    ),
                     const SizedBox(width: 12),
-                    Icon(Icons.mode_comment_outlined, size: 18, color: scheme.onSurfaceVariant),
+                    Icon(
+                      Icons.mode_comment_outlined,
+                      size: 18,
+                      color: scheme.onSurfaceVariant,
+                    ),
                     const SizedBox(width: 12),
-                    Icon(Icons.share_outlined, size: 18, color: scheme.onSurfaceVariant),
+                    Icon(
+                      Icons.share_outlined,
+                      size: 18,
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ],
                 ),
-                Icon(Icons.bookmark_border, size: 18, color: scheme.onSurfaceVariant),
+                Icon(
+                  Icons.bookmark_border,
+                  size: 18,
+                  color: scheme.onSurfaceVariant,
+                ),
               ],
             ),
           ),
@@ -472,12 +496,17 @@ class _InstagramStoryPreview extends StatelessWidget {
           // Story image
           if ((campaign.finalDesignUrl ?? '').isNotEmpty)
             Container(
-              decoration: BoxDecoration(borderRadius: BorderRadius.circular(20)),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+              ),
               child: Image.network(
                 campaign.finalDesignUrl!,
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => Center(
-                  child: Text('Imagen no disponible', style: Theme.of(context).textTheme.labelSmall),
+                  child: Text(
+                    'Imagen no disponible',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
                 ),
               ),
             ),
@@ -493,9 +522,9 @@ class _InstagramStoryPreview extends StatelessWidget {
                   Text(
                     campaign.headline!,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -504,9 +533,9 @@ class _InstagramStoryPreview extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
                       campaign.primaryText!,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Colors.white70,
-                          ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: Colors.white70),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -529,9 +558,9 @@ class _InstagramStoryPreview extends StatelessWidget {
                 child: Text(
                   'Enviar WhatsApp',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: scheme.onPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: scheme.onPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
@@ -565,12 +594,17 @@ class _InstagramReelsPreview extends StatelessWidget {
           // Video thumbnail
           if ((campaign.finalDesignUrl ?? '').isNotEmpty)
             Container(
-              decoration: BoxDecoration(borderRadius: BorderRadius.circular(20)),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+              ),
               child: Image.network(
                 campaign.finalDesignUrl!,
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => Center(
-                  child: Text('Imagen no disponible', style: Theme.of(context).textTheme.labelSmall),
+                  child: Text(
+                    'Imagen no disponible',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
                 ),
               ),
             ),
@@ -583,7 +617,11 @@ class _InstagramReelsPreview extends StatelessWidget {
                 color: Colors.white.withValues(alpha: 0.8),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.play_arrow_rounded, size: 28, color: scheme.primary),
+              child: Icon(
+                Icons.play_arrow_rounded,
+                size: 28,
+                color: scheme.primary,
+              ),
             ),
           ),
           // Text overlay
@@ -598,9 +636,9 @@ class _InstagramReelsPreview extends StatelessWidget {
                   Text(
                     campaign.headline!,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -625,9 +663,9 @@ class _InstagramReelsPreview extends StatelessWidget {
                   Text(
                     'Reel',
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: Colors.white,
-                          fontSize: 10,
-                        ),
+                      color: Colors.white,
+                      fontSize: 10,
+                    ),
                   ),
                 ],
               ),

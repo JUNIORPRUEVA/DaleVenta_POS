@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_error_mapper.dart';
@@ -212,7 +212,10 @@ class MarketingApi {
         '${ApiRoutes.marketingStories}/$storyId/regenerate-copy-from-design',
       );
     } on DioException catch (error) {
-      _rethrow(error, 'No se pudo regenerar el copy desde el diseño (imagen o video)');
+      _rethrow(
+        error,
+        'No se pudo regenerar el copy desde el diseño (imagen o video)',
+      );
     }
   }
 

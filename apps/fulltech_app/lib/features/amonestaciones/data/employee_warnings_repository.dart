@@ -8,10 +8,11 @@ import '../../../core/api/env.dart';
 import '../../../core/auth/auth_repository.dart';
 import 'employee_warning_model.dart';
 
-final employeeWarningsRepositoryProvider =
-    Provider<EmployeeWarningsRepository>((ref) {
-  return EmployeeWarningsRepository(ref.watch(dioProvider));
-});
+final employeeWarningsRepositoryProvider = Provider<EmployeeWarningsRepository>(
+  (ref) {
+    return EmployeeWarningsRepository(ref.watch(dioProvider));
+  },
+);
 
 class EmployeeWarningsRepository {
   final Dio _dio;
@@ -79,10 +80,7 @@ class EmployeeWarningsRepository {
   }
 
   Future<void> uploadEvidence(String id, FormData formData) async {
-    await _dio.post(
-      ApiRoutes.employeeWarningEvidences(id),
-      data: formData,
-    );
+    await _dio.post(ApiRoutes.employeeWarningEvidences(id), data: formData);
   }
 
   // ── Employee ───────────────────────────────────────────────────────────────
@@ -212,5 +210,4 @@ class EmployeeWarningsRepository {
     }
     throw Exception('No se pudo descargar el PDF');
   }
-
 }

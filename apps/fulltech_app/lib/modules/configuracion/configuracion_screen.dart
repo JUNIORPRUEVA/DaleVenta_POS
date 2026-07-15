@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -174,10 +174,10 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
       legalRepresentativeName: _legalRepresentativeNameCtrl.text.trim(),
       legalRepresentativeCedula: _legalRepresentativeCedulaCtrl.text.trim(),
       legalRepresentativeRole: _legalRepresentativeRoleCtrl.text.trim(),
-      legalRepresentativeNationality:
-          _legalRepresentativeNationalityCtrl.text.trim(),
-      legalRepresentativeCivilStatus:
-          _legalRepresentativeCivilStatusCtrl.text.trim(),
+      legalRepresentativeNationality: _legalRepresentativeNationalityCtrl.text
+          .trim(),
+      legalRepresentativeCivilStatus: _legalRepresentativeCivilStatusCtrl.text
+          .trim(),
       logoBase64: _logoBase64,
       openAiApiKey: _openAiApiKeyCtrl.text.trim(),
       openAiModel: '',
@@ -237,17 +237,20 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
 
   Uint8List _prepareLogoBytes(Uint8List rawBytes) {
     final decoded = img.decodeImage(rawBytes);
-    if (decoded == null) throw Exception('La imagen seleccionada no es valida.');
+    if (decoded == null)
+      throw Exception('La imagen seleccionada no es valida.');
     var current = img.bakeOrientation(decoded);
     current = _resizeToFit(current, _maxLogoDimension);
     for (var attempt = 0; attempt < 5; attempt++) {
       final quality = (88 - (attempt * 10)).clamp(50, 88).toInt();
       final pngBytes = Uint8List.fromList(img.encodePng(current, level: 6));
-      final jpgBytes =
-          Uint8List.fromList(img.encodeJpg(current, quality: quality));
+      final jpgBytes = Uint8List.fromList(
+        img.encodeJpg(current, quality: quality),
+      );
       if (current.hasAlpha && pngBytes.length <= _maxLogoBytes) return pngBytes;
       if (jpgBytes.length <= _maxLogoBytes) return jpgBytes;
-      if (!current.hasAlpha && pngBytes.length <= _maxLogoBytes) return pngBytes;
+      if (!current.hasAlpha && pngBytes.length <= _maxLogoBytes)
+        return pngBytes;
       if (current.width <= 320 && current.height <= 320) break;
       current = img.copyResize(
         current,
@@ -256,7 +259,9 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
         interpolation: img.Interpolation.average,
       );
     }
-    throw Exception('El logo sigue siendo demasiado pesado. Usa una imagen menor a 2 MB.');
+    throw Exception(
+      'El logo sigue siendo demasiado pesado. Usa una imagen menor a 2 MB.',
+    );
   }
 
   img.Image _resizeToFit(img.Image image, int maxDimension) {
@@ -264,18 +269,25 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
       return image;
     }
     final ar = image.width / image.height;
-    final w =
-        image.width >= image.height ? maxDimension : (maxDimension * ar).round();
-    final h =
-        image.height > image.width ? maxDimension : (maxDimension / ar).round();
-    return img.copyResize(image, width: w, height: h,
-        interpolation: img.Interpolation.average);
+    final w = image.width >= image.height
+        ? maxDimension
+        : (maxDimension * ar).round();
+    final h = image.height > image.width
+        ? maxDimension
+        : (maxDimension / ar).round();
+    return img.copyResize(
+      image,
+      width: w,
+      height: h,
+      interpolation: img.Interpolation.average,
+    );
   }
 
   void _showMessage(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.maybeOf(context)
-        ?.showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.maybeOf(
+      context,
+    )?.showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _toggleSection(String key) {
@@ -297,8 +309,9 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide:
-            BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.6)),
+        borderSide: BorderSide(
+          color: scheme.outlineVariant.withValues(alpha: 0.6),
+        ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
@@ -358,17 +371,16 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
         children: [
           InkWell(
             onTap: () => _toggleSection(key),
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(14)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
               child: Row(
                 children: [
-                  Icon(icon, size: 22,
-                      color: isOpen
-                          ? scheme.primary
-                          : scheme.onSurfaceVariant),
+                  Icon(
+                    icon,
+                    size: 22,
+                    color: isOpen ? scheme.primary : scheme.onSurfaceVariant,
+                  ),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
@@ -378,16 +390,17 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
                           title,
                           style: theme.textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.w700,
-                            color: isOpen
-                                ? scheme.primary
-                                : scheme.onSurface,
+                            color: isOpen ? scheme.primary : scheme.onSurface,
                           ),
                         ),
                         if (!isOpen) ...[
                           const SizedBox(height: 2),
-                          Text(subtitle,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                  color: scheme.onSurfaceVariant)),
+                          Text(
+                            subtitle,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
                         ],
                       ],
                     ),
@@ -395,8 +408,10 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
                   AnimatedRotation(
                     turns: isOpen ? 0.5 : 0,
                     duration: const Duration(milliseconds: 200),
-                    child: Icon(Icons.keyboard_arrow_down_rounded,
-                        color: scheme.onSurfaceVariant),
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -434,8 +449,8 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                      color:
-                          Theme.of(context).colorScheme.outlineVariant),
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
                 ),
                 child: Image.memory(logoBytes, fit: BoxFit.cover),
               )
@@ -447,27 +462,28 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .outlineVariant
-                          .withValues(alpha: 0.5)),
-                  color: Theme.of(context)
-                      .colorScheme
-                      .surfaceContainerLow,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.outlineVariant.withValues(alpha: 0.5),
+                  ),
+                  color: Theme.of(context).colorScheme.surfaceContainerLow,
                 ),
-                child: Icon(Icons.image_outlined,
-                    size: 28,
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurfaceVariant),
+                child: Icon(
+                  Icons.image_outlined,
+                  size: 28,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             OutlinedButton.icon(
               onPressed: _pickLogo,
               icon: const Icon(Icons.upload_file_outlined, size: 18),
               label: const Text('Subir logo'),
               style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 10)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+              ),
             ),
             if (_logoBase64 != null) ...[
               const SizedBox(width: 8),
@@ -490,39 +506,60 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
         const SizedBox(height: 12),
         _field(_descriptionCtrl, 'Descripcion corta', maxLines: 2),
         const SizedBox(height: 12),
-        _field(_phoneCtrl, 'Telefono principal',
-            keyboard: TextInputType.phone),
+        _field(_phoneCtrl, 'Telefono principal', keyboard: TextInputType.phone),
         const SizedBox(height: 12),
-        _field(_phonePreferentialCtrl, 'Telefono preferencial',
-            hint: 'Ej. +1 809 000 0000',
-            keyboard: TextInputType.phone),
+        _field(
+          _phonePreferentialCtrl,
+          'Telefono preferencial',
+          hint: 'Ej. +1 809 000 0000',
+          keyboard: TextInputType.phone,
+        ),
         const SizedBox(height: 12),
         _field(_addressCtrl, 'Direccion', maxLines: 2),
         const SizedBox(height: 12),
-        _field(_businessHoursCtrl, 'Horario comercial',
-            hint: 'Ej. Lun-Vie 8am-5pm | Sab 8am-12pm',
-            maxLines: 2),
+        _field(
+          _businessHoursCtrl,
+          'Horario comercial',
+          hint: 'Ej. Lun-Vie 8am-5pm | Sab 8am-12pm',
+          maxLines: 2,
+        ),
         const SizedBox(height: 16),
-        Text('Redes y presencia digital',
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.3)),
+        Text(
+          'Redes y presencia digital',
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.3,
+          ),
+        ),
         const SizedBox(height: 10),
-        _field(_instagramUrlCtrl, 'Instagram',
-            hint: 'https://instagram.com/...',
-            keyboard: TextInputType.url),
+        _field(
+          _instagramUrlCtrl,
+          'Instagram',
+          hint: 'https://instagram.com/...',
+          keyboard: TextInputType.url,
+        ),
         const SizedBox(height: 12),
-        _field(_facebookUrlCtrl, 'Facebook',
-            hint: 'https://facebook.com/...',
-            keyboard: TextInputType.url),
+        _field(
+          _facebookUrlCtrl,
+          'Facebook',
+          hint: 'https://facebook.com/...',
+          keyboard: TextInputType.url,
+        ),
         const SizedBox(height: 12),
-        _field(_websiteUrlCtrl, 'Sitio web',
-            hint: 'https://...', keyboard: TextInputType.url),
+        _field(
+          _websiteUrlCtrl,
+          'Sitio web',
+          hint: 'https://...',
+          keyboard: TextInputType.url,
+        ),
         const SizedBox(height: 12),
-        _field(_gpsLocationUrlCtrl, 'Enlace GPS',
-            hint: 'https://maps.google.com/...',
-            keyboard: TextInputType.url),
+        _field(
+          _gpsLocationUrlCtrl,
+          'Enlace GPS',
+          hint: 'https://maps.google.com/...',
+          keyboard: TextInputType.url,
+        ),
       ],
     );
   }
@@ -534,11 +571,12 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
         if (_bankRows.isEmpty)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: Text('Sin cuentas bancarias configuradas.',
-                style: TextStyle(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurfaceVariant)),
+            child: Text(
+              'Sin cuentas bancarias configuradas.',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
           )
         else
           for (var i = 0; i < _bankRows.length; i++) ...[
@@ -554,8 +592,7 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
             const SizedBox(height: 12),
           ],
         TextButton.icon(
-          onPressed: () =>
-              setState(() => _bankRows.add(_BankRowCtrls())),
+          onPressed: () => setState(() => _bankRows.add(_BankRowCtrls())),
           icon: const Icon(Icons.add, size: 18),
           label: const Text('Agregar cuenta'),
         ),
@@ -567,8 +604,7 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _field(_legalRepresentativeNameCtrl,
-            'Nombre del representante legal'),
+        _field(_legalRepresentativeNameCtrl, 'Nombre del representante legal'),
         const SizedBox(height: 12),
         _field(_legalRepresentativeCedulaCtrl, 'Cedula'),
         const SizedBox(height: 12),
@@ -588,27 +624,29 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
         Text(
           'Solo coloca tu API key. El sistema selecciona el modelo segun la necesidad.',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color:
-                  Theme.of(context).colorScheme.onSurfaceVariant),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 12),
-        _field(_openAiApiKeyCtrl, 'OpenAI API Key',
-            hint: 'sk-...',
-            obscure: !_showApiKey,
-            suffix: IconButton(
-              tooltip:
-                  _showApiKey ? 'Ocultar clave' : 'Mostrar clave',
-              onPressed: () =>
-                  setState(() => _showApiKey = !_showApiKey),
-              icon: Icon(_showApiKey
+        _field(
+          _openAiApiKeyCtrl,
+          'OpenAI API Key',
+          hint: 'sk-...',
+          obscure: !_showApiKey,
+          suffix: IconButton(
+            tooltip: _showApiKey ? 'Ocultar clave' : 'Mostrar clave',
+            onPressed: () => setState(() => _showApiKey = !_showApiKey),
+            icon: Icon(
+              _showApiKey
                   ? Icons.visibility_off_outlined
-                  : Icons.visibility_outlined),
-            )),
+                  : Icons.visibility_outlined,
+            ),
+          ),
+        ),
         const SizedBox(height: 8),
         if (_openAiApiKeyCtrl.text.trim().isNotEmpty)
           TextButton.icon(
-            onPressed: () =>
-                setState(() => _openAiApiKeyCtrl.clear()),
+            onPressed: () => setState(() => _openAiApiKeyCtrl.clear()),
             icon: const Icon(Icons.delete_outline, size: 18),
             label: const Text('Limpiar API key'),
           ),
@@ -653,9 +691,11 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
             tooltip: _showEvolutionApiKey ? 'Ocultar clave' : 'Mostrar clave',
             onPressed: () =>
                 setState(() => _showEvolutionApiKey = !_showEvolutionApiKey),
-            icon: Icon(_showEvolutionApiKey
-                ? Icons.visibility_off_outlined
-                : Icons.visibility_outlined),
+            icon: Icon(
+              _showEvolutionApiKey
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+            ),
           ),
         ),
         const SizedBox(height: 8),
@@ -728,9 +768,11 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.sync_rounded, size: 18),
-          label: Text(_syncingWebhooks
-              ? 'Sincronizando...'
-              : 'Sincronizar webhooks de usuarios'),
+          label: Text(
+            _syncingWebhooks
+                ? 'Sincronizando...'
+                : 'Sincronizar webhooks de usuarios',
+          ),
         ),
       ],
     );
@@ -747,10 +789,7 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (_saving) ...[
-                  _SavingBanner(),
-                  const SizedBox(height: 12),
-                ],
+                if (_saving) ...[_SavingBanner(), const SizedBox(height: 12)],
                 if (_refreshing)
                   const Padding(
                     padding: EdgeInsets.only(bottom: 12),
@@ -767,8 +806,7 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
                   key: 'cuentas',
                   icon: Icons.account_balance_outlined,
                   title: 'Cuentas bancarias',
-                  subtitle:
-                      'Cuentas disponibles para pagos y transferencias.',
+                  subtitle: 'Cuentas disponibles para pagos y transferencias.',
                   child: _buildCuentasSection(),
                 ),
                 _accordion(
@@ -800,12 +838,15 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
                   child: FilledButton.icon(
                     onPressed: _saving ? null : _save,
                     icon: const Icon(Icons.save_outlined),
-                    label: Text(_saving
-                        ? 'Guardando...'
-                        : 'Guardar configuracion'),
+                    label: Text(
+                      _saving ? 'Guardando...' : 'Guardar configuracion',
+                    ),
                     style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 28, vertical: 14)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 28,
+                        vertical: 14,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -871,24 +912,24 @@ class _BankRowCtrls {
     String initialType = '',
     String initialAccountNumber = '',
     String initialBankName = '',
-  })  : name = TextEditingController(text: initialName),
-        type = TextEditingController(text: initialType),
-        accountNumber = TextEditingController(text: initialAccountNumber),
-        bankName = TextEditingController(text: initialBankName);
+  }) : name = TextEditingController(text: initialName),
+       type = TextEditingController(text: initialType),
+       accountNumber = TextEditingController(text: initialAccountNumber),
+       bankName = TextEditingController(text: initialBankName);
 
   factory _BankRowCtrls.fromEntry(BankAccountEntry e) => _BankRowCtrls(
-        initialName: e.name,
-        initialType: e.type,
-        initialAccountNumber: e.accountNumber,
-        initialBankName: e.bankName,
-      );
+    initialName: e.name,
+    initialType: e.type,
+    initialAccountNumber: e.accountNumber,
+    initialBankName: e.bankName,
+  );
 
   BankAccountEntry toEntry() => BankAccountEntry(
-        name: name.text.trim(),
-        type: type.text.trim(),
-        accountNumber: accountNumber.text.trim(),
-        bankName: bankName.text.trim(),
-      );
+    name: name.text.trim(),
+    type: type.text.trim(),
+    accountNumber: accountNumber.text.trim(),
+    bankName: bankName.text.trim(),
+  );
 
   void dispose() {
     name.dispose();
@@ -918,8 +959,7 @@ class _BankRowWidget extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-            color: scheme.outlineVariant.withValues(alpha: 0.5)),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
         color: scheme.surfaceContainerLowest,
       ),
       child: Column(
@@ -928,13 +968,13 @@ class _BankRowWidget extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text('Cuenta $index',
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelMedium
-                        ?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: scheme.onSurfaceVariant)),
+                child: Text(
+                  'Cuenta $index',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
               ),
               IconButton(
                 tooltip: 'Eliminar cuenta',
@@ -942,8 +982,7 @@ class _BankRowWidget extends StatelessWidget {
                 icon: const Icon(Icons.close, size: 18),
                 color: scheme.error,
                 padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               ),
             ],
           ),
@@ -953,27 +992,34 @@ class _BankRowWidget extends StatelessWidget {
             runSpacing: 10,
             children: [
               SizedBox(
-                  width: 200,
-                  child: TextField(
-                      controller: row.name,
-                      decoration: dec('Nombre de cuenta'))),
+                width: 200,
+                child: TextField(
+                  controller: row.name,
+                  decoration: dec('Nombre de cuenta'),
+                ),
+              ),
               SizedBox(
-                  width: 140,
-                  child: TextField(
-                      controller: row.type,
-                      decoration:
-                          dec('Tipo', hint: 'Ej. Ahorros'))),
+                width: 140,
+                child: TextField(
+                  controller: row.type,
+                  decoration: dec('Tipo', hint: 'Ej. Ahorros'),
+                ),
+              ),
               SizedBox(
-                  width: 200,
-                  child: TextField(
-                      controller: row.accountNumber,
-                      decoration: dec('Numero de cuenta'),
-                      keyboardType: TextInputType.number)),
+                width: 200,
+                child: TextField(
+                  controller: row.accountNumber,
+                  decoration: dec('Numero de cuenta'),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
               SizedBox(
-                  width: 180,
-                  child: TextField(
-                      controller: row.bankName,
-                      decoration: dec('Banco'))),
+                width: 180,
+                child: TextField(
+                  controller: row.bankName,
+                  decoration: dec('Banco'),
+                ),
+              ),
             ],
           ),
         ],
@@ -994,12 +1040,13 @@ class _SavingBanner extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Guardando configuracion...',
-              style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onPrimaryContainer)),
+          Text(
+            'Guardando configuracion...',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: Theme.of(context).colorScheme.onPrimaryContainer,
+            ),
+          ),
           const SizedBox(height: 8),
           const LinearProgressIndicator(),
         ],
@@ -1019,10 +1066,10 @@ class _RefreshingSettingsBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         color: Theme.of(context).colorScheme.surfaceContainerLow,
         border: Border.all(
-            color: Theme.of(context)
-                .colorScheme
-                .outlineVariant
-                .withValues(alpha: 0.5)),
+          color: Theme.of(
+            context,
+          ).colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Row(
         children: [
@@ -1030,16 +1077,18 @@ class _RefreshingSettingsBanner extends StatelessWidget {
             width: 14,
             height: 14,
             child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Theme.of(context).colorScheme.primary),
+              strokeWidth: 2,
+              color: Theme.of(context).colorScheme.primary,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text('Actualizando configuracion en segundo plano...',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(fontWeight: FontWeight.w600)),
+            child: Text(
+              'Actualizando configuracion en segundo plano...',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),

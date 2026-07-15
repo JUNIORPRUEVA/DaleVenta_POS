@@ -194,7 +194,9 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
       context.go(Routes.clienteDetail(saved.id));
     } catch (e) {
       if (!mounted) return;
-      final message = e is ApiException && (e.code == 403 || e.type == ApiErrorType.forbidden)
+      final message =
+          e is ApiException &&
+              (e.code == 403 || e.type == ApiErrorType.forbidden)
           ? 'No tienes permiso para crear o editar clientes'
           : e.toString();
       ScaffoldMessenger.of(

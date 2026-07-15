@@ -19,8 +19,7 @@ class MediaGalleryScreen extends ConsumerStatefulWidget {
   const MediaGalleryScreen({super.key});
 
   @override
-  ConsumerState<MediaGalleryScreen> createState() =>
-      _MediaGalleryScreenState();
+  ConsumerState<MediaGalleryScreen> createState() => _MediaGalleryScreenState();
 }
 
 class _MediaGalleryScreenState extends ConsumerState<MediaGalleryScreen> {
@@ -99,17 +98,19 @@ class _MediaGalleryScreenState extends ConsumerState<MediaGalleryScreen> {
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: MediaGalleryTypeFilter.values.map((filter) {
-                        return ChoiceChip(
-                          label: Text(_typeFilterLabel(filter)),
-                          selected: tempType == filter,
-                          onSelected: (_) {
-                            setModalState(() {
-                              tempType = filter;
-                            });
-                          },
-                        );
-                      }).toList(growable: false),
+                      children: MediaGalleryTypeFilter.values
+                          .map((filter) {
+                            return ChoiceChip(
+                              label: Text(_typeFilterLabel(filter)),
+                              selected: tempType == filter,
+                              onSelected: (_) {
+                                setModalState(() {
+                                  tempType = filter;
+                                });
+                              },
+                            );
+                          })
+                          .toList(growable: false),
                     ),
                     const SizedBox(height: 16),
                     const Text('Estado de instalación'),
@@ -117,17 +118,19 @@ class _MediaGalleryScreenState extends ConsumerState<MediaGalleryScreen> {
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: MediaGalleryInstallationFilter.values.map((filter) {
-                        return ChoiceChip(
-                          label: Text(_installationFilterLabel(filter)),
-                          selected: tempInstallation == filter,
-                          onSelected: (_) {
-                            setModalState(() {
-                              tempInstallation = filter;
-                            });
-                          },
-                        );
-                      }).toList(growable: false),
+                      children: MediaGalleryInstallationFilter.values
+                          .map((filter) {
+                            return ChoiceChip(
+                              label: Text(_installationFilterLabel(filter)),
+                              selected: tempInstallation == filter,
+                              onSelected: (_) {
+                                setModalState(() {
+                                  tempInstallation = filter;
+                                });
+                              },
+                            );
+                          })
+                          .toList(growable: false),
                     ),
                     const SizedBox(height: 18),
                     Row(
@@ -135,7 +138,9 @@ class _MediaGalleryScreenState extends ConsumerState<MediaGalleryScreen> {
                         Expanded(
                           child: OutlinedButton(
                             onPressed: () {
-                              controller.setTypeFilter(MediaGalleryTypeFilter.all);
+                              controller.setTypeFilter(
+                                MediaGalleryTypeFilter.all,
+                              );
                               controller.setInstallationFilter(
                                 MediaGalleryInstallationFilter.all,
                               );
@@ -149,7 +154,9 @@ class _MediaGalleryScreenState extends ConsumerState<MediaGalleryScreen> {
                           child: FilledButton(
                             onPressed: () {
                               controller.setTypeFilter(tempType);
-                              controller.setInstallationFilter(tempInstallation);
+                              controller.setInstallationFilter(
+                                tempInstallation,
+                              );
                               Navigator.of(bottomSheetContext).pop();
                             },
                             child: const Text('Aplicar'),
@@ -269,9 +276,7 @@ class _MediaGalleryScreenState extends ConsumerState<MediaGalleryScreen> {
         const SnackBar(content: Text('Evidencia eliminada correctamente.')),
       );
     } else {
-      messenger?.showSnackBar(
-        SnackBar(content: Text(errorState!)),
-      );
+      messenger?.showSnackBar(SnackBar(content: Text(errorState!)));
     }
   }
 
@@ -304,21 +309,18 @@ class _MediaGalleryScreenState extends ConsumerState<MediaGalleryScreen> {
     final errorState = ref.read(mediaGalleryControllerProvider).error;
     if ((errorState ?? '').isEmpty) {
       messenger?.showSnackBar(
-        const SnackBar(
-          content: Text('Evidencia marcada para publicidad.'),
-        ),
+        const SnackBar(content: Text('Evidencia marcada para publicidad.')),
       );
     } else {
-      messenger?.showSnackBar(
-        SnackBar(content: Text(errorState!)),
-      );
+      messenger?.showSnackBar(SnackBar(content: Text(errorState!)));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authStateProvider);
-    final canView = auth.isAuthenticated &&
+    final canView =
+        auth.isAuthenticated &&
         auth.user != null &&
         hasPermission(auth.user!.appRole, AppPermission.viewMediaGallery);
     final isAdmin = auth.user?.appRole == AppRole.admin;
@@ -347,8 +349,9 @@ class _MediaGalleryScreenState extends ConsumerState<MediaGalleryScreen> {
 
     final visibleItems = _applySearch(state.visibleItems);
     final totalItems = state.items.length;
-    final completedCount =
-        state.items.where((item) => item.isInstallationCompleted).length;
+    final completedCount = state.items
+        .where((item) => item.isInstallationCompleted)
+        .length;
     final pendingCount = totalItems - completedCount;
     final activeFilterCount = [
       state.typeFilter != MediaGalleryTypeFilter.all,
@@ -366,7 +369,9 @@ class _MediaGalleryScreenState extends ConsumerState<MediaGalleryScreen> {
         actions: [
           IconButton(
             tooltip: 'Buscar',
-            onPressed: state.items.isEmpty ? null : () => _openSearch(state.items),
+            onPressed: state.items.isEmpty
+                ? null
+                : () => _openSearch(state.items),
             icon: const Icon(Icons.search_rounded),
           ),
           Stack(
@@ -440,7 +445,8 @@ class _MediaGalleryScreenState extends ConsumerState<MediaGalleryScreen> {
                 hasScrollBody: false,
                 child: Center(child: CircularProgressIndicator()),
               )
-            else if ((state.error ?? '').trim().isNotEmpty && state.items.isEmpty)
+            else if ((state.error ?? '').trim().isNotEmpty &&
+                state.items.isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: _GalleryMessageState(
@@ -481,42 +487,37 @@ class _MediaGalleryScreenState extends ConsumerState<MediaGalleryScreen> {
                     final crossAxisCount = width >= 1500
                         ? 5
                         : width >= 1200
-                            ? 4
-                            : width >= 860
-                                ? 3
-                          : 2;
+                        ? 4
+                        : width >= 860
+                        ? 3
+                        : 2;
                     final childAspectRatio = width >= 1200
                         ? 0.92
                         : width >= 860
-                            ? 0.9
+                        ? 0.9
                         : width >= 420
-                          ? 0.72
-                          : 0.66;
+                        ? 0.72
+                        : 0.66;
 
                     return SliverGrid(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final item = visibleItems[index];
-                          return MediaGalleryCard(
-                            item: item,
-                            isAdmin: isAdmin,
-                            onTap: () => showMediaGalleryViewer(
-                              context,
-                              visibleItems,
-                              index,
-                              _downloadItem,
-                            ),
-                            onDownload: () => _downloadItem(item),
-                            onDelete: isAdmin
-                                ? () => _confirmDelete(item)
-                                : null,
-                            onMarkPublicidad: isAdmin && !item.forPublicidad
-                                ? () => _confirmMarkPublicidad(item)
-                                : null,
-                          );
-                        },
-                        childCount: visibleItems.length,
-                      ),
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final item = visibleItems[index];
+                        return MediaGalleryCard(
+                          item: item,
+                          isAdmin: isAdmin,
+                          onTap: () => showMediaGalleryViewer(
+                            context,
+                            visibleItems,
+                            index,
+                            _downloadItem,
+                          ),
+                          onDownload: () => _downloadItem(item),
+                          onDelete: isAdmin ? () => _confirmDelete(item) : null,
+                          onMarkPublicidad: isAdmin && !item.forPublicidad
+                              ? () => _confirmMarkPublicidad(item)
+                              : null,
+                        );
+                      }, childCount: visibleItems.length),
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: crossAxisCount,
                         mainAxisSpacing: 16,
@@ -534,7 +535,8 @@ class _MediaGalleryScreenState extends ConsumerState<MediaGalleryScreen> {
                   child: Center(child: CircularProgressIndicator()),
                 ),
               )
-            else if ((state.nextCursor ?? '').trim().isEmpty && visibleItems.isNotEmpty)
+            else if ((state.nextCursor ?? '').trim().isEmpty &&
+                visibleItems.isNotEmpty)
               const SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(20, 0, 20, 32),
@@ -588,9 +590,7 @@ class _GalleryTopBar extends StatelessWidget {
     }
     if (installationFilter != MediaGalleryInstallationFilter.all) {
       chips.add(
-        _ActiveFilterChip(
-          label: _installationFilterLabel(installationFilter),
-        ),
+        _ActiveFilterChip(label: _installationFilterLabel(installationFilter)),
       );
     }
     if (searchQuery.trim().isNotEmpty) {
@@ -804,10 +804,12 @@ class _MediaGallerySearchDelegate extends SearchDelegate<String?> {
 
   List<MediaGalleryItem> get _filteredItems {
     final normalizedQuery = query.trim().toLowerCase();
-    final filtered = items.where((item) {
-      if (normalizedQuery.isEmpty) return true;
-      return item.searchableText.contains(normalizedQuery);
-    }).toList(growable: false);
+    final filtered = items
+        .where((item) {
+          if (normalizedQuery.isEmpty) return true;
+          return item.searchableText.contains(normalizedQuery);
+        })
+        .toList(growable: false);
     filtered.sort((left, right) => right.createdAt.compareTo(left.createdAt));
     return filtered;
   }
@@ -881,7 +883,9 @@ class _MediaGallerySearchDelegate extends SearchDelegate<String?> {
             : item.orderId.toUpperCase();
 
         return ListTile(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           tileColor: Theme.of(context).colorScheme.surfaceContainerLowest,
           leading: CircleAvatar(
             backgroundColor: const Color(0xFFE6F4F7),

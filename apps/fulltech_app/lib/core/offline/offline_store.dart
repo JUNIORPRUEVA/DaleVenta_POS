@@ -206,11 +206,7 @@ class OfflineStore {
       return;
     }
 
-    await db.delete(
-      'cache_entries',
-      where: 'cache_key = ?',
-      whereArgs: [key],
-    );
+    await db.delete('cache_entries', where: 'cache_key = ?', whereArgs: [key]);
   }
 
   Future<void> putPendingAction(PendingSyncAction action) async {
@@ -365,10 +361,6 @@ class OfflineStore {
       'offline_store',
       'pending stats pending=$pending syncing=$syncing error=$error',
     );
-    return {
-      'pending': pending,
-      'syncing': syncing,
-      'error': error,
-    };
+    return {'pending': pending, 'syncing': syncing, 'error': error};
   }
 }

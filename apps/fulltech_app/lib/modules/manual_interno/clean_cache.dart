@@ -13,7 +13,7 @@ Future<void> clearManualInternoCache() async {
     final prefs = await SharedPreferences.getInstance();
     final keys = prefs.getKeys();
     int clearedPrefs = 0;
-    
+
     for (final key in keys) {
       if (key.contains('company_manual') || key.contains('manual_interno')) {
         await prefs.remove(key);
@@ -23,10 +23,7 @@ Future<void> clearManualInternoCache() async {
     debugPrint('✓ Limpiadas $clearedPrefs preferencias');
 
     // 2. Limpiar base de datos local SQLite
-    final database = await openDatabase(
-      'company_manual_local.db',
-      version: 2,
-    );
+    final database = await openDatabase('company_manual_local.db', version: 2);
 
     try {
       await database.transaction((txn) async {
@@ -39,7 +36,9 @@ Future<void> clearManualInternoCache() async {
     }
 
     debugPrint('✅ Caché limpiado correctamente.');
-    debugPrint('💡 Tip: El frontend descargará datos frescos en la próxima carga.');
+    debugPrint(
+      '💡 Tip: El frontend descargará datos frescos en la próxima carga.',
+    );
   } catch (e) {
     debugPrint('❌ Error al limpiar caché: $e');
     rethrow;

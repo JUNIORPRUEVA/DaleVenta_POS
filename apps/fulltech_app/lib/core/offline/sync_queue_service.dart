@@ -144,7 +144,8 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
         title: 'Sincronizacion en segundo plano limitada',
         userMessage:
             'No se pudo actualizar el estado de la cola offline. La app seguira operando y reintentara automaticamente.',
-        technicalDetails: 'Fallo al consultar estadisticas locales de sincronizacion.',
+        technicalDetails:
+            'Fallo al consultar estadisticas locales de sincronizacion.',
         severity: AppErrorSeverity.warning,
         dedupeKey: 'sync-queue-refresh-stats-failed',
         retryLabel: 'Reintentar',

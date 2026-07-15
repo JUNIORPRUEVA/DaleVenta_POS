@@ -125,7 +125,7 @@ Future<bool> showServiceOrderStatusConfirmationDialog({
                   title: Text(
                     requiresScheduledAt
                         ? 'Reprogramar orden'
-                    : 'Aplicar cambio',
+                        : 'Aplicar cambio',
                   ),
                   content: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 420),

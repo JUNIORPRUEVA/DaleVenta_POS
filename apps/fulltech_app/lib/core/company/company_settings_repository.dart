@@ -73,7 +73,10 @@ class CompanySettingsRepository {
   }
 
   Future<CompanySettings?> getCachedSettings() async {
-    final cached = await _cache.readMap(_cacheKey, maxAge: const Duration(days: 14));
+    final cached = await _cache.readMap(
+      _cacheKey,
+      maxAge: const Duration(days: 14),
+    );
     if (cached == null) return null;
     return CompanySettings.fromMap(cached);
   }
@@ -191,7 +194,10 @@ class CompanySettingsRepository {
           .timeout(_settingsTimeout);
     } on DioException catch (e) {
       throw ApiException(
-        _extractMessage(e.response?.data, 'No se pudo sincronizar los webhooks'),
+        _extractMessage(
+          e.response?.data,
+          'No se pudo sincronizar los webhooks',
+        ),
         e.response?.statusCode,
       );
     }

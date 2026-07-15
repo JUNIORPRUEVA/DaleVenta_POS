@@ -2973,10 +2973,10 @@ class _HistoryFullScreenPageState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-          const Text(
-            'Fondo de caja',
-            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
-          ),
+            const Text(
+              'Fondo de caja',
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+            ),
             const SizedBox(height: 4),
             Text(
               '${closes.length} cierres filtrados',

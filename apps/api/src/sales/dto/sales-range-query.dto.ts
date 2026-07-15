@@ -1,4 +1,4 @@
-import { IsISO8601, IsOptional, IsUUID } from 'class-validator';
+import { IsBooleanString, IsISO8601, IsOptional, IsUUID } from 'class-validator';
 
 export class SalesRangeQueryDto {
   @IsOptional()
@@ -16,4 +16,8 @@ export class SalesRangeQueryDto {
   @IsOptional()
   @IsUUID()
   customerId?: string;
+
+  @IsOptional()
+  @IsBooleanString()
+  includeDeleted?: string;
 }

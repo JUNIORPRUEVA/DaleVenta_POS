@@ -19,10 +19,7 @@ class AdministracionScreen extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              scheme.surface,
-              scheme.surfaceContainerLowest,
-            ],
+            colors: [scheme.surface, scheme.surfaceContainerLowest],
           ),
         ),
         child: SafeArea(
@@ -49,7 +46,8 @@ class AdministracionScreen extends StatelessWidget {
                       _AdminMenuCard(
                         icon: Icons.stars_rounded,
                         title: 'Comisiones',
-                        onTap: () => context.push(Routes.administracionComisiones),
+                        onTap: () =>
+                            context.push(Routes.administracionComisiones),
                       ),
                     ],
                   ),
@@ -59,10 +57,8 @@ class AdministracionScreen extends StatelessWidget {
                 top: 10,
                 left: 16,
                 child: _BackGhostButton(
-                  onTap: () => AppNavigator.goBack(
-                    context,
-                    fallbackRoute: Routes.home,
-                  ),
+                  onTap: () =>
+                      AppNavigator.goBack(context, fallbackRoute: Routes.home),
                 ),
               ),
             ],

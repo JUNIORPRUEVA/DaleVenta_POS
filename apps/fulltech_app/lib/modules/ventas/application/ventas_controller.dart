@@ -87,6 +87,7 @@ class VentasController extends StateNotifier<VentasState> {
           from: state.from,
           to: state.to,
           customerId: state.customerIdFilter,
+          includeDeleted: true,
         ),
         repo.summary(
           from: state.from,
@@ -133,6 +134,23 @@ class VentasController extends StateNotifier<VentasState> {
 
     try {
       await ref.read(ventasRepositoryProvider).deleteSale(id);
+      await load();
+    } catch (_) {
+      state = state.copyWith(sales: previous);
+      rethrow;
+    }
+  }
+
+  Future<void> returnSale(String id) async {
+    final previous = state.sales;
+    try {
+      final returned = await ref.read(ventasRepositoryProvider).returnSale(id);
+      state = state.copyWith(
+        sales: [
+          for (final sale in state.sales)
+            if (sale.id == id) returned else sale,
+        ],
+      );
       await load();
     } catch (_) {
       state = state.copyWith(sales: previous);

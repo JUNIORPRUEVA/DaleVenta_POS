@@ -46,10 +46,7 @@ Future<Uint8List> buildDepositOrderPdf({
   final dateTimeFmt = DateFormat('dd/MM/yyyy h:mm a', 'es_DO');
   final detailRows = _buildRows(data);
 
-  final doc = pw.Document(
-    title: 'Deposíto al banco',
-    author: 'FULLTECH, SRL',
-  );
+  final doc = pw.Document(title: 'Deposíto al banco', author: 'FULLTECH, SRL');
 
   doc.addPage(
     pw.MultiPage(
@@ -104,7 +101,9 @@ Future<Uint8List> buildDepositOrderPdf({
                 padding: const pw.EdgeInsets.all(10),
                 decoration: pw.BoxDecoration(
                   color: PdfColors.white,
-                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(10)),
+                  borderRadius: const pw.BorderRadius.all(
+                    pw.Radius.circular(10),
+                  ),
                 ),
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -155,7 +154,10 @@ Future<Uint8List> buildDepositOrderPdf({
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         _metaLine('Banco', data.bankName),
-                        _metaLine('Monto a depositar', money.format(data.depositTotal)),
+                        _metaLine(
+                          'Monto a depositar',
+                          money.format(data.depositTotal),
+                        ),
                       ],
                     ),
                   ),
@@ -165,10 +167,7 @@ Future<Uint8List> buildDepositOrderPdf({
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         if ((data.createdByName ?? '').trim().isNotEmpty)
-                          _metaLine(
-                            'Ordenado por',
-                            data.createdByName!.trim(),
-                          ),
+                          _metaLine('Ordenado por', data.createdByName!.trim()),
                         if ((data.collaboratorName ?? '').trim().isNotEmpty)
                           _metaLine(
                             'Ejecutado por',
@@ -186,7 +185,9 @@ Future<Uint8List> buildDepositOrderPdf({
                   padding: const pw.EdgeInsets.all(10),
                   decoration: pw.BoxDecoration(
                     color: PdfColors.white,
-                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                    borderRadius: const pw.BorderRadius.all(
+                      pw.Radius.circular(8),
+                    ),
                     border: pw.Border.all(color: PdfColors.blue100),
                   ),
                   child: pw.Column(
@@ -201,7 +202,10 @@ Future<Uint8List> buildDepositOrderPdf({
                         ),
                       ),
                       pw.SizedBox(height: 4),
-                      pw.Text(data.note!.trim(), style: const pw.TextStyle(fontSize: 10.5)),
+                      pw.Text(
+                        data.note!.trim(),
+                        style: const pw.TextStyle(fontSize: 10.5),
+                      ),
                     ],
                   ),
                 ),
@@ -241,7 +245,10 @@ Future<Uint8List> buildDepositOrderPdf({
                 children: [
                   _tableCell(data.bankName),
                   _tableCell(row.account),
-                  _tableCell(money.format(row.amount), align: pw.TextAlign.right),
+                  _tableCell(
+                    money.format(row.amount),
+                    align: pw.TextAlign.right,
+                  ),
                 ],
               ),
             ),
@@ -256,7 +263,9 @@ Future<Uint8List> buildDepositOrderPdf({
                 padding: const pw.EdgeInsets.all(12),
                 decoration: pw.BoxDecoration(
                   color: PdfColors.grey100,
-                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(10)),
+                  borderRadius: const pw.BorderRadius.all(
+                    pw.Radius.circular(10),
+                  ),
                   border: pw.Border.all(color: PdfColors.grey300),
                 ),
                 child: pw.Column(

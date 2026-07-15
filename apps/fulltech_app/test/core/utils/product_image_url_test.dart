@@ -40,10 +40,7 @@ void main() {
         baseUrl: 'https://api.example.com/',
       );
 
-      expect(
-        result,
-        'https://api.example.com/uploads/products/demo-image.jpg',
-      );
+      expect(result, 'https://api.example.com/uploads/products/demo-image.jpg');
     });
   });
 }

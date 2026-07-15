@@ -27,11 +27,11 @@ export class SalesService {
     return false;
   }
 
-  async listMine(userId: string, from?: string, to?: string, customerId?: string) {
+  async listMine(userId: string, from?: string, to?: string, customerId?: string, includeDeleted = false) {
     const normalizedCustomerId = customerId?.trim();
     const where: Prisma.SaleWhereInput = {
       userId,
-      isDeleted: false,
+      ...(includeDeleted ? {} : { isDeleted: false }),
       ...(normalizedCustomerId ? { customerId: normalizedCustomerId } : {}),
       ...this.buildDateRange(from, to),
     };
@@ -57,8 +57,8 @@ export class SalesService {
     }
   }
 
-  async listByUser(userId: string, from?: string, to?: string, customerId?: string) {
-    return this.listMine(userId, from, to, customerId);
+  async listByUser(userId: string, from?: string, to?: string, customerId?: string, includeDeleted = false) {
+    return this.listMine(userId, from, to, customerId, includeDeleted);
   }
 
   async summaryMine(userId: string, from?: string, to?: string, customerId?: string) {
@@ -353,6 +353,69 @@ export class SalesService {
     }
 
     return { ok: true };
+  }
+
+  async returnSale(requestUserId: string, saleId: string) {
+    let sale:
+      | (Prisma.SaleGetPayload<{
+          include: { items: true };
+        }>)
+      | null = null;
+
+    try {
+      sale = await this.prisma.sale.findUnique({
+        where: { id: saleId },
+        include: { items: true },
+      });
+    } catch (error) {
+      if (!this.isSchemaMismatch(error)) throw error;
+      throw new NotFoundException('Venta no encontrada');
+    }
+
+    if (!sale || sale.isDeleted) {
+      throw new NotFoundException('Venta no encontrada');
+    }
+
+    if (sale.userId !== requestUserId) {
+      throw new ForbiddenException('No puedes devolver esta venta');
+    }
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        for (const item of sale!.items) {
+          if (!item.productId) continue;
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { increment: item.qty } },
+          });
+        }
+
+        return tx.sale.update({
+          where: { id: saleId },
+          data: {
+            isDeleted: true,
+            deletedAt: new Date(),
+            deletedById: requestUserId,
+            note: sale!.note?.trim()
+              ? `${sale!.note}\nDEVOLUCION: venta devuelta desde historial.`
+              : 'DEVOLUCION: venta devuelta desde historial.',
+          },
+          include: {
+            customer: {
+              select: {
+                id: true,
+                nombre: true,
+                telefono: true,
+              },
+            },
+            items: true,
+          },
+        });
+      });
+    } catch (error) {
+      if (!this.isSchemaMismatch(error)) throw error;
+      throw new NotFoundException('Venta no encontrada');
+    }
   }
 
   async purgeAllForDebug(user: { id: string; role: string }) {

@@ -8,55 +8,70 @@ final crmComercialLocalDbProvider = Provider<CrmComercialLocalDb>((ref) {
 });
 
 /// Provider que carga las conversaciones desde el caché local
-final crmComercialCachedConversationsProvider = FutureProvider<List<CrmComercialInboxConversation>>((ref) async {
-  final db = ref.watch(crmComercialLocalDbProvider);
-  return db.getConversations();
-});
+final crmComercialCachedConversationsProvider =
+    FutureProvider<List<CrmComercialInboxConversation>>((ref) async {
+      final db = ref.watch(crmComercialLocalDbProvider);
+      return db.getConversations();
+    });
 
 /// Provider que carga los mensajes de una conversación desde el caché local
-final crmComercialCachedMessagesProvider = FutureProvider.family<List<CrmComercialInboxMessage>, String>((ref, conversationId) async {
-  final db = ref.watch(crmComercialLocalDbProvider);
-  return db.getMessages(conversationId);
-});
+final crmComercialCachedMessagesProvider =
+    FutureProvider.family<List<CrmComercialInboxMessage>, String>((
+      ref,
+      conversationId,
+    ) async {
+      final db = ref.watch(crmComercialLocalDbProvider);
+      return db.getMessages(conversationId);
+    });
 
 /// Provider que carga los clientes desde el caché local
-final crmComercialCachedCustomersProvider = FutureProvider<List<CrmComercialCustomer>>((ref) async {
-  final db = ref.watch(crmComercialLocalDbProvider);
-  return db.getCustomers();
-});
+final crmComercialCachedCustomersProvider =
+    FutureProvider<List<CrmComercialCustomer>>((ref) async {
+      final db = ref.watch(crmComercialLocalDbProvider);
+      return db.getCustomers();
+    });
 
 /// Provider que carga un cliente específico desde el caché local
-final crmComercialCachedCustomerProvider = FutureProvider.family<CrmComercialCustomer?, String>((ref, customerId) async {
-  final db = ref.watch(crmComercialLocalDbProvider);
-  return db.getCustomer(customerId);
-});
+final crmComercialCachedCustomerProvider =
+    FutureProvider.family<CrmComercialCustomer?, String>((
+      ref,
+      customerId,
+    ) async {
+      final db = ref.watch(crmComercialLocalDbProvider);
+      return db.getCustomer(customerId);
+    });
 
 /// Provider que carga las tareas de seguimiento desde el caché local
-final crmComercialCachedFollowupTasksProvider = FutureProvider<List<CrmComercialFollowupTask>>((ref) async {
-  final db = ref.watch(crmComercialLocalDbProvider);
-  return db.getFollowupTasks();
-});
+final crmComercialCachedFollowupTasksProvider =
+    FutureProvider<List<CrmComercialFollowupTask>>((ref) async {
+      final db = ref.watch(crmComercialLocalDbProvider);
+      return db.getFollowupTasks();
+    });
 
 /// Provider que carga la configuración desde el caché local
-final crmComercialCachedSettingsProvider = FutureProvider<CrmComercialSettings?>((ref) async {
-  final db = ref.watch(crmComercialLocalDbProvider);
-  return db.getSettings();
-});
+final crmComercialCachedSettingsProvider =
+    FutureProvider<CrmComercialSettings?>((ref) async {
+      final db = ref.watch(crmComercialLocalDbProvider);
+      return db.getSettings();
+    });
 
 /// Provider que carga las instancias de WhatsApp desde el caché local
-final crmComercialCachedWhatsappInstancesProvider = FutureProvider<List<CrmComercialWhatsappInstance>>((ref) async {
-  final db = ref.watch(crmComercialLocalDbProvider);
-  return db.getWhatsappInstances();
-});
+final crmComercialCachedWhatsappInstancesProvider =
+    FutureProvider<List<CrmComercialWhatsappInstance>>((ref) async {
+      final db = ref.watch(crmComercialLocalDbProvider);
+      return db.getWhatsappInstances();
+    });
 
 /// Provider que carga los usuarios desde el caché local
-final crmComercialCachedUsersProvider = FutureProvider<List<CrmComercialUserRef>>((ref) async {
-  final db = ref.watch(crmComercialLocalDbProvider);
-  return db.getUsers();
-});
+final crmComercialCachedUsersProvider =
+    FutureProvider<List<CrmComercialUserRef>>((ref) async {
+      final db = ref.watch(crmComercialLocalDbProvider);
+      return db.getUsers();
+    });
 
 /// Notifier que maneja la sincronización del caché con el servidor
-class CrmComercialCacheSyncNotifier extends StateNotifier<CrmComercialCacheSyncState> {
+class CrmComercialCacheSyncNotifier
+    extends StateNotifier<CrmComercialCacheSyncState> {
   CrmComercialCacheSyncNotifier() : super(CrmComercialCacheSyncState.initial());
 
   void startSync() {
@@ -101,7 +116,8 @@ class CrmComercialCacheSyncState {
   factory CrmComercialCacheSyncState.initial() {
     return CrmComercialCacheSyncState(
       isSyncing: false,
-      isStale: true, // Inicialmente los datos están "stale" hasta que se carguen
+      isStale:
+          true, // Inicialmente los datos están "stale" hasta que se carguen
     );
   }
 
@@ -124,6 +140,10 @@ class CrmComercialCacheSyncState {
 }
 
 /// Provider que expone el estado de sincronización
-final crmComercialCacheSyncProvider = StateNotifierProvider<CrmComercialCacheSyncNotifier, CrmComercialCacheSyncState>((ref) {
-  return CrmComercialCacheSyncNotifier();
-});
+final crmComercialCacheSyncProvider =
+    StateNotifierProvider<
+      CrmComercialCacheSyncNotifier,
+      CrmComercialCacheSyncState
+    >((ref) {
+      return CrmComercialCacheSyncNotifier();
+    });

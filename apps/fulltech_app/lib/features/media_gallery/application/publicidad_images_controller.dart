@@ -10,17 +10,14 @@ class PublicidadImagesController
   final PublicidadImagesRepository _repository;
 
   PublicidadImagesController(this._repository)
-      : super(const AsyncValue.loading());
+    : super(const AsyncValue.loading());
 
   Future<void> load() async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() => _repository.getAll());
   }
 
-  Future<void> create({
-    required String url,
-    String? caption,
-  }) async {
+  Future<void> create({required String url, String? caption}) async {
     final currentState = state;
     if (!currentState.hasValue) return;
 
@@ -43,7 +40,9 @@ class PublicidadImagesController
     if (!currentState.hasValue) return;
 
     final updatedImage = await _repository.update(id, caption: caption);
-    final items = currentState.value!.map((e) => e.id == id ? updatedImage : e).toList();
+    final items = currentState.value!
+        .map((e) => e.id == id ? updatedImage : e)
+        .toList();
     state = AsyncValue.data(items);
   }
 
@@ -62,16 +61,20 @@ class PublicidadImagesController
       caption: caption,
     );
     final currentState = state;
-    final existing = currentState.hasValue ? currentState.value! : <PublicidadImage>[];
+    final existing = currentState.hasValue
+        ? currentState.value!
+        : <PublicidadImage>[];
     state = AsyncValue.data([image, ...existing]);
   }
 }
 
-final publicidadImagesControllerProvider = StateNotifierProvider<
-    PublicidadImagesController,
-    AsyncValue<List<PublicidadImage>>>((ref) {
-  final repository = ref.watch(publicidadImagesRepositoryProvider);
-  final controller = PublicidadImagesController(repository);
-  controller.load();
-  return controller;
-});
+final publicidadImagesControllerProvider =
+    StateNotifierProvider<
+      PublicidadImagesController,
+      AsyncValue<List<PublicidadImage>>
+    >((ref) {
+      final repository = ref.watch(publicidadImagesRepositoryProvider);
+      final controller = PublicidadImagesController(repository);
+      controller.load();
+      return controller;
+    });

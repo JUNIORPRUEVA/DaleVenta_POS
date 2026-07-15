@@ -5,8 +5,9 @@ import '../../../core/auth/auth_repository.dart';
 import '../../../core/errors/api_exception.dart';
 import '../whatsapp_instance_model.dart';
 
-final companyWhatsappRepositoryProvider =
-    Provider<CompanyWhatsappRepository>((ref) {
+final companyWhatsappRepositoryProvider = Provider<CompanyWhatsappRepository>((
+  ref,
+) {
   return CompanyWhatsappRepository(ref.watch(dioProvider));
 });
 
@@ -46,7 +47,10 @@ class CompanyWhatsappRepository {
     }
   }
 
-  Future<void> createInstance({String? instanceName, String? phoneNumber}) async {
+  Future<void> createInstance({
+    String? instanceName,
+    String? phoneNumber,
+  }) async {
     try {
       final data = <String, dynamic>{};
       if (instanceName != null && instanceName.isNotEmpty) {

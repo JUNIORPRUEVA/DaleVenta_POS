@@ -81,10 +81,7 @@ class UserReference {
   final String id;
   final String nombreCompleto;
 
-  UserReference({
-    required this.id,
-    required this.nombreCompleto,
-  });
+  UserReference({required this.id, required this.nombreCompleto});
 
   factory UserReference.fromJson(Map<String, dynamic> json) {
     return UserReference(
@@ -94,14 +91,12 @@ class UserReference {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'nombreCompleto': nombreCompleto,
-    };
+    return {'id': id, 'nombreCompleto': nombreCompleto};
   }
 
   @override
-  String toString() => 'UserReference(id: $id, nombreCompleto: $nombreCompleto)';
+  String toString() =>
+      'UserReference(id: $id, nombreCompleto: $nombreCompleto)';
 
   @override
   bool operator ==(Object other) =>

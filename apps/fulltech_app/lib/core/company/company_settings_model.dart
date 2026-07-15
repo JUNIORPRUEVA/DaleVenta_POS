@@ -1,4 +1,4 @@
-﻿class BankAccountEntry {
+class BankAccountEntry {
   final String name;
   final String type;
   final String accountNumber;
@@ -200,7 +200,7 @@ class CompanySettings {
       evolutionApiApiKey: evolutionApiApiKey ?? this.evolutionApiApiKey,
       hasEvolutionApiApiKey:
           hasEvolutionApiApiKey ?? this.hasEvolutionApiApiKey,
-        whatsappWebhookEnabled:
+      whatsappWebhookEnabled:
           whatsappWebhookEnabled ?? this.whatsappWebhookEnabled,
       productsSource: productsSource ?? this.productsSource,
       productsReadOnly: productsReadOnly ?? this.productsReadOnly,
@@ -260,9 +260,12 @@ class CompanySettings {
       gpsLocationUrl: (map['gpsLocationUrl'] ?? '').toString(),
       businessHours: (map['businessHours'] ?? '').toString(),
       bankAccounts: parseBankAccounts(map['bankAccounts']),
-      legalRepresentativeName: (map['legalRepresentativeName'] ?? '').toString(),
-      legalRepresentativeCedula: (map['legalRepresentativeCedula'] ?? '').toString(),
-      legalRepresentativeRole: (map['legalRepresentativeRole'] ?? '').toString(),
+      legalRepresentativeName: (map['legalRepresentativeName'] ?? '')
+          .toString(),
+      legalRepresentativeCedula: (map['legalRepresentativeCedula'] ?? '')
+          .toString(),
+      legalRepresentativeRole: (map['legalRepresentativeRole'] ?? '')
+          .toString(),
       legalRepresentativeNationality:
           (map['legalRepresentativeNationality'] ?? '').toString(),
       legalRepresentativeCivilStatus:
@@ -272,7 +275,8 @@ class CompanySettings {
       openAiModel: (map['openAiModel'] ?? 'gpt-4o-mini').toString(),
       hasOpenAiApiKey: map['hasOpenAiApiKey'] == true,
       evolutionApiBaseUrl: (map['evolutionApiBaseUrl'] ?? '').toString(),
-      evolutionApiInstanceName: (map['evolutionApiInstanceName'] ?? '').toString(),
+      evolutionApiInstanceName: (map['evolutionApiInstanceName'] ?? '')
+          .toString(),
       evolutionApiApiKey: (map['evolutionApiApiKey'] ?? '').toString(),
       hasEvolutionApiApiKey: map['hasEvolutionApiApiKey'] == true,
       whatsappWebhookEnabled: map['whatsappWebhookEnabled'] == true,

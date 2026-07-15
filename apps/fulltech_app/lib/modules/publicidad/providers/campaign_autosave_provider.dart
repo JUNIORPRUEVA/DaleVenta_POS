@@ -46,8 +46,8 @@ class CampaignAutosaveController extends StateNotifier<AutosaveState> {
   CampaignAutosaveController(
     this._api, {
     Duration debounceDuration = const Duration(milliseconds: 800),
-  })  : _debounceDuration = debounceDuration,
-        super(AutosaveState());
+  }) : _debounceDuration = debounceDuration,
+       super(AutosaveState());
 
   /// Set the current campaign
   void setCampaign(MarketingCampaign campaign) {
@@ -59,11 +59,11 @@ class CampaignAutosaveController extends StateNotifier<AutosaveState> {
   /// Mark changes pending and trigger autosave after debounce
   void markChanged(MarketingCampaign updated) {
     _pendingChanges = updated;
-    
+
     if (state.isLoading) return;
-    
+
     state = state.copyWith(hasUnsavedChanges: true, error: null);
-    
+
     _debounceTimer?.cancel();
     _debounceTimer = Timer(_debounceDuration, _performAutosave);
   }
@@ -126,9 +126,11 @@ class CampaignAutosaveController extends StateNotifier<AutosaveState> {
 
 /// Provider for autosave controller
 final campaignAutosaveProvider =
-    StateNotifierProvider.family<CampaignAutosaveController, AutosaveState, String>(
-  (ref, campaignId) {
-    final api = ref.watch(marketingApiProvider);
-    return CampaignAutosaveController(api);
-  },
-);
+    StateNotifierProvider.family<
+      CampaignAutosaveController,
+      AutosaveState,
+      String
+    >((ref, campaignId) {
+      final api = ref.watch(marketingApiProvider);
+      return CampaignAutosaveController(api);
+    });

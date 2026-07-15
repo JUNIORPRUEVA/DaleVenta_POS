@@ -164,6 +164,7 @@ class ApiRoutes {
   static const salesDebugPurge = '/sales/debug/purge';
   static const salesSummary = '/sales/summary';
   static String saleDetail(String id) => '/sales/$id';
+  static String saleReturn(String id) => '/sales/$id/return';
 
   static const services = '/services';
   static const technicians = '/technicians';

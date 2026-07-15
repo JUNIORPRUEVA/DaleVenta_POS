@@ -185,35 +185,33 @@ class CrmComercialLocalDb {
 
   // ==================== CONVERSATIONS ====================
 
-  Future<void> saveConversations(List<CrmComercialInboxConversation> conversations) async {
+  Future<void> saveConversations(
+    List<CrmComercialInboxConversation> conversations,
+  ) async {
     final db = await database;
     final batch = db.batch();
     final now = DateTime.now().millisecondsSinceEpoch;
 
     for (final c in conversations) {
-      batch.insert(
-        'conversations',
-        {
-          'id': c.id,
-          'contact_name': c.contactName,
-          'remote_phone': c.remotePhone,
-          'remote_jid': c.remoteJid,
-          'remote_avatar_url': c.remoteAvatarUrl,
-          'last_message_at': c.lastMessageAt?.millisecondsSinceEpoch,
-          'last_message_preview': c.lastMessagePreview,
-          'last_message_type': c.lastMessageType,
-          'last_message_direction': c.lastMessageDirection,
-          'unread_count': c.unreadCount,
-          'message_count': c.messageCount,
-          'crm_customer_id': c.crmCustomerId,
-          'crm_customer_name': c.crmCustomerName,
-          'crm_customer_status': c.crmCustomerStatus,
-          'is_new_contact': c.isNewContact ? 1 : 0,
-          'can_convert_to_crm': c.canConvertToCrm ? 1 : 0,
-          'cached_at': now,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      batch.insert('conversations', {
+        'id': c.id,
+        'contact_name': c.contactName,
+        'remote_phone': c.remotePhone,
+        'remote_jid': c.remoteJid,
+        'remote_avatar_url': c.remoteAvatarUrl,
+        'last_message_at': c.lastMessageAt?.millisecondsSinceEpoch,
+        'last_message_preview': c.lastMessagePreview,
+        'last_message_type': c.lastMessageType,
+        'last_message_direction': c.lastMessageDirection,
+        'unread_count': c.unreadCount,
+        'message_count': c.messageCount,
+        'crm_customer_id': c.crmCustomerId,
+        'crm_customer_name': c.crmCustomerName,
+        'crm_customer_status': c.crmCustomerStatus,
+        'is_new_contact': c.isNewContact ? 1 : 0,
+        'can_convert_to_crm': c.canConvertToCrm ? 1 : 0,
+        'cached_at': now,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
 
     await batch.commit(noResult: true);
@@ -236,7 +234,10 @@ class CrmComercialLocalDb {
 
   // ==================== MESSAGES ====================
 
-  Future<void> saveMessages(String conversationId, List<CrmComercialInboxMessage> messages) async {
+  Future<void> saveMessages(
+    String conversationId,
+    List<CrmComercialInboxMessage> messages,
+  ) async {
     final db = await database;
     final batch = db.batch();
 
@@ -248,32 +249,30 @@ class CrmComercialLocalDb {
     );
 
     for (final m in messages) {
-      batch.insert(
-        'messages',
-        {
-          'id': m.id,
-          'conversation_id': conversationId,
-          'direction': m.direction,
-          'message_type': m.messageType,
-          'body': m.body,
-          'caption': m.caption,
-          'media_url': m.mediaUrl,
-          'media_mime_type': m.mediaMimeType,
-          'sender_name': m.senderName,
-          'sent_at': m.sentAt?.millisecondsSinceEpoch,
-          'media_storage_key': m.mediaStorageKey,
-          'media_status': m.mediaStatus,
-          'original_file_name': m.originalFileName,
-          'media_file_size': m.mediaFileSize,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      batch.insert('messages', {
+        'id': m.id,
+        'conversation_id': conversationId,
+        'direction': m.direction,
+        'message_type': m.messageType,
+        'body': m.body,
+        'caption': m.caption,
+        'media_url': m.mediaUrl,
+        'media_mime_type': m.mediaMimeType,
+        'sender_name': m.senderName,
+        'sent_at': m.sentAt?.millisecondsSinceEpoch,
+        'media_storage_key': m.mediaStorageKey,
+        'media_status': m.mediaStatus,
+        'original_file_name': m.originalFileName,
+        'media_file_size': m.mediaFileSize,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
 
     await batch.commit(noResult: true);
   }
 
-  Future<List<CrmComercialInboxMessage>> getMessages(String conversationId) async {
+  Future<List<CrmComercialInboxMessage>> getMessages(
+    String conversationId,
+  ) async {
     final db = await database;
     final maps = await db.query(
       'messages',
@@ -285,28 +284,27 @@ class CrmComercialLocalDb {
     return maps.map((map) => _messageFromMap(map)).toList();
   }
 
-  Future<void> saveMessage(String conversationId, CrmComercialInboxMessage message) async {
+  Future<void> saveMessage(
+    String conversationId,
+    CrmComercialInboxMessage message,
+  ) async {
     final db = await database;
-    await db.insert(
-      'messages',
-      {
-        'id': message.id,
-        'conversation_id': conversationId,
-        'direction': message.direction,
-        'message_type': message.messageType,
-        'body': message.body,
-        'caption': message.caption,
-        'media_url': message.mediaUrl,
-        'media_mime_type': message.mediaMimeType,
-        'sender_name': message.senderName,
-        'sent_at': message.sentAt?.millisecondsSinceEpoch,
-        'media_storage_key': message.mediaStorageKey,
-        'media_status': message.mediaStatus,
-        'original_file_name': message.originalFileName,
-        'media_file_size': message.mediaFileSize,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('messages', {
+      'id': message.id,
+      'conversation_id': conversationId,
+      'direction': message.direction,
+      'message_type': message.messageType,
+      'body': message.body,
+      'caption': message.caption,
+      'media_url': message.mediaUrl,
+      'media_mime_type': message.mediaMimeType,
+      'sender_name': message.senderName,
+      'sent_at': message.sentAt?.millisecondsSinceEpoch,
+      'media_storage_key': message.mediaStorageKey,
+      'media_status': message.mediaStatus,
+      'original_file_name': message.originalFileName,
+      'media_file_size': message.mediaFileSize,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   // ==================== CUSTOMERS ====================
@@ -317,25 +315,21 @@ class CrmComercialLocalDb {
     final now = DateTime.now().millisecondsSinceEpoch;
 
     for (final c in customers) {
-      batch.insert(
-        'customers',
-        {
-          'id': c.id,
-          'nombre': c.nombre,
-          'telefono': c.telefono,
-          'estado_actual': c.estadoActual,
-          'direccion': c.direccion,
-          'ciudad': c.ciudad,
-          'etiqueta': c.etiqueta,
-          'next_action': c.nextAction,
-          'next_action_at': c.nextActionAt?.millisecondsSinceEpoch,
-          'updated_at': c.updatedAt?.millisecondsSinceEpoch,
-          'responsable_user_id': c.responsable?.id,
-          'responsable_user_nombre': c.responsable?.nombreCompleto,
-          'cached_at': now,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      batch.insert('customers', {
+        'id': c.id,
+        'nombre': c.nombre,
+        'telefono': c.telefono,
+        'estado_actual': c.estadoActual,
+        'direccion': c.direccion,
+        'ciudad': c.ciudad,
+        'etiqueta': c.etiqueta,
+        'next_action': c.nextAction,
+        'next_action_at': c.nextActionAt?.millisecondsSinceEpoch,
+        'updated_at': c.updatedAt?.millisecondsSinceEpoch,
+        'responsable_user_id': c.responsable?.id,
+        'responsable_user_nombre': c.responsable?.nombreCompleto,
+        'cached_at': now,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
 
     await batch.commit(noResult: true);
@@ -350,11 +344,7 @@ class CrmComercialLocalDb {
 
   Future<CrmComercialCustomer?> getCustomer(String id) async {
     final db = await database;
-    final maps = await db.query(
-      'customers',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    final maps = await db.query('customers', where: 'id = ?', whereArgs: [id]);
 
     if (maps.isEmpty) return null;
     return _customerFromMap(maps.first);
@@ -367,28 +357,24 @@ class CrmComercialLocalDb {
     final batch = db.batch();
 
     for (final t in tasks) {
-      batch.insert(
-        'followup_tasks',
-        {
-          'id': t.id,
-          'customer_id': t.customerId,
-          'title': t.title,
-          'status': t.status,
-          'effective_status': t.effectiveStatus,
-          'priority': t.priority,
-          'description': t.description,
-          'due_date': t.dueDate?.millisecondsSinceEpoch,
-          'completed_at': t.completedAt?.millisecondsSinceEpoch,
-          'created_at': t.createdAt?.millisecondsSinceEpoch,
-          'assigned_user_id': t.assignedTo?.id,
-          'assigned_user_nombre': t.assignedTo?.nombreCompleto,
-          'created_by_user_id': t.createdBy?.id,
-          'created_by_user_nombre': t.createdBy?.nombreCompleto,
-          'completed_by_user_id': t.completedBy?.id,
-          'completed_by_user_nombre': t.completedBy?.nombreCompleto,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      batch.insert('followup_tasks', {
+        'id': t.id,
+        'customer_id': t.customerId,
+        'title': t.title,
+        'status': t.status,
+        'effective_status': t.effectiveStatus,
+        'priority': t.priority,
+        'description': t.description,
+        'due_date': t.dueDate?.millisecondsSinceEpoch,
+        'completed_at': t.completedAt?.millisecondsSinceEpoch,
+        'created_at': t.createdAt?.millisecondsSinceEpoch,
+        'assigned_user_id': t.assignedTo?.id,
+        'assigned_user_nombre': t.assignedTo?.nombreCompleto,
+        'created_by_user_id': t.createdBy?.id,
+        'created_by_user_nombre': t.createdBy?.nombreCompleto,
+        'completed_by_user_id': t.completedBy?.id,
+        'completed_by_user_nombre': t.completedBy?.nombreCompleto,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
 
     await batch.commit(noResult: true);
@@ -405,21 +391,19 @@ class CrmComercialLocalDb {
 
   Future<void> saveSettings(CrmComercialSettings settings) async {
     final db = await database;
-    await db.insert(
-      'settings',
-      {
-        'id': settings.id,
-        'enabled': settings.enabled ? 1 : 0,
-        'selected_whatsapp_instance_id': settings.selectedWhatsappInstanceId,
-        'selected_whatsapp_instance_name': settings.selectedWhatsappInstanceName,
-        'updated_at': settings.updatedAt?.millisecondsSinceEpoch,
-        'selected_instance_exists': (settings.selectedInstanceExists ?? false) ? 1 : 0,
-        'warning': settings.warning,
-        'real_messages_ready': (settings.realMessagesReady ?? false) ? 1 : 0,
-        'cached_at': DateTime.now().millisecondsSinceEpoch,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('settings', {
+      'id': settings.id,
+      'enabled': settings.enabled ? 1 : 0,
+      'selected_whatsapp_instance_id': settings.selectedWhatsappInstanceId,
+      'selected_whatsapp_instance_name': settings.selectedWhatsappInstanceName,
+      'updated_at': settings.updatedAt?.millisecondsSinceEpoch,
+      'selected_instance_exists': (settings.selectedInstanceExists ?? false)
+          ? 1
+          : 0,
+      'warning': settings.warning,
+      'real_messages_ready': (settings.realMessagesReady ?? false) ? 1 : 0,
+      'cached_at': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<CrmComercialSettings?> getSettings() async {
@@ -432,26 +416,24 @@ class CrmComercialLocalDb {
 
   // ==================== WHATSAPP INSTANCES ====================
 
-  Future<void> saveWhatsappInstances(List<CrmComercialWhatsappInstance> instances) async {
+  Future<void> saveWhatsappInstances(
+    List<CrmComercialWhatsappInstance> instances,
+  ) async {
     final db = await database;
     final batch = db.batch();
 
     for (final i in instances) {
-      batch.insert(
-        'whatsapp_instances',
-        {
-          'id': i.id,
-          'instance_name': i.instanceName,
-          'status': i.status,
-          'webhook_enabled': i.webhookEnabled ? 1 : 0,
-          'is_company': i.isCompany ? 1 : 0,
-          'user_id': i.userId,
-          'user_name': i.userName,
-          'user_role': i.userRole,
-          'phone_number': i.phoneNumber,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      batch.insert('whatsapp_instances', {
+        'id': i.id,
+        'instance_name': i.instanceName,
+        'status': i.status,
+        'webhook_enabled': i.webhookEnabled ? 1 : 0,
+        'is_company': i.isCompany ? 1 : 0,
+        'user_id': i.userId,
+        'user_name': i.userName,
+        'user_role': i.userRole,
+        'phone_number': i.phoneNumber,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
 
     await batch.commit(noResult: true);
@@ -471,15 +453,11 @@ class CrmComercialLocalDb {
     final batch = db.batch();
 
     for (final u in users) {
-      batch.insert(
-        'users',
-        {
-          'id': u.id,
-          'nombre_completo': u.nombreCompleto,
-          'role': u.role,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      batch.insert('users', {
+        'id': u.id,
+        'nombre_completo': u.nombreCompleto,
+        'role': u.role,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
 
     await batch.commit(noResult: true);
@@ -620,8 +598,10 @@ class CrmComercialLocalDb {
     return CrmComercialSettings(
       id: map['id'] as String? ?? 'global',
       enabled: (map['enabled'] as int?) == 1,
-      selectedWhatsappInstanceId: map['selected_whatsapp_instance_id'] as String?,
-      selectedWhatsappInstanceName: map['selected_whatsapp_instance_name'] as String?,
+      selectedWhatsappInstanceId:
+          map['selected_whatsapp_instance_id'] as String?,
+      selectedWhatsappInstanceName:
+          map['selected_whatsapp_instance_name'] as String?,
       updatedAt: map['updated_at'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['updated_at'] as int)
           : null,

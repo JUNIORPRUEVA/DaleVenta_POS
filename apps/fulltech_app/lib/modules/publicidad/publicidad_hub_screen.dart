@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -18,7 +18,8 @@ class PublicidadHubScreen extends ConsumerWidget {
     final auth = ref.watch(authStateProvider);
     final user = auth.user;
     final isAdmin =
-        user != null && hasPermission(user.appRole, AppPermission.viewPublicidad);
+        user != null &&
+        hasPermission(user.appRole, AppPermission.viewPublicidad);
     final state = ref.watch(publicidadControllerProvider);
     final controller = ref.read(publicidadControllerProvider.notifier);
     final scheme = Theme.of(context).colorScheme;
@@ -38,16 +39,19 @@ class PublicidadHubScreen extends ConsumerWidget {
     final now = DateTime.now();
 
     final campaignActiveOrFuture = state.publishedAssets.where((item) {
-      final marker =
-          '${item.platform} ${item.status} ${item.storyType}'.toLowerCase();
+      final marker = '${item.platform} ${item.status} ${item.storyType}'
+          .toLowerCase();
       final hasCampaignTag =
-          marker.contains('campaign') || marker.contains('ads') || marker.contains('paid');
-      return hasCampaignTag && (item.publishedAt == null || item.publishedAt!.isAfter(now));
+          marker.contains('campaign') ||
+          marker.contains('ads') ||
+          marker.contains('paid');
+      return hasCampaignTag &&
+          (item.publishedAt == null || item.publishedAt!.isAfter(now));
     }).length;
 
     final marketplaceFuture = state.publishedAssets.where((item) {
-      final marker =
-          '${item.platform} ${item.status} ${item.storyType}'.toLowerCase();
+      final marker = '${item.platform} ${item.status} ${item.storyType}'
+          .toLowerCase();
       return marker.contains('marketplace') &&
           (item.publishedAt == null || item.publishedAt!.isAfter(now));
     }).length;
@@ -83,7 +87,9 @@ class PublicidadHubScreen extends ConsumerWidget {
                 LayoutBuilder(
                   builder: (context, constraints) {
                     final isDesktop = constraints.maxWidth >= 980;
-                    final panelWidth = constraints.maxWidth >= 1400 ? 380.0 : 340.0;
+                    final panelWidth = constraints.maxWidth >= 1400
+                        ? 380.0
+                        : 340.0;
 
                     final leftColumn = _HubMainColumn(
                       researchCount: state.researchHistory.length,
@@ -99,8 +105,10 @@ class PublicidadHubScreen extends ConsumerWidget {
                       campaignsCount: campaignActiveOrFuture,
                       marketplaceCount: marketplaceFuture,
                       nextResearchAt: _formatDateTime(nextResearchAt),
-                      onNewResearch: () => context.go(Routes.publicidadInvestigacion),
-                      onOpenInvestigacion: () => context.go(Routes.publicidadInvestigacion),
+                      onNewResearch: () =>
+                          context.go(Routes.publicidadInvestigacion),
+                      onOpenInvestigacion: () =>
+                          context.go(Routes.publicidadInvestigacion),
                       onOpenEstados: () => context.go(Routes.publicidadEstados),
                       onRefresh: controller.refresh,
                     );
@@ -110,7 +118,8 @@ class PublicidadHubScreen extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           _CompactHeader(
-                            onNewResearch: () => context.go(Routes.publicidadInvestigacion),
+                            onNewResearch: () =>
+                                context.go(Routes.publicidadInvestigacion),
                           ),
                           const SizedBox(height: 12),
                           leftColumn,
@@ -124,7 +133,8 @@ class PublicidadHubScreen extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _CompactHeader(
-                          onNewResearch: () => context.go(Routes.publicidadInvestigacion),
+                          onNewResearch: () =>
+                              context.go(Routes.publicidadInvestigacion),
                         ),
                         const SizedBox(height: 12),
                         Row(
@@ -177,7 +187,9 @@ class _CompactHeader extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.35)),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.35),
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.03),
@@ -275,7 +287,8 @@ class _HubMainColumn extends StatelessWidget {
         const SizedBox(height: 8),
         _ModuleRowItem(
           title: 'Galería de Contenido',
-          description: 'Centro multimedia: productos, uploads, y fuente global.',
+          description:
+              'Centro multimedia: productos, uploads, y fuente global.',
           summary: 'Multimedia hub',
           icon: Icons.collections_rounded,
           onEnter: () => context.go(Routes.publicidadGaleria),
@@ -334,9 +347,7 @@ class _ModuleRowItemState extends State<_ModuleRowItem>
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final cardColor = _hovered
-        ? scheme.surfaceContainerLow
-        : scheme.surface;
+    final cardColor = _hovered ? scheme.surfaceContainerLow : scheme.surface;
     final borderColor = _hovered
         ? scheme.primary.withValues(alpha: 0.45)
         : scheme.outlineVariant.withValues(alpha: 0.32);
@@ -378,17 +389,26 @@ class _ModuleRowItemState extends State<_ModuleRowItem>
                       ),
                     ],
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   child: Row(
                     children: [
                       Container(
                         width: 34,
                         height: 34,
                         decoration: BoxDecoration(
-                          color: scheme.primaryContainer.withValues(alpha: 0.55),
+                          color: scheme.primaryContainer.withValues(
+                            alpha: 0.55,
+                          ),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: Icon(widget.icon, size: 18, color: scheme.onPrimaryContainer),
+                        child: Icon(
+                          widget.icon,
+                          size: 18,
+                          color: scheme.onPrimaryContainer,
+                        ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -400,34 +420,36 @@ class _ModuleRowItemState extends State<_ModuleRowItem>
                               widget.title,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w700),
                             ),
                             const SizedBox(height: 2),
                             Text(
                               widget.description,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                              ),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: scheme.onSurfaceVariant),
                             ),
                           ],
                         ),
                       ),
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 5,
+                        ),
                         decoration: BoxDecoration(
-                          color: scheme.secondaryContainer.withValues(alpha: 0.45),
+                          color: scheme.secondaryContainer.withValues(
+                            alpha: 0.45,
+                          ),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
                           widget.summary,
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -491,7 +513,9 @@ class _HubSidePanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.34)),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.34),
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.03),
@@ -507,9 +531,9 @@ class _HubSidePanel extends StatelessWidget {
           children: [
             Text(
               'Resumen y acciones',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 10),
             _PanelMetric(
@@ -604,7 +628,9 @@ class _PanelMetric extends StatelessWidget {
         decoration: BoxDecoration(
           color: scheme.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.22)),
+          border: Border.all(
+            color: scheme.outlineVariant.withValues(alpha: 0.22),
+          ),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,

@@ -25,7 +25,8 @@ final mediaGalleryBackgroundSyncBootstrapProvider = Provider<void>((ref) {
   final role = authState.user?.appRole;
   final viewerUserId = authState.user?.id ?? '';
 
-  final canSync = authState.isAuthenticated &&
+  final canSync =
+      authState.isAuthenticated &&
       role != null &&
       viewerUserId.trim().isNotEmpty &&
       hasPermission(role, AppPermission.viewMediaGallery);
@@ -116,7 +117,8 @@ class MediaGalleryBackgroundSyncService {
         previousItems: snapshot.items,
         freshItems: page.items,
       );
-      final nextCursor = snapshot.items.length > page.items.length &&
+      final nextCursor =
+          snapshot.items.length > page.items.length &&
               snapshot.nextCursor != null
           ? snapshot.nextCursor
           : page.nextCursor;

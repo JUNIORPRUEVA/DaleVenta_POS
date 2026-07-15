@@ -33,16 +33,15 @@ class NetworkReachability {
     }
 
     final result = await _probeHost(host);
-    _cache[host] = _CachedProbe(
-      result: result,
-      expiresAt: now.add(_cacheTtl),
-    );
+    _cache[host] = _CachedProbe(result: result, expiresAt: now.add(_cacheTtl));
     return result;
   }
 
   Future<NetworkProbeResult> _probeHost(String host) async {
     try {
-      final records = await InternetAddress.lookup(host).timeout(_lookupTimeout);
+      final records = await InternetAddress.lookup(
+        host,
+      ).timeout(_lookupTimeout);
       if (records.isEmpty) {
         return NetworkProbeResult(
           status: NetworkProbeStatus.dnsFailure,

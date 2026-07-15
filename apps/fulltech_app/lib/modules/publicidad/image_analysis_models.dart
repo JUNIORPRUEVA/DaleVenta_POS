@@ -28,7 +28,8 @@ class ImageAnalysisResult {
   final List<String> bestForStoryTypes; // ['sales', 'trust', 'educational']
   final int estimatedConversionLift; // percentage
   final String suggestedAngle;
-  final String lightingQuality; // professional, good, acceptable, needs_improvement
+  final String
+  lightingQuality; // professional, good, acceptable, needs_improvement
   final int productClarityScore; // 0-100
   final String backgroundQuality; // professional, acceptable, distracting
   final UsageMetrics usageHistory;

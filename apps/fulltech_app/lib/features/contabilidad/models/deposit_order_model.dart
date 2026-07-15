@@ -133,7 +133,9 @@ class DepositOrderModel {
       executedAt: json['executedAt'] == null
           ? null
           : DateTime.parse(json['executedAt'].toString()),
-      correctionOfDepositOrderId: _nullableString(json['correctionOfDepositOrderId']),
+      correctionOfDepositOrderId: _nullableString(
+        json['correctionOfDepositOrderId'],
+      ),
       correctionReason: _nullableString(json['correctionReason']),
       deletedAt: json['deletedAt'] == null
           ? null

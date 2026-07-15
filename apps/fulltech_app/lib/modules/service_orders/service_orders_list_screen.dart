@@ -529,7 +529,8 @@ class _ServiceOrdersListScreenState
                         child: _SidebarToggleButton(
                           icon: Icons.chevron_right,
                           tooltip: 'Ocultar panel de filtros',
-                          onPressed: () => setState(() => _showRightPanel = false),
+                          onPressed: () =>
+                              setState(() => _showRightPanel = false),
                         ),
                       ),
                     ),
@@ -1023,7 +1024,15 @@ class _ServiceOrdersListScreenState
   }
 }
 
-enum ServiceOrdersDatePreset { all, today, yesterday, thisWeek, currentPayPeriod, previousPayPeriod, custom }
+enum ServiceOrdersDatePreset {
+  all,
+  today,
+  yesterday,
+  thisWeek,
+  currentPayPeriod,
+  previousPayPeriod,
+  custom,
+}
 
 enum ServiceOrdersCompletionFilter { any, finalizadas, noFinalizadas }
 
@@ -1217,7 +1226,7 @@ class ServiceOrdersFilter {
       Duration(days: todayStart.weekday - 1),
     );
     final weekEnd = weekStart.add(const Duration(days: 7));
-    
+
     // Calcular quincenas: 15-29 y 30-14 (del mes siguiente)
     DateTime payPeriodStart, payPeriodEnd;
     if (now.day >= 15 && now.day <= 29) {
@@ -1237,23 +1246,28 @@ class ServiceOrdersFilter {
       payPeriodStart = DateTime(prevYear, prevMonth, 30);
       payPeriodEnd = DateTime(now.year, now.month, 15);
     }
-    
+
     // Quincena pasada
     DateTime prevPayPeriodStart, prevPayPeriodEnd;
     if (payPeriodStart.day == 15) {
       // La quincena actual es 15-29, la pasada es 30-14
-      prevPayPeriodStart = DateTime(now.year, now.month, 30).subtract(
-        Duration(days: DateTime(now.year, now.month, 30).day - 1),
+      prevPayPeriodStart = DateTime(
+        now.year,
+        now.month,
+        30,
+      ).subtract(Duration(days: DateTime(now.year, now.month, 30).day - 1));
+      prevPayPeriodStart = DateTime(
+        now.year,
+        now.month - (now.month > 1 ? 1 : 12),
+        now.month > 1 ? 30 : 30,
       );
-      prevPayPeriodStart = DateTime(now.year, now.month - (now.month > 1 ? 1 : 12),
-          now.month > 1 ? 30 : 30);
       prevPayPeriodEnd = payPeriodStart;
     } else {
       // La quincena actual es 30-14, la pasada es 15-29
       prevPayPeriodStart = DateTime(now.year, now.month, 15);
       prevPayPeriodEnd = payPeriodStart;
     }
-    
+
     final customStart = customRange == null
         ? null
         : DateTime(
@@ -1278,13 +1292,16 @@ class ServiceOrdersFilter {
             ServiceOrdersDatePreset.today =>
               !activityAt.isBefore(todayStart) && activityAt.isBefore(todayEnd),
             ServiceOrdersDatePreset.yesterday =>
-              !activityAt.isBefore(yesterdayStart) && activityAt.isBefore(yesterdayEnd),
+              !activityAt.isBefore(yesterdayStart) &&
+                  activityAt.isBefore(yesterdayEnd),
             ServiceOrdersDatePreset.thisWeek =>
               !activityAt.isBefore(weekStart) && activityAt.isBefore(weekEnd),
             ServiceOrdersDatePreset.currentPayPeriod =>
-              !activityAt.isBefore(payPeriodStart) && activityAt.isBefore(payPeriodEnd),
+              !activityAt.isBefore(payPeriodStart) &&
+                  activityAt.isBefore(payPeriodEnd),
             ServiceOrdersDatePreset.previousPayPeriod =>
-              !activityAt.isBefore(prevPayPeriodStart) && activityAt.isBefore(prevPayPeriodEnd),
+              !activityAt.isBefore(prevPayPeriodStart) &&
+                  activityAt.isBefore(prevPayPeriodEnd),
             ServiceOrdersDatePreset.custom =>
               customStart != null &&
                   customEnd != null &&
@@ -2908,9 +2925,8 @@ class _DesktopOperationsFilterSidebarState
                       child: _CustomDateRangeBanner(
                         range: filter.customRange,
                         compact: true,
-                        onTap: () => _selectDatePreset(
-                          ServiceOrdersDatePreset.custom,
-                        ),
+                        onTap: () =>
+                            _selectDatePreset(ServiceOrdersDatePreset.custom),
                       ),
                     ),
                 ],
@@ -2941,7 +2957,9 @@ class _DesktopOperationsFilterSidebarState
                                       .map(
                                         (status) => _CompactFilterChip(
                                           label: status.label,
-                                          selected: filter.statuses.contains(status),
+                                          selected: filter.statuses.contains(
+                                            status,
+                                          ),
                                           accent: status.color,
                                           onTap: () => _toggleStatus(status),
                                         ),
@@ -2958,9 +2976,8 @@ class _DesktopOperationsFilterSidebarState
                                       .map(
                                         (serviceType) => _CompactFilterChip(
                                           label: serviceType.label,
-                                          selected: filter.serviceTypes.contains(
-                                            serviceType,
-                                          ),
+                                          selected: filter.serviceTypes
+                                              .contains(serviceType),
                                           onTap: () =>
                                               _toggleServiceType(serviceType),
                                         ),
@@ -5101,13 +5118,15 @@ class _OperationsAdminTotalsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     // Calcular totales
     final totalQuotations = visibleOrders
-        .where((order) => order.quotationId != null && order.quotationId!.isNotEmpty)
+        .where(
+          (order) => order.quotationId != null && order.quotationId!.isNotEmpty,
+        )
         .length;
     final totalServices = visibleOrders.length;
-    
+
     // Nota: Si el modelo tiene campos de monto, estos debería calcularse aquí
     // Por ahora mostramos placeholders que pueden actualizarse
     const totalAmount = 0.0; // Placeholder
@@ -5206,14 +5225,18 @@ class _OperationsAdminTotalsPanel extends StatelessWidget {
                 const SizedBox(height: 12),
                 _TotalRowItem(
                   label: 'Monto Total',
-                  value: totalAmount == 0.0 ? '---' : '\$${totalAmount.toStringAsFixed(2)}',
+                  value: totalAmount == 0.0
+                      ? '---'
+                      : '\$${totalAmount.toStringAsFixed(2)}',
                   icon: Icons.attach_money_rounded,
                   accent: const Color(0xFF10B981),
                 ),
                 const SizedBox(height: 12),
                 _TotalRowItem(
                   label: 'Utilidad',
-                  value: totalUtility == 0.0 ? '---' : '\$${totalUtility.toStringAsFixed(2)}',
+                  value: totalUtility == 0.0
+                      ? '---'
+                      : '\$${totalUtility.toStringAsFixed(2)}',
                   icon: Icons.trending_up_rounded,
                   accent: const Color(0xFF8B5CF6),
                 ),
@@ -5253,11 +5276,7 @@ class _TotalRowItem extends StatelessWidget {
             color: accent.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(
-            icon,
-            size: 14,
-            color: accent,
-          ),
+          child: Icon(icon, size: 14, color: accent),
         ),
         const SizedBox(width: 8),
         Expanded(

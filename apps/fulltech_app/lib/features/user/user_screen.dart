@@ -47,7 +47,9 @@ class _UserScreenState extends ConsumerState<UserScreen> {
       if (bytes == null || bytes.isEmpty) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No se pudo leer la imagen seleccionada')),
+          const SnackBar(
+            content: Text('No se pudo leer la imagen seleccionada'),
+          ),
         );
         return;
       }
@@ -90,10 +92,7 @@ class _UserScreenState extends ConsumerState<UserScreen> {
     final user = state.user;
 
     return Scaffold(
-      appBar: CustomAppBar(
-        title: 'FullTech',
-        showLogo: true,
-      ),
+      appBar: CustomAppBar(title: 'FullTech', showLogo: true),
       drawer: buildAdaptiveDrawer(context, currentUser: user),
       body: user == null
           ? const Center(child: CircularProgressIndicator())
@@ -126,7 +125,8 @@ class _UserDetailContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final infoItems = <(String, String)>[
       if (user.telefono.trim().isNotEmpty) ('Teléfono', user.telefono.trim()),
-      if ((user.cedula ?? '').trim().isNotEmpty) ('Cédula', user.cedula!.trim()),
+      if ((user.cedula ?? '').trim().isNotEmpty)
+        ('Cédula', user.cedula!.trim()),
       if ((user.telefonoFamiliar ?? '').trim().isNotEmpty)
         ('Tel. familiar', user.telefonoFamiliar!.trim()),
       if (user.fechaNacimiento != null)
@@ -138,7 +138,8 @@ class _UserDetailContent extends StatelessWidget {
         ('Experiencia', user.experienciaLaboral!.trim()),
       if (user.fechaIngreso != null)
         ('Ingreso', DateFormat('dd/MM/yyyy').format(user.fechaIngreso!)),
-      if (user.fechaIngreso != null) ('Días empresa', '${user.diasEnEmpresa ?? 0}'),
+      if (user.fechaIngreso != null)
+        ('Días empresa', '${user.diasEnEmpresa ?? 0}'),
       ('Licencia', user.licenciaConducir ? 'Sí' : 'No'),
       ('Vehículo', user.vehiculo ? 'Sí' : 'No'),
       ('Casa propia', user.casaPropia ? 'Sí' : 'No'),
@@ -215,7 +216,10 @@ class _UserDetailContent extends StatelessWidget {
                         spacing: 10,
                         runSpacing: 10,
                         children: docs
-                            .map((doc) => _SmallPreview(label: doc.$1, url: doc.$2))
+                            .map(
+                              (doc) =>
+                                  _SmallPreview(label: doc.$1, url: doc.$2),
+                            )
                             .toList(growable: false),
                       ),
                     ),
@@ -440,7 +444,9 @@ class _DataCell extends StatelessWidget {
           value,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ],
     );
@@ -491,7 +497,10 @@ class _SmallPreview extends StatelessWidget {
                   width: 100,
                   height: 72,
                   color: scheme.surfaceContainerHighest,
-                  child: Icon(Icons.broken_image_outlined, color: scheme.outline),
+                  child: Icon(
+                    Icons.broken_image_outlined,
+                    color: scheme.outline,
+                  ),
                 ),
               ),
             ),

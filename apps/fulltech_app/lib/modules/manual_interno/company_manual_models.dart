@@ -224,7 +224,10 @@ class CompanyManualEntry {
       'content': content,
       'kind': kind.apiValue,
       'audience': audience.apiValue,
-      'targetRoles': targetRoles.map(toApiRole).where((e) => e.isNotEmpty).toList(growable: false),
+      'targetRoles': targetRoles
+          .map(toApiRole)
+          .where((e) => e.isNotEmpty)
+          .toList(growable: false),
       'moduleKey': moduleKey,
       'published': published,
       'sortOrder': sortOrder,

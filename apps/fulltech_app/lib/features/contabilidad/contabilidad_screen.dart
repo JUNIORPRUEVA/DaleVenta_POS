@@ -104,9 +104,7 @@ class _AccountingExecutivePage extends StatelessWidget {
               constraints: BoxConstraints(maxWidth: contentWidth),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _AccountingModulesWrap(modules: modules),
-                ],
+                children: [_AccountingModulesWrap(modules: modules)],
               ),
             ),
           ),
@@ -187,7 +185,9 @@ class _AccountingModuleCardState extends State<_AccountingModuleCard> {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: _hovered ? 0.08 : 0.04),
+                    color: Colors.black.withValues(
+                      alpha: _hovered ? 0.08 : 0.04,
+                    ),
                     blurRadius: _hovered ? 14 : 10,
                     offset: Offset(0, _hovered ? 6 : 3),
                   ),

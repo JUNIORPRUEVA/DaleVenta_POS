@@ -82,8 +82,7 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
           child: ColoredBox(
             color: const Color(0xFFF2F5F8),
             child: RefreshIndicator(
-              onRefresh:
-                  ref.read(nominaHomeControllerProvider.notifier).load,
+              onRefresh: ref.read(nominaHomeControllerProvider.notifier).load,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(20, 16, 16, 28),
@@ -102,8 +101,7 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
                           _showEmployeePayrollDialog(context, ref, e),
                       onEdit: (e) =>
                           _showEmployeeDialog(context, ref, employee: e),
-                      onDelete: (e) =>
-                          _confirmDeleteEmployee(context, ref, e),
+                      onDelete: (e) => _confirmDeleteEmployee(context, ref, e),
                     ),
                   ],
                 ),
@@ -130,10 +128,9 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
           onPdf: state.loading
               ? null
               : () => _exportOpenPeriodPdf(context, ref, state),
-          onSendAll:
-              state.loading || _sendingPayrollToAll || openPeriod == null
-                  ? null
-                  : () => _sendOpenPeriodPayrollToAll(context, ref, state),
+          onSendAll: state.loading || _sendingPayrollToAll || openPeriod == null
+              ? null
+              : () => _sendOpenPeriodPayrollToAll(context, ref, state),
           onAddEmployee: () => _showEmployeeDialog(context, ref),
           onClosePeriod: openPeriod == null
               ? null
@@ -212,10 +209,15 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
                             ? null
                             : () => _exportOpenPeriodPdf(context, ref, state),
                         onSendAllPayroll:
-                          state.loading || _sendingPayrollToAll || openPeriod == null
-                          ? null
-                          : () =>
-                              _sendOpenPeriodPayrollToAll(context, ref, state),
+                            state.loading ||
+                                _sendingPayrollToAll ||
+                                openPeriod == null
+                            ? null
+                            : () => _sendOpenPeriodPayrollToAll(
+                                context,
+                                ref,
+                                state,
+                              ),
                         onAddEmployee: () => _showEmployeeDialog(context, ref),
                         onClosePeriod: openPeriod == null
                             ? null
@@ -438,8 +440,10 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
     }
   }
 
-  Future<List<_PayrollPeriodRow>>
-  _loadOpenPeriodRows(WidgetRef ref, NominaHomeState state) async {
+  Future<List<_PayrollPeriodRow>> _loadOpenPeriodRows(
+    WidgetRef ref,
+    NominaHomeState state,
+  ) async {
     final open = state.openPeriod;
     if (open == null) return const [];
 
@@ -460,7 +464,8 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
       rows.add((
         employee: employee,
         totals: totals,
-        paymentStatus: statusesByEmployee[employee.id] ??
+        paymentStatus:
+            statusesByEmployee[employee.id] ??
             PayrollPaymentRecord.draft(
               periodId: open.id,
               employeeId: employee.id,
@@ -470,8 +475,7 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
     return rows;
   }
 
-  Future<List<_PayrollPeriodRow>>
-  _loadRowsForPeriod(
+  Future<List<_PayrollPeriodRow>> _loadRowsForPeriod(
     WidgetRef ref,
     NominaHomeState state,
     PayrollPeriod period,
@@ -490,7 +494,8 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
       rows.add((
         employee: employee,
         totals: totals,
-        paymentStatus: statusesByEmployee[employee.id] ??
+        paymentStatus:
+            statusesByEmployee[employee.id] ??
             PayrollPaymentRecord.draft(
               periodId: period.id,
               employeeId: employee.id,
@@ -533,12 +538,12 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
               _openPastPeriodDetailsDialog(routeContext, ref, state, period),
           onEditPayroll: (dialogContext, period, row) =>
               _showEmployeePayrollDialog(
-            dialogContext,
-            ref,
-            row.employee,
-            periodOverride: period,
-            paidLocked: row.paymentStatus.isPaid,
-          ),
+                dialogContext,
+                ref,
+                row.employee,
+                periodOverride: period,
+                paidLocked: row.paymentStatus.isPaid,
+              ),
           onSendPayroll: (dialogContext, period, row) => _sendPayrollToWhatsApp(
             dialogContext,
             ref,
@@ -548,20 +553,20 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
           ),
           onSchedulePayroll: (dialogContext, period, row) =>
               _schedulePayrollToWhatsApp(
-            dialogContext,
-            ref,
-            period: period,
-            employee: row.employee,
-            totals: row.totals,
-          ),
+                dialogContext,
+                ref,
+                period: period,
+                employee: row.employee,
+                totals: row.totals,
+              ),
           onPreviewPayroll: (dialogContext, period, row) =>
               _previewEmployeePayrollPdf(
-            dialogContext,
-            ref,
-            period: period,
-            employee: row.employee,
-            totals: row.totals,
-          ),
+                dialogContext,
+                ref,
+                period: period,
+                employee: row.employee,
+                totals: row.totals,
+              ),
         ),
       ),
     );
@@ -628,7 +633,9 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
             if (!routeContext.mounted) return null;
             ScaffoldMessenger.of(routeContext).showSnackBar(
               SnackBar(
-                content: Text('Nomina de ${row.employee.nombre} marcada como pagada'),
+                content: Text(
+                  'Nomina de ${row.employee.nombre} marcada como pagada',
+                ),
               ),
             );
             return status;
@@ -663,7 +670,8 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
     );
     final totalCommissions = rows.fold<double>(
       0,
-      (sum, row) => sum + row.totals.commissions + row.totals.serviceCommissions,
+      (sum, row) =>
+          sum + row.totals.commissions + row.totals.serviceCommissions,
     );
     final totalBonos = rows.fold<double>(
       0,
@@ -761,7 +769,8 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
     );
     final totalCommissions = rows.fold<double>(
       0,
-      (sum, row) => sum + row.totals.commissions + row.totals.serviceCommissions,
+      (sum, row) =>
+          sum + row.totals.commissions + row.totals.serviceCommissions,
     );
     final totalBonos = rows.fold<double>(
       0,
@@ -799,8 +808,7 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
                     row.employee.nombre,
                     money.format(row.totals.baseSalary),
                     money.format(
-                      row.totals.commissions +
-                          row.totals.serviceCommissions,
+                      row.totals.commissions + row.totals.serviceCommissions,
                     ),
                     money.format(
                       row.totals.bonuses + row.totals.otherAdditions,
@@ -857,7 +865,9 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
     required PayrollEmployee employee,
     required PayrollTotals totals,
   }) async {
-    final settings = await ref.read(companySettingsRepositoryProvider).getSettings();
+    final settings = await ref
+        .read(companySettingsRepositoryProvider)
+        .getSettings();
     final entries = await ref
         .read(nominaRepositoryProvider)
         .listEntries(period.id, employee.id);
@@ -873,7 +883,10 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
         ? 'Empleado'
         : employee.puesto!.trim();
 
-    final doc = pw.Document(title: 'Nomina ${employee.nombre}', author: companyName);
+    final doc = pw.Document(
+      title: 'Nomina ${employee.nombre}',
+      author: companyName,
+    );
     final primary = PdfColor.fromInt(0xFF0B5D6E);
     final primaryDark = PdfColor.fromInt(0xFF083E4A);
     final surface = PdfColor.fromInt(0xFFF4F7FA);
@@ -900,7 +913,9 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
                 label,
                 style: pw.TextStyle(
                   fontSize: strong ? 10.5 : 9.5,
-                  fontWeight: strong ? pw.FontWeight.bold : pw.FontWeight.normal,
+                  fontWeight: strong
+                      ? pw.FontWeight.bold
+                      : pw.FontWeight.normal,
                   color: PdfColors.blueGrey800,
                 ),
               ),
@@ -953,7 +968,10 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
           alignment: pw.Alignment.centerRight,
           child: pw.Text(
             'Pagina ${context.pageNumber} de ${context.pagesCount}',
-            style: const pw.TextStyle(fontSize: 8, color: PdfColors.blueGrey400),
+            style: const pw.TextStyle(
+              fontSize: 8,
+              color: PdfColors.blueGrey400,
+            ),
           ),
         ),
         build: (context) => [
@@ -1123,11 +1141,17 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
                 money.format(totals.serviceCommissions),
               ),
             if (totals.commissions > 0)
-              amountLine('Comision por ventas', money.format(totals.commissions)),
+              amountLine(
+                'Comision por ventas',
+                money.format(totals.commissions),
+              ),
             if (totals.bonuses > 0)
               amountLine('Bonificaciones', money.format(totals.bonuses)),
             if (totals.holidayWorked > 0)
-              amountLine('Feriados trabajados', money.format(totals.holidayWorked)),
+              amountLine(
+                'Feriados trabajados',
+                money.format(totals.holidayWorked),
+              ),
             if (totals.otherAdditions > 0)
               amountLine('Otros ingresos', money.format(totals.otherAdditions)),
             amountLine(
@@ -1139,13 +1163,25 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
           ]),
           section('DEDUCCIONES', [
             if (totals.seguroLey > 0)
-              amountLine('Seguro de ley', money.format(totals.seguroLey), color: danger),
+              amountLine(
+                'Seguro de ley',
+                money.format(totals.seguroLey),
+                color: danger,
+              ),
             if (totals.absences > 0)
-              amountLine('Ausencias', money.format(totals.absences), color: danger),
+              amountLine(
+                'Ausencias',
+                money.format(totals.absences),
+                color: danger,
+              ),
             if (totals.late > 0)
               amountLine('Tardanzas', money.format(totals.late), color: danger),
             if (totals.advances > 0)
-              amountLine('Adelantos', money.format(totals.advances), color: danger),
+              amountLine(
+                'Adelantos',
+                money.format(totals.advances),
+                color: danger,
+              ),
             if (totals.otherDeductions > 0)
               amountLine(
                 'Otros descuentos',
@@ -1445,7 +1481,9 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
     );
 
     try {
-      await ref.read(nominaRepositoryProvider).schedulePayrollToWhatsApp(
+      await ref
+          .read(nominaRepositoryProvider)
+          .schedulePayrollToWhatsApp(
             employeeId: employee.id,
             periodId: period.id,
             bytes: bytes,
@@ -1535,10 +1573,11 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
     );
     final failures = <String>[];
 
-    unawaited(showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => PopScope(
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => PopScope(
           canPop: false,
           child: ValueListenableBuilder<_PayrollBulkSendProgress>(
             valueListenable: progress,
@@ -1561,7 +1600,8 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
             ),
           ),
         ),
-    ));
+      ),
+    );
 
     try {
       for (final row in rows) {
@@ -1581,7 +1621,9 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
             showSuccessFeedback: false,
           );
         } catch (error) {
-          final message = error is ApiException ? error.message : error.toString();
+          final message = error is ApiException
+              ? error.message
+              : error.toString();
           failures.add('${row.employee.nombre}: $message');
         } finally {
           progress.value = _PayrollBulkSendProgress(
@@ -1808,8 +1850,7 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
         periodId: open.id,
         employeeId: employee.id,
       );
-      effectivePaidLocked =
-          statusRows.isNotEmpty && statusRows.first.isPaid;
+      effectivePaidLocked = statusRows.isNotEmpty && statusRows.first.isPaid;
     }
 
     var entries = await repo.listEntries(open.id, employee.id);
@@ -1983,7 +2024,8 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
                         Expanded(
                           child: TextField(
                             controller: seguroLeyCtrl,
-                            enabled: !effectivePaidLocked &&
+                            enabled:
+                                !effectivePaidLocked &&
                                 editingSeguroLey &&
                                 !isSavingSeguroLey,
                             keyboardType: const TextInputType.numberWithOptions(
@@ -2001,13 +2043,14 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
                           tooltip: editingSeguroLey
                               ? 'Editando seguro de ley'
                               : 'Editar seguro de ley',
-                          onPressed: effectivePaidLocked ||
+                          onPressed:
+                              effectivePaidLocked ||
                                   isSavingSeguroLey ||
                                   editingSeguroLey
                               ? null
                               : () => setStateDialog(
-                                    () => editingSeguroLey = true,
-                                  ),
+                                  () => editingSeguroLey = true,
+                                ),
                           icon: Icon(
                             editingSeguroLey
                                 ? Icons.lock_open_outlined
@@ -2017,7 +2060,8 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
                         const SizedBox(width: 6),
                         IconButton.filled(
                           tooltip: 'Guardar seguro de ley',
-                          onPressed: effectivePaidLocked ||
+                          onPressed:
+                              effectivePaidLocked ||
                                   !editingSeguroLey ||
                                   isSavingSeguroLey
                               ? null
@@ -2108,9 +2152,8 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
                         Expanded(
                           child: TextField(
                             controller: qtyCtrl,
-                            onChanged: (_) => setStateDialog(
-                              syncAutomaticAmount,
-                            ),
+                            onChanged: (_) =>
+                                setStateDialog(syncAutomaticAmount),
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
@@ -2367,12 +2410,12 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
                 onPressed: isSendingPayroll
                     ? null
                     : () => _previewEmployeePayrollPdf(
-                          scaffoldContext,
-                          ref,
-                          period: open,
-                          employee: employee,
-                          totals: totals,
-                        ),
+                        scaffoldContext,
+                        ref,
+                        period: open,
+                        employee: employee,
+                        totals: totals,
+                      ),
                 icon: const Icon(Icons.picture_as_pdf_outlined),
               ),
               TextButton.icon(
@@ -2424,12 +2467,12 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
                 onPressed: isSendingPayroll
                     ? null
                     : () => _schedulePayrollToWhatsApp(
-                          scaffoldContext,
-                          ref,
-                          period: open,
-                          employee: employee,
-                          totals: totals,
-                        ),
+                        scaffoldContext,
+                        ref,
+                        period: open,
+                        employee: employee,
+                        totals: totals,
+                      ),
                 icon: const Icon(Icons.event_available_outlined),
               ),
               TextButton(
@@ -3121,6 +3164,7 @@ class _EmployeeCard extends ConsumerStatefulWidget {
   final VoidCallback onEdit;
   final VoidCallback onManage;
   final VoidCallback onDelete;
+
   /// When true, shows the expandable detail & movements buttons (desktop only).
   final bool showDetail;
 
@@ -3405,10 +3449,7 @@ class _ExpandToggleChip extends StatelessWidget {
 
 // ── Employee static info panel ───────────────────────────────────────────────
 class _EmployeeInfoPanel extends StatelessWidget {
-  const _EmployeeInfoPanel({
-    required this.employee,
-    required this.money,
-  });
+  const _EmployeeInfoPanel({required this.employee, required this.money});
 
   final PayrollEmployee employee;
   final NumberFormat money;
@@ -4392,22 +4433,26 @@ class _PayrollHistoryFullScreen extends ConsumerStatefulWidget {
     BuildContext context,
     PayrollPeriod period,
     _PayrollPeriodRow row,
-  ) onEditPayroll;
+  )
+  onEditPayroll;
   final Future<void> Function(
     BuildContext context,
     PayrollPeriod period,
     _PayrollPeriodRow row,
-  ) onSendPayroll;
+  )
+  onSendPayroll;
   final Future<void> Function(
     BuildContext context,
     PayrollPeriod period,
     _PayrollPeriodRow row,
-  ) onSchedulePayroll;
+  )
+  onSchedulePayroll;
   final Future<void> Function(
     BuildContext context,
     PayrollPeriod period,
     _PayrollPeriodRow row,
-  ) onPreviewPayroll;
+  )
+  onPreviewPayroll;
 
   @override
   ConsumerState<_PayrollHistoryFullScreen> createState() =>
@@ -4500,8 +4545,7 @@ class _PayrollHistoryFullScreenState
             if (item.period.endDate.isBefore(from)) return false;
           }
           if (_to != null) {
-            final to =
-                DateTime(_to!.year, _to!.month, _to!.day, 23, 59, 59);
+            final to = DateTime(_to!.year, _to!.month, _to!.day, 23, 59, 59);
             if (item.period.startDate.isAfter(to)) return false;
           }
           return true;
@@ -4521,9 +4565,8 @@ class _PayrollHistoryFullScreenState
     });
     try {
       final repo = ref.read(nominaRepositoryProvider);
-      final employees = [
-        ...ref.read(nominaHomeControllerProvider).employees,
-      ]..sort((a, b) => a.nombre.compareTo(b.nombre));
+      final employees = [...ref.read(nominaHomeControllerProvider).employees]
+        ..sort((a, b) => a.nombre.compareTo(b.nombre));
       final statuses = await repo.listPaymentStatuses(periodId: item.period.id);
       final statusesByEmployee = {
         for (final status in statuses) status.employeeId: status,
@@ -4534,7 +4577,8 @@ class _PayrollHistoryFullScreenState
         rows.add((
           employee: employee,
           totals: totals,
-          paymentStatus: statusesByEmployee[employee.id] ??
+          paymentStatus:
+              statusesByEmployee[employee.id] ??
               PayrollPaymentRecord.draft(
                 periodId: item.period.id,
                 employeeId: employee.id,
@@ -4596,7 +4640,8 @@ class _PayrollHistoryFullScreenState
           }
           switch (_detailFilter) {
             case _PayrollDetailEmployeeFilter.withCommission:
-              return row.totals.commissions > 0 || row.totals.serviceCommissions > 0;
+              return row.totals.commissions > 0 ||
+                  row.totals.serviceCommissions > 0;
             case _PayrollDetailEmployeeFilter.withDeductions:
               return row.totals.deductions > 0;
             case _PayrollDetailEmployeeFilter.all:
@@ -4619,8 +4664,7 @@ class _PayrollHistoryFullScreenState
     final scheme = theme.colorScheme;
     final filtered = _filteredItems;
     final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
-    final visibleTotal =
-        filtered.fold<double>(0, (s, i) => s + i.total);
+    final visibleTotal = filtered.fold<double>(0, (s, i) => s + i.total);
     final activeFilters = [
       if (_searchController.text.trim().isNotEmpty) 1,
       if (_from != null) 1,
@@ -4700,7 +4744,10 @@ class _PayrollHistoryFullScreenState
                           hintStyle: theme.textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
-                          prefixIcon: const Icon(Icons.search_rounded, size: 16),
+                          prefixIcon: const Icon(
+                            Icons.search_rounded,
+                            size: 16,
+                          ),
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 10,
@@ -4710,13 +4757,15 @@ class _PayrollHistoryFullScreenState
                           fillColor: scheme.surface,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide:
-                                BorderSide(color: scheme.outlineVariant),
+                            borderSide: BorderSide(
+                              color: scheme.outlineVariant,
+                            ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide:
-                                BorderSide(color: scheme.outlineVariant),
+                            borderSide: BorderSide(
+                              color: scheme.outlineVariant,
+                            ),
                           ),
                         ),
                       ),
@@ -4789,8 +4838,7 @@ class _PayrollHistoryFullScreenState
                             height: 1,
                             indent: 14,
                             endIndent: 14,
-                            color:
-                                scheme.outlineVariant.withValues(alpha: 0.3),
+                            color: scheme.outlineVariant.withValues(alpha: 0.3),
                           ),
                           itemBuilder: (context, index) {
                             final item = filtered[index];
@@ -4822,8 +4870,7 @@ class _PayrollHistoryFullScreenState
                     filter: _detailFilter,
                     filteredRows: _filteredDetailRows,
                     money: money,
-                    onFilterChange: (f) =>
-                        setState(() => _detailFilter = f),
+                    onFilterChange: (f) => setState(() => _detailFilter = f),
                     onSendPayroll: (row) async {
                       await widget.onSendPayroll(
                         context,
@@ -4854,7 +4901,9 @@ class _PayrollHistoryFullScreenState
                       await _selectPeriod(_selectedItem!);
                     },
                     onMarkPaid: (row) async {
-                      await ref.read(nominaRepositoryProvider).markPayrollPaid(
+                      await ref
+                          .read(nominaRepositoryProvider)
+                          .markPayrollPaid(
                             periodId: _selectedItem!.period.id,
                             employeeId: row.employee.id,
                           );
@@ -4884,8 +4933,7 @@ class _PayrollHistoryFullScreenState
     final scheme = theme.colorScheme;
     final filtered = _filteredItems;
     final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
-    final visibleTotal =
-        filtered.fold<double>(0, (s, i) => s + i.total);
+    final visibleTotal = filtered.fold<double>(0, (s, i) => s + i.total);
     final latestClose = filtered.isEmpty
         ? null
         : DateFormat('dd/MM/yyyy').format(filtered.first.period.endDate);
@@ -4901,10 +4949,7 @@ class _PayrollHistoryFullScreenState
         title: const Text('Historial de nominas'),
         actions: [
           if (activeFilters > 0)
-            TextButton(
-              onPressed: _resetFilters,
-              child: const Text('Limpiar'),
-            ),
+            TextButton(onPressed: _resetFilters, child: const Text('Limpiar')),
         ],
       ),
       body: Column(
@@ -5100,8 +5145,11 @@ class _HistoryDateButton extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(Icons.calendar_today_outlined,
-                size: 12, color: scheme.onSurfaceVariant),
+            Icon(
+              Icons.calendar_today_outlined,
+              size: 12,
+              color: scheme.onSurfaceVariant,
+            ),
             const SizedBox(width: 5),
             Expanded(
               child: Column(
@@ -5179,8 +5227,7 @@ class _HistoryPeriodListTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight:
-                          selected ? FontWeight.w800 : FontWeight.w600,
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
                       color: selected ? scheme.primary : scheme.onSurface,
                     ),
                   ),
@@ -5288,18 +5335,27 @@ class _HistoryInlineDetail extends StatelessWidget {
         '${DateFormat('dd/MM/yyyy').format(item.period.endDate)}';
 
     final totalBase = filteredRows.fold<double>(
-        0, (s, r) => s + r.totals.baseSalary);
+      0,
+      (s, r) => s + r.totals.baseSalary,
+    );
     final totalCommissions = filteredRows.fold<double>(
-        0, (s, r) => s + r.totals.commissions + r.totals.serviceCommissions);
+      0,
+      (s, r) => s + r.totals.commissions + r.totals.serviceCommissions,
+    );
     final totalExtras = filteredRows.fold<double>(
-        0, (s, r) => s + r.totals.bonuses + r.totals.otherAdditions);
+      0,
+      (s, r) => s + r.totals.bonuses + r.totals.otherAdditions,
+    );
     final totalDeductions = filteredRows.fold<double>(
-        0, (s, r) => s + r.totals.deductions);
-    final totalNeto =
-        filteredRows.fold<double>(0, (s, r) => s + r.totals.total);
+      0,
+      (s, r) => s + r.totals.deductions,
+    );
+    final totalNeto = filteredRows.fold<double>(
+      0,
+      (s, r) => s + r.totals.total,
+    );
     final allRows = rows ?? const <_PayrollPeriodRow>[];
-    final paidCount =
-        allRows.where((row) => row.paymentStatus.isPaid).length;
+    final paidCount = allRows.where((row) => row.paymentStatus.isPaid).length;
     final allPaid = allRows.isNotEmpty && paidCount == allRows.length;
 
     return Column(
@@ -5361,7 +5417,9 @@ class _HistoryInlineDetail extends StatelessWidget {
                         color: scheme.outlineVariant.withValues(alpha: 0.7),
                       ),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       textStyle: theme.textTheme.labelSmall?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
@@ -5429,8 +5487,10 @@ class _HistoryInlineDetail extends StatelessWidget {
                           hintStyle: theme.textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
-                          prefixIcon:
-                              const Icon(Icons.search_rounded, size: 15),
+                          prefixIcon: const Icon(
+                            Icons.search_rounded,
+                            size: 15,
+                          ),
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 10,
@@ -5440,13 +5500,15 @@ class _HistoryInlineDetail extends StatelessWidget {
                           fillColor: scheme.surfaceContainerLowest,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(9),
-                            borderSide:
-                                BorderSide(color: scheme.outlineVariant),
+                            borderSide: BorderSide(
+                              color: scheme.outlineVariant,
+                            ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(9),
-                            borderSide:
-                                BorderSide(color: scheme.outlineVariant),
+                            borderSide: BorderSide(
+                              color: scheme.outlineVariant,
+                            ),
                           ),
                         ),
                       ),
@@ -5468,52 +5530,44 @@ class _HistoryInlineDetail extends StatelessWidget {
             ],
           ),
         ),
-        Divider(
-          height: 1,
-          color: scheme.outlineVariant.withValues(alpha: 0.4),
-        ),
+        Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.4)),
 
         // ── Employee rows ─────────────────────────────────────────────
         Expanded(
           child: loading
               ? const Center(child: CircularProgressIndicator())
               : error != null
-                  ? Center(
-                      child: Text(
-                        error!,
-                        style: TextStyle(color: scheme.error),
-                      ),
-                    )
-                  : filteredRows.isEmpty
-                      ? Center(
-                          child: Text(
-                            'Sin empleados con este filtro.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          ),
-                        )
-                      : ListView.separated(
-                          padding:
-                              const EdgeInsets.fromLTRB(14, 10, 14, 24),
-                          itemCount: filteredRows.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 6),
-                          itemBuilder: (context, index) {
-                            final row = filteredRows[index];
-                            return _PayrollPeriodEmployeeCard(
-                              row: row,
-                              money: money,
-                              onSendPayroll: () => onSendPayroll(row),
-                              onSchedulePayroll: () => onSchedulePayroll(row),
-                              onPreviewPayroll: () => onPreviewPayroll(row),
-                              onEditPayroll: () => onEditPayroll(row),
-                              onMarkPaid: row.paymentStatus.isPaid
-                                  ? null
-                                  : () => onMarkPaid(row),
-                            );
-                          },
-                        ),
+              ? Center(
+                  child: Text(error!, style: TextStyle(color: scheme.error)),
+                )
+              : filteredRows.isEmpty
+              ? Center(
+                  child: Text(
+                    'Sin empleados con este filtro.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
+                  itemCount: filteredRows.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 6),
+                  itemBuilder: (context, index) {
+                    final row = filteredRows[index];
+                    return _PayrollPeriodEmployeeCard(
+                      row: row,
+                      money: money,
+                      onSendPayroll: () => onSendPayroll(row),
+                      onSchedulePayroll: () => onSchedulePayroll(row),
+                      onPreviewPayroll: () => onPreviewPayroll(row),
+                      onEditPayroll: () => onEditPayroll(row),
+                      onMarkPaid: row.paymentStatus.isPaid
+                          ? null
+                          : () => onMarkPaid(row),
+                    );
+                  },
+                ),
         ),
       ],
     );
@@ -5540,18 +5594,18 @@ class _HistoryStatChip extends StatelessWidget {
     final color = primary
         ? scheme.primary
         : danger
-            ? scheme.error
-            : scheme.onSurface;
+        ? scheme.error
+        : scheme.onSurface;
     final bg = primary
         ? scheme.primary.withValues(alpha: 0.08)
         : danger
-            ? scheme.error.withValues(alpha: 0.06)
-            : scheme.surfaceContainerLowest;
+        ? scheme.error.withValues(alpha: 0.06)
+        : scheme.surfaceContainerLowest;
     final border = primary
         ? scheme.primary.withValues(alpha: 0.25)
         : danger
-            ? scheme.error.withValues(alpha: 0.2)
-            : scheme.outlineVariant.withValues(alpha: 0.5);
+        ? scheme.error.withValues(alpha: 0.2)
+        : scheme.outlineVariant.withValues(alpha: 0.5);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -5606,7 +5660,8 @@ class _PayrollPeriodDetailsScreen extends StatefulWidget {
   final Future<void> Function(_PayrollPeriodRow row) onSchedulePayroll;
   final Future<void> Function(_PayrollPeriodRow row) onPreviewPayroll;
   final Future<void> Function(_PayrollPeriodRow row) onEditPayroll;
-  final Future<PayrollPaymentRecord?> Function(_PayrollPeriodRow row) onMarkPaid;
+  final Future<PayrollPaymentRecord?> Function(_PayrollPeriodRow row)
+  onMarkPaid;
   final Future<List<_PayrollPeriodRow>> Function() onReloadRows;
   final NumberFormat money;
 
@@ -5658,7 +5713,8 @@ class _PayrollPeriodDetailsScreenState
           }
           switch (_filter) {
             case _PayrollDetailEmployeeFilter.withCommission:
-              return row.totals.commissions > 0 || row.totals.serviceCommissions > 0;
+              return row.totals.commissions > 0 ||
+                  row.totals.serviceCommissions > 0;
             case _PayrollDetailEmployeeFilter.withDeductions:
               return row.totals.deductions > 0;
             case _PayrollDetailEmployeeFilter.all:
@@ -5685,7 +5741,8 @@ class _PayrollPeriodDetailsScreenState
     );
     final totalCommissions = filtered.fold<double>(
       0,
-      (sum, row) => sum + row.totals.commissions + row.totals.serviceCommissions,
+      (sum, row) =>
+          sum + row.totals.commissions + row.totals.serviceCommissions,
     );
     final totalDeductions = filtered.fold<double>(
       0,
@@ -5797,9 +5854,7 @@ class _PayrollPeriodDetailsScreenState
                   ),
                   if (allPaid) ...[
                     const SizedBox(height: 10),
-                    const _PayrollPaidBadge(
-                      label: 'Nomina de quincena pagada',
-                    ),
+                    const _PayrollPaidBadge(label: 'Nomina de quincena pagada'),
                   ] else if (paidCount > 0) ...[
                     const SizedBox(height: 10),
                     _PayrollPaidBadge(
@@ -6107,7 +6162,9 @@ class _PayrollHeaderMetric extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.65)),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.65),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -6196,10 +6253,7 @@ class _PayrollAmountBadge extends StatelessWidget {
 }
 
 class _PayrollPaidBadge extends StatelessWidget {
-  const _PayrollPaidBadge({
-    required this.label,
-    this.dense = false,
-  });
+  const _PayrollPaidBadge({required this.label, this.dense = false});
 
   final String label;
   final bool dense;
@@ -6492,8 +6546,7 @@ class _PayrollPeriodEmployeeCard extends StatefulWidget {
       _PayrollPeriodEmployeeCardState();
 }
 
-class _PayrollPeriodEmployeeCardState
-    extends State<_PayrollPeriodEmployeeCard>
+class _PayrollPeriodEmployeeCardState extends State<_PayrollPeriodEmployeeCard>
     with SingleTickerProviderStateMixin {
   bool _expanded = false;
   late final AnimationController _ctrl;
@@ -6529,7 +6582,8 @@ class _PayrollPeriodEmployeeCardState
     final isPaid = widget.row.paymentStatus.isPaid;
     final money = widget.money;
     // ignore: unused_local_variable
-    final extras = totals.bonuses + totals.holidayWorked + totals.otherAdditions;
+    final extras =
+        totals.bonuses + totals.holidayWorked + totals.otherAdditions;
     final isNegative = totals.total < 0;
 
     return Container(
@@ -6611,16 +6665,15 @@ class _PayrollPeriodEmployeeCardState
                   ),
                   const SizedBox(width: 8),
                   if (isPaid) ...[
-                    const _PayrollPaidBadge(
-                      label: 'Pagada',
-                      dense: true,
-                    ),
+                    const _PayrollPaidBadge(label: 'Pagada', dense: true),
                     const SizedBox(width: 8),
                   ],
                   // Neto badge
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 9, vertical: 5),
+                      horizontal: 9,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: isNegative
                           ? scheme.errorContainer
@@ -6646,10 +6699,10 @@ class _PayrollPeriodEmployeeCardState
                             fontSize: 9,
                             fontWeight: FontWeight.w700,
                             color: isNegative
-                                ? scheme.onErrorContainer
-                                    .withValues(alpha: 0.7)
-                                : scheme.onPrimaryContainer
-                                    .withValues(alpha: 0.7),
+                                ? scheme.onErrorContainer.withValues(alpha: 0.7)
+                                : scheme.onPrimaryContainer.withValues(
+                                    alpha: 0.7,
+                                  ),
                           ),
                         ),
                       ],
@@ -6782,13 +6835,13 @@ class _PayrollPeriodEmployeeCardState
                       // ── NETO FINAL ─────────────────────────────────
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 8),
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: isNegative
-                              ? scheme.errorContainer
-                                  .withValues(alpha: 0.5)
-                              : scheme.primaryContainer
-                                  .withValues(alpha: 0.5),
+                              ? scheme.errorContainer.withValues(alpha: 0.5)
+                              : scheme.primaryContainer.withValues(alpha: 0.5),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
                             color: isNegative
@@ -6952,19 +7005,16 @@ class _BreakdownLine extends StatelessWidget {
     final labelColor = muted
         ? scheme.onSurfaceVariant.withValues(alpha: 0.5)
         : danger
-            ? scheme.error.withValues(alpha: 0.85)
-            : color ?? scheme.onSurfaceVariant;
+        ? scheme.error.withValues(alpha: 0.85)
+        : color ?? scheme.onSurfaceVariant;
     final valueColor = muted
         ? scheme.onSurfaceVariant.withValues(alpha: 0.4)
         : danger
-            ? scheme.error
-            : color ?? scheme.onSurface;
+        ? scheme.error
+        : color ?? scheme.onSurface;
 
     return Padding(
-      padding: EdgeInsets.only(
-        bottom: isTotal ? 0 : 3,
-        top: isTotal ? 3 : 0,
-      ),
+      padding: EdgeInsets.only(bottom: isTotal ? 0 : 3, top: isTotal ? 3 : 0),
       child: Row(
         children: [
           if (isTotal)
@@ -7143,7 +7193,7 @@ class _NominaDesktopSidebar extends StatelessWidget {
     final isOpen = openPeriod != null;
     final range = isOpen
         ? '${DateFormat('dd/MM/yyyy').format(openPeriod!.startDate)} – '
-            '${DateFormat('dd/MM/yyyy').format(openPeriod!.endDate)}'
+              '${DateFormat('dd/MM/yyyy').format(openPeriod!.endDate)}'
         : null;
 
     return Container(
@@ -7476,9 +7526,7 @@ class _NominaDesktopEmployeePanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.5),
-        ),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
         boxShadow: const [
           BoxShadow(
             color: Color(0x08000000),

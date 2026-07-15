@@ -47,7 +47,8 @@ class _ResilientLocalDatabase {
 
   static final _ResilientLocalDatabase instance = _ResilientLocalDatabase._();
 
-  final Map<String, Future<Database>> _openingByPath = <String, Future<Database>>{};
+  final Map<String, Future<Database>> _openingByPath =
+      <String, Future<Database>>{};
 
   Future<Database> open({
     required String fileName,
@@ -66,22 +67,23 @@ class _ResilientLocalDatabase {
     }
 
     late final Future<Database> future;
-    future = _openInternal(
-      fileName: fileName,
-      dbPath: dbPath,
-      version: version,
-      onCreate: onCreate,
-      onUpgrade: onUpgrade,
-      onDowngrade: onDowngrade,
-      onConfigure: onConfigure,
-      onOpen: onOpen,
-      allowInMemoryFallback: allowInMemoryFallback,
-    ).whenComplete(() {
-      final current = _openingByPath[dbPath];
-      if (identical(current, future)) {
-        _openingByPath.remove(dbPath);
-      }
-    });
+    future =
+        _openInternal(
+          fileName: fileName,
+          dbPath: dbPath,
+          version: version,
+          onCreate: onCreate,
+          onUpgrade: onUpgrade,
+          onDowngrade: onDowngrade,
+          onConfigure: onConfigure,
+          onOpen: onOpen,
+          allowInMemoryFallback: allowInMemoryFallback,
+        ).whenComplete(() {
+          final current = _openingByPath[dbPath];
+          if (identical(current, future)) {
+            _openingByPath.remove(dbPath);
+          }
+        });
 
     _openingByPath[dbPath] = future;
     return future;
@@ -230,14 +232,18 @@ class _ResilientLocalDatabase {
 
   Future<void> _ensureIntegrity(Database db, {required String fileName}) async {
     final rows = await db.rawQuery('PRAGMA quick_check(1)');
-    final value = rows.isEmpty ? null : rows.first.values.firstOrNull?.toString().trim();
+    final value = rows.isEmpty
+        ? null
+        : rows.first.values.firstOrNull?.toString().trim();
     if ((value ?? '').toLowerCase() == 'ok') {
       return;
     }
 
     throw LocalDatabaseCorruptionException(
       fileName,
-      value == null || value.isEmpty ? 'PRAGMA quick_check returned an empty result.' : value,
+      value == null || value.isEmpty
+          ? 'PRAGMA quick_check returned an empty result.'
+          : value,
     );
   }
 
@@ -345,8 +351,7 @@ class _ResilientLocalDatabase {
       title: 'Recuperamos el almacenamiento local',
       userMessage:
           'Detectamos un daño en la base local del dispositivo y la reparamos automaticamente. La app seguira funcionando y volvera a descargar la informacion necesaria desde la nube.',
-      technicalDetails:
-          'db=$fileName path=$dbPath backups=$backupSummary',
+      technicalDetails: 'db=$fileName path=$dbPath backups=$backupSummary',
       severity: AppErrorSeverity.warning,
       dedupeKey: 'local-db-auto-repair',
     );

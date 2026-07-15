@@ -354,7 +354,9 @@ class MediaGalleryCard extends StatelessWidget {
                                 onPressed: onMarkPublicidad!,
                               ),
                             ),
-                          if (!item.forPublicidad && onMarkPublicidad != null && onDelete != null)
+                          if (!item.forPublicidad &&
+                              onMarkPublicidad != null &&
+                              onDelete != null)
                             const SizedBox(width: 6),
                           if (onDelete != null)
                             Expanded(
@@ -852,9 +854,7 @@ class _AdminActionButtonState extends State<_AdminActionButton> {
           side: BorderSide(color: widget.color.withValues(alpha: 0.38)),
           padding: const EdgeInsets.symmetric(horizontal: 8),
           textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
         onPressed: _loading
             ? null

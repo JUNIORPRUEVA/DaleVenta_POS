@@ -42,8 +42,7 @@ class UserFacingError {
         case ApiErrorType.forbidden:
           return const UserFacingError(
             title: 'Acceso no disponible',
-            message:
-                'No tienes permisos para esta acción en este momento.',
+            message: 'No tienes permisos para esta acción en este momento.',
             helpText:
                 'Si consideras que esto es un error, contacta a un administrador.',
             autoRetry: false,
@@ -55,8 +54,7 @@ class UserFacingError {
             title: 'No se pudo completar la operación',
             message:
                 'Recibimos una respuesta inválida para esta consulta específica.',
-            helpText:
-                'Revisa los filtros aplicados y vuelve a intentar.',
+            helpText: 'Revisa los filtros aplicados y vuelve a intentar.',
             autoRetry: false,
           );
         case ApiErrorType.parse:
@@ -65,10 +63,8 @@ class UserFacingError {
         case ApiErrorType.unknown:
           return const UserFacingError(
             title: 'Estamos validando la información',
-            message:
-                'No pudimos completar esta carga en este momento.',
-            helpText:
-                'Puedes intentar nuevamente en unos segundos.',
+            message: 'No pudimos completar esta carga en este momento.',
+            helpText: 'Puedes intentar nuevamente en unos segundos.',
             autoRetry: false,
           );
       }

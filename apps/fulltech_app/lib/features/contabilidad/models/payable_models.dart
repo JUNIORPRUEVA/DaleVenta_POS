@@ -99,17 +99,22 @@ class PayableService {
   });
 
   factory PayableService.fromJson(Map<String, dynamic> json) {
-    final rows = (json['payments'] is List) ? (json['payments'] as List) : const [];
+    final rows = (json['payments'] is List)
+        ? (json['payments'] as List)
+        : const [];
     return PayableService(
       id: (json['id'] ?? '').toString(),
       title: (json['title'] ?? '').toString(),
-      providerKind:
-          PayableProviderKindX.fromApi((json['providerKind'] ?? '').toString()),
+      providerKind: PayableProviderKindX.fromApi(
+        (json['providerKind'] ?? '').toString(),
+      ),
       providerName: (json['providerName'] ?? '').toString(),
       description: (json['description'] as String?)?.trim().isEmpty == true
           ? null
           : json['description'] as String?,
-      frequency: PayableFrequencyX.fromApi((json['frequency'] ?? '').toString()),
+      frequency: PayableFrequencyX.fromApi(
+        (json['frequency'] ?? '').toString(),
+      ),
       defaultAmount: json['defaultAmount'] == null
           ? null
           : _asDouble(json['defaultAmount']),
@@ -189,9 +194,12 @@ class PayableServiceRef {
       id: (json['id'] ?? '').toString(),
       title: (json['title'] ?? '').toString(),
       providerName: (json['providerName'] ?? '').toString(),
-      providerKind:
-          PayableProviderKindX.fromApi((json['providerKind'] ?? '').toString()),
-      frequency: PayableFrequencyX.fromApi((json['frequency'] ?? '').toString()),
+      providerKind: PayableProviderKindX.fromApi(
+        (json['providerKind'] ?? '').toString(),
+      ),
+      frequency: PayableFrequencyX.fromApi(
+        (json['frequency'] ?? '').toString(),
+      ),
     );
   }
 }

@@ -356,7 +356,10 @@ class _DocumentFlowDetailScreenState
 
       // Generate and encode warranty if applicable
       if (shouldSendWarranty) {
-        final warrantyBytes = await _buildWarrantyPdfBytes(flow, companySettings);
+        final warrantyBytes = await _buildWarrantyPdfBytes(
+          flow,
+          companySettings,
+        );
         warrantyPdfBase64 = base64Encode(warrantyBytes);
         sentDocuments.add('carta de garantía');
       }
@@ -367,8 +370,12 @@ class _DocumentFlowDetailScreenState
             flow.id,
             invoicePdfBase64: invoicePdfBase64,
             warrantyPdfBase64: warrantyPdfBase64,
-            invoiceFileName: shouldSendInvoice ? 'factura-final-$orderId.pdf' : null,
-            warrantyFileName: shouldSendWarranty ? 'warranty-final-$orderId.pdf' : null,
+            invoiceFileName: shouldSendInvoice
+                ? 'factura-final-$orderId.pdf'
+                : null,
+            warrantyFileName: shouldSendWarranty
+                ? 'warranty-final-$orderId.pdf'
+                : null,
           );
       if (!mounted) return;
       setState(() {
@@ -715,9 +722,9 @@ class _DocumentFlowDetailScreenState
       context.go(Routes.documentFlows);
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) {
         setState(() {
@@ -1050,7 +1057,8 @@ class _DocumentFlowDetailScreenState
     return _SectionCard(
       icon: Icons.settings_outlined,
       title: 'Gestión del flujo',
-      subtitle: 'Acciones administrativas sobre el flujo documental y su cotización vinculada',
+      subtitle:
+          'Acciones administrativas sobre el flujo documental y su cotización vinculada',
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 760;
@@ -1082,11 +1090,7 @@ class _DocumentFlowDetailScreenState
             );
           }
 
-          return Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: children,
-          );
+          return Wrap(spacing: 8, runSpacing: 8, children: children);
         },
       ),
     );

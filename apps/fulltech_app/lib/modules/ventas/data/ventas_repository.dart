@@ -46,6 +46,7 @@ class VentasRepository {
     required DateTime to,
     String? userId,
     String? customerId,
+    bool includeDeleted = false,
   }) async {
     try {
       final res = await _dio.get(
@@ -56,6 +57,7 @@ class VentasRepository {
           if ((userId ?? '').trim().isNotEmpty) 'userId': userId!.trim(),
           if ((customerId ?? '').trim().isNotEmpty)
             'customerId': customerId!.trim(),
+          if (includeDeleted) 'includeDeleted': 'true',
         },
         options: Options(extra: const {'skipLoader': true}),
       );
@@ -135,6 +137,7 @@ class VentasRepository {
     required DateTime from,
     required DateTime to,
     required String userId,
+    bool includeDeleted = false,
   }) async {
     try {
       final res = await _dio.get(
@@ -143,6 +146,7 @@ class VentasRepository {
           'from': _dateOnly(from),
           'to': _dateOnly(to),
           'userId': userId.trim(),
+          if (includeDeleted) 'includeDeleted': 'true',
         },
         options: Options(extra: const {'skipLoader': true}),
       );
@@ -169,6 +173,18 @@ class VentasRepository {
     } on DioException catch (e) {
       throw ApiException(
         _extractMessage(e.response?.data, 'No se pudo eliminar la venta'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<SaleModel> returnSale(String id) async {
+    try {
+      final res = await _dio.post(ApiRoutes.saleReturn(id));
+      return SaleModel.fromJson((res.data as Map).cast<String, dynamic>());
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(e.response?.data, 'No se pudo devolver la venta'),
         e.response?.statusCode,
       );
     }
@@ -289,9 +305,9 @@ class VentasRepository {
         final raw = res.data;
         final rows = _extractRows(raw);
         clients.addAll(
-          rows
-              .whereType<Map>()
-              .map((row) => ClienteModel.fromJson(row.cast<String, dynamic>())),
+          rows.whereType<Map>().map(
+            (row) => ClienteModel.fromJson(row.cast<String, dynamic>()),
+          ),
         );
 
         totalPages = raw is Map && raw['totalPages'] is num

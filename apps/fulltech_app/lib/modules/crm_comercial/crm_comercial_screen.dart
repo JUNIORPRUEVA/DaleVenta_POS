@@ -1,4 +1,4 @@
-﻿ import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -83,7 +83,10 @@ Future<Uint8List> _crmBytesFromMediaUrl(
   String mediaUrl, {
   required Future<Uint8List> Function(String) downloadBytes,
 }) async {
-  return _crmMediaBytesCache.putIfAbsent(mediaUrl, () => downloadBytes(mediaUrl));
+  return _crmMediaBytesCache.putIfAbsent(
+    mediaUrl,
+    () => downloadBytes(mediaUrl),
+  );
 }
 
 String _crmMimeToExtension(String? mime) {
@@ -124,12 +127,17 @@ Future<void> _crmOpenMedia(
   required Future<Uint8List> Function(String) downloadBytes,
 }) async {
   try {
-    final bytes = await _crmBytesFromMediaUrl(mediaUrl, downloadBytes: downloadBytes);
+    final bytes = await _crmBytesFromMediaUrl(
+      mediaUrl,
+      downloadBytes: downloadBytes,
+    );
     if (bytes.isEmpty) return;
     final ext = _crmMimeToExtension(mimeType);
     final dir = await getTemporaryDirectory();
     final hash = mediaUrl.hashCode.abs();
-    final file = File('${dir.path}${Platform.pathSeparator}crm_media_$hash$ext');
+    final file = File(
+      '${dir.path}${Platform.pathSeparator}crm_media_$hash$ext',
+    );
     await file.writeAsBytes(bytes, flush: true);
     await launchUrl(Uri.file(file.path), mode: LaunchMode.externalApplication);
   } catch (e) {
@@ -143,7 +151,10 @@ Future<String> _crmMediaSourceForPlayback(
   String? mimeType, {
   required Future<Uint8List> Function(String) downloadBytes,
 }) async {
-  final bytes = await _crmBytesFromMediaUrl(mediaUrl, downloadBytes: downloadBytes);
+  final bytes = await _crmBytesFromMediaUrl(
+    mediaUrl,
+    downloadBytes: downloadBytes,
+  );
   if (bytes.isEmpty) throw Exception('Archivo vacío o no disponible');
   final ext = _crmMimeToExtension(mimeType);
   final dir = await getTemporaryDirectory();
@@ -163,7 +174,10 @@ bool _isSafePublicNetworkUrl(String? raw) {
   }
   final host = uri.host.trim().toLowerCase();
   if (host.isEmpty) return false;
-  if (host == 'localhost' || host == '127.0.0.1' || host == '0.0.0.0' || host == '::1') {
+  if (host == 'localhost' ||
+      host == '127.0.0.1' ||
+      host == '0.0.0.0' ||
+      host == '::1') {
     return false;
   }
   return true;
@@ -183,7 +197,10 @@ String _sanitizeText(String? text) {
   return text
       .replaceAll(RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]'), '')
       .replaceAll(RegExp(r'[\uFFFD]'), '') // Replacement character
-      .replaceAll(RegExp(r'[\u{1F600}-\u{1F64F}]', unicode: true), '') // Emojis problemáticos si los hay
+      .replaceAll(
+        RegExp(r'[\u{1F600}-\u{1F64F}]', unicode: true),
+        '',
+      ) // Emojis problemáticos si los hay
       .trim();
 }
 
@@ -255,11 +272,14 @@ class _CrmContactAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final normalizedUrl = (imageUrl ?? '').trim();
-    final safeUrl = _isSafePublicNetworkUrl(normalizedUrl) ? normalizedUrl : null;
+    final safeUrl = _isSafePublicNetworkUrl(normalizedUrl)
+        ? normalizedUrl
+        : null;
     final fallback = _avatarFallbackText(title, phone);
-    final cachePx = (((radius * 2) * MediaQuery.devicePixelRatioOf(context)).round())
-        .clamp(48, 640)
-        .toInt();
+    final cachePx =
+        (((radius * 2) * MediaQuery.devicePixelRatioOf(context)).round())
+            .clamp(48, 640)
+            .toInt();
 
     Widget child;
     if (safeUrl == null) {
@@ -287,7 +307,9 @@ class _CrmContactAvatar extends StatelessWidget {
                 height: radius * 0.85,
                 child: CircularProgressIndicator(
                   strokeWidth: 1.8,
-                  valueColor: AlwaysStoppedAnimation<Color>(accent.withAlpha(180)),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    accent.withAlpha(180),
+                  ),
                 ),
               ),
             );
@@ -356,7 +378,8 @@ class CrmComercialScreen extends ConsumerStatefulWidget {
 
 class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   static const String _quickRepliesCacheKey = 'crm_comercial_quick_replies_v1';
-  static const String _composerToolsCacheKey = 'crm_comercial_composer_tools_v1';
+  static const String _composerToolsCacheKey =
+      'crm_comercial_composer_tools_v1';
 
   // Phase 1 controllers
   final TextEditingController _searchCtrl = TextEditingController();
@@ -395,8 +418,7 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   List<CrmComercialInboxConversation> _conversations =
       const <CrmComercialInboxConversation>[];
   CrmComercialInboxConversation? _selectedConversation;
-  List<CrmComercialInboxMessage> _messages =
-      const <CrmComercialInboxMessage>[];
+  List<CrmComercialInboxMessage> _messages = const <CrmComercialInboxMessage>[];
   String? _conversationWarning;
 
   // Phase 2 state
@@ -540,7 +562,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   void _startConversationPolling() {
     _conversationPollTimer?.cancel();
     // Cada 6s: suficiente para “sentirse” realtime sin cargar demasiado.
-    _conversationPollTimer = Timer.periodic(const Duration(seconds: 6), (_) async {
+    _conversationPollTimer = Timer.periodic(const Duration(seconds: 6), (
+      _,
+    ) async {
       if (!mounted) return;
       if (_saving || _loading) return;
       // Evita stacking de polls si el request toma más de lo esperado.
@@ -572,7 +596,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
         // Mantener referencia a seleccionada actual, si existe en el nuevo listado.
         final selId = _selectedConversation?.id;
         if (selId != null) {
-          final found = sorted.where((c) => c.id == selId).toList(growable: false);
+          final found = sorted
+              .where((c) => c.id == selId)
+              .toList(growable: false);
           if (found.isNotEmpty) {
             _selectedConversation = found.first;
           }
@@ -622,9 +648,11 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   ) {
     if (_locallyReadConversationIds.isEmpty) return source;
     return source
-        .map((c) => _locallyReadConversationIds.contains(c.id)
-            ? c.copyWith(unreadCount: 0)
-            : c)
+        .map(
+          (c) => _locallyReadConversationIds.contains(c.id)
+              ? c.copyWith(unreadCount: 0)
+              : c,
+        )
         .toList(growable: false);
   }
 
@@ -632,9 +660,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     _locallyReadConversationIds.add(conversationId);
     final updated = _conversations
         .map(
-          (item) => item.id == conversationId
-              ? item.copyWith(unreadCount: 0)
-              : item,
+          (item) =>
+              item.id == conversationId ? item.copyWith(unreadCount: 0) : item,
         )
         .toList(growable: false);
     setState(() {
@@ -678,48 +705,57 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
 
   List<CrmComercialInboxMessage> get _filteredMessages {
     final query = _conversationSearchCtrl.text.trim().toLowerCase();
-    return _messages.where((message) {
-      if (!_matchesDateFilter(
-        message.sentAt,
-        _messageDateFilter,
-        _messageCustomRange,
-      )) {
-        return false;
-      }
-      if (query.isEmpty) return true;
-      final text = message.displayText.toLowerCase();
-      final sender = (message.senderName ?? '').toLowerCase();
-      return text.contains(query) || sender.contains(query);
-    }).toList(growable: false);
+    return _messages
+        .where((message) {
+          if (!_matchesDateFilter(
+            message.sentAt,
+            _messageDateFilter,
+            _messageCustomRange,
+          )) {
+            return false;
+          }
+          if (query.isEmpty) return true;
+          final text = message.displayText.toLowerCase();
+          final sender = (message.senderName ?? '').toLowerCase();
+          return text.contains(query) || sender.contains(query);
+        })
+        .toList(growable: false);
   }
 
   List<CrmComercialInboxConversation> get _filteredConversations {
     final query = _searchCtrl.text.trim().toLowerCase();
-    return _conversations.where((conversation) {
-      if (_statusFilter.isNotEmpty &&
-          _conversationEffectiveStatus(conversation) != _statusFilter) {
-        return false;
-      }
-      if (!_matchesDateFilter(
-        conversation.lastMessageAt,
-        _conversationDateFilter,
-        _conversationCustomRange,
-      )) {
-        return false;
-      }
-      if (query.isEmpty) return true;
-      final visibleName = _conversationVisibleName(conversation).toLowerCase();
-      final phone = (conversation.remotePhone ?? '').toLowerCase();
-      final customerName = (conversation.crmCustomerName ?? '').toLowerCase();
-      final preview = _conversationPreviewText(conversation).toLowerCase();
-      return visibleName.contains(query) ||
-          phone.contains(query) ||
-          customerName.contains(query) ||
-          preview.contains(query);
-    }).toList(growable: false);
+    return _conversations
+        .where((conversation) {
+          if (_statusFilter.isNotEmpty &&
+              _conversationEffectiveStatus(conversation) != _statusFilter) {
+            return false;
+          }
+          if (!_matchesDateFilter(
+            conversation.lastMessageAt,
+            _conversationDateFilter,
+            _conversationCustomRange,
+          )) {
+            return false;
+          }
+          if (query.isEmpty) return true;
+          final visibleName = _conversationVisibleName(
+            conversation,
+          ).toLowerCase();
+          final phone = (conversation.remotePhone ?? '').toLowerCase();
+          final customerName = (conversation.crmCustomerName ?? '')
+              .toLowerCase();
+          final preview = _conversationPreviewText(conversation).toLowerCase();
+          return visibleName.contains(query) ||
+              phone.contains(query) ||
+              customerName.contains(query) ||
+              preview.contains(query);
+        })
+        .toList(growable: false);
   }
 
-  String _conversationEffectiveStatus(CrmComercialInboxConversation conversation) {
+  String _conversationEffectiveStatus(
+    CrmComercialInboxConversation conversation,
+  ) {
     final linkedCustomerId = (conversation.crmCustomerId ?? '').trim();
     final rawStatus = (conversation.crmCustomerStatus ?? '').trim();
     if (linkedCustomerId.isEmpty || rawStatus.isEmpty) {
@@ -847,7 +883,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
 
   Future<void> _pickCustomDateRange({required bool forMessages}) async {
     final now = DateTime.now();
-    final currentRange = forMessages ? _messageCustomRange : _conversationCustomRange;
+    final currentRange = forMessages
+        ? _messageCustomRange
+        : _conversationCustomRange;
     final picked = await showDateRangePicker(
       context: context,
       firstDate: DateTime(now.year - 2),
@@ -977,12 +1015,17 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
       // Determinar selección actual
       CrmComercialCustomer? selected = _selected;
       if (selected != null) {
-        final found = customersResponse.items.where((e) => e.id == selected!.id);
+        final found = customersResponse.items.where(
+          (e) => e.id == selected!.id,
+        );
         selected = found.isEmpty ? null : found.first;
       }
-      selected ??= customersResponse.items.isEmpty ? null : customersResponse.items.first;
+      selected ??= customersResponse.items.isEmpty
+          ? null
+          : customersResponse.items.first;
 
-      CrmComercialInboxConversation? selectedConversation = _selectedConversation;
+      CrmComercialInboxConversation? selectedConversation =
+          _selectedConversation;
       if (selectedConversation != null) {
         final found = conversationsResponse.items.where(
           (e) => e.id == selectedConversation!.id,
@@ -1015,7 +1058,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
         _nextActionCtrl.text = selected.nextAction ?? '';
       }
 
-      if (selectedConversation != null && selectedConversation.crmCustomerId != null) {
+      if (selectedConversation != null &&
+          selectedConversation.crmCustomerId != null) {
         final linked = customersResponse.items
             .where((e) => e.id == selectedConversation!.crmCustomerId)
             .toList(growable: false);
@@ -1026,17 +1070,21 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
       }
 
       // Guardar todo en caché
-      await repo.cacheData(CrmComercialCacheData(
-        conversations: conversationsResponse.items,
-        customers: customersResponse.items,
-        tasks: allTasks,
-        settings: crmSettings,
-        whatsappInstances: availableInstances,
-        users: users,
-      ));
+      await repo.cacheData(
+        CrmComercialCacheData(
+          conversations: conversationsResponse.items,
+          customers: customersResponse.items,
+          tasks: allTasks,
+          settings: crmSettings,
+          whatsappInstances: availableInstances,
+          users: users,
+        ),
+      );
 
       if (!mounted) return;
-      final mergedConversations = _applyLocalReadOverrides(conversationsResponse.items);
+      final mergedConversations = _applyLocalReadOverrides(
+        conversationsResponse.items,
+      );
       setState(() {
         _users = users;
         _crmSettings = crmSettings;
@@ -1117,7 +1165,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                     children: [
                       SwitchListTile.adaptive(
                         contentPadding: EdgeInsets.zero,
-                        title: const Text('Habilitar instancia para mensajes reales'),
+                        title: const Text(
+                          'Habilitar instancia para mensajes reales',
+                        ),
                         subtitle: const Text(
                           'El CRM Comercial seguira funcionando sin mensajes reales si esta desactivado.',
                         ),
@@ -1152,8 +1202,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                           child: ListView.separated(
                             shrinkWrap: true,
                             itemCount: instances.length,
-                            separatorBuilder: (_, __) =>
-                                Divider(height: 1, color: _waBorder.withAlpha(100)),
+                            separatorBuilder: (_, __) => Divider(
+                              height: 1,
+                              color: _waBorder.withAlpha(100),
+                            ),
                             itemBuilder: (context, index) {
                               final instance = instances[index];
                               final isSelected = selectedId == instance.id;
@@ -1180,7 +1232,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                                   isSelected
                                       ? Icons.radio_button_checked_rounded
                                       : Icons.radio_button_unchecked_rounded,
-                                  color: isSelected ? _waGreenDark : _waTextMuted,
+                                  color: isSelected
+                                      ? _waGreenDark
+                                      : _waTextMuted,
                                 ),
                               );
                             },
@@ -1190,7 +1244,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                         const SizedBox(height: 10),
                         Text(
                           dialogError,
-                          style: const TextStyle(color: AppColors.error, fontSize: 12),
+                          style: const TextStyle(
+                            color: AppColors.error,
+                            fontSize: 12,
+                          ),
                         ),
                       ],
                     ],
@@ -1230,9 +1287,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                                 enabled: enabled,
                                 selectedWhatsappInstanceId:
                                     (selectedId ?? '').trim().isEmpty
-                                        ? null
-                                        : selectedId,
-                                selectedWhatsappInstanceName: selected?.instanceName,
+                                    ? null
+                                    : selectedId,
+                                selectedWhatsappInstanceName:
+                                    selected?.instanceName,
                               );
                               if (!mounted) return;
                               setState(() => _crmSettings = updated);
@@ -1326,7 +1384,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
       final response = await repo.getConversationMessages(conversationId);
       CrmComercialInboxConversation? conversation = response.conversation;
       if (conversation == null) {
-        final found = _conversations.where((e) => e.id == conversationId).toList();
+        final found = _conversations
+            .where((e) => e.id == conversationId)
+            .toList();
         if (found.isNotEmpty) {
           conversation = found.first;
         }
@@ -1361,7 +1421,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
         _saving = false;
       });
       final hasNewMessages = response.items.length > _lastRenderedMessageCount;
-      final newMessagesDelta = response.items.length - _lastRenderedMessageCount;
+      final newMessagesDelta =
+          response.items.length - _lastRenderedMessageCount;
       _lastRenderedMessageCount = response.items.length;
       _scheduleSilentCommercialSuggestion();
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1370,7 +1431,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
         if (hasNewMessages && _showScrollToBottomButton) {
           if (mounted) {
             setState(() {
-              _pendingNewMessages = (_pendingNewMessagesConversationId == conversationId)
+              _pendingNewMessages =
+                  (_pendingNewMessagesConversationId == conversationId)
                   ? (_pendingNewMessages + newMessagesDelta.clamp(1, 9999))
                   : newMessagesDelta.clamp(1, 9999);
               _pendingNewMessagesConversationId = conversationId;
@@ -1418,7 +1480,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     );
 
     try {
-      await ref.read(crmComercialRepositoryProvider).replyConversation(
+      await ref
+          .read(crmComercialRepositoryProvider)
+          .replyConversation(
             conversationId: selectedConversation.id,
             text: text,
           );
@@ -1433,7 +1497,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
           try {
             await _syncWithServer();
           } catch (error) {
-            debugPrint('[CRM][UI][_sendMessageToCurrentConversation] background sync error=$error');
+            debugPrint(
+              '[CRM][UI][_sendMessageToCurrentConversation] background sync error=$error',
+            );
           }
         });
       } catch (refreshError) {
@@ -1495,7 +1561,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     if (confirmed != true) return;
 
     try {
-      await ref.read(crmComercialRepositoryProvider).deleteConversationMessage(
+      await ref
+          .read(crmComercialRepositoryProvider)
+          .deleteConversationMessage(
             conversationId: selectedConversation.id,
             messageId: messageId,
           );
@@ -1506,7 +1574,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     } catch (error) {
       if (!mounted) return;
       _showCrmToast(
-        error is ApiException ? error.message : 'No se pudo eliminar el mensaje.',
+        error is ApiException
+            ? error.message
+            : 'No se pudo eliminar el mensaje.',
         kind: _CrmToastKind.error,
       );
     }
@@ -1515,7 +1585,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   Future<CompanySettings?> _resolveCompanySettings() async {
     if (_companySettings != null) return _companySettings;
     try {
-      final settings = await ref.read(companySettingsRepositoryProvider).getSettings();
+      final settings = await ref
+          .read(companySettingsRepositoryProvider)
+          .getSettings();
       if (mounted) {
         setState(() => _companySettings = settings);
       }
@@ -1528,7 +1600,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   void _onComposerTextChanged() {
     // IA desactivada para priorizar respuesta instantánea del composer.
     _composerSpellTimer?.cancel();
-    if (_composerOrthographySuggestion != null || _aiSuggestedEmojis.isNotEmpty) {
+    if (_composerOrthographySuggestion != null ||
+        _aiSuggestedEmojis.isNotEmpty) {
       setState(() {
         _composerOrthographySuggestion = null;
         _aiSuggestedEmojis = const [];
@@ -1566,7 +1639,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     if (text.trim().isEmpty) {
       return ['👋', '😊', '✅', '🙏', '👍'];
     }
-    final lower = text.toLowerCase()
+    final lower = text
+        .toLowerCase()
         .replaceAll(RegExp(r'[áàä]'), 'a')
         .replaceAll(RegExp(r'[éèë]'), 'e')
         .replaceAll(RegExp(r'[íìï]'), 'i')
@@ -1581,42 +1655,129 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     bool has(String k) => lower.contains(k);
 
     // Saludos
-    if (has('hola') || has('buen')) { add('👋', 3); add('😊', 2); }
-    if (has('gracias') || has('agradec')) { add('🙏', 3); add('😊', 2); add('❤️', 1); }
-    if (has('perfecto') || has('excelente') || has('genial')) { add('✅', 3); add('🎉', 2); add('👍', 2); }
-    if (has('ok') || has('dale') || has('listo')) { add('👍', 3); add('✅', 2); }
+    if (has('hola') || has('buen')) {
+      add('👋', 3);
+      add('😊', 2);
+    }
+    if (has('gracias') || has('agradec')) {
+      add('🙏', 3);
+      add('😊', 2);
+      add('❤️', 1);
+    }
+    if (has('perfecto') || has('excelente') || has('genial')) {
+      add('✅', 3);
+      add('🎉', 2);
+      add('👍', 2);
+    }
+    if (has('ok') || has('dale') || has('listo')) {
+      add('👍', 3);
+      add('✅', 2);
+    }
 
     // Negocio
-    if (has('precio') || has('costo') || has('cuanto')) { add('💰', 3); add('💵', 2); add('🤔', 1); }
-    if (has('cotiz') || has('presupuesto') || has('propuesta')) { add('📋', 3); add('💼', 2); add('✏️', 1); }
-    if (has('comprar') || has('adquirir') || has('pedir')) { add('🛒', 3); add('💳', 2); add('✅', 1); }
-    if (has('pago') || has('deposito') || has('transferencia') || has('banco')) { add('💳', 3); add('🏦', 2); add('💵', 1); }
-    if (has('product') || has('catalogo') || has('servicio')) { add('📦', 3); add('🛍️', 2); add('✨', 1); }
-    if (has('instalar') || has('instalacion') || has('montaje')) { add('🔧', 3); add('🛠️', 2); add('⚙️', 1); }
-    if (has('tecnico') || has('soporte') || has('reparar')) { add('🔧', 3); add('🛠️', 2); add('💪', 1); }
-    if (has('promo') || has('descuento') || has('oferta')) { add('🔥', 3); add('🎉', 2); add('💥', 1); }
+    if (has('precio') || has('costo') || has('cuanto')) {
+      add('💰', 3);
+      add('💵', 2);
+      add('🤔', 1);
+    }
+    if (has('cotiz') || has('presupuesto') || has('propuesta')) {
+      add('📋', 3);
+      add('💼', 2);
+      add('✏️', 1);
+    }
+    if (has('comprar') || has('adquirir') || has('pedir')) {
+      add('🛒', 3);
+      add('💳', 2);
+      add('✅', 1);
+    }
+    if (has('pago') ||
+        has('deposito') ||
+        has('transferencia') ||
+        has('banco')) {
+      add('💳', 3);
+      add('🏦', 2);
+      add('💵', 1);
+    }
+    if (has('product') || has('catalogo') || has('servicio')) {
+      add('📦', 3);
+      add('🛍️', 2);
+      add('✨', 1);
+    }
+    if (has('instalar') || has('instalacion') || has('montaje')) {
+      add('🔧', 3);
+      add('🛠️', 2);
+      add('⚙️', 1);
+    }
+    if (has('tecnico') || has('soporte') || has('reparar')) {
+      add('🔧', 3);
+      add('🛠️', 2);
+      add('💪', 1);
+    }
+    if (has('promo') || has('descuento') || has('oferta')) {
+      add('🔥', 3);
+      add('🎉', 2);
+      add('💥', 1);
+    }
 
     // Comunicación
-    if (has('llama') || has('llamar') || has('contactar')) { add('📞', 3); add('📱', 2); }
-    if (has('whatsapp') || has('mensaje') || has('escribir')) { add('💬', 3); add('📱', 2); }
-    if (has('correo') || has('email') || has('enviar')) { add('📧', 3); add('✉️', 2); }
+    if (has('llama') || has('llamar') || has('contactar')) {
+      add('📞', 3);
+      add('📱', 2);
+    }
+    if (has('whatsapp') || has('mensaje') || has('escribir')) {
+      add('💬', 3);
+      add('📱', 2);
+    }
+    if (has('correo') || has('email') || has('enviar')) {
+      add('📧', 3);
+      add('✉️', 2);
+    }
 
     // Tiempo
-    if (has('hoy') || has('ahora') || has('inmediato')) { add('⚡', 3); add('🕐', 2); }
-    if (has('manana') || has('semana') || has('pronto')) { add('📅', 3); add('⏰', 2); }
-    if (has('urgente') || has('rapido') || has('prioridad')) { add('🚨', 3); add('⚡', 2); add('🔴', 1); }
+    if (has('hoy') || has('ahora') || has('inmediato')) {
+      add('⚡', 3);
+      add('🕐', 2);
+    }
+    if (has('manana') || has('semana') || has('pronto')) {
+      add('📅', 3);
+      add('⏰', 2);
+    }
+    if (has('urgente') || has('rapido') || has('prioridad')) {
+      add('🚨', 3);
+      add('⚡', 2);
+      add('🔴', 1);
+    }
 
     // Sentimientos
-    if (has('disculpa') || has('perdon') || has('lamento')) { add('😔', 3); add('🙏', 2); }
-    if (has('feliz') || has('alegr') || has('contento')) { add('😊', 3); add('🎉', 2); add('😃', 1); }
-    if (has('problema') || has('queja') || has('inconforme')) { add('😟', 2); add('🔧', 2); add('💪', 1); }
+    if (has('disculpa') || has('perdon') || has('lamento')) {
+      add('😔', 3);
+      add('🙏', 2);
+    }
+    if (has('feliz') || has('alegr') || has('contento')) {
+      add('😊', 3);
+      add('🎉', 2);
+      add('😃', 1);
+    }
+    if (has('problema') || has('queja') || has('inconforme')) {
+      add('😟', 2);
+      add('🔧', 2);
+      add('💪', 1);
+    }
 
     // Ubicacion
-    if (has('ubicacion') || has('direccion') || has('local') || has('donde')) { add('📍', 3); add('🗺️', 2); add('🏢', 1); }
-    if (has('horario') || has('hora') || has('abren')) { add('🕐', 3); add('📅', 2); }
+    if (has('ubicacion') || has('direccion') || has('local') || has('donde')) {
+      add('📍', 3);
+      add('🗺️', 2);
+      add('🏢', 1);
+    }
+    if (has('horario') || has('hora') || has('abren')) {
+      add('🕐', 3);
+      add('📅', 2);
+    }
 
     // Sort by score and return top 8
-    final sorted = scores.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final sorted = scores.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
     final result = sorted.take(8).map((e) => e.key).toList();
 
     // Ensure at least 5 emojis
@@ -1657,10 +1818,7 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   }
 
   String _orthographyInputKey(String raw) {
-    return raw
-        .trim()
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .toLowerCase();
+    return raw.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
   }
 
   Future<void> _requestOrthographySuggestion(String snapshotText) async {
@@ -1675,11 +1833,13 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     }
 
     final now = DateTime.now();
-    final recent = _lastOrthographyRequestAt != null &&
+    final recent =
+        _lastOrthographyRequestAt != null &&
         now.difference(_lastOrthographyRequestAt!).inMilliseconds < 350;
     if (recent &&
         _lastOrthographyRequestedText.isNotEmpty &&
-        (snapshotText.length - _lastOrthographyRequestedText.length).abs() <= 2) {
+        (snapshotText.length - _lastOrthographyRequestedText.length).abs() <=
+            2) {
       return;
     }
 
@@ -1744,7 +1904,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     final merged = current.isEmpty ? clean : '$current\n$clean';
     setState(() {
       _chatComposerCtrl.text = merged;
-      _chatComposerCtrl.selection = TextSelection.collapsed(offset: merged.length);
+      _chatComposerCtrl.selection = TextSelection.collapsed(
+        offset: merged.length,
+      );
       _composerOrthographySuggestion = null;
       _lastIgnoredComposerSuggestion = null;
     });
@@ -1763,7 +1925,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
 
   Future<String> _catalogSummaryForAi() async {
     try {
-      final products = await ref.read(catalogRepositoryProvider).fetchProducts(silent: true);
+      final products = await ref
+          .read(catalogRepositoryProvider)
+          .fetchProducts(silent: true);
       if (products.isEmpty) return '';
       return products
           .take(6)
@@ -1775,13 +1939,13 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     }
   }
 
-  Future<void> _requestCommercialReplySuggestion({
-    required bool manual,
-  }) async {
+  Future<void> _requestCommercialReplySuggestion({required bool manual}) async {
     final selectedConversation = _selectedConversation;
     if (selectedConversation == null) return;
     final incoming = _latestIncomingMessage();
-    final incomingText = incoming == null ? '' : (incoming.body ?? incoming.caption ?? '').trim();
+    final incomingText = incoming == null
+        ? ''
+        : (incoming.body ?? incoming.caption ?? '').trim();
     final composerText = _chatComposerCtrl.text.trim();
     final sourceText = incomingText.isNotEmpty ? incomingText : composerText;
 
@@ -1796,7 +1960,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
       }
       return;
     }
-    if (!manual && incoming != null && _lastAutoSuggestedIncomingMessageId == incoming.id) {
+    if (!manual &&
+        incoming != null &&
+        _lastAutoSuggestedIncomingMessageId == incoming.id) {
       return;
     }
 
@@ -1810,24 +1976,31 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     try {
       final settings = await _resolveCompanySettings();
       final catalogSummary = await _catalogSummaryForAi();
-      final bankAccounts = (settings?.bankAccounts ?? const <BankAccountEntry>[])
-          .map((entry) {
-            final parts = <String>[];
-            if (entry.name.trim().isNotEmpty) parts.add(entry.name.trim());
-            if (entry.bankName.trim().isNotEmpty) parts.add(entry.bankName.trim());
-            if (entry.accountNumber.trim().isNotEmpty) parts.add(entry.accountNumber.trim());
-            return parts.join(' | ');
-          })
-          .where((row) => row.trim().isNotEmpty)
-          .toList(growable: false);
+      final bankAccounts =
+          (settings?.bankAccounts ?? const <BankAccountEntry>[])
+              .map((entry) {
+                final parts = <String>[];
+                if (entry.name.trim().isNotEmpty) parts.add(entry.name.trim());
+                if (entry.bankName.trim().isNotEmpty)
+                  parts.add(entry.bankName.trim());
+                if (entry.accountNumber.trim().isNotEmpty)
+                  parts.add(entry.accountNumber.trim());
+                return parts.join(' | ');
+              })
+              .where((row) => row.trim().isNotEmpty)
+              .toList(growable: false);
 
-      final suggestion = await ref.read(crmComercialRepositoryProvider).suggestReply(
+      final suggestion = await ref
+          .read(crmComercialRepositoryProvider)
+          .suggestReply(
             conversationId: selectedConversation.id,
-        lastCustomerMessage: sourceText,
+            lastCustomerMessage: sourceText,
             recentMessages: _messages,
             crmStatus: selectedConversation.crmCustomerStatus,
             customerInfo: {
-              'name': selectedConversation.crmCustomerName ?? selectedConversation.contactName,
+              'name':
+                  selectedConversation.crmCustomerName ??
+                  selectedConversation.contactName,
               'phone': selectedConversation.remotePhone,
             },
             availableBusinessData: {
@@ -1870,7 +2043,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
         });
         return;
       }
-      if (suggestion.suggestedReply.trim() == _lastIgnoredCommercialSuggestion) {
+      if (suggestion.suggestedReply.trim() ==
+          _lastIgnoredCommercialSuggestion) {
         setState(() {
           _commercialAiStatusText = 'No pude generar sugerencia';
         });
@@ -1888,14 +2062,17 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     } on ApiException catch (error) {
       if (!mounted) return;
       final low = error.message.toLowerCase();
-      final isConfig = low.contains('openai') ||
+      final isConfig =
+          low.contains('openai') ||
           low.contains('api key') ||
           low.contains('configurada');
       setState(() {
         _commercialAiSuggestion = null;
-        _commercialAiStatusText =
-            isConfig ? 'La IA no está configurada todavía.' : 'No pude generar sugerencia';
-        _commercialAiErrorDetail = error.responseBody ?? error.technicalDetails ?? error.message;
+        _commercialAiStatusText = isConfig
+            ? 'La IA no está configurada todavía.'
+            : 'No pude generar sugerencia';
+        _commercialAiErrorDetail =
+            error.responseBody ?? error.technicalDetails ?? error.message;
       });
       _showCrmToast(
         _commercialAiStatusText,
@@ -1947,7 +2124,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   void _ignoreCommercialSuggestion() {
     final suggestion = _commercialAiSuggestion;
     setState(() {
-      _lastIgnoredCommercialSuggestion = suggestion?.suggestedReply.trim() ?? '';
+      _lastIgnoredCommercialSuggestion =
+          suggestion?.suggestedReply.trim() ?? '';
       _commercialAiSuggestion = null;
     });
   }
@@ -1983,7 +2161,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
               color: Colors.transparent,
               child: Container(
                 constraints: const BoxConstraints(maxWidth: 320),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: backgroundColor,
                   borderRadius: BorderRadius.circular(8),
@@ -2010,7 +2191,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                         ),
                       ),
                     ),
-                    if (kind == _CrmToastKind.error && (detail ?? '').trim().isNotEmpty)
+                    if (kind == _CrmToastKind.error &&
+                        (detail ?? '').trim().isNotEmpty)
                       TextButton(
                         onPressed: () {
                           showDialog<void>(
@@ -2022,7 +2204,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                               ),
                               actions: [
                                 TextButton(
-                                  onPressed: () => Navigator.of(dialogContext).pop(),
+                                  onPressed: () =>
+                                      Navigator.of(dialogContext).pop(),
                                   child: const Text('Cerrar'),
                                 ),
                               ],
@@ -2087,7 +2270,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
               ),
               actions: [
                 TextButton(
-                  onPressed: saving ? null : () => Navigator.of(dialogContext).pop(),
+                  onPressed: saving
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
                   child: const Text('Cancelar'),
                 ),
                 FilledButton(
@@ -2175,7 +2360,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                               if (value == null) return;
                               setDialogState(() => selectedType = value);
                             },
-                      decoration: const InputDecoration(labelText: 'Tipo/Estado CRM'),
+                      decoration: const InputDecoration(
+                        labelText: 'Tipo/Estado CRM',
+                      ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -2192,7 +2379,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                         alignment: Alignment.centerLeft,
                         child: Text(
                           dialogError!,
-                          style: const TextStyle(color: AppColors.error, fontSize: 12),
+                          style: const TextStyle(
+                            color: AppColors.error,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                     ],
@@ -2201,7 +2391,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
               ),
               actions: [
                 TextButton(
-                  onPressed: saving ? null : () => Navigator.of(dialogContext).pop(),
+                  onPressed: saving
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
                   child: const Text('Cancelar'),
                 ),
                 FilledButton(
@@ -2211,7 +2403,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                           final description = descCtrl.text.trim();
                           if (description.isEmpty) {
                             setDialogState(
-                              () => dialogError = 'La actividad necesita descripción.',
+                              () => dialogError =
+                                  'La actividad necesita descripción.',
                             );
                             return;
                           }
@@ -2269,14 +2462,17 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     final accounts = settings?.bankAccounts ?? const <BankAccountEntry>[];
     if (accounts.isEmpty) return 'No hay cuentas bancarias configuradas.';
     final rows = accounts
-        .where((entry) =>
-            entry.name.trim().isNotEmpty ||
-            entry.accountNumber.trim().isNotEmpty ||
-            entry.bankName.trim().isNotEmpty)
+        .where(
+          (entry) =>
+              entry.name.trim().isNotEmpty ||
+              entry.accountNumber.trim().isNotEmpty ||
+              entry.bankName.trim().isNotEmpty,
+        )
         .map((entry) {
           final parts = <String>[];
           if (entry.name.trim().isNotEmpty) parts.add(entry.name.trim());
-          if (entry.bankName.trim().isNotEmpty) parts.add(entry.bankName.trim());
+          if (entry.bankName.trim().isNotEmpty)
+            parts.add(entry.bankName.trim());
           if (entry.accountNumber.trim().isNotEmpty) {
             parts.add(entry.accountNumber.trim());
           }
@@ -2289,9 +2485,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
 
   Future<String> _buildCatalogMessage() async {
     try {
-      final products = await ref.read(catalogRepositoryProvider).fetchProducts(
-            silent: true,
-          );
+      final products = await ref
+          .read(catalogRepositoryProvider)
+          .fetchProducts(silent: true);
       if (products.isEmpty) return 'No hay catálogo configurado.';
       final sample = products
           .take(4)
@@ -2374,12 +2570,21 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   }
 
   bool _isLibraryItemMedia(CrmComercialLibraryItem item) {
-    return const {'IMAGE', 'VIDEO', 'AUDIO', 'DOCUMENT'}.contains(item.type.toUpperCase());
+    return const {
+      'IMAGE',
+      'VIDEO',
+      'AUDIO',
+      'DOCUMENT',
+    }.contains(item.type.toUpperCase());
   }
 
   bool _libraryTypeUsesMediaPicker(String type) {
-    return const {'IMAGE', 'VIDEO', 'AUDIO', 'DOCUMENT'}
-        .contains(type.toUpperCase());
+    return const {
+      'IMAGE',
+      'VIDEO',
+      'AUDIO',
+      'DOCUMENT',
+    }.contains(type.toUpperCase());
   }
 
   bool _libraryTypeUsesTextContent(String type) {
@@ -2481,10 +2686,14 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
 
   String _formatLibraryPreview(CrmComercialLibraryItem item) {
     final parts = <String>[];
-    if ((item.description ?? '').trim().isNotEmpty) parts.add(item.description!.trim());
-    if ((item.contentText ?? '').trim().isNotEmpty) parts.add(item.contentText!.trim());
-    if ((item.externalUrl ?? '').trim().isNotEmpty) parts.add(item.externalUrl!.trim());
-    if ((item.mediaUrl ?? '').trim().isNotEmpty) parts.add(item.mediaUrl!.trim());
+    if ((item.description ?? '').trim().isNotEmpty)
+      parts.add(item.description!.trim());
+    if ((item.contentText ?? '').trim().isNotEmpty)
+      parts.add(item.contentText!.trim());
+    if ((item.externalUrl ?? '').trim().isNotEmpty)
+      parts.add(item.externalUrl!.trim());
+    if ((item.mediaUrl ?? '').trim().isNotEmpty)
+      parts.add(item.mediaUrl!.trim());
     return parts.join('\n\n');
   }
 
@@ -2493,10 +2702,15 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     if (text.trim().isEmpty) return;
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
-    _showCrmToast('Recurso copiado al portapapeles.', kind: _CrmToastKind.success);
+    _showCrmToast(
+      'Recurso copiado al portapapeles.',
+      kind: _CrmToastKind.success,
+    );
   }
 
-  Future<void> _insertLibraryItemIntoComposer(CrmComercialLibraryItem item) async {
+  Future<void> _insertLibraryItemIntoComposer(
+    CrmComercialLibraryItem item,
+  ) async {
     final text = _libraryInsertText(item);
     if (text.trim().isEmpty) return;
     _insertTextInComposer(text);
@@ -2519,7 +2733,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Enviar recurso'),
-          content: Text('¿Deseas enviar "${item.title}" directamente al cliente?'),
+          content: Text(
+            '¿Deseas enviar "${item.title}" directamente al cliente?',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -2575,14 +2791,18 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
           : 'application/octet-stream';
       final fileName = (item.fileName ?? item.title).trim();
       if (conversation.id.isNotEmpty) {
-        await ref.read(crmComercialRepositoryProvider).replyConversationMedia(
-          conversationId: conversation.id,
-          mediaType: mediaType,
-          mimeType: mimeType,
-          fileName: fileName,
-          base64Data: base64Data,
-          caption: (item.contentText ?? '').trim().isNotEmpty ? item.contentText!.trim() : null,
-        );
+        await ref
+            .read(crmComercialRepositoryProvider)
+            .replyConversationMedia(
+              conversationId: conversation.id,
+              mediaType: mediaType,
+              mimeType: mimeType,
+              fileName: fileName,
+              base64Data: base64Data,
+              caption: (item.contentText ?? '').trim().isNotEmpty
+                  ? item.contentText!.trim()
+                  : null,
+            );
       }
     } else {
       final text = _libraryInsertText(item);
@@ -2598,17 +2818,29 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     CrmComercialLibraryItem? initial,
   }) async {
     final titleCtrl = TextEditingController(text: initial?.title ?? '');
-    final descriptionCtrl = TextEditingController(text: initial?.description ?? '');
+    final descriptionCtrl = TextEditingController(
+      text: initial?.description ?? '',
+    );
     final contentCtrl = TextEditingController(text: initial?.contentText ?? '');
     final mediaUrlCtrl = TextEditingController(text: initial?.mediaUrl ?? '');
     final fileNameCtrl = TextEditingController(text: initial?.fileName ?? '');
     final mimeTypeCtrl = TextEditingController(text: initial?.mimeType ?? '');
-    final externalUrlCtrl = TextEditingController(text: initial?.externalUrl ?? '');
+    final externalUrlCtrl = TextEditingController(
+      text: initial?.externalUrl ?? '',
+    );
     final categoryCtrl = TextEditingController(text: initial?.category ?? '');
-    final tagsCtrl = TextEditingController(text: (initial?.tags ?? const []).join(', '));
-    final latitudeCtrl = TextEditingController(text: initial?.latitude?.toString() ?? '');
-    final longitudeCtrl = TextEditingController(text: initial?.longitude?.toString() ?? '');
-    final sortOrderCtrl = TextEditingController(text: initial?.sortOrder.toString() ?? '0');
+    final tagsCtrl = TextEditingController(
+      text: (initial?.tags ?? const []).join(', '),
+    );
+    final latitudeCtrl = TextEditingController(
+      text: initial?.latitude?.toString() ?? '',
+    );
+    final longitudeCtrl = TextEditingController(
+      text: initial?.longitude?.toString() ?? '',
+    );
+    final sortOrderCtrl = TextEditingController(
+      text: initial?.sortOrder.toString() ?? '0',
+    );
     var isActive = initial?.isActive ?? true;
     String selectedType = initial?.type ?? 'TEXT';
     String error = '';
@@ -2627,7 +2859,14 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
           allowedExtensions = const ['mp3', 'wav', 'm4a', 'ogg'];
           break;
         default:
-          allowedExtensions = const ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt'];
+          allowedExtensions = const [
+            'pdf',
+            'doc',
+            'docx',
+            'xls',
+            'xlsx',
+            'txt',
+          ];
           break;
       }
 
@@ -2677,20 +2916,59 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                         decoration: const InputDecoration(labelText: 'Tipo'),
                         items: const [
                           DropdownMenuItem(value: 'TEXT', child: Text('Texto')),
-                          DropdownMenuItem(value: 'IMAGE', child: Text('Imagen')),
-                          DropdownMenuItem(value: 'VIDEO', child: Text('Video')),
-                          DropdownMenuItem(value: 'AUDIO', child: Text('Audio')),
-                          DropdownMenuItem(value: 'DOCUMENT', child: Text('Documento')),
-                          DropdownMenuItem(value: 'LOCATION', child: Text('Ubicación')),
-                          DropdownMenuItem(value: 'BANK_ACCOUNT', child: Text('Cuenta bancaria')),
-                          DropdownMenuItem(value: 'BUSINESS_HOURS', child: Text('Horario')),
-                          DropdownMenuItem(value: 'CATALOG', child: Text('Catálogo')),
-                          DropdownMenuItem(value: 'QUOTE_TEMPLATE', child: Text('Plantilla cotización')),
-                          DropdownMenuItem(value: 'LINK', child: Text('Enlace')),
-                          DropdownMenuItem(value: 'PROMOTION', child: Text('Promoción')),
-                          DropdownMenuItem(value: 'WARRANTY', child: Text('Garantía')),
+                          DropdownMenuItem(
+                            value: 'IMAGE',
+                            child: Text('Imagen'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'VIDEO',
+                            child: Text('Video'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'AUDIO',
+                            child: Text('Audio'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'DOCUMENT',
+                            child: Text('Documento'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'LOCATION',
+                            child: Text('Ubicación'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'BANK_ACCOUNT',
+                            child: Text('Cuenta bancaria'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'BUSINESS_HOURS',
+                            child: Text('Horario'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'CATALOG',
+                            child: Text('Catálogo'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'QUOTE_TEMPLATE',
+                            child: Text('Plantilla cotización'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'LINK',
+                            child: Text('Enlace'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'PROMOTION',
+                            child: Text('Promoción'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'WARRANTY',
+                            child: Text('Garantía'),
+                          ),
                           DropdownMenuItem(value: 'FAQ', child: Text('FAQ')),
-                          DropdownMenuItem(value: 'FOLLOW_UP', child: Text('Seguimiento')),
+                          DropdownMenuItem(
+                            value: 'FOLLOW_UP',
+                            child: Text('Seguimiento'),
+                          ),
                         ],
                         onChanged: (value) {
                           if (value == null) return;
@@ -2719,7 +2997,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                         controller: descriptionCtrl,
                         minLines: 2,
                         maxLines: 4,
-                        decoration: const InputDecoration(labelText: 'Descripción'),
+                        decoration: const InputDecoration(
+                          labelText: 'Descripción',
+                        ),
                       ),
                       if (_libraryTypeUsesTextContent(selectedType)) ...[
                         const SizedBox(height: 8),
@@ -2740,7 +3020,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                           alignment: Alignment.centerLeft,
                           child: OutlinedButton.icon(
                             onPressed: () => pickFile(setDialogState),
-                            icon: const Icon(Icons.upload_file_rounded, size: 16),
+                            icon: const Icon(
+                              Icons.upload_file_rounded,
+                              size: 16,
+                            ),
                             label: const Text('Seleccionar archivo desde PC'),
                           ),
                         ),
@@ -2750,37 +3033,49 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                           readOnly: true,
                           minLines: 1,
                           maxLines: 2,
-                          decoration: const InputDecoration(labelText: 'Ruta/URL del archivo'),
+                          decoration: const InputDecoration(
+                            labelText: 'Ruta/URL del archivo',
+                          ),
                         ),
                         const SizedBox(height: 8),
                         TextField(
                           controller: fileNameCtrl,
                           readOnly: true,
-                          decoration: const InputDecoration(labelText: 'Nombre del archivo'),
+                          decoration: const InputDecoration(
+                            labelText: 'Nombre del archivo',
+                          ),
                         ),
                         const SizedBox(height: 8),
                         TextField(
                           controller: mimeTypeCtrl,
                           readOnly: true,
-                          decoration: const InputDecoration(labelText: 'MIME type'),
+                          decoration: const InputDecoration(
+                            labelText: 'MIME type',
+                          ),
                         ),
                       ],
                       if (_libraryTypeUsesExternalUrl(selectedType)) ...[
                         const SizedBox(height: 8),
                         TextField(
                           controller: externalUrlCtrl,
-                          decoration: const InputDecoration(labelText: 'Enlace externo'),
+                          decoration: const InputDecoration(
+                            labelText: 'Enlace externo',
+                          ),
                         ),
                       ],
                       const SizedBox(height: 8),
                       TextField(
                         controller: categoryCtrl,
-                        decoration: const InputDecoration(labelText: 'Categoría'),
+                        decoration: const InputDecoration(
+                          labelText: 'Categoría',
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
                         controller: tagsCtrl,
-                        decoration: const InputDecoration(labelText: 'Etiquetas separadas por coma'),
+                        decoration: const InputDecoration(
+                          labelText: 'Etiquetas separadas por coma',
+                        ),
                       ),
                       if (_libraryTypeUsesCoordinates(selectedType)) ...[
                         const SizedBox(height: 8),
@@ -2790,7 +3085,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                               child: TextField(
                                 controller: latitudeCtrl,
                                 keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(labelText: 'Latitud'),
+                                decoration: const InputDecoration(
+                                  labelText: 'Latitud',
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -2798,7 +3095,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                               child: TextField(
                                 controller: longitudeCtrl,
                                 keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(labelText: 'Longitud'),
+                                decoration: const InputDecoration(
+                                  labelText: 'Longitud',
+                                ),
                               ),
                             ),
                           ],
@@ -2811,14 +3110,17 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                             child: TextField(
                               controller: sortOrderCtrl,
                               keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(labelText: 'Orden'),
+                              decoration: const InputDecoration(
+                                labelText: 'Orden',
+                              ),
                             ),
                           ),
                           const SizedBox(width: 12),
                           FilterChip(
                             selected: isActive,
                             label: const Text('Activo'),
-                            onSelected: (value) => setDialogState(() => isActive = value),
+                            onSelected: (value) =>
+                                setDialogState(() => isActive = value),
                           ),
                         ],
                       ),
@@ -2828,7 +3130,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                           alignment: Alignment.centerLeft,
                           child: Text(
                             error,
-                            style: const TextStyle(fontSize: 12, color: AppColors.error),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.error,
+                            ),
                           ),
                         ),
                       ],
@@ -2850,13 +3155,19 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                     }
                     if (_libraryTypeUsesMediaPicker(selectedType) &&
                         mediaUrlCtrl.text.trim().isEmpty) {
-                      setDialogState(() => error = 'Selecciona un archivo para este tipo de recurso.');
+                      setDialogState(
+                        () => error =
+                            'Selecciona un archivo para este tipo de recurso.',
+                      );
                       return;
                     }
                     if (_libraryTypeUsesExternalUrl(selectedType) &&
                         externalUrlCtrl.text.trim().isEmpty &&
                         !_libraryTypeUsesMediaPicker(selectedType)) {
-                      setDialogState(() => error = 'El enlace externo es obligatorio para este tipo.');
+                      setDialogState(
+                        () => error =
+                            'El enlace externo es obligatorio para este tipo.',
+                      );
                       return;
                     }
                     final tags = tagsCtrl.text
@@ -2865,8 +3176,11 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                         .where((tag) => tag.isNotEmpty)
                         .toList(growable: false);
                     final latitude = double.tryParse(latitudeCtrl.text.trim());
-                    final longitude = double.tryParse(longitudeCtrl.text.trim());
-                    final sortOrder = int.tryParse(sortOrderCtrl.text.trim()) ?? 0;
+                    final longitude = double.tryParse(
+                      longitudeCtrl.text.trim(),
+                    );
+                    final sortOrder =
+                        int.tryParse(sortOrderCtrl.text.trim()) ?? 0;
                     Navigator.of(dialogContext).pop(
                       CrmComercialLibraryItem(
                         id: initial?.id ?? '',
@@ -2942,9 +3256,13 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
         dialogError = '';
       });
       try {
-        final response = await ref.read(crmComercialRepositoryProvider).listLibrary(
+        final response = await ref
+            .read(crmComercialRepositoryProvider)
+            .listLibrary(
               type: selectedType,
-              category: selectedCategory.trim().isEmpty ? null : selectedCategory.trim(),
+              category: selectedCategory.trim().isEmpty
+                  ? null
+                  : selectedCategory.trim(),
               search: query.trim().isEmpty ? null : query.trim(),
               isActive: onlyActive ? true : null,
             );
@@ -2976,15 +3294,22 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
         await ref.read(crmComercialRepositoryProvider).createLibraryItem({
           'title': created.title,
           'type': created.type,
-          if ((created.description ?? '').trim().isNotEmpty) 'description': created.description,
-          if ((created.contentText ?? '').trim().isNotEmpty) 'contentText': created.contentText,
-          if ((created.mediaUrl ?? '').trim().isNotEmpty) 'mediaUrl': created.mediaUrl,
-          if ((created.fileName ?? '').trim().isNotEmpty) 'fileName': created.fileName,
-          if ((created.mimeType ?? '').trim().isNotEmpty) 'mimeType': created.mimeType,
+          if ((created.description ?? '').trim().isNotEmpty)
+            'description': created.description,
+          if ((created.contentText ?? '').trim().isNotEmpty)
+            'contentText': created.contentText,
+          if ((created.mediaUrl ?? '').trim().isNotEmpty)
+            'mediaUrl': created.mediaUrl,
+          if ((created.fileName ?? '').trim().isNotEmpty)
+            'fileName': created.fileName,
+          if ((created.mimeType ?? '').trim().isNotEmpty)
+            'mimeType': created.mimeType,
           if (created.latitude != null) 'latitude': created.latitude,
           if (created.longitude != null) 'longitude': created.longitude,
-          if ((created.externalUrl ?? '').trim().isNotEmpty) 'externalUrl': created.externalUrl,
-          if ((created.category ?? '').trim().isNotEmpty) 'category': created.category,
+          if ((created.externalUrl ?? '').trim().isNotEmpty)
+            'externalUrl': created.externalUrl,
+          if ((created.category ?? '').trim().isNotEmpty)
+            'category': created.category,
           'tags': created.tags,
           'isActive': created.isActive,
           'sortOrder': created.sortOrder,
@@ -3000,26 +3325,40 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
       }
     }
 
-    Future<void> editItem(CrmComercialLibraryItem item, StateSetter setDialogState) async {
-      final edited = await _openCommercialLibraryItemEditorDialog(initial: item);
+    Future<void> editItem(
+      CrmComercialLibraryItem item,
+      StateSetter setDialogState,
+    ) async {
+      final edited = await _openCommercialLibraryItemEditorDialog(
+        initial: item,
+      );
       if (edited == null) return;
       try {
-        await ref.read(crmComercialRepositoryProvider).updateLibraryItem(item.id, {
-          'title': edited.title,
-          'type': edited.type,
-          if ((edited.description ?? '').trim().isNotEmpty) 'description': edited.description,
-          if ((edited.contentText ?? '').trim().isNotEmpty) 'contentText': edited.contentText,
-          if ((edited.mediaUrl ?? '').trim().isNotEmpty) 'mediaUrl': edited.mediaUrl,
-          if ((edited.fileName ?? '').trim().isNotEmpty) 'fileName': edited.fileName,
-          if ((edited.mimeType ?? '').trim().isNotEmpty) 'mimeType': edited.mimeType,
-          if (edited.latitude != null) 'latitude': edited.latitude,
-          if (edited.longitude != null) 'longitude': edited.longitude,
-          if ((edited.externalUrl ?? '').trim().isNotEmpty) 'externalUrl': edited.externalUrl,
-          if ((edited.category ?? '').trim().isNotEmpty) 'category': edited.category,
-          'tags': edited.tags,
-          'isActive': edited.isActive,
-          'sortOrder': edited.sortOrder,
-        });
+        await ref
+            .read(crmComercialRepositoryProvider)
+            .updateLibraryItem(item.id, {
+              'title': edited.title,
+              'type': edited.type,
+              if ((edited.description ?? '').trim().isNotEmpty)
+                'description': edited.description,
+              if ((edited.contentText ?? '').trim().isNotEmpty)
+                'contentText': edited.contentText,
+              if ((edited.mediaUrl ?? '').trim().isNotEmpty)
+                'mediaUrl': edited.mediaUrl,
+              if ((edited.fileName ?? '').trim().isNotEmpty)
+                'fileName': edited.fileName,
+              if ((edited.mimeType ?? '').trim().isNotEmpty)
+                'mimeType': edited.mimeType,
+              if (edited.latitude != null) 'latitude': edited.latitude,
+              if (edited.longitude != null) 'longitude': edited.longitude,
+              if ((edited.externalUrl ?? '').trim().isNotEmpty)
+                'externalUrl': edited.externalUrl,
+              if ((edited.category ?? '').trim().isNotEmpty)
+                'category': edited.category,
+              'tags': edited.tags,
+              'isActive': edited.isActive,
+              'sortOrder': edited.sortOrder,
+            });
         await reload(setDialogState);
         _showCrmToast('Recurso actualizado.', kind: _CrmToastKind.success);
       } on ApiException catch (error) {
@@ -3031,7 +3370,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
       }
     }
 
-    Future<void> deleteItem(CrmComercialLibraryItem item, StateSetter setDialogState) async {
+    Future<void> deleteItem(
+      CrmComercialLibraryItem item,
+      StateSetter setDialogState,
+    ) async {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
@@ -3051,7 +3393,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
       );
       if (confirmed != true) return;
       try {
-        await ref.read(crmComercialRepositoryProvider).deleteLibraryItem(item.id);
+        await ref
+            .read(crmComercialRepositoryProvider)
+            .deleteLibraryItem(item.id);
         await reload(setDialogState);
         _showCrmToast('Recurso eliminado.', kind: _CrmToastKind.success);
       } on ApiException catch (error) {
@@ -3146,105 +3490,135 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                       child: loading
                           ? const Center(child: CircularProgressIndicator())
                           : dialogError.trim().isNotEmpty
-                              ? Center(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        dialogError,
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.error,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      OutlinedButton.icon(
-                                        onPressed: () => reload(setDialogState),
-                                        icon: const Icon(Icons.refresh_rounded, size: 16),
-                                        label: const Text('Reintentar'),
-                                      ),
-                                    ],
+                          ? Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    dialogError,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.error,
+                                    ),
                                   ),
-                                )
+                                  const SizedBox(height: 8),
+                                  OutlinedButton.icon(
+                                    onPressed: () => reload(setDialogState),
+                                    icon: const Icon(
+                                      Icons.refresh_rounded,
+                                      size: 16,
+                                    ),
+                                    label: const Text('Reintentar'),
+                                  ),
+                                ],
+                              ),
+                            )
                           : filtered.isEmpty
-                              ? const Center(
-                                  child: Text('No hay recursos en la Biblioteca Comercial.'),
-                                )
-                              : ListView.separated(
-                                  shrinkWrap: true,
-                                  itemCount: filtered.length,
-                                  separatorBuilder: (_, __) =>
-                                      Divider(height: 1, color: _waBorder.withAlpha(80)),
-                                  itemBuilder: (context, index) {
-                                    final item = filtered[index];
-                                    return Card(
-                                      child: ListTile(
-                                        leading: Icon(_libraryTypeIcon(item.type), color: _waGreenDark),
-                                        title: Text(item.title),
-                                        subtitle: Text(
-                                          '${_libraryTypeLabel(item.type)}${(item.category ?? '').trim().isNotEmpty ? ' · ${item.category}' : ''}',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                          ? const Center(
+                              child: Text(
+                                'No hay recursos en la Biblioteca Comercial.',
+                              ),
+                            )
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, __) => Divider(
+                                height: 1,
+                                color: _waBorder.withAlpha(80),
+                              ),
+                              itemBuilder: (context, index) {
+                                final item = filtered[index];
+                                return Card(
+                                  child: ListTile(
+                                    leading: Icon(
+                                      _libraryTypeIcon(item.type),
+                                      color: _waGreenDark,
+                                    ),
+                                    title: Text(item.title),
+                                    subtitle: Text(
+                                      '${_libraryTypeLabel(item.type)}${(item.category ?? '').trim().isNotEmpty ? ' · ${item.category}' : ''}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    isThreeLine: true,
+                                    onTap: () =>
+                                        _insertLibraryItemIntoComposer(item),
+                                    trailing: Wrap(
+                                      spacing: 0,
+                                      children: [
+                                        IconButton(
+                                          tooltip: 'Copiar',
+                                          icon: const Icon(Icons.copy_rounded),
+                                          onPressed: () =>
+                                              _copyLibraryItemToClipboard(item),
                                         ),
-                                        isThreeLine: true,
-                                        onTap: () => _insertLibraryItemIntoComposer(item),
-                                        trailing: Wrap(
-                                          spacing: 0,
-                                          children: [
-                                            IconButton(
-                                              tooltip: 'Copiar',
-                                              icon: const Icon(Icons.copy_rounded),
-                                              onPressed: () => _copyLibraryItemToClipboard(item),
-                                            ),
-                                            IconButton(
-                                              tooltip: 'Insertar',
-                                              icon: const Icon(Icons.input_rounded),
-                                              onPressed: () => _insertLibraryItemIntoComposer(item),
-                                            ),
-                                            IconButton(
-                                              tooltip: 'Editar',
-                                              icon: const Icon(Icons.edit_outlined),
-                                              onPressed: () => editItem(item, setDialogState),
-                                            ),
-                                            IconButton(
-                                              tooltip: 'Eliminar',
-                                              icon: const Icon(Icons.delete_outline_rounded),
-                                              onPressed: () => deleteItem(item, setDialogState),
-                                            ),
-                                            IconButton(
-                                              tooltip: 'Vista previa',
-                                              icon: const Icon(Icons.visibility_outlined),
-                                              onPressed: () async {
-                                                final preview = _formatLibraryPreview(item);
-                                                await showDialog<void>(
-                                                  context: context,
-                                                  builder: (previewContext) => AlertDialog(
-                                                    title: Text(item.title),
-                                                    content: SingleChildScrollView(
-                                                      child: SelectableText(preview.isNotEmpty ? preview : 'Sin contenido adicional.'),
-                                                    ),
-                                                    actions: [
-                                                      TextButton(
-                                                        onPressed: () => Navigator.of(previewContext).pop(),
-                                                        child: const Text('Cerrar'),
-                                                      ),
-                                                    ],
+                                        IconButton(
+                                          tooltip: 'Insertar',
+                                          icon: const Icon(Icons.input_rounded),
+                                          onPressed: () =>
+                                              _insertLibraryItemIntoComposer(
+                                                item,
+                                              ),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Editar',
+                                          icon: const Icon(Icons.edit_outlined),
+                                          onPressed: () =>
+                                              editItem(item, setDialogState),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Eliminar',
+                                          icon: const Icon(
+                                            Icons.delete_outline_rounded,
+                                          ),
+                                          onPressed: () =>
+                                              deleteItem(item, setDialogState),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Vista previa',
+                                          icon: const Icon(
+                                            Icons.visibility_outlined,
+                                          ),
+                                          onPressed: () async {
+                                            final preview =
+                                                _formatLibraryPreview(item);
+                                            await showDialog<void>(
+                                              context: context,
+                                              builder: (previewContext) => AlertDialog(
+                                                title: Text(item.title),
+                                                content: SingleChildScrollView(
+                                                  child: SelectableText(
+                                                    preview.isNotEmpty
+                                                        ? preview
+                                                        : 'Sin contenido adicional.',
                                                   ),
-                                                );
-                                              },
-                                            ),
-                                            IconButton(
-                                              tooltip: 'Enviar directo',
-                                              icon: const Icon(Icons.send_rounded),
-                                              onPressed: () => _sendLibraryItemDirect(item),
-                                            ),
-                                          ],
+                                                ),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.of(
+                                                          previewContext,
+                                                        ).pop(),
+                                                    child: const Text('Cerrar'),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          },
                                         ),
-                                      ),
-                                    );
-                                  },
-                                ),
+                                        IconButton(
+                                          tooltip: 'Enviar directo',
+                                          icon: const Icon(Icons.send_rounded),
+                                          onPressed: () =>
+                                              _sendLibraryItemDirect(item),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                     ),
                   ],
                 ),
@@ -3355,8 +3729,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
 
     // Determine media type and MIME type
     final fileName = file.name.toLowerCase();
-    final extension =
-        (file.extension ?? fileName.split('.').lastOrNull ?? '').toLowerCase();
+    final extension = (file.extension ?? fileName.split('.').lastOrNull ?? '')
+        .toLowerCase();
     String mediaType = 'document';
     String mimeType = 'application/octet-stream';
 
@@ -3374,8 +3748,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
       mimeType = extension == 'mp3'
           ? 'audio/mpeg'
           : extension == 'm4a'
-              ? 'audio/mp4'
-              : 'audio/$extension';
+          ? 'audio/mp4'
+          : 'audio/$extension';
     } else if (extension == 'pdf') {
       mimeType = 'application/pdf';
     }
@@ -3392,7 +3766,11 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     _showMediaPreviewDialog(mediaType, file.name, bytes);
   }
 
-  void _showMediaPreviewDialog(String mediaType, String fileName, Uint8List bytes) {
+  void _showMediaPreviewDialog(
+    String mediaType,
+    String fileName,
+    Uint8List bytes,
+  ) {
     setState(() => _sendingMedia = false);
     showDialog<void>(
       context: context,
@@ -3506,7 +3884,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                       ? null
                       : () => _confirmSendMedia(dialogContext, setDialogState),
                   icon: Icon(
-                    _sendingMedia ? Icons.hourglass_bottom_rounded : Icons.send_rounded,
+                    _sendingMedia
+                        ? Icons.hourglass_bottom_rounded
+                        : Icons.send_rounded,
                   ),
                   label: Text(_sendingMedia ? 'Enviando...' : 'Enviar'),
                 ),
@@ -3518,7 +3898,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     );
   }
 
-  Future<void> _confirmSendMedia(BuildContext dialogContext, StateSetter setDialogState) async {
+  Future<void> _confirmSendMedia(
+    BuildContext dialogContext,
+    StateSetter setDialogState,
+  ) async {
     final selectedConversation = _selectedConversation;
     final mediaBytes = _selectedMediaBytes;
     final mediaName = _selectedMediaName;
@@ -3526,7 +3909,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     final mimeType = _selectedMediaMimeType;
     final caption = _mediaCaptionCtrl.text.trim();
 
-    if (selectedConversation == null || mediaBytes == null || mediaType == null || mimeType == null) {
+    if (selectedConversation == null ||
+        mediaBytes == null ||
+        mediaType == null ||
+        mimeType == null) {
       return;
     }
 
@@ -3538,7 +3924,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     try {
       final base64Data = base64Encode(mediaBytes);
 
-      await ref.read(crmComercialRepositoryProvider).replyConversationMedia(
+      await ref
+          .read(crmComercialRepositoryProvider)
+          .replyConversationMedia(
             conversationId: selectedConversation.id,
             mediaType: mediaType,
             mimeType: mimeType,
@@ -3569,7 +3957,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     } catch (error) {
       if (!mounted) return;
       final normalized = error.toString().toLowerCase();
-      final mediaUnavailable = normalized.contains('404') ||
+      final mediaUnavailable =
+          normalized.contains('404') ||
           normalized.contains('501') ||
           normalized.contains('not implemented') ||
           normalized.contains('unsupported');
@@ -3704,8 +4093,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                               final matched = _conversations
                                   .where(
                                     (c) =>
-                                        (c.remotePhone ?? '')
-                                            .replaceAll(RegExp(r'\D'), '') ==
+                                        (c.remotePhone ?? '').replaceAll(
+                                          RegExp(r'\D'),
+                                          '',
+                                        ) ==
                                         normalized,
                                   )
                                   .toList(growable: false);
@@ -3812,7 +4203,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
         );
       },
       transitionBuilder: (context, animation, _, child) {
-        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
         return SlideTransition(
           position: Tween<Offset>(
             begin: const Offset(0.08, 0),
@@ -3838,7 +4232,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
   }) async {
     final normalizedTitle = title.trim().isEmpty ? 'Contacto' : title.trim();
     final normalizedSubtitle = (subtitle ?? '').trim();
-    final safeImageUrl = _isSafeNetworkImageUrl(imageUrl) ? imageUrl!.trim() : null;
+    final safeImageUrl = _isSafeNetworkImageUrl(imageUrl)
+        ? imageUrl!.trim()
+        : null;
     await showDialog<void>(
       context: context,
       barrierColor: Colors.black.withAlpha(220),
@@ -3846,7 +4242,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
         final size = MediaQuery.sizeOf(context);
         return Dialog(
           backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 20,
+          ),
           child: ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: size.width * 0.94,
@@ -3874,16 +4273,20 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                                       safeImageUrl,
                                       fit: BoxFit.contain,
                                       gaplessPlayback: true,
-                                      loadingBuilder: (context, imageChild, progress) {
-                                        if (progress == null) return imageChild;
-                                        return const Center(
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            valueColor:
-                                                AlwaysStoppedAnimation<Color>(_waGreen),
-                                          ),
-                                        );
-                                      },
+                                      loadingBuilder:
+                                          (context, imageChild, progress) {
+                                            if (progress == null)
+                                              return imageChild;
+                                            return const Center(
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                valueColor:
+                                                    AlwaysStoppedAnimation<
+                                                      Color
+                                                    >(_waGreen),
+                                              ),
+                                            );
+                                          },
                                       errorBuilder: (_, __, ___) {
                                         return _CrmContactAvatar(
                                           title: normalizedTitle,
@@ -3910,7 +4313,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                           decoration: BoxDecoration(
                             color: Colors.black.withAlpha(155),
                             border: Border(
-                              top: BorderSide(color: Colors.white.withAlpha(40)),
+                              top: BorderSide(
+                                color: Colors.white.withAlpha(40),
+                              ),
                             ),
                           ),
                           child: Column(
@@ -4296,8 +4701,12 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     final rawList = (cached?['items'] as List?) ?? const [];
     final parsed = rawList
         .whereType<Map>()
-        .map((raw) => _CrmQuickReplyTemplate.fromMap(raw.cast<String, dynamic>()))
-        .where((item) => item.label.trim().isNotEmpty && item.text.trim().isNotEmpty)
+        .map(
+          (raw) => _CrmQuickReplyTemplate.fromMap(raw.cast<String, dynamic>()),
+        )
+        .where(
+          (item) => item.label.trim().isNotEmpty && item.text.trim().isNotEmpty,
+        )
         .toList(growable: false);
     final value = parsed.isEmpty ? _defaultQuickReplies() : parsed;
     if (!mounted) return;
@@ -4360,16 +4769,56 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
 
   List<_CrmComposerToolTemplate> _defaultComposerTools() {
     return const [
-      _CrmComposerToolTemplate(id: 'image', label: 'Imagen', actionType: 'image'),
-      _CrmComposerToolTemplate(id: 'video', label: 'Video', actionType: 'video'),
-      _CrmComposerToolTemplate(id: 'document', label: 'Documento', actionType: 'document'),
-      _CrmComposerToolTemplate(id: 'audio', label: 'Audio', actionType: 'audio'),
-      _CrmComposerToolTemplate(id: 'note', label: 'Nota interna', actionType: 'note'),
-      _CrmComposerToolTemplate(id: 'activity', label: 'Crear actividad', actionType: 'activity'),
-      _CrmComposerToolTemplate(id: 'gps', label: 'Ubicación GPS', actionType: 'gps'),
-      _CrmComposerToolTemplate(id: 'hours', label: 'Horario de tienda', actionType: 'store_hours'),
-      _CrmComposerToolTemplate(id: 'bank_accounts', label: 'Cuentas bancarias', actionType: 'bank_accounts'),
-      _CrmComposerToolTemplate(id: 'catalog', label: 'Catálogo de productos', actionType: 'catalog'),
+      _CrmComposerToolTemplate(
+        id: 'image',
+        label: 'Imagen',
+        actionType: 'image',
+      ),
+      _CrmComposerToolTemplate(
+        id: 'video',
+        label: 'Video',
+        actionType: 'video',
+      ),
+      _CrmComposerToolTemplate(
+        id: 'document',
+        label: 'Documento',
+        actionType: 'document',
+      ),
+      _CrmComposerToolTemplate(
+        id: 'audio',
+        label: 'Audio',
+        actionType: 'audio',
+      ),
+      _CrmComposerToolTemplate(
+        id: 'note',
+        label: 'Nota interna',
+        actionType: 'note',
+      ),
+      _CrmComposerToolTemplate(
+        id: 'activity',
+        label: 'Crear actividad',
+        actionType: 'activity',
+      ),
+      _CrmComposerToolTemplate(
+        id: 'gps',
+        label: 'Ubicación GPS',
+        actionType: 'gps',
+      ),
+      _CrmComposerToolTemplate(
+        id: 'hours',
+        label: 'Horario de tienda',
+        actionType: 'store_hours',
+      ),
+      _CrmComposerToolTemplate(
+        id: 'bank_accounts',
+        label: 'Cuentas bancarias',
+        actionType: 'bank_accounts',
+      ),
+      _CrmComposerToolTemplate(
+        id: 'catalog',
+        label: 'Catálogo de productos',
+        actionType: 'catalog',
+      ),
     ];
   }
 
@@ -4381,8 +4830,14 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     final rawList = (cached?['items'] as List?) ?? const [];
     final parsed = rawList
         .whereType<Map>()
-        .map((raw) => _CrmComposerToolTemplate.fromMap(raw.cast<String, dynamic>()))
-        .where((item) => item.label.trim().isNotEmpty && item.actionType.trim().isNotEmpty)
+        .map(
+          (raw) =>
+              _CrmComposerToolTemplate.fromMap(raw.cast<String, dynamic>()),
+        )
+        .where(
+          (item) =>
+              item.label.trim().isNotEmpty && item.actionType.trim().isNotEmpty,
+        )
         .toList(growable: false);
     final value = parsed.isEmpty ? _defaultComposerTools() : parsed;
     if (!mounted) return;
@@ -4492,21 +4947,43 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
                       value: selectedAction,
-                      decoration: const InputDecoration(
-                        labelText: 'Acción',
-                      ),
+                      decoration: const InputDecoration(labelText: 'Acción'),
                       items: const [
                         DropdownMenuItem(value: 'image', child: Text('Imagen')),
                         DropdownMenuItem(value: 'video', child: Text('Video')),
-                        DropdownMenuItem(value: 'document', child: Text('Documento')),
+                        DropdownMenuItem(
+                          value: 'document',
+                          child: Text('Documento'),
+                        ),
                         DropdownMenuItem(value: 'audio', child: Text('Audio')),
-                        DropdownMenuItem(value: 'note', child: Text('Nota interna')),
-                        DropdownMenuItem(value: 'activity', child: Text('Crear actividad')),
-                        DropdownMenuItem(value: 'gps', child: Text('Ubicación GPS')),
-                        DropdownMenuItem(value: 'store_hours', child: Text('Horario de tienda')),
-                        DropdownMenuItem(value: 'bank_accounts', child: Text('Cuentas bancarias')),
-                        DropdownMenuItem(value: 'catalog', child: Text('Catálogo de productos')),
-                        DropdownMenuItem(value: 'quick_messages', child: Text('Biblioteca Comercial')),
+                        DropdownMenuItem(
+                          value: 'note',
+                          child: Text('Nota interna'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'activity',
+                          child: Text('Crear actividad'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'gps',
+                          child: Text('Ubicación GPS'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'store_hours',
+                          child: Text('Horario de tienda'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'bank_accounts',
+                          child: Text('Cuentas bancarias'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'catalog',
+                          child: Text('Catálogo de productos'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'quick_messages',
+                          child: Text('Biblioteca Comercial'),
+                        ),
                       ],
                       onChanged: (value) {
                         if (value == null) return;
@@ -4519,7 +4996,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                         alignment: Alignment.centerLeft,
                         child: Text(
                           error,
-                          style: const TextStyle(fontSize: 12, color: AppColors.error),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.error,
+                          ),
                         ),
                       ),
                     ],
@@ -4535,7 +5015,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                   onPressed: () {
                     final label = labelCtrl.text.trim();
                     if (label.isEmpty) {
-                      setDialogState(() => error = 'Escribe un título visible.');
+                      setDialogState(
+                        () => error = 'Escribe un título visible.',
+                      );
                       return;
                     }
                     Navigator.of(dialogContext).pop(
@@ -4572,7 +5054,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
     }
 
     Future<void> editTool(int index, StateSetter setDialogState) async {
-      final edited = await _openComposerToolEditorDialog(initial: working[index]);
+      final edited = await _openComposerToolEditorDialog(
+        initial: working[index],
+      );
       if (edited == null) return;
       setDialogState(() => working[index] = edited);
     }
@@ -4614,8 +5098,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                           : ListView.separated(
                               shrinkWrap: true,
                               itemCount: working.length,
-                              separatorBuilder: (_, __) =>
-                                  Divider(height: 1, color: _waBorder.withAlpha(80)),
+                              separatorBuilder: (_, __) => Divider(
+                                height: 1,
+                                color: _waBorder.withAlpha(80),
+                              ),
                               itemBuilder: (context, index) {
                                 final item = working[index];
                                 return ListTile(
@@ -4640,16 +5126,25 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                                       IconButton(
                                         tooltip: 'Editar',
                                         visualDensity: VisualDensity.compact,
-                                        onPressed: () => editTool(index, setDialogState),
-                                        icon: const Icon(Icons.edit_outlined, size: 18),
+                                        onPressed: () =>
+                                            editTool(index, setDialogState),
+                                        icon: const Icon(
+                                          Icons.edit_outlined,
+                                          size: 18,
+                                        ),
                                       ),
                                       IconButton(
                                         tooltip: 'Eliminar',
                                         visualDensity: VisualDensity.compact,
                                         onPressed: () {
-                                          setDialogState(() => working.removeAt(index));
+                                          setDialogState(
+                                            () => working.removeAt(index),
+                                          );
                                         },
-                                        icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                                        icon: const Icon(
+                                          Icons.delete_outline_rounded,
+                                          size: 18,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -4668,8 +5163,11 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                 FilledButton(
                   onPressed: () async {
                     final sanitized = working
-                        .where((item) =>
-                            item.label.trim().isNotEmpty && item.actionType.trim().isNotEmpty)
+                        .where(
+                          (item) =>
+                              item.label.trim().isNotEmpty &&
+                              item.actionType.trim().isNotEmpty,
+                        )
                         .toList(growable: false);
                     await _saveComposerTools(sanitized);
                     if (!mounted) return;
@@ -4705,7 +5203,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                 ListTile(
                   leading: const Icon(Icons.library_books_outlined),
                   title: const Text('Biblioteca Comercial'),
-                  subtitle: const Text('Crear, editar y reutilizar recursos comerciales.'),
+                  subtitle: const Text(
+                    'Crear, editar y reutilizar recursos comerciales.',
+                  ),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () async {
                     Navigator.of(dialogContext).pop();
@@ -4715,7 +5215,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                 ListTile(
                   leading: const Icon(Icons.attach_file_rounded),
                   title: const Text('Atajos manuales'),
-                  subtitle: const Text('Configurar acciones visibles en el menú de adjuntar.'),
+                  subtitle: const Text(
+                    'Configurar acciones visibles en el menú de adjuntar.',
+                  ),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () async {
                     Navigator.of(dialogContext).pop();
@@ -4962,11 +5464,7 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                   curve: Curves.easeOut,
                   width: rightWidth,
                   child: _showDetailsPanel
-                      ? _buildDetailsPanel(
-                          context,
-                          selected,
-                          compact: false,
-                        )
+                      ? _buildDetailsPanel(context, selected, compact: false)
                       : const SizedBox.shrink(),
                 ),
               ],
@@ -4999,9 +5497,12 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                 LayoutBuilder(
                   builder: (context, toolbarConstraints) {
                     final compact = toolbarConstraints.maxWidth < 310;
-                    final maxSearchWidth = (toolbarConstraints.maxWidth - (compact ? 230 : 248))
-                        .clamp(0.0, compact ? 110.0 : 170.0);
-                    final searchWidth = _showSidebarSearch ? maxSearchWidth : 0.0;
+                    final maxSearchWidth =
+                        (toolbarConstraints.maxWidth - (compact ? 230 : 248))
+                            .clamp(0.0, compact ? 110.0 : 170.0);
+                    final searchWidth = _showSidebarSearch
+                        ? maxSearchWidth
+                        : 0.0;
                     return Row(
                       children: [
                         IconButton(
@@ -5013,7 +5514,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                           ),
                           padding: EdgeInsets.zero,
                           onPressed: () {
-                            setState(() => _showSidebarSearch = !_showSidebarSearch);
+                            setState(
+                              () => _showSidebarSearch = !_showSidebarSearch,
+                            );
                             if (_showSidebarSearch) {
                               WidgetsBinding.instance.addPostFrameCallback((_) {
                                 if (!mounted) return;
@@ -5084,7 +5587,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                           icon: Icon(
                             Icons.filter_list_rounded,
                             size: 20,
-                            color: _statusFilter.isEmpty ? _waTextMuted : _waGreenDark,
+                            color: _statusFilter.isEmpty
+                                ? _waTextMuted
+                                : _waGreenDark,
                           ),
                         ),
                         PopupMenuButton<String>(
@@ -5101,7 +5606,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                               return;
                             }
                             setState(() {
-                              _conversationDateFilter = {
+                              _conversationDateFilter =
+                                  {
                                     'all': _CrmDateFilter.all,
                                     'today': _CrmDateFilter.today,
                                     'yesterday': _CrmDateFilter.yesterday,
@@ -5111,11 +5617,26 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                             });
                           },
                           itemBuilder: (context) => const [
-                            PopupMenuItem<String>(value: 'all', child: Text('Todas las fechas')),
-                            PopupMenuItem<String>(value: 'today', child: Text('Hoy')),
-                            PopupMenuItem<String>(value: 'yesterday', child: Text('Ayer')),
-                            PopupMenuItem<String>(value: 'last7', child: Text('Ultimos 7 dias')),
-                            PopupMenuItem<String>(value: 'custom', child: Text('Intervalo personalizado')),
+                            PopupMenuItem<String>(
+                              value: 'all',
+                              child: Text('Todas las fechas'),
+                            ),
+                            PopupMenuItem<String>(
+                              value: 'today',
+                              child: Text('Hoy'),
+                            ),
+                            PopupMenuItem<String>(
+                              value: 'yesterday',
+                              child: Text('Ayer'),
+                            ),
+                            PopupMenuItem<String>(
+                              value: 'last7',
+                              child: Text('Ultimos 7 dias'),
+                            ),
+                            PopupMenuItem<String>(
+                              value: 'custom',
+                              child: Text('Intervalo personalizado'),
+                            ),
                           ],
                           icon: Icon(
                             Icons.filter_alt_rounded,
@@ -5133,9 +5654,15 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                           backgroundColor: const Color(0xFFF6F7F7),
                           selectedColor: _waGreen.withAlpha(20),
                           visualDensity: VisualDensity.compact,
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          labelPadding: const EdgeInsets.symmetric(horizontal: 2),
-                          label: const Text('Mio', style: TextStyle(fontSize: 11)),
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          labelPadding: const EdgeInsets.symmetric(
+                            horizontal: 2,
+                          ),
+                          label: const Text(
+                            'Mio',
+                            style: TextStyle(fontSize: 11),
+                          ),
                           onSelected: (value) {
                             setState(() => _onlyMine = value);
                             _loadAll();
@@ -5198,15 +5725,17 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                               const PopupMenuDivider(),
                               PopupMenuItem<String>(
                                 value: 'bot-pause',
-                                child: Text(_botPaused
-                                    ? 'Reanudar bot'
-                                    : 'Pausar bot'),
+                                child: Text(
+                                  _botPaused ? 'Reanudar bot' : 'Pausar bot',
+                                ),
                               ),
                               PopupMenuItem<String>(
                                 value: 'bot-exclude',
-                                child: Text(_isExcluded
-                                    ? 'Incluir numero en bot'
-                                    : 'Excluir numero del bot'),
+                                child: Text(
+                                  _isExcluded
+                                      ? 'Incluir numero en bot'
+                                      : 'Excluir numero del bot',
+                                ),
                               ),
                               PopupMenuItem<String>(
                                 value: 'bot-suggest',
@@ -5270,7 +5799,7 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                       _searchCtrl.text.trim().isNotEmpty
                           ? 'No hay resultados para esa busqueda.'
                           : (_conversationWarning ??
-                              'Sin conversaciones para la instancia seleccionada.'),
+                                'Sin conversaciones para la instancia seleccionada.'),
                       textAlign: TextAlign.center,
                       style: const TextStyle(fontSize: 12, color: _waTextMuted),
                     ),
@@ -5292,14 +5821,18 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                         itemBuilder: (context, index) {
                           final item = filteredConversations[index];
                           final isActive = _selectedConversation?.id == item.id;
-                          final effectiveStatus = _conversationEffectiveStatus(item);
+                          final effectiveStatus = _conversationEffectiveStatus(
+                            item,
+                          );
                           return _CrmConversationListItem(
                             key: ValueKey(item.id),
                             item: item,
                             isActive: isActive,
                             visibleName: _conversationVisibleName(item),
                             previewText: _conversationPreviewText(item),
-                            timeLabel: _formatConversationListTime(item.lastMessageAt),
+                            timeLabel: _formatConversationListTime(
+                              item.lastMessageAt,
+                            ),
                             statusLabel: _statusLabel(effectiveStatus),
                             statusColor: _statusAccentColor(effectiveStatus),
                             onAvatarTap: () => _openAvatarPreview(
@@ -5313,7 +5846,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                                     await _openConversation(item.id);
                                     if (!mounted) return;
                                     if (isMobile) {
-                                      setState(() => _mobileConversationMode = true);
+                                      setState(
+                                        () => _mobileConversationMode = true,
+                                      );
                                     }
                                   },
                           );
@@ -5351,7 +5886,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
             (message) => _CrmTimelineEntry(
               title: message.displayText,
               subtitle: message.isOutgoing ? 'Tu mensaje' : 'Cliente',
-              author: message.senderName ??
+              author:
+                  message.senderName ??
                   (message.isOutgoing ? 'Equipo FULLTECH' : 'Cliente'),
               createdAt: message.sentAt,
               icon: message.isOutgoing
@@ -5426,7 +5962,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        selectedConversation?.contactName ?? 'Conversaciones CRM',
+                        selectedConversation?.contactName ??
+                            'Conversaciones CRM',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -5442,9 +5979,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                             child: Text(
                               hasConversation
                                   ? (selectedConversation.crmCustomerName ??
-                                      (selectedConversation.isNewContact
-                                          ? 'Nuevo contacto'
-                                          : 'Sin CRM'))
+                                        (selectedConversation.isNewContact
+                                            ? 'Nuevo contacto'
+                                            : 'Sin CRM'))
                                   : 'Selecciona una conversacion para ver mensajes reales',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -5523,7 +6060,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                       return;
                     }
                     setState(() {
-                      _messageDateFilter = {
+                      _messageDateFilter =
+                          {
                             'all': _CrmDateFilter.all,
                             'today': _CrmDateFilter.today,
                             'yesterday': _CrmDateFilter.yesterday,
@@ -5533,11 +6071,23 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                     });
                   },
                   itemBuilder: (context) => const [
-                    PopupMenuItem<String>(value: 'all', child: Text('Todas las fechas')),
+                    PopupMenuItem<String>(
+                      value: 'all',
+                      child: Text('Todas las fechas'),
+                    ),
                     PopupMenuItem<String>(value: 'today', child: Text('Hoy')),
-                    PopupMenuItem<String>(value: 'yesterday', child: Text('Ayer')),
-                    PopupMenuItem<String>(value: 'last7', child: Text('Ultimos 7 dias')),
-                    PopupMenuItem<String>(value: 'custom', child: Text('Intervalo personalizado')),
+                    PopupMenuItem<String>(
+                      value: 'yesterday',
+                      child: Text('Ayer'),
+                    ),
+                    PopupMenuItem<String>(
+                      value: 'last7',
+                      child: Text('Ultimos 7 dias'),
+                    ),
+                    PopupMenuItem<String>(
+                      value: 'custom',
+                      child: Text('Intervalo personalizado'),
+                    ),
                   ],
                   icon: Icon(
                     Icons.filter_alt_rounded,
@@ -5762,7 +6312,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                   Center(
                     child: Text(
                       hasConversation
-                          ? (_conversationWarning ?? 'Sin mensajes en esta conversacion.')
+                          ? (_conversationWarning ??
+                                'Sin mensajes en esta conversacion.')
                           : 'Selecciona una conversacion para ver mensajes reales',
                       style: const TextStyle(fontSize: 13, color: _waTextMuted),
                     ),
@@ -5789,15 +6340,21 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                           children: [
                             if (showDate)
                               Padding(
-                                padding: const EdgeInsets.only(bottom: 8, top: 2),
+                                padding: const EdgeInsets.only(
+                                  bottom: 8,
+                                  top: 2,
+                                ),
                                 child: _DateSeparator(
                                   label: _formatDayLabel(entry.createdAt),
                                 ),
                               ),
                             _CrmTimelineTile(
                               entry: entry,
-                              onDeleteOutgoing: entry.isOutgoing && entry.messageId != null
-                                  ? () => _deleteMessageFromCurrentConversation(entry.messageId!)
+                              onDeleteOutgoing:
+                                  entry.isOutgoing && entry.messageId != null
+                                  ? () => _deleteMessageFromCurrentConversation(
+                                      entry.messageId!,
+                                    )
                                   : null,
                             ),
                             const SizedBox(height: 5),
@@ -5830,7 +6387,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                 // Indicador de mensajes nuevos si el usuario está arriba.
                 if (_pendingNewMessages > 0 &&
                     hasConversation &&
-                    _pendingNewMessagesConversationId == selectedConversation.id)
+                    _pendingNewMessagesConversationId ==
+                        selectedConversation.id)
                   Positioned(
                     left: 0,
                     right: 0,
@@ -5857,7 +6415,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                             decoration: BoxDecoration(
                               color: Colors.white.withAlpha(245),
                               borderRadius: BorderRadius.circular(999),
-                              border: Border.all(color: _waBorder.withAlpha(160)),
+                              border: Border.all(
+                                color: _waBorder.withAlpha(160),
+                              ),
                               boxShadow: [
                                 BoxShadow(
                                   color: Colors.black.withAlpha(20),
@@ -5922,15 +6482,15 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                       color: _loadingCommercialSuggestion
                           ? const Color(0xFFF0F7FF)
                           : (_commercialAiStatusText == 'Sugerencia lista'
-                              ? const Color(0xFFEAF7EE)
-                              : const Color(0xFFFFF2F0)),
+                                ? const Color(0xFFEAF7EE)
+                                : const Color(0xFFFFF2F0)),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: _loadingCommercialSuggestion
                             ? const Color(0xFFBFDBFE)
                             : (_commercialAiStatusText == 'Sugerencia lista'
-                                ? const Color(0xFFA7E0B4)
-                                : const Color(0xFFF7B4AE)),
+                                  ? const Color(0xFFA7E0B4)
+                                  : const Color(0xFFF7B4AE)),
                       ),
                     ),
                     child: Row(
@@ -5980,7 +6540,11 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.auto_awesome_rounded, size: 16, color: _waGreenDark),
+                            const Icon(
+                              Icons.auto_awesome_rounded,
+                              size: 16,
+                              color: _waGreenDark,
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -5996,7 +6560,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                             ),
                             Text(
                               '${(_commercialAiSuggestion!.confidence * 100).round()}%',
-                              style: const TextStyle(fontSize: 10, color: _waTextMuted),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: _waTextMuted,
+                              ),
                             ),
                           ],
                         ),
@@ -6005,7 +6572,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                           _commercialAiSuggestion!.suggestedReply,
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 11.5, color: _waTextMuted),
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            color: _waTextMuted,
+                          ),
                         ),
                         const SizedBox(height: 6),
                         Wrap(
@@ -6020,7 +6590,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                               child: const Text('Insertar en input'),
                             ),
                             FilledButton(
-                              onPressed: _sendingChatMessage ? null : _sendCommercialSuggestion,
+                              onPressed: _sendingChatMessage
+                                  ? null
+                                  : _sendCommercialSuggestion,
                               style: FilledButton.styleFrom(
                                 visualDensity: VisualDensity.compact,
                                 backgroundColor: _waGreenDark,
@@ -6030,12 +6602,16 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                             ),
                             TextButton(
                               onPressed: _insertCommercialSuggestionInComposer,
-                              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                              ),
                               child: const Text('Editar'),
                             ),
                             TextButton(
                               onPressed: _ignoreCommercialSuggestion,
-                              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                              ),
                               child: const Text('Ignorar'),
                             ),
                           ],
@@ -6067,19 +6643,28 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            const Icon(Icons.auto_fix_high_rounded, size: 16, color: _waGreenDark),
+                            const Icon(
+                              Icons.auto_fix_high_rounded,
+                              size: 16,
+                              color: _waGreenDark,
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 _composerOrthographySuggestion!,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 11.5, color: _waTextMuted),
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  color: _waTextMuted,
+                                ),
                               ),
                             ),
                             TextButton(
                               onPressed: _ignoreOrthographySuggestion,
-                              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                              ),
                               child: const Text('Ignorar'),
                             ),
                             FilledButton(
@@ -6105,17 +6690,28 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                         // AI-suggested emojis row
                         Container(
                           color: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.auto_awesome_rounded, size: 13, color: _waGreenDark),
+                                  const Icon(
+                                    Icons.auto_awesome_rounded,
+                                    size: 13,
+                                    color: _waGreenDark,
+                                  ),
                                   const SizedBox(width: 4),
                                   const Text(
                                     'IA sugiere',
-                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _waGreenDark),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: _waGreenDark,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -6128,7 +6724,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                                     borderRadius: BorderRadius.circular(6),
                                     child: Padding(
                                       padding: const EdgeInsets.all(4),
-                                      child: Text(emoji, style: const TextStyle(fontSize: 24)),
+                                      child: Text(
+                                        emoji,
+                                        style: const TextStyle(fontSize: 24),
+                                      ),
                                     ),
                                   );
                                 }).toList(),
@@ -6150,9 +6749,10 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                                 indicatorColor: _waGreenDark,
                                 iconColorSelected: _waGreenDark,
                               ),
-                              bottomActionBarConfig: const ep.BottomActionBarConfig(
-                                enabled: false,
-                              ),
+                              bottomActionBarConfig:
+                                  const ep.BottomActionBarConfig(
+                                    enabled: false,
+                                  ),
                               searchViewConfig: ep.SearchViewConfig(
                                 backgroundColor: Colors.white,
                               ),
@@ -6198,9 +6798,11 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                     IconButton(
                       tooltip: 'Sugerir respuesta IA',
                       visualDensity: VisualDensity.compact,
-                      onPressed: !hasConversation || _loadingCommercialSuggestion
+                      onPressed:
+                          !hasConversation || _loadingCommercialSuggestion
                           ? null
-                          : () => _requestCommercialReplySuggestion(manual: true),
+                          : () =>
+                                _requestCommercialReplySuggestion(manual: true),
                       icon: _loadingCommercialSuggestion
                           ? const SizedBox(
                               width: 18,
@@ -6247,7 +6849,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                       icon: const Icon(Icons.mic_none_rounded, size: 20),
                     ),
                     FilledButton.icon(
-                      onPressed: canSendText ? _sendMessageToCurrentConversation : null,
+                      onPressed: canSendText
+                          ? _sendMessageToCurrentConversation
+                          : null,
                       icon: _sendingChatMessage
                           ? const SizedBox(
                               width: 14,
@@ -6258,7 +6862,9 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                               ),
                             )
                           : const Icon(Icons.send_rounded, size: 16),
-                      label: Text(_sendingChatMessage ? 'Enviando...' : 'Enviar'),
+                      label: Text(
+                        _sendingChatMessage ? 'Enviando...' : 'Enviar',
+                      ),
                       style: FilledButton.styleFrom(
                         backgroundColor: _waGreenDark,
                         foregroundColor: Colors.white,
@@ -6318,7 +6924,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                 if (tabOverride != null) return;
                 setState(() => _activeRightPanelTab = tab);
               },
-              onClose: onClose ?? () => setState(() => _showDetailsPanel = false),
+              onClose:
+                  onClose ?? () => setState(() => _showDetailsPanel = false),
             ),
             const Expanded(
               child: Center(
@@ -6348,7 +6955,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                 if (tabOverride != null) return;
                 setState(() => _activeRightPanelTab = tab);
               },
-              onClose: onClose ?? () => setState(() => _showDetailsPanel = false),
+              onClose:
+                  onClose ?? () => setState(() => _showDetailsPanel = false),
             ),
             Expanded(
               child: Padding(
@@ -6358,7 +6966,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                   loading: _loadingCommercialSuggestion,
                   statusText: _commercialAiStatusText,
                   errorDetail: _commercialAiErrorDetail,
-                  onSuggest: () => _requestCommercialReplySuggestion(manual: true),
+                  onSuggest: () =>
+                      _requestCommercialReplySuggestion(manual: true),
                   onInsert: _insertCommercialSuggestionInComposer,
                   onSend: _sendCommercialSuggestion,
                   onIgnore: _ignoreCommercialSuggestion,
@@ -6436,7 +7045,8 @@ class _CrmComercialScreenState extends ConsumerState<CrmComercialScreen> {
                   if (tabOverride != null) return;
                   setState(() => _activeRightPanelTab = tab);
                 },
-                onClose: onClose ?? () => setState(() => _showDetailsPanel = false),
+                onClose:
+                    onClose ?? () => setState(() => _showDetailsPanel = false),
               ),
               const SizedBox(height: 8),
               _InfoRow(label: 'Telefono', value: customer.telefono),
@@ -6921,7 +7531,10 @@ class _CrmAiCommercialPanel extends StatelessWidget {
                 Expanded(
                   child: Text(
                     statusText,
-                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
@@ -6954,7 +7567,10 @@ class _CrmAiCommercialPanel extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                (suggestion?.intent ?? 'Sin sugerencia aún').replaceAll('_', ' '),
+                (suggestion?.intent ?? 'Sin sugerencia aún').replaceAll(
+                  '_',
+                  ' ',
+                ),
                 style: const TextStyle(fontSize: 11, color: _waTextMuted),
               ),
             ],
@@ -6973,7 +7589,8 @@ class _CrmAiCommercialPanel extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                suggestion?.suggestedReply ?? 'Pulsa "Sugerir respuesta" para generar una propuesta.',
+                suggestion?.suggestedReply ??
+                    'Pulsa "Sugerir respuesta" para generar una propuesta.',
                 style: const TextStyle(fontSize: 11, color: _waTextMuted),
               ),
             ],
@@ -7017,7 +7634,10 @@ class _CrmAiCommercialPanel extends StatelessWidget {
               ? const SizedBox(
                   width: 14,
                   height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
                 )
               : const Icon(Icons.auto_fix_high_rounded, size: 16),
           label: const Text('Sugerir respuesta'),
@@ -7065,10 +7685,22 @@ class _CrmAiCommercialPanel extends StatelessWidget {
           spacing: 6,
           runSpacing: 6,
           children: [
-            OutlinedButton(onPressed: onUseLocation, child: const Text('Usar ubicación')),
-            OutlinedButton(onPressed: onUseHours, child: const Text('Usar horario')),
-            OutlinedButton(onPressed: onUseAccounts, child: const Text('Usar cuentas')),
-            OutlinedButton(onPressed: onUseCatalog, child: const Text('Usar catálogo')),
+            OutlinedButton(
+              onPressed: onUseLocation,
+              child: const Text('Usar ubicación'),
+            ),
+            OutlinedButton(
+              onPressed: onUseHours,
+              child: const Text('Usar horario'),
+            ),
+            OutlinedButton(
+              onPressed: onUseAccounts,
+              child: const Text('Usar cuentas'),
+            ),
+            OutlinedButton(
+              onPressed: onUseCatalog,
+              child: const Text('Usar catálogo'),
+            ),
             if (statusMenu != null) statusMenu!,
           ],
         ),
@@ -7151,7 +7783,6 @@ class _InfoRow extends StatelessWidget {
       ),
     );
   }
-
 }
 
 class _CrmConversationListItem extends StatelessWidget {
@@ -7245,8 +7876,12 @@ class _CrmConversationListItem extends StatelessWidget {
                           timeLabel,
                           style: TextStyle(
                             fontSize: 10,
-                            color: item.unreadCount > 0 ? _waGreenDark : _waTextMuted,
-                            fontWeight: item.unreadCount > 0 ? FontWeight.w600 : FontWeight.w400,
+                            color: item.unreadCount > 0
+                                ? _waGreenDark
+                                : _waTextMuted,
+                            fontWeight: item.unreadCount > 0
+                                ? FontWeight.w600
+                                : FontWeight.w400,
                           ),
                         ),
                       ],
@@ -7267,7 +7902,10 @@ class _CrmConversationListItem extends StatelessWidget {
                       children: [
                         if (showStatus)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1.5,
+                            ),
                             decoration: BoxDecoration(
                               color: statusColor.withAlpha(18),
                               borderRadius: BorderRadius.circular(999),
@@ -7288,7 +7926,10 @@ class _CrmConversationListItem extends StatelessWidget {
                         if (item.unreadCount > 0)
                           Container(
                             constraints: const BoxConstraints(minWidth: 16),
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1.5,
+                            ),
                             decoration: BoxDecoration(
                               color: _waGreenDark,
                               borderRadius: BorderRadius.circular(999),
@@ -7386,11 +8027,7 @@ class _CrmQuickReplyTemplate {
   final String text;
 
   Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'label': label,
-      'text': text,
-    };
+    return {'id': id, 'label': label, 'text': text};
   }
 
   factory _CrmQuickReplyTemplate.fromMap(Map<String, dynamic> map) {
@@ -7414,11 +8051,7 @@ class _CrmComposerToolTemplate {
   final String actionType;
 
   Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'label': label,
-      'actionType': actionType,
-    };
+    return {'id': id, 'label': label, 'actionType': actionType};
   }
 
   factory _CrmComposerToolTemplate.fromMap(Map<String, dynamic> map) {
@@ -7519,8 +8152,9 @@ class _CrmTimelineTile extends StatelessWidget {
     );
 
     return Row(
-      mainAxisAlignment:
-          entry.isOutgoing ? MainAxisAlignment.end : MainAxisAlignment.start,
+      mainAxisAlignment: entry.isOutgoing
+          ? MainAxisAlignment.end
+          : MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ConstrainedBox(
@@ -7542,13 +8176,15 @@ class _CrmTimelineTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Render multimedia if present
-                if (entry.messageType.toUpperCase() != 'TEXT' && entry.messageId != null) ...[
+                if (entry.messageType.toUpperCase() != 'TEXT' &&
+                    entry.messageId != null) ...[
                   _buildMediaContent(),
                   if (entry.caption?.isNotEmpty == true)
                     const SizedBox(height: 6),
                 ],
                 // Text content
-                if (entry.messageType.toUpperCase() == 'TEXT' && entry.title.isNotEmpty)
+                if (entry.messageType.toUpperCase() == 'TEXT' &&
+                    entry.title.isNotEmpty)
                   Text(
                     entry.title,
                     style: const TextStyle(
@@ -7580,7 +8216,10 @@ class _CrmTimelineTile extends StatelessWidget {
                         entry.createdAt == null
                             ? 'Sin fecha'
                             : DateFormat('HH:mm').format(entry.createdAt!),
-                        style: const TextStyle(fontSize: 9.5, color: _waTextMuted),
+                        style: const TextStyle(
+                          fontSize: 9.5,
+                          color: _waTextMuted,
+                        ),
                       ),
                       if (entry.isOutgoing) ...[
                         const SizedBox(width: 4),
@@ -7623,690 +8262,705 @@ class _CrmTimelineTile extends StatelessWidget {
   }
 }
 
-  // ─── CRM Comercial Media Widgets ──────────────────────────────────────────────
+// ─── CRM Comercial Media Widgets ──────────────────────────────────────────────
 
-  class _CrmMediaUnavailable extends StatelessWidget {
-    const _CrmMediaUnavailable({
-      required this.icon,
-      required this.textColor,
-      this.onRetry,
-    });
+class _CrmMediaUnavailable extends StatelessWidget {
+  const _CrmMediaUnavailable({
+    required this.icon,
+    required this.textColor,
+    this.onRetry,
+  });
 
-    final IconData icon;
-    final Color textColor;
-    final VoidCallback? onRetry;
+  final IconData icon;
+  final Color textColor;
+  final VoidCallback? onRetry;
 
-    @override
-    Widget build(BuildContext context) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: textColor),
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: textColor),
+        const SizedBox(width: 6),
+        Text(
+          'Archivo no disponible',
+          style: TextStyle(color: textColor, fontSize: 13),
+        ),
+        if (onRetry != null) ...[
           const SizedBox(width: 6),
-          Text(
-            'Archivo no disponible',
-            style: TextStyle(color: textColor, fontSize: 13),
-          ),
-          if (onRetry != null) ...[
-            const SizedBox(width: 6),
-            InkWell(
-              onTap: onRetry,
-              child: Text(
-                'Reintentar',
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  decoration: TextDecoration.underline,
-                ),
+          InkWell(
+            onTap: onRetry,
+            child: Text(
+              'Reintentar',
+              style: TextStyle(
+                color: textColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                decoration: TextDecoration.underline,
               ),
             ),
-          ],
+          ),
         ],
-      );
-    }
+      ],
+    );
+  }
+}
+
+class _CrmImageContent extends ConsumerStatefulWidget {
+  const _CrmImageContent({required this.msg, required this.textColor});
+  final CrmComercialInboxMessage msg;
+  final Color textColor;
+  @override
+  ConsumerState<_CrmImageContent> createState() => _CrmImageContentState();
+}
+
+class _CrmImageContentState extends ConsumerState<_CrmImageContent> {
+  Future<Uint8List>? _bytesFuture;
+  String? _url;
+
+  @override
+  void initState() {
+    super.initState();
+    _setFutureIfNeeded();
   }
 
-  class _CrmImageContent extends ConsumerStatefulWidget {
-    const _CrmImageContent({required this.msg, required this.textColor});
-    final CrmComercialInboxMessage msg;
-    final Color textColor;
-    @override
-    ConsumerState<_CrmImageContent> createState() => _CrmImageContentState();
-  }
-
-  class _CrmImageContentState extends ConsumerState<_CrmImageContent> {
-    Future<Uint8List>? _bytesFuture;
-    String? _url;
-
-    @override
-    void initState() {
-      super.initState();
+  @override
+  void didUpdateWidget(covariant _CrmImageContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.msg.id != widget.msg.id ||
+        oldWidget.msg.mediaUrl != widget.msg.mediaUrl) {
       _setFutureIfNeeded();
     }
+  }
 
-    @override
-    void didUpdateWidget(covariant _CrmImageContent oldWidget) {
-      super.didUpdateWidget(oldWidget);
-      if (oldWidget.msg.id != widget.msg.id ||
-          oldWidget.msg.mediaUrl != widget.msg.mediaUrl) {
-        _setFutureIfNeeded();
-      }
+  void _setFutureIfNeeded() {
+    _url = _mediaUrlForCrmMsg(widget.msg);
+    if (_url == null || widget.msg.mediaFailed) {
+      _bytesFuture = null;
+      return;
     }
+    final downloadBytes = ref
+        .read(crmComercialRepositoryProvider)
+        .downloadMediaBytes;
+    _bytesFuture = _crmBytesFromMediaUrl(_url!, downloadBytes: downloadBytes);
+  }
 
-    void _setFutureIfNeeded() {
-      _url = _mediaUrlForCrmMsg(widget.msg);
-      if (_url == null || widget.msg.mediaFailed) {
-        _bytesFuture = null;
-        return;
-      }
-      final downloadBytes =
-          ref.read(crmComercialRepositoryProvider).downloadMediaBytes;
-      _bytesFuture = _crmBytesFromMediaUrl(_url!, downloadBytes: downloadBytes);
-    }
-
-    @override
-    Widget build(BuildContext context) {
-      final downloadBytes =
-          ref.read(crmComercialRepositoryProvider).downloadMediaBytes;
-      if (widget.msg.mediaFailed) {
-        return _CrmMediaUnavailable(
-          icon: Icons.image_not_supported_outlined,
-          textColor: widget.textColor,
-        );
-      }
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_url != null && _bytesFuture != null)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: GestureDetector(
-                onTap: () => _showFullImage(context, _url!, downloadBytes),
-                child: _buildImageWidget(_bytesFuture!),
-              ),
-            )
-          else
-            _CrmMediaUnavailable(
-              icon: Icons.image_not_supported_outlined,
-              textColor: widget.textColor,
-            ),
-        ],
+  @override
+  Widget build(BuildContext context) {
+    final downloadBytes = ref
+        .read(crmComercialRepositoryProvider)
+        .downloadMediaBytes;
+    if (widget.msg.mediaFailed) {
+      return _CrmMediaUnavailable(
+        icon: Icons.image_not_supported_outlined,
+        textColor: widget.textColor,
       );
     }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_url != null && _bytesFuture != null)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: GestureDetector(
+              onTap: () => _showFullImage(context, _url!, downloadBytes),
+              child: _buildImageWidget(_bytesFuture!),
+            ),
+          )
+        else
+          _CrmMediaUnavailable(
+            icon: Icons.image_not_supported_outlined,
+            textColor: widget.textColor,
+          ),
+      ],
+    );
+  }
 
-    Widget _buildImageWidget(Future<Uint8List> future) {
-      return FutureBuilder<Uint8List>(
-        future: future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return Container(
-              width: 220,
-              height: 120,
-              color: Colors.grey.shade200,
-              child: const Center(
-                child: Icon(Icons.image_outlined, size: 26, color: Colors.grey),
-              ),
-            );
-          }
-          final bytes = snapshot.data;
-          if (snapshot.hasError || bytes == null || bytes.isEmpty) {
-            return _brokenImage();
-          }
-          return Image.memory(
-            bytes,
+  Widget _buildImageWidget(Future<Uint8List> future) {
+    return FutureBuilder<Uint8List>(
+      future: future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return Container(
             width: 220,
             height: 120,
-            fit: BoxFit.cover,
-            gaplessPlayback: true,
-            errorBuilder: (_, __, ___) => _brokenImage(),
+            color: Colors.grey.shade200,
+            child: const Center(
+              child: Icon(Icons.image_outlined, size: 26, color: Colors.grey),
+            ),
+          );
+        }
+        final bytes = snapshot.data;
+        if (snapshot.hasError || bytes == null || bytes.isEmpty) {
+          return _brokenImage();
+        }
+        return Image.memory(
+          bytes,
+          width: 220,
+          height: 120,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          errorBuilder: (_, __, ___) => _brokenImage(),
+        );
+      },
+    );
+  }
+
+  Widget _brokenImage() => Container(
+    width: 220,
+    height: 120,
+    color: Colors.grey.shade300,
+    child: const Icon(Icons.broken_image_rounded, size: 40),
+  );
+
+  void _showFullImage(
+    BuildContext context,
+    String url,
+    Future<Uint8List> Function(String mediaUrl) downloadBytes,
+  ) {
+    final imageFuture = _crmBytesFromMediaUrl(
+      url,
+      downloadBytes: downloadBytes,
+    );
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black,
+        child: GestureDetector(
+          onTap: () => Navigator.of(ctx).pop(),
+          child: InteractiveViewer(
+            child: FutureBuilder<Uint8List>(
+              future: imageFuture,
+              builder: (context, snapshot) {
+                final bytes = snapshot.data;
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError || bytes == null || bytes.isEmpty) {
+                  return const Icon(
+                    Icons.broken_image_rounded,
+                    size: 64,
+                    color: Colors.white,
+                  );
+                }
+                return Image.memory(bytes);
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CrmAudioContent extends ConsumerStatefulWidget {
+  const _CrmAudioContent({required this.msg, required this.textColor});
+  final CrmComercialInboxMessage msg;
+  final Color textColor;
+  @override
+  ConsumerState<_CrmAudioContent> createState() => _CrmAudioContentState();
+}
+
+class _CrmAudioContentState extends ConsumerState<_CrmAudioContent> {
+  static const double _minPlayerWidth = 188;
+  static const double _maxPlayerWidth = 260;
+
+  media_kit.Player? _player;
+  StreamSubscription<bool>? _playingSub;
+  StreamSubscription<Duration>? _positionSub;
+  StreamSubscription<Duration>? _durationSub;
+  bool _initializing = false;
+  bool _initialized = false;
+  bool _playing = false;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+  String? _error;
+
+  @override
+  void dispose() {
+    _playingSub?.cancel();
+    _positionSub?.cancel();
+    _durationSub?.cancel();
+    _player?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _ensureInitialized() async {
+    if (_initializing || _initialized) return;
+    setState(() => _initializing = true);
+    try {
+      final url = _mediaUrlForCrmMsg(widget.msg);
+      if (url == null) throw Exception('Sin URL de audio');
+      final source = await _crmMediaSourceForPlayback(
+        url,
+        widget.msg.mediaMimeType,
+        downloadBytes: ref
+            .read(crmComercialRepositoryProvider)
+            .downloadMediaBytes,
+      );
+      final player = media_kit.Player();
+      await player.setVolume(100);
+      _playingSub = player.stream.playing.listen((v) {
+        if (mounted) setState(() => _playing = v);
+      });
+      _positionSub = player.stream.position.listen((v) {
+        if (mounted) setState(() => _position = v);
+      });
+      _durationSub = player.stream.duration.listen((v) {
+        if (mounted) setState(() => _duration = v);
+      });
+      await player.open(media_kit.Media(source), play: true);
+      if (mounted) {
+        setState(() {
+          _player = player;
+          _initializing = false;
+          _initialized = true;
+        });
+      } else {
+        await player.dispose();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _initializing = false;
+          _error = e.toString();
+        });
+      }
+    }
+  }
+
+  Future<void> _togglePlayPause() async {
+    final player = _player;
+    if (player == null) return;
+    if (_playing) {
+      await player.pause();
+    } else {
+      if (_duration > Duration.zero && _position >= _duration) {
+        await player.seek(Duration.zero);
+      }
+      await player.play();
+    }
+  }
+
+  String _fmt(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  double _audioWidthFor(BoxConstraints constraints) {
+    final maxWidth =
+        constraints.hasBoundedWidth && constraints.maxWidth.isFinite
+        ? constraints.maxWidth
+        : _maxPlayerWidth;
+    return maxWidth.clamp(_minPlayerWidth, _maxPlayerWidth);
+  }
+
+  Future<void> _seekFromLocalDx(double dx, double width) async {
+    final player = _player;
+    if (player == null || _duration <= Duration.zero || width <= 0) return;
+    final progress = (dx / width).clamp(0.0, 1.0);
+    await player.seek(
+      Duration(milliseconds: (progress * _duration.inMilliseconds).round()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.textColor;
+    if (_mediaUrlForCrmMsg(widget.msg) == null || widget.msg.mediaFailed) {
+      return _CrmMediaUnavailable(
+        icon: Icons.mic_off_rounded,
+        textColor: color,
+      );
+    }
+    if (_error != null) {
+      return _CrmMediaUnavailable(
+        icon: Icons.error_outline,
+        textColor: color,
+        onRetry: () {
+          setState(() => _error = null);
+          _ensureInitialized();
+        },
+      );
+    }
+    if (!_initialized) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final width = _audioWidthFor(constraints);
+          return GestureDetector(
+            onTap: _ensureInitialized,
+            child: SizedBox(
+              width: width,
+              height: 44,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  SizedBox.square(
+                    dimension: 34,
+                    child: _initializing
+                        ? Padding(
+                            padding: const EdgeInsets.all(7),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.4,
+                              color: color,
+                            ),
+                          )
+                        : DecoratedBox(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: color.withValues(alpha: 0.15),
+                            ),
+                            child: Icon(
+                              Icons.play_arrow_rounded,
+                              color: color,
+                              size: 21,
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.msg.originalFileName ?? 'Audio',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: color,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            height: 1.05,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        _CrmStaticWaveform(color: color),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           );
         },
       );
     }
 
-    Widget _brokenImage() => Container(
-      width: 220,
-      height: 120,
-      color: Colors.grey.shade300,
-      child: const Icon(Icons.broken_image_rounded, size: 40),
-    );
+    final progress = _duration.inMilliseconds > 0
+        ? (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0)
+        : 0.0;
 
-    void _showFullImage(
-      BuildContext context,
-      String url,
-      Future<Uint8List> Function(String mediaUrl) downloadBytes,
-    ) {
-      final imageFuture = _crmBytesFromMediaUrl(url, downloadBytes: downloadBytes);
-      showDialog(
-        context: context,
-        builder: (ctx) => Dialog(
-          backgroundColor: Colors.black,
-          child: GestureDetector(
-            onTap: () => Navigator.of(ctx).pop(),
-            child: InteractiveViewer(
-              child: FutureBuilder<Uint8List>(
-                future: imageFuture,
-                builder: (context, snapshot) {
-                  final bytes = snapshot.data;
-                  if (snapshot.connectionState != ConnectionState.done) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (snapshot.hasError || bytes == null || bytes.isEmpty) {
-                    return const Icon(
-                      Icons.broken_image_rounded,
-                      size: 64,
-                      color: Colors.white,
-                    );
-                  }
-                  return Image.memory(bytes);
-                },
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = _audioWidthFor(constraints);
+        return SizedBox(
+          width: width,
+          height: 46,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              GestureDetector(
+                onTap: _togglePlayPause,
+                child: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: color.withValues(alpha: 0.15),
+                  ),
+                  child: Icon(
+                    _playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                    color: color,
+                    size: 21,
+                  ),
+                ),
               ),
-            ),
-          ),
-        ),
-      );
-    }
-  }
-
-  class _CrmAudioContent extends ConsumerStatefulWidget {
-    const _CrmAudioContent({required this.msg, required this.textColor});
-    final CrmComercialInboxMessage msg;
-    final Color textColor;
-    @override
-    ConsumerState<_CrmAudioContent> createState() => _CrmAudioContentState();
-  }
-
-  class _CrmAudioContentState extends ConsumerState<_CrmAudioContent> {
-    static const double _minPlayerWidth = 188;
-    static const double _maxPlayerWidth = 260;
-
-    media_kit.Player? _player;
-    StreamSubscription<bool>? _playingSub;
-    StreamSubscription<Duration>? _positionSub;
-    StreamSubscription<Duration>? _durationSub;
-    bool _initializing = false;
-    bool _initialized = false;
-    bool _playing = false;
-    Duration _position = Duration.zero;
-    Duration _duration = Duration.zero;
-    String? _error;
-
-    @override
-    void dispose() {
-      _playingSub?.cancel();
-      _positionSub?.cancel();
-      _durationSub?.cancel();
-      _player?.dispose();
-      super.dispose();
-    }
-
-    Future<void> _ensureInitialized() async {
-      if (_initializing || _initialized) return;
-      setState(() => _initializing = true);
-      try {
-        final url = _mediaUrlForCrmMsg(widget.msg);
-        if (url == null) throw Exception('Sin URL de audio');
-        final source = await _crmMediaSourceForPlayback(
-          url,
-          widget.msg.mediaMimeType,
-          downloadBytes: ref.read(crmComercialRepositoryProvider).downloadMediaBytes,
-        );
-        final player = media_kit.Player();
-        await player.setVolume(100);
-        _playingSub = player.stream.playing.listen((v) {
-          if (mounted) setState(() => _playing = v);
-        });
-        _positionSub = player.stream.position.listen((v) {
-          if (mounted) setState(() => _position = v);
-        });
-        _durationSub = player.stream.duration.listen((v) {
-          if (mounted) setState(() => _duration = v);
-        });
-        await player.open(media_kit.Media(source), play: true);
-        if (mounted) {
-          setState(() {
-            _player = player;
-            _initializing = false;
-            _initialized = true;
-          });
-        } else {
-          await player.dispose();
-        }
-      } catch (e) {
-        if (mounted) {
-          setState(() {
-            _initializing = false;
-            _error = e.toString();
-          });
-        }
-      }
-    }
-
-    Future<void> _togglePlayPause() async {
-      final player = _player;
-      if (player == null) return;
-      if (_playing) {
-        await player.pause();
-      } else {
-        if (_duration > Duration.zero && _position >= _duration) {
-          await player.seek(Duration.zero);
-        }
-        await player.play();
-      }
-    }
-
-    String _fmt(Duration d) {
-      final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-      final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-      return '$m:$s';
-    }
-
-    double _audioWidthFor(BoxConstraints constraints) {
-      final maxWidth =
-          constraints.hasBoundedWidth && constraints.maxWidth.isFinite
-              ? constraints.maxWidth
-              : _maxPlayerWidth;
-      return maxWidth.clamp(_minPlayerWidth, _maxPlayerWidth);
-    }
-
-    Future<void> _seekFromLocalDx(double dx, double width) async {
-      final player = _player;
-      if (player == null || _duration <= Duration.zero || width <= 0) return;
-      final progress = (dx / width).clamp(0.0, 1.0);
-      await player.seek(
-        Duration(milliseconds: (progress * _duration.inMilliseconds).round()),
-      );
-    }
-
-    @override
-    Widget build(BuildContext context) {
-      final color = widget.textColor;
-      if (_mediaUrlForCrmMsg(widget.msg) == null || widget.msg.mediaFailed) {
-        return _CrmMediaUnavailable(icon: Icons.mic_off_rounded, textColor: color);
-      }
-      if (_error != null) {
-        return _CrmMediaUnavailable(
-          icon: Icons.error_outline,
-          textColor: color,
-          onRetry: () {
-            setState(() => _error = null);
-            _ensureInitialized();
-          },
-        );
-      }
-      if (!_initialized) {
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final width = _audioWidthFor(constraints);
-            return GestureDetector(
-              onTap: _ensureInitialized,
-              child: SizedBox(
-                width: width,
-                height: 44,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SizedBox.square(
-                      dimension: 34,
-                      child: _initializing
-                          ? Padding(
-                              padding: const EdgeInsets.all(7),
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.4,
-                                color: color,
+                    LayoutBuilder(
+                      builder: (context, barConstraints) {
+                        final barWidth = barConstraints.maxWidth;
+                        final thumbTravel = (barWidth - 10).clamp(
+                          0.0,
+                          barWidth,
+                        );
+                        return GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTapDown: (d) =>
+                              _seekFromLocalDx(d.localPosition.dx, barWidth),
+                          onHorizontalDragUpdate: (d) =>
+                              _seekFromLocalDx(d.localPosition.dx, barWidth),
+                          child: SizedBox(
+                            height: 24,
+                            child: Center(
+                              child: Stack(
+                                alignment: Alignment.centerLeft,
+                                children: [
+                                  Container(
+                                    height: 3,
+                                    decoration: BoxDecoration(
+                                      color: color.withValues(alpha: 0.24),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                  ),
+                                  FractionallySizedBox(
+                                    widthFactor: progress.toDouble(),
+                                    child: Container(
+                                      height: 3,
+                                      decoration: BoxDecoration(
+                                        color: color,
+                                        borderRadius: BorderRadius.circular(
+                                          999,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    left: (thumbTravel * progress).clamp(
+                                      0.0,
+                                      thumbTravel,
+                                    ),
+                                    child: Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: BoxDecoration(
+                                        color: color,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            )
-                          : DecoratedBox(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: color.withValues(alpha: 0.15),
-                              ),
-                              child: Icon(
-                                Icons.play_arrow_rounded,
-                                color: color,
-                                size: 21,
-                              ),
-                            ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.msg.originalFileName ?? 'Audio',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: color,
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              height: 1.05,
                             ),
                           ),
-                          const SizedBox(height: 5),
-                          _CrmStaticWaveform(color: color),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 1),
+                    SizedBox(
+                      height: 12,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _fmt(_position),
+                              maxLines: 1,
+                              style: TextStyle(
+                                color: color.withValues(alpha: 0.7),
+                                fontSize: 9.5,
+                                height: 1,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              _fmt(_duration),
+                              maxLines: 1,
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                color: color.withValues(alpha: 0.7),
+                                fontSize: 9.5,
+                                height: 1,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ],
                 ),
               ),
-            );
-          },
+            ],
+          ),
         );
+      },
+    );
+  }
+}
+
+class _CrmStaticWaveform extends StatelessWidget {
+  const _CrmStaticWaveform({required this.color});
+  final Color color;
+  static const _heights = [
+    4.0,
+    8.0,
+    12.0,
+    6.0,
+    14.0,
+    8.0,
+    10.0,
+    6.0,
+    4.0,
+    12.0,
+    8.0,
+    14.0,
+    6.0,
+    10.0,
+    8.0,
+    4.0,
+    12.0,
+    6.0,
+  ];
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.hasBoundedWidth
+            ? constraints.maxWidth
+            : _heights.length * 5.0;
+        final visibleCount = (availableWidth / 5).floor().clamp(
+          4,
+          _heights.length,
+        );
+        final heights = _heights.take(visibleCount).toList(growable: false);
+        return SizedBox(
+          height: 16,
+          child: Row(
+            mainAxisSize: MainAxisSize.max,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              for (var i = 0; i < heights.length; i++) ...[
+                Flexible(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      width: 3,
+                      height: heights[i].clamp(3.0, 14.0),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                ),
+                if (i < heights.length - 1) const SizedBox(width: 2),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _CrmVideoContent extends ConsumerStatefulWidget {
+  const _CrmVideoContent({required this.msg, required this.textColor});
+  final CrmComercialInboxMessage msg;
+  final Color textColor;
+  @override
+  ConsumerState<_CrmVideoContent> createState() => _CrmVideoContentState();
+}
+
+class _CrmVideoContentState extends ConsumerState<_CrmVideoContent> {
+  media_kit.Player? _player;
+  media_kit_video.VideoController? _videoController;
+  StreamSubscription<bool>? _playingSub;
+  bool _loading = false;
+  bool _initialized = false;
+  bool _playing = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _playingSub?.cancel();
+    _player?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _initializeAndPlay() async {
+    final mediaUrl = _mediaUrlForCrmMsg(widget.msg);
+    if (mediaUrl == null) return;
+    setState(() => _loading = true);
+    try {
+      final source = await _crmMediaSourceForPlayback(
+        mediaUrl,
+        widget.msg.mediaMimeType ?? 'video/mp4',
+        downloadBytes: ref
+            .read(crmComercialRepositoryProvider)
+            .downloadMediaBytes,
+      );
+      final player = media_kit.Player();
+      await player.setVolume(100);
+      final controller = media_kit_video.VideoController(player);
+      _playingSub = player.stream.playing.listen((v) {
+        if (mounted) setState(() => _playing = v);
+      });
+      await player.open(media_kit.Media(source), play: true);
+      if (!mounted) {
+        await player.dispose();
+        return;
       }
-
-      final progress = _duration.inMilliseconds > 0
-          ? (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0)
-          : 0.0;
-
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          final width = _audioWidthFor(constraints);
-          return SizedBox(
-            width: width,
-            height: 46,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                GestureDetector(
-                  onTap: _togglePlayPause,
-                  child: Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: color.withValues(alpha: 0.15),
-                    ),
-                    child: Icon(
-                      _playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                      color: color,
-                      size: 21,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      LayoutBuilder(
-                        builder: (context, barConstraints) {
-                          final barWidth = barConstraints.maxWidth;
-                          final thumbTravel =
-                              (barWidth - 10).clamp(0.0, barWidth);
-                          return GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTapDown: (d) =>
-                                _seekFromLocalDx(d.localPosition.dx, barWidth),
-                            onHorizontalDragUpdate: (d) =>
-                                _seekFromLocalDx(d.localPosition.dx, barWidth),
-                            child: SizedBox(
-                              height: 24,
-                              child: Center(
-                                child: Stack(
-                                  alignment: Alignment.centerLeft,
-                                  children: [
-                                    Container(
-                                      height: 3,
-                                      decoration: BoxDecoration(
-                                        color: color.withValues(alpha: 0.24),
-                                        borderRadius:
-                                            BorderRadius.circular(999),
-                                      ),
-                                    ),
-                                    FractionallySizedBox(
-                                      widthFactor: progress.toDouble(),
-                                      child: Container(
-                                        height: 3,
-                                        decoration: BoxDecoration(
-                                          color: color,
-                                          borderRadius:
-                                              BorderRadius.circular(999),
-                                        ),
-                                      ),
-                                    ),
-                                    Positioned(
-                                      left: (thumbTravel * progress).clamp(
-                                          0.0, thumbTravel),
-                                      child: Container(
-                                        width: 10,
-                                        height: 10,
-                                        decoration: BoxDecoration(
-                                          color: color,
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 1),
-                      SizedBox(
-                        height: 12,
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _fmt(_position),
-                                maxLines: 1,
-                                style: TextStyle(
-                                  color: color.withValues(alpha: 0.7),
-                                  fontSize: 9.5,
-                                  height: 1,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                _fmt(_duration),
-                                maxLines: 1,
-                                textAlign: TextAlign.right,
-                                style: TextStyle(
-                                  color: color.withValues(alpha: 0.7),
-                                  fontSize: 9.5,
-                                  height: 1,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      );
-    }
-  }
-
-  class _CrmStaticWaveform extends StatelessWidget {
-    const _CrmStaticWaveform({required this.color});
-    final Color color;
-    static const _heights = [
-      4.0, 8.0, 12.0, 6.0, 14.0, 8.0, 10.0, 6.0,
-      4.0, 12.0, 8.0, 14.0, 6.0, 10.0, 8.0, 4.0, 12.0, 6.0,
-    ];
-    @override
-    Widget build(BuildContext context) {
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          final availableWidth = constraints.hasBoundedWidth
-              ? constraints.maxWidth
-              : _heights.length * 5.0;
-          final visibleCount =
-              (availableWidth / 5).floor().clamp(4, _heights.length);
-          final heights = _heights.take(visibleCount).toList(growable: false);
-          return SizedBox(
-            height: 16,
-            child: Row(
-              mainAxisSize: MainAxisSize.max,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                for (var i = 0; i < heights.length; i++) ...[
-                  Flexible(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Container(
-                        width: 3,
-                        height: heights[i].clamp(3.0, 14.0),
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (i < heights.length - 1) const SizedBox(width: 2),
-                ],
-              ],
-            ),
-          );
-        },
-      );
-    }
-  }
-
-  class _CrmVideoContent extends ConsumerStatefulWidget {
-    const _CrmVideoContent({required this.msg, required this.textColor});
-    final CrmComercialInboxMessage msg;
-    final Color textColor;
-    @override
-    ConsumerState<_CrmVideoContent> createState() => _CrmVideoContentState();
-  }
-
-  class _CrmVideoContentState extends ConsumerState<_CrmVideoContent> {
-    media_kit.Player? _player;
-    media_kit_video.VideoController? _videoController;
-    StreamSubscription<bool>? _playingSub;
-    bool _loading = false;
-    bool _initialized = false;
-    bool _playing = false;
-    String? _error;
-
-    @override
-    void dispose() {
-      _playingSub?.cancel();
-      _player?.dispose();
-      super.dispose();
-    }
-
-    Future<void> _initializeAndPlay() async {
-      final mediaUrl = _mediaUrlForCrmMsg(widget.msg);
-      if (mediaUrl == null) return;
-      setState(() => _loading = true);
-      try {
-        final source = await _crmMediaSourceForPlayback(
-          mediaUrl,
-          widget.msg.mediaMimeType ?? 'video/mp4',
-          downloadBytes: ref.read(crmComercialRepositoryProvider).downloadMediaBytes,
-        );
-        final player = media_kit.Player();
-        await player.setVolume(100);
-        final controller = media_kit_video.VideoController(player);
-        _playingSub = player.stream.playing.listen((v) {
-          if (mounted) setState(() => _playing = v);
-        });
-        await player.open(media_kit.Media(source), play: true);
-        if (!mounted) {
-          await player.dispose();
-          return;
-        }
+      setState(() {
+        _player = player;
+        _videoController = controller;
+        _initialized = true;
+        _loading = false;
+      });
+    } catch (e) {
+      if (mounted)
         setState(() {
-          _player = player;
-          _videoController = controller;
-          _initialized = true;
           _loading = false;
+          _error = e.toString();
         });
-      } catch (e) {
-        if (mounted) setState(() { _loading = false; _error = e.toString(); });
-      }
     }
+  }
 
-    Future<void> _togglePlayPause() async {
-      final player = _player;
-      if (player == null) return;
-      if (_playing) { await player.pause(); } else { await player.play(); }
+  Future<void> _togglePlayPause() async {
+    final player = _player;
+    if (player == null) return;
+    if (_playing) {
+      await player.pause();
+    } else {
+      await player.play();
     }
+  }
 
-    @override
-    Widget build(BuildContext context) {
-      final color = widget.textColor;
-      final controller = _videoController;
-      if (_mediaUrlForCrmMsg(widget.msg) == null || widget.msg.mediaFailed) {
-        return _CrmMediaUnavailable(
-          icon: Icons.videocam_off_outlined,
-          textColor: color,
-        );
-      }
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: GestureDetector(
-          onTap: _initialized ? _togglePlayPause : _initializeAndPlay,
-          child: Container(
-            width: 260,
-            height: 150,
-            color: Colors.black87,
-            child: _error != null
-                ? Center(
-                    child: IconButton(
-                      tooltip: 'Reintentar cargar',
-                      onPressed: () {
-                        setState(() => _error = null);
-                        _initializeAndPlay();
-                      },
-                      icon: const Icon(
-                        Icons.refresh_rounded,
-                        color: Colors.white70,
-                        size: 34,
-                      ),
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.textColor;
+    final controller = _videoController;
+    if (_mediaUrlForCrmMsg(widget.msg) == null || widget.msg.mediaFailed) {
+      return _CrmMediaUnavailable(
+        icon: Icons.videocam_off_outlined,
+        textColor: color,
+      );
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: GestureDetector(
+        onTap: _initialized ? _togglePlayPause : _initializeAndPlay,
+        child: Container(
+          width: 260,
+          height: 150,
+          color: Colors.black87,
+          child: _error != null
+              ? Center(
+                  child: IconButton(
+                    tooltip: 'Reintentar cargar',
+                    onPressed: () {
+                      setState(() => _error = null);
+                      _initializeAndPlay();
+                    },
+                    icon: const Icon(
+                      Icons.refresh_rounded,
+                      color: Colors.white70,
+                      size: 34,
                     ),
-                  )
-                : _initialized && controller != null
-                ? Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      media_kit_video.Video(controller: controller),
-                      if (!_playing)
-                        Container(
-                          width: 52,
-                          height: 52,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.black45,
-                          ),
-                          child: const Icon(
-                            Icons.play_arrow_rounded,
-                            color: Colors.white,
-                            size: 34,
-                          ),
-                        ),
-                    ],
-                  )
-                : _loading
-                ? const Center(
-                    child: CircularProgressIndicator(color: Colors.white),
-                  )
-                : Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      const Icon(
-                        Icons.videocam_rounded,
-                        color: Colors.white54,
-                        size: 40,
-                      ),
+                  ),
+                )
+              : _initialized && controller != null
+              ? Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    media_kit_video.Video(controller: controller),
+                    if (!_playing)
                       Container(
                         width: 52,
                         height: 52,
@@ -8320,74 +8974,102 @@ class _CrmTimelineTile extends StatelessWidget {
                           size: 34,
                         ),
                       ),
-                    ],
-                  ),
+                  ],
+                )
+              : _loading
+              ? const Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                )
+              : Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    const Icon(
+                      Icons.videocam_rounded,
+                      color: Colors.white54,
+                      size: 40,
+                    ),
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.black45,
+                      ),
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 34,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CrmDocumentContent extends ConsumerStatefulWidget {
+  const _CrmDocumentContent({required this.msg, required this.textColor});
+  final CrmComercialInboxMessage msg;
+  final Color textColor;
+  @override
+  ConsumerState<_CrmDocumentContent> createState() =>
+      _CrmDocumentContentState();
+}
+
+class _CrmDocumentContentState extends ConsumerState<_CrmDocumentContent> {
+  bool _loading = false;
+
+  Future<void> _open() async {
+    final mediaUrl = _mediaUrlForCrmMsg(widget.msg);
+    if (mediaUrl == null) return;
+    setState(() => _loading = true);
+    await _crmOpenMedia(
+      mediaUrl,
+      widget.msg.mediaMimeType,
+      downloadBytes: ref
+          .read(crmComercialRepositoryProvider)
+          .downloadMediaBytes,
+    );
+    if (mounted) setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.textColor;
+    final mediaUrl = _mediaUrlForCrmMsg(widget.msg);
+    if (mediaUrl == null || widget.msg.mediaFailed) {
+      return _CrmMediaUnavailable(
+        icon: Icons.insert_drive_file_outlined,
+        textColor: color,
+      );
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _loading
+            ? SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2, color: color),
+              )
+            : Icon(Icons.insert_drive_file_rounded, color: color, size: 18),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            widget.msg.originalFileName ?? widget.msg.body ?? 'Documento',
+            style: TextStyle(color: color, fontSize: 13),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
-      );
-    }
+        const SizedBox(width: 6),
+        GestureDetector(
+          onTap: _open,
+          child: Icon(Icons.download_rounded, color: color, size: 16),
+        ),
+      ],
+    );
   }
-
-  class _CrmDocumentContent extends ConsumerStatefulWidget {
-    const _CrmDocumentContent({required this.msg, required this.textColor});
-    final CrmComercialInboxMessage msg;
-    final Color textColor;
-    @override
-    ConsumerState<_CrmDocumentContent> createState() => _CrmDocumentContentState();
-  }
-
-  class _CrmDocumentContentState extends ConsumerState<_CrmDocumentContent> {
-    bool _loading = false;
-
-    Future<void> _open() async {
-      final mediaUrl = _mediaUrlForCrmMsg(widget.msg);
-      if (mediaUrl == null) return;
-      setState(() => _loading = true);
-      await _crmOpenMedia(
-        mediaUrl,
-        widget.msg.mediaMimeType,
-        downloadBytes: ref.read(crmComercialRepositoryProvider).downloadMediaBytes,
-      );
-      if (mounted) setState(() => _loading = false);
-    }
-
-    @override
-    Widget build(BuildContext context) {
-      final color = widget.textColor;
-      final mediaUrl = _mediaUrlForCrmMsg(widget.msg);
-      if (mediaUrl == null || widget.msg.mediaFailed) {
-        return _CrmMediaUnavailable(
-          icon: Icons.insert_drive_file_outlined,
-          textColor: color,
-        );
-      }
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _loading
-              ? SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: color),
-                )
-              : Icon(Icons.insert_drive_file_rounded, color: color, size: 18),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              widget.msg.originalFileName ??
-                  widget.msg.body ??
-                  'Documento',
-              style: TextStyle(color: color, fontSize: 13),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 6),
-          GestureDetector(
-            onTap: _open,
-            child: Icon(Icons.download_rounded, color: color, size: 16),
-          ),
-        ],
-      );
-    }
-  }
+}
