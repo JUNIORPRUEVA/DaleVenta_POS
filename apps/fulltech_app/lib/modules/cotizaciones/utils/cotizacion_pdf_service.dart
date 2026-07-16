@@ -30,7 +30,7 @@ Future<Uint8List> buildCotizacionPdf({
   final logoImage = await _resolveCompanyLogo(company);
   final companyName = _fallback(company?.companyName, fallback: 'FULLTECH');
 
-  final doc = pw.Document(title: 'Cotizacion', author: companyName);
+  final doc = pw.Document(title: 'Cotización', author: companyName);
 
   doc.addPage(
     pw.MultiPage(
@@ -47,6 +47,7 @@ Future<Uint8List> buildCotizacionPdf({
         logoImage: logoImage,
         cotizacion: cotizacion,
         dateFmt: dateFmt,
+        documentLabel: 'COTIZACIÓN',
         isContinuation: context.pageNumber > 1,
       ),
       footer: (context) => _pageFooter(context.pageNumber, context.pagesCount),
@@ -66,6 +67,7 @@ pw.Widget _pageHeader({
   required pw.MemoryImage? logoImage,
   required CotizacionModel cotizacion,
   required DateFormat dateFmt,
+  required String documentLabel,
   required bool isContinuation,
 }) {
   final companyName = _fallback(company?.companyName, fallback: 'FULLTECH');
@@ -131,6 +133,7 @@ pw.Widget _pageHeader({
             pw.SizedBox(
               width: 215,
               child: _quoteFactsPanel(
+                documentLabel: documentLabel,
                 quoteCode: quoteCode,
                 dateText: dateFmt.format(cotizacion.createdAt),
                 taxText: taxText,
@@ -493,6 +496,7 @@ pw.Widget _companyLine(String text) {
 }
 
 pw.Widget _quoteFactsPanel({
+  required String documentLabel,
   required String quoteCode,
   required String dateText,
   String? taxText,
@@ -507,6 +511,15 @@ pw.Widget _quoteFactsPanel({
     child: pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
+        pw.Text(
+          documentLabel,
+          style: pw.TextStyle(
+            fontSize: 8.4,
+            fontWeight: pw.FontWeight.bold,
+            color: _accentBlue,
+          ),
+        ),
+        pw.SizedBox(height: 4),
         pw.Text(
           quoteCode,
           style: pw.TextStyle(

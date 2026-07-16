@@ -7,11 +7,13 @@ import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 
 import '../../core/auth/auth_provider.dart';
+import '../../core/company/company_settings_repository.dart';
 import '../../core/debug/debug_admin_action.dart';
 import '../../core/routing/routes.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
+import '../cash/cash_dialogs.dart';
 import 'application/ventas_controller.dart';
 import 'data/ventas_repository.dart';
 import 'sales_models.dart';
@@ -459,6 +461,11 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                                           _saleStatusColor(context, sale),
                                       onView: (sale) =>
                                           _showDetailsDialog(context, sale),
+                                      onPdf: (sale) =>
+                                          _openSaleInvoicePdfPreview(
+                                            context,
+                                            sale,
+                                          ),
                                       onReturn: (sale) =>
                                           _returnSale(context, sale),
                                     ),
@@ -526,6 +533,8 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                       statusLabel: _saleStatusLabel,
                       statusColor: (sale) => _saleStatusColor(context, sale),
                       onView: (sale) => _showDetailsDialog(context, sale),
+                      onPdf: (sale) =>
+                          _openSaleInvoicePdfPreview(context, sale),
                       onReturn: (sale) => _returnSale(context, sale),
                     ),
                     SizedBox(height: gap),
@@ -615,6 +624,8 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                         statusLabel: _saleStatusLabel,
                         statusColor: (sale) => _saleStatusColor(context, sale),
                         onView: (sale) => _showDetailsDialog(context, sale),
+                        onPdf: (sale) =>
+                            _openSaleInvoicePdfPreview(context, sale),
                         onReturn: (sale) => _returnSale(context, sale),
                         compact: true,
                       ),
@@ -885,14 +896,10 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
     try {
       await ref.read(ventasControllerProvider.notifier).returnSale(sale.id);
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Venta devuelta')));
+      showCashToast(context, 'Venta devuelta correctamente');
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo devolver: $e')));
+      showCashToast(context, 'No se pudo devolver: $e', isError: true);
     }
   }
 
@@ -965,6 +972,88 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                     canDebug: false,
                     allowPrinting: true,
                     allowSharing: true,
+                    build: (_) async => pdfBytes,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _openSaleInvoicePdfPreview(
+    BuildContext context,
+    SaleModel sale,
+  ) async {
+    final company = await ref
+        .read(companySettingsRepositoryProvider)
+        .getCachedSettings();
+    final pdfBytes = await buildSaleInvoicePdf(sale: sale, company: company);
+    if (!context.mounted) return;
+    final fileName =
+        'factura_${_shortSaleId(sale.id).replaceAll(' ', '_')}.pdf';
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: const Color(0x990B1720),
+      builder: (dialogContext) {
+        final media = MediaQuery.sizeOf(dialogContext);
+        final isCompact = media.width < 720;
+        return Dialog(
+          insetPadding: EdgeInsets.symmetric(
+            horizontal: isCompact ? 10 : 28,
+            vertical: isCompact ? 10 : 24,
+          ),
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(isCompact ? 8 : 12),
+          ),
+          child: SizedBox(
+            width: isCompact ? media.width - 20 : 980,
+            height: isCompact ? media.height - 20 : media.height * 0.88,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 10, 12),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.picture_as_pdf_outlined,
+                        color: Color(0xFF0F7C92),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'PDF factura · ${sale.customerName ?? 'Consumidor Final'}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF111827),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Cerrar',
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: PdfPreview(
+                    canChangePageFormat: false,
+                    canChangeOrientation: false,
+                    canDebug: false,
+                    allowPrinting: true,
+                    allowSharing: true,
+                    maxPageWidth: isCompact ? 640 : 900,
+                    pdfFileName: fileName,
                     build: (_) async => pdfBytes,
                   ),
                 ),
@@ -1216,6 +1305,18 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                                         ),
                                       ),
                                       IconButton(
+                                        tooltip: 'Ver PDF',
+                                        onPressed: () =>
+                                            _openSaleInvoicePdfPreview(
+                                              context,
+                                              sale,
+                                            ),
+                                        icon: const Icon(
+                                          Icons.picture_as_pdf_outlined,
+                                        ),
+                                        color: const Color(0xFFE11D48),
+                                      ),
+                                      IconButton(
                                         tooltip: sale.isDeleted
                                             ? 'Venta ya devuelta'
                                             : 'Devolver venta',
@@ -1251,6 +1352,7 @@ class _SalesLedgerCard extends StatelessWidget {
     required this.statusLabel,
     required this.statusColor,
     required this.onView,
+    required this.onPdf,
     required this.onReturn,
     this.compact = false,
   });
@@ -1261,6 +1363,7 @@ class _SalesLedgerCard extends StatelessWidget {
   final String Function(SaleModel sale) statusLabel;
   final Color Function(SaleModel sale) statusColor;
   final ValueChanged<SaleModel> onView;
+  final ValueChanged<SaleModel> onPdf;
   final ValueChanged<SaleModel> onReturn;
   final bool compact;
 
@@ -1345,6 +1448,7 @@ class _SalesLedgerCard extends StatelessWidget {
                     statusLabel: statusLabel,
                     statusColor: statusColor,
                     onView: onView,
+                    onPdf: onPdf,
                     onReturn: onReturn,
                   );
                 },
@@ -1426,6 +1530,14 @@ class _SalesLedgerCard extends StatelessWidget {
                                     icon: const Icon(Icons.visibility_outlined),
                                   ),
                                   IconButton(
+                                    tooltip: 'Ver PDF',
+                                    onPressed: () => onPdf(sale),
+                                    icon: const Icon(
+                                      Icons.picture_as_pdf_outlined,
+                                    ),
+                                    color: const Color(0xFFE11D48),
+                                  ),
+                                  IconButton(
                                     tooltip: sale.isDeleted
                                         ? 'Venta ya devuelta'
                                         : 'Devolver venta',
@@ -1460,6 +1572,7 @@ class _SalesLedgerMobileRow extends StatelessWidget {
     required this.statusLabel,
     required this.statusColor,
     required this.onView,
+    required this.onPdf,
     required this.onReturn,
   });
 
@@ -1469,6 +1582,7 @@ class _SalesLedgerMobileRow extends StatelessWidget {
   final String Function(SaleModel sale) statusLabel;
   final Color Function(SaleModel sale) statusColor;
   final ValueChanged<SaleModel> onView;
+  final ValueChanged<SaleModel> onPdf;
   final ValueChanged<SaleModel> onReturn;
 
   @override
@@ -1494,10 +1608,12 @@ class _SalesLedgerMobileRow extends StatelessWidget {
           PopupMenuButton<String>(
             onSelected: (value) {
               if (value == 'view') onView(sale);
+              if (value == 'pdf') onPdf(sale);
               if (value == 'return' && !sale.isDeleted) onReturn(sale);
             },
             itemBuilder: (context) => [
               const PopupMenuItem(value: 'view', child: Text('Ver detalle')),
+              const PopupMenuItem(value: 'pdf', child: Text('Ver PDF')),
               PopupMenuItem(
                 value: 'return',
                 enabled: !sale.isDeleted,

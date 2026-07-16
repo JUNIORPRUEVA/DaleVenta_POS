@@ -157,6 +157,7 @@ class SaleModel {
   final String? userName;
   final String? customerId;
   final String? customerName;
+  final String? customerPhone;
   final DateTime? saleDate;
   final String? note;
   final double totalSold;
@@ -180,6 +181,7 @@ class SaleModel {
     required this.userName,
     required this.customerId,
     required this.customerName,
+    required this.customerPhone,
     required this.saleDate,
     required this.note,
     required this.totalSold,
@@ -203,9 +205,14 @@ class SaleModel {
     final customer = json['customer'];
     String? customerName;
     String? customerId;
+    String? customerPhone;
     if (customer is Map) {
       customerName = customer['nombre']?.toString();
       customerId = customer['id']?.toString();
+      customerPhone =
+          customer['telefono']?.toString() ??
+          customer['phone']?.toString() ??
+          customer['celular']?.toString();
     }
     final user = json['user'];
     String? userName;
@@ -220,6 +227,7 @@ class SaleModel {
       userName: userName,
       customerId: json['customerId']?.toString() ?? customerId,
       customerName: customerName,
+      customerPhone: customerPhone,
       saleDate: json['saleDate'] != null
           ? DateTime.tryParse(json['saleDate'].toString())
           : null,

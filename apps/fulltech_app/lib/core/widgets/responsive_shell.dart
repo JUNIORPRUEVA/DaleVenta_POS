@@ -1032,87 +1032,112 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                             ],
                           ),
                           if (cashRoutes.isNotEmpty)
-                            _PremiumSidebarNavItem(
-                              item: const AppNavigationItem(
-                                icon: Icons.account_balance_wallet_outlined,
-                                title: 'Movimiento efectivo',
-                                route: '__cash__',
-                              ),
-                              activeRoutes: cashRoutes,
-                              collapsed: visualCollapsed,
-                              currentLocation: widget.currentLocation,
-                              textColor: textColor,
-                              activeColor: activeColor,
-                              hoverColor: hoverColor,
-                              baseColor: baseColor,
-                              scale: scale,
-                              showSubmenuBadge: true,
-                              trailing: AnimatedRotation(
-                                turns: _cashExpanded ? 0.25 : 0,
-                                duration: const Duration(milliseconds: 220),
-                                curve: Curves.easeOutCubic,
-                                child: Icon(
-                                  Icons.chevron_right_rounded,
-                                  size: 16,
-                                  color: textColor.withValues(alpha: 0.58),
-                                ),
-                              ),
-                              onTap: () {
-                                if (visualCollapsed) {
-                                  _toggleSidebar();
+                            MouseRegion(
+                              onEnter: (_) {
+                                if (!visualCollapsed && !_cashExpanded) {
                                   setState(() => _cashExpanded = true);
-                                } else {
-                                  setState(
-                                    () => _cashExpanded = !_cashExpanded,
-                                  );
                                 }
                               },
+                              onExit: (_) {
+                                if (!visualCollapsed && _cashExpanded) {
+                                  setState(() => _cashExpanded = false);
+                                }
+                              },
+                              child: Column(
+                                children: [
+                                  _PremiumSidebarNavItem(
+                                    item: const AppNavigationItem(
+                                      icon:
+                                          Icons.account_balance_wallet_outlined,
+                                      title: 'Movimiento efectivo',
+                                      route: '__cash__',
+                                    ),
+                                    activeRoutes: cashRoutes,
+                                    collapsed: visualCollapsed,
+                                    currentLocation: widget.currentLocation,
+                                    textColor: textColor,
+                                    activeColor: activeColor,
+                                    hoverColor: hoverColor,
+                                    baseColor: baseColor,
+                                    scale: scale,
+                                    showSubmenuBadge: true,
+                                    trailing: AnimatedRotation(
+                                      turns: _cashExpanded ? 0.25 : 0,
+                                      duration: const Duration(
+                                        milliseconds: 220,
+                                      ),
+                                      curve: Curves.easeOutCubic,
+                                      child: Icon(
+                                        Icons.chevron_right_rounded,
+                                        size: 16,
+                                        color: textColor.withValues(
+                                          alpha: 0.58,
+                                        ),
+                                      ),
+                                    ),
+                                    onTap: () {
+                                      if (visualCollapsed) {
+                                        _toggleSidebar();
+                                        setState(() => _cashExpanded = true);
+                                      } else {
+                                        setState(
+                                          () => _cashExpanded = !_cashExpanded,
+                                        );
+                                      }
+                                    },
+                                  ),
+                                  _PremiumSidebarSubmenu(
+                                    visible: !visualCollapsed && _cashExpanded,
+                                    children: [
+                                      if (cashIngreso != null)
+                                        _PremiumSidebarNavItem(
+                                          item: cashIngreso,
+                                          collapsed: false,
+                                          lowEmphasis: true,
+                                          currentLocation:
+                                              widget.currentLocation,
+                                          textColor: textColor,
+                                          activeColor: activeColor,
+                                          hoverColor: hoverColor,
+                                          baseColor: baseColor,
+                                          scale: scale,
+                                          onTap: () => _openCashMovement('IN'),
+                                        ),
+                                      if (cashSalida != null)
+                                        _PremiumSidebarNavItem(
+                                          item: cashSalida,
+                                          collapsed: false,
+                                          lowEmphasis: true,
+                                          currentLocation:
+                                              widget.currentLocation,
+                                          textColor: textColor,
+                                          activeColor: activeColor,
+                                          hoverColor: hoverColor,
+                                          baseColor: baseColor,
+                                          scale: scale,
+                                          onTap: () => _openCashMovement('OUT'),
+                                        ),
+                                      if (cashHistorial != null)
+                                        _PremiumSidebarNavItem(
+                                          item: cashHistorial,
+                                          collapsed: false,
+                                          lowEmphasis: true,
+                                          currentLocation:
+                                              widget.currentLocation,
+                                          textColor: textColor,
+                                          activeColor: activeColor,
+                                          hoverColor: hoverColor,
+                                          baseColor: baseColor,
+                                          scale: scale,
+                                          onTap: () => widget.onNavigate(
+                                            cashHistorial.route,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
-                          _PremiumSidebarSubmenu(
-                            visible: !visualCollapsed && _cashExpanded,
-                            children: [
-                              if (cashIngreso != null)
-                                _PremiumSidebarNavItem(
-                                  item: cashIngreso,
-                                  collapsed: false,
-                                  lowEmphasis: true,
-                                  currentLocation: widget.currentLocation,
-                                  textColor: textColor,
-                                  activeColor: activeColor,
-                                  hoverColor: hoverColor,
-                                  baseColor: baseColor,
-                                  scale: scale,
-                                  onTap: () => _openCashMovement('IN'),
-                                ),
-                              if (cashSalida != null)
-                                _PremiumSidebarNavItem(
-                                  item: cashSalida,
-                                  collapsed: false,
-                                  lowEmphasis: true,
-                                  currentLocation: widget.currentLocation,
-                                  textColor: textColor,
-                                  activeColor: activeColor,
-                                  hoverColor: hoverColor,
-                                  baseColor: baseColor,
-                                  scale: scale,
-                                  onTap: () => _openCashMovement('OUT'),
-                                ),
-                              if (cashHistorial != null)
-                                _PremiumSidebarNavItem(
-                                  item: cashHistorial,
-                                  collapsed: false,
-                                  lowEmphasis: true,
-                                  currentLocation: widget.currentLocation,
-                                  textColor: textColor,
-                                  activeColor: activeColor,
-                                  hoverColor: hoverColor,
-                                  baseColor: baseColor,
-                                  scale: scale,
-                                  onTap: () =>
-                                      widget.onNavigate(cashHistorial.route),
-                                ),
-                            ],
-                          ),
                           if (creditosVentas != null)
                             _PremiumSidebarNavItem(
                               item: creditosVentas,

@@ -35,7 +35,9 @@ import '../clientes/cliente_model.dart';
 import '../clientes/cliente_form_screen.dart';
 import '../service_orders/service_order_models.dart';
 import '../ventas/data/ventas_repository.dart';
+import '../ventas/sales_credit_screen.dart';
 import '../ventas/sales_models.dart';
+import '../ventas/utils/sales_pdf_service.dart';
 import 'ai/application/quotation_ai_controller.dart';
 import 'ai/domain/models/ai_warning.dart';
 import 'ai/domain/models/quotation_context.dart';
@@ -150,7 +152,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   bool _loadingProducts = false;
   String? _error;
   String? _selectedCategory;
-  bool _dismissAiBanner = false;
   bool _showDesktopManualItemForm = false;
   int? _desktopManualEditIndex;
 
@@ -890,14 +891,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     unawaited(_syncQuotationAi());
   }
 
-  bool _hasAiBannerContent(QuotationAiState aiState) {
-    return aiState.visibleWarnings.isNotEmpty ||
-        aiState.analyzing ||
-        aiState.loadingRules;
-  }
-
   bool _shouldShowAiBanner(QuotationAiState aiState) {
-    return _hasAiBannerContent(aiState) && !_dismissAiBanner;
+    return false;
   }
 
   void _hideSalesNotice() {
@@ -951,7 +946,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   void _closeAiBanner() {
     if (!mounted) return;
-    setState(() => _dismissAiBanner = true);
+    setState(() {});
   }
 
   String _nextDesktopTicketTitle() => 'Ticket ${_desktopTickets.length + 1}';
@@ -4088,6 +4083,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             dateLabel: _saleDateLabel,
             shortId: _saleShortId,
             onViewSale: _showRecentSaleDetails,
+            onOpenPdf: _openRecentSalePdf,
             onClose: () => Navigator.of(dialogContext).pop(),
             onOpenFullHistory: () {
               Navigator.of(dialogContext).pop();
@@ -4107,6 +4103,82 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             end: Offset.zero,
           ).animate(curved),
           child: FadeTransition(opacity: curved, child: child),
+        );
+      },
+    );
+  }
+
+  Future<void> _openRecentSalePdf(SaleModel sale) async {
+    final company = await _getCompanySettingsForPdf();
+    final bytes = await buildSaleInvoicePdf(sale: sale, company: company);
+    if (!mounted) return;
+    final filename = 'factura_${_saleShortId(sale).replaceAll('...', '')}.pdf';
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: const Color(0x990B1720),
+      builder: (dialogContext) {
+        final media = MediaQuery.sizeOf(dialogContext);
+        final compact = media.width < 720;
+        return Dialog(
+          insetPadding: EdgeInsets.symmetric(
+            horizontal: compact ? 10 : 28,
+            vertical: compact ? 10 : 24,
+          ),
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(compact ? 8 : 12),
+          ),
+          child: SizedBox(
+            width: compact ? media.width - 20 : 980,
+            height: compact ? media.height - 20 : media.height * 0.88,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 10, 12),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.picture_as_pdf_outlined,
+                        color: Color(0xFF0F7C92),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'PDF factura · ${sale.customerName ?? 'Consumidor Final'}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF111827),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Cerrar',
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: PdfPreview(
+                    canChangePageFormat: false,
+                    canChangeOrientation: false,
+                    canDebug: false,
+                    allowPrinting: true,
+                    allowSharing: true,
+                    maxPageWidth: compact ? 640 : 900,
+                    pdfFileName: filename,
+                    build: (_) async => bytes,
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
@@ -4341,6 +4413,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 )
                 .toList(),
           );
+
+      if (checkout?.method == _CheckoutPaymentMethod.credit) {
+        ref.invalidate(salesCreditsProvider);
+      }
 
       if (!mounted) return;
 
@@ -6346,6 +6422,7 @@ class _RecentSalesPanel extends StatefulWidget {
     required this.dateLabel,
     required this.shortId,
     required this.onViewSale,
+    required this.onOpenPdf,
     required this.onClose,
     required this.onOpenFullHistory,
   });
@@ -6355,6 +6432,7 @@ class _RecentSalesPanel extends StatefulWidget {
   final String Function(DateTime? date) dateLabel;
   final String Function(SaleModel sale) shortId;
   final ValueChanged<SaleModel> onViewSale;
+  final ValueChanged<SaleModel> onOpenPdf;
   final VoidCallback onClose;
   final VoidCallback onOpenFullHistory;
 
@@ -6539,6 +6617,7 @@ class _RecentSalesPanelState extends State<_RecentSalesPanel> {
                                 dateLabel: widget.dateLabel,
                                 shortId: widget.shortId,
                                 onViewSale: widget.onViewSale,
+                                onOpenPdf: widget.onOpenPdf,
                                 onOpenFullHistory: widget.onOpenFullHistory,
                               );
                             },
@@ -6586,6 +6665,7 @@ class _RecentSalesRow extends StatelessWidget {
     required this.dateLabel,
     required this.shortId,
     required this.onViewSale,
+    required this.onOpenPdf,
     required this.onOpenFullHistory,
   });
 
@@ -6594,6 +6674,7 @@ class _RecentSalesRow extends StatelessWidget {
   final String Function(DateTime? date) dateLabel;
   final String Function(SaleModel sale) shortId;
   final ValueChanged<SaleModel> onViewSale;
+  final ValueChanged<SaleModel> onOpenPdf;
   final VoidCallback onOpenFullHistory;
 
   @override
@@ -6668,10 +6749,10 @@ class _RecentSalesRow extends StatelessWidget {
                   color: const Color(0xFF475569),
                 ),
                 IconButton(
-                  tooltip: 'Abrir historial',
-                  onPressed: onOpenFullHistory,
-                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                  color: const Color(0xFF1957E6),
+                  tooltip: 'Ver PDF',
+                  onPressed: () => onOpenPdf(sale),
+                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                  color: const Color(0xFFE11D48),
                 ),
               ],
             ),

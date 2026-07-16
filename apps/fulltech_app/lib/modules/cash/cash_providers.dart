@@ -40,11 +40,16 @@ class ActiveCashSessionController
   final Ref ref;
 
   Future<void> refresh() async {
+    debugPrint('[CashController] refresh start');
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
       final gate = await ref.read(cashRepositoryProvider).state();
-      debugPrint('[CashController] current shift loaded');
+      debugPrint(
+        '[CashController] currentShift=${gate.activeSession?.shiftId}',
+      );
       ref.invalidate(cashGateStateProvider);
+      ref.invalidate(cashSummaryProvider);
+      ref.invalidate(cashMovementsProvider);
       debugPrint('[CashController] refresh complete');
       return gate.activeSession;
     });
@@ -77,11 +82,6 @@ class ActiveCashSessionController
     );
 
     await repo.closeSession(closingAmount: closingAmount, note: note);
-    ref.invalidate(cashGateStateProvider);
-    ref.invalidate(cashSummaryProvider);
-    ref.invalidate(cashMovementsProvider);
-    state = const AsyncData(null);
-
     return ref.read(cashCloseTicketPrinterProvider).printCloseTicket(snapshot);
   }
 

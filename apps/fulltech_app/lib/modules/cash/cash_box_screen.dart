@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_provider.dart';
+import '../../core/debug/app_error_reporter.dart';
 import '../../core/routing/routes.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -22,42 +23,67 @@ class CashBoxScreen extends ConsumerWidget {
   static const _line = Color(0xFFD4E3ED);
 
   Future<void> _openCash(BuildContext context, WidgetRef ref) async {
-    final opened = await showOpenCashDialog(
-      context,
-      onOpenShift: (amount) async {
-        await ref
-            .read(activeCashSessionControllerProvider.notifier)
-            .open(amount);
-      },
-    );
-    if (!context.mounted) return;
-    if (opened == true) {
-      await ref.read(activeCashSessionControllerProvider.notifier).refresh();
+    try {
+      final opened = await showOpenCashDialog(
+        context,
+        onOpenShift: (amount) async {
+          await ref
+              .read(activeCashSessionControllerProvider.notifier)
+              .open(amount);
+        },
+      );
       if (!context.mounted) return;
-      showCashToast(context, 'Caja abierta');
+      if (opened == true) {
+        await ref.read(activeCashSessionControllerProvider.notifier).refresh();
+        if (!context.mounted) return;
+        showCashToast(context, 'Caja abierta');
+      }
+    } catch (error, stack) {
+      AppErrorReporter.instance.record(
+        error,
+        stack,
+        context: 'Abrir caja desde pantalla de caja',
+        notifyUser: false,
+      );
+      if (!context.mounted) return;
+      showCashToast(context, resolveCashError(error), isError: true);
     }
   }
 
   Future<void> _closeCash(BuildContext context, WidgetRef ref) async {
-    final currentSummary = await ref.read(cashRepositoryProvider).summary();
-    if (!context.mounted) return;
-    final amount = await showCashAmountDialog(
-      context,
-      title: 'Cerrar turno',
-      actionLabel: 'Cerrar turno',
-      hint: currentSummary.expectedCash.toStringAsFixed(2),
-    );
-    if (amount == null) return;
-    final printResult = await ref
-        .read(activeCashSessionControllerProvider.notifier)
-        .close(amount);
-    if (!context.mounted) return;
-    final message = printResult == null
-        ? 'Turno cerrado'
-        : printResult.success
-        ? 'Turno cerrado e impreso'
-        : 'Turno cerrado. ${printResult.message}';
-    showCashToast(context, message);
+    try {
+      final currentSummary = await ref.read(cashRepositoryProvider).summary();
+      if (!context.mounted) return;
+      final result = await showCloseShiftDialog(
+        context,
+        expectedCash: currentSummary.expectedCash,
+        onCloseShift: (amount) {
+          return ref
+              .read(activeCashSessionControllerProvider.notifier)
+              .close(amount);
+        },
+      );
+      if (!context.mounted) return;
+      if (result?.success != true) return;
+      await ref.read(activeCashSessionControllerProvider.notifier).refresh();
+      if (!context.mounted) return;
+      final printResult = result?.printResult;
+      final message = printResult == null
+          ? 'Turno cerrado'
+          : printResult.success
+          ? 'Turno cerrado e impreso'
+          : 'Turno cerrado. ${printResult.message}';
+      showCashToast(context, message);
+    } catch (error, stack) {
+      AppErrorReporter.instance.record(
+        error,
+        stack,
+        context: 'Cerrar caja desde pantalla de caja',
+        notifyUser: false,
+      );
+      if (!context.mounted) return;
+      showCashToast(context, resolveCashError(error), isError: true);
+    }
   }
 
   Future<void> _addMovement(

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/debug/app_error_reporter.dart';
 import '../../core/routing/routes.dart';
 import '../../core/utils/money_formatters.dart';
 import 'cash_dialogs.dart';
@@ -13,68 +16,105 @@ import 'cash_repository.dart';
 class CashTurnMenuButton extends ConsumerWidget {
   const CashTurnMenuButton({super.key, this.compact = false});
 
+  static const _navigatorSettleDelay = Duration(milliseconds: 220);
+
   final bool compact;
 
+  void _runAfterNavigatorSettles(
+    BuildContext context,
+    Future<void> Function() action,
+  ) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(
+        Future<void>.delayed(_navigatorSettleDelay).then((_) async {
+          if (!context.mounted) return;
+          await action();
+        }),
+      );
+    });
+  }
+
   Future<void> _openCash(BuildContext context, WidgetRef ref) async {
-    final opened = await showOpenCashDialog(
-      context,
-      onOpenShift: (amount) async {
-        await ref
-            .read(activeCashSessionControllerProvider.notifier)
-            .open(amount);
-      },
-    );
-    if (!context.mounted) return;
-    if (opened == true) {
-      await ref.read(activeCashSessionControllerProvider.notifier).refresh();
+    try {
+      final opened = await showOpenCashDialog(
+        context,
+        onOpenShift: (amount) async {
+          await ref
+              .read(activeCashSessionControllerProvider.notifier)
+              .open(amount);
+        },
+      );
       if (!context.mounted) return;
-      showCashToast(context, 'Caja abierta');
+      if (opened == true) {
+        await ref.read(activeCashSessionControllerProvider.notifier).refresh();
+        if (!context.mounted) return;
+        showCashToast(context, 'Caja abierta');
+      }
+    } catch (error, stack) {
+      AppErrorReporter.instance.record(
+        error,
+        stack,
+        context: 'Abrir caja desde menu de turno',
+        notifyUser: false,
+      );
+      if (!context.mounted) return;
+      showCashToast(context, resolveCashError(error), isError: true);
     }
   }
 
   Future<void> _closeCash(BuildContext context, WidgetRef ref) async {
-    final summary = await ref.read(cashRepositoryProvider).summary();
-    if (!context.mounted) return;
-    final amount = await showCashAmountDialog(
-      context,
-      title: 'Cerrar turno',
-      actionLabel: 'Cerrar turno',
-      hint: summary.expectedCash.toStringAsFixed(2),
-    );
-    if (amount == null) return;
-    final printResult = await ref
-        .read(activeCashSessionControllerProvider.notifier)
-        .close(amount);
-    if (!context.mounted) return;
-    final message = printResult == null
-        ? 'Turno cerrado'
-        : printResult.success
-        ? 'Turno cerrado e impreso'
-        : 'Turno cerrado. ${printResult.message}';
-    showCashToast(context, message);
+    try {
+      final summary = await ref.read(cashRepositoryProvider).summary();
+      if (!context.mounted) return;
+      final result = await showCloseShiftDialog(
+        context,
+        expectedCash: summary.expectedCash,
+        onCloseShift: (amount) {
+          return ref
+              .read(activeCashSessionControllerProvider.notifier)
+              .close(amount);
+        },
+      );
+      if (!context.mounted) return;
+      if (result?.success != true) return;
+      await ref.read(activeCashSessionControllerProvider.notifier).refresh();
+      if (!context.mounted) return;
+      final printResult = result?.printResult;
+      final message = printResult == null
+          ? 'Turno cerrado'
+          : printResult.success
+          ? 'Turno cerrado e impreso'
+          : 'Turno cerrado. ${printResult.message}';
+      showCashToast(context, message);
+    } catch (error, stack) {
+      AppErrorReporter.instance.record(
+        error,
+        stack,
+        context: 'Cerrar caja desde menu de turno',
+        notifyUser: false,
+      );
+      if (!context.mounted) return;
+      showCashToast(context, resolveCashError(error), isError: true);
+    }
   }
 
   Future<void> _showCurrentTurn(BuildContext context, WidgetRef ref) async {
     final summary = await ref.read(cashRepositoryProvider).summary();
     final movements = await ref.read(cashRepositoryProvider).movements();
     if (!context.mounted) return;
-    final rootContext = context;
-    await showDialog<void>(
+    final action = await showDialog<String>(
       context: context,
       builder: (dialogContext) => _CurrentTurnDialog(
         active: ref.read(activeCashSessionControllerProvider).valueOrNull,
         summary: summary,
         movements: movements,
         onCloseTurn: () {
-          Navigator.of(dialogContext).pop();
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (rootContext.mounted) {
-              _closeCash(rootContext, ref);
-            }
-          });
+          Navigator.of(dialogContext).pop('close');
         },
       ),
     );
+    if (!context.mounted || action != 'close') return;
+    _runAfterNavigatorSettles(context, () => _closeCash(context, ref));
   }
 
   Future<void> _showHistory(BuildContext context, WidgetRef ref) async {
@@ -103,27 +143,32 @@ class CashTurnMenuButton extends ConsumerWidget {
         side: const BorderSide(color: Color(0xFFE2E8F0)),
       ),
       onSelected: (value) {
-        switch (value) {
-          case 'open':
-            _openCash(context, ref);
-            break;
-          case 'current':
-            if (active == null) {
+        debugPrint('[TurnMenu] action selected=$value');
+        _runAfterNavigatorSettles(context, () async {
+          debugPrint('[TurnMenu] popup closed');
+          switch (value) {
+            case 'open':
+              await _openCash(context, ref);
+              break;
+            case 'current':
+              if (active == null) {
+                context.go(Routes.caja);
+              } else {
+                await _showCurrentTurn(context, ref);
+              }
+              break;
+            case 'history':
+              await _showHistory(context, ref);
+              break;
+            case 'close':
+              debugPrint('[TurnMenu] opening close dialog');
+              await _closeCash(context, ref);
+              break;
+            case 'cash':
               context.go(Routes.caja);
-            } else {
-              _showCurrentTurn(context, ref);
-            }
-            break;
-          case 'history':
-            _showHistory(context, ref);
-            break;
-          case 'close':
-            _closeCash(context, ref);
-            break;
-          case 'cash':
-            context.go(Routes.caja);
-            break;
-        }
+              break;
+          }
+        });
       },
       itemBuilder: (context) => [
         if (active == null)

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -140,8 +141,13 @@ export class CashService {
     const difference = closingAmount.minus(expectedAmount);
 
     return this.prisma.$transaction(async (tx) => {
-      const closed = await tx.cashSession.update({
-        where: { id: session.id },
+      const closeResult = await tx.cashSession.updateMany({
+        where: {
+          id: session.id,
+          openedByUserId: user.id,
+          status: "OPEN",
+          closedAt: null,
+        },
         data: {
           status: "CLOSED",
           closingAmount,
@@ -152,6 +158,16 @@ export class CashService {
           note: dto.note ?? session.note,
         },
       });
+      if (closeResult.count !== 1) {
+        throw new ConflictException("Este turno ya fue cerrado.");
+      }
+
+      const closed = await tx.cashSession.findUnique({
+        where: { id: session.id },
+      });
+      if (!closed) {
+        throw new NotFoundException("No encontramos el turno cerrado.");
+      }
 
       const otherOpen = await tx.cashSession.findFirst({
         where: {
@@ -246,7 +262,10 @@ export class CashService {
     }));
   }
 
-  private movementDateRange(from?: string, to?: string): Prisma.CashMovementWhereInput {
+  private movementDateRange(
+    from?: string,
+    to?: string,
+  ): Prisma.CashMovementWhereInput {
     if (!from && !to) return {};
     const createdAt: Prisma.DateTimeFilter = {};
     if (from) {
@@ -321,7 +340,9 @@ export class CashService {
         },
       }),
       this.prisma.cashMovement.findMany({ where: { sessionId } }),
-      this.prisma.saleCreditPayment.findMany({ where: { cashSessionId: sessionId } }),
+      this.prisma.saleCreditPayment.findMany({
+        where: { cashSessionId: sessionId },
+      }),
     ]);
 
     let salesCashTotal = 0;
@@ -395,7 +416,17 @@ export class CashService {
       salesTransferTotal,
       salesCreditTotal: sales
         .filter((sale) => !sale.isDeleted && sale.paymentMethod === "credit")
-        .reduce((sum, sale) => sum + Math.max(0, this.toNumber(sale.totalSold) - this.toNumber(sale.paymentCashAmount) - this.toNumber(sale.paymentTransferAmount)), 0),
+        .reduce(
+          (sum, sale) =>
+            sum +
+            Math.max(
+              0,
+              this.toNumber(sale.totalSold) -
+                this.toNumber(sale.paymentCashAmount) -
+                this.toNumber(sale.paymentTransferAmount),
+            ),
+          0,
+        ),
       refundsCash,
       expectedCash,
       totalTickets,

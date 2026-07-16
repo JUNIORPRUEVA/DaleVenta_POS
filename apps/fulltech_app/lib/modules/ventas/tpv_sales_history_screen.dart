@@ -4,18 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../core/auth/auth_provider.dart';
+import '../../core/company/company_settings_repository.dart';
 import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/routing/routes.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/fulltech_page_header.dart';
+import '../cash/cash_dialogs.dart';
 import 'data/ventas_repository.dart';
 import 'sales_models.dart';
+import 'utils/sales_pdf_service.dart';
 
 enum _InvoiceFilter { active, all, returned }
 
@@ -170,20 +171,18 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
         ];
         _selected = returned;
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Factura devuelta')));
+      showCashToast(context, 'Factura devuelta correctamente');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo devolver: $e')));
+      showCashToast(context, 'No se pudo devolver: $e', isError: true);
     }
   }
 
   Future<void> _sharePdf(SaleModel sale) async {
     final bytes = await _buildInvoicePdf(sale);
-    await Printing.sharePdf(
+    if (!mounted) return;
+    await _showInvoicePdfPreview(
+      sale: sale,
       bytes: bytes,
       filename: 'factura_${_invoiceNumber(sale)}.pdf',
     );
@@ -200,110 +199,85 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   }
 
   Future<Uint8List> _buildInvoicePdf(SaleModel sale) async {
-    final doc = pw.Document(
-      title: 'Factura ${_invoiceNumber(sale)}',
-      author: 'FullTech',
-    );
-    final subtotal = sale.items.fold(
-      0.0,
-      (sum, item) => sum + item.subtotalSold,
-    );
+    final company = await ref
+        .read(companySettingsRepositoryProvider)
+        .getCachedSettings();
+    return buildSaleInvoicePdf(sale: sale, company: company);
+  }
 
-    doc.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(28),
-        build: (context) => [
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Expanded(
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      'FullTech POS',
-                      style: pw.TextStyle(
-                        fontSize: 22,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                    pw.SizedBox(height: 4),
-                    pw.Text('Sistema de facturacion'),
-                  ],
-                ),
-              ),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.end,
-                children: [
-                  pw.Text(
-                    'Factura ${_invoiceNumber(sale)}',
-                    style: pw.TextStyle(
-                      fontSize: 16,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Text(_dateFmt.format(sale.saleDate ?? DateTime.now())),
-                  pw.Text(sale.isDeleted ? 'Devuelta' : 'Activa'),
-                ],
-              ),
-            ],
+  Future<void> _showInvoicePdfPreview({
+    required SaleModel sale,
+    required Uint8List bytes,
+    required String filename,
+  }) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: const Color(0x990B1720),
+      builder: (dialogContext) {
+        final media = MediaQuery.sizeOf(dialogContext);
+        final compact = media.width < 720;
+        return Dialog(
+          insetPadding: EdgeInsets.symmetric(
+            horizontal: compact ? 10 : 28,
+            vertical: compact ? 10 : 24,
           ),
-          pw.SizedBox(height: 20),
-          pw.Container(
-            padding: const pw.EdgeInsets.all(10),
-            decoration: pw.BoxDecoration(
-              border: pw.Border.all(color: PdfColors.grey400),
-              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
-            ),
-            child: pw.Row(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(compact ? 8 : 12),
+          ),
+          child: SizedBox(
+            width: compact ? media.width - 20 : 980,
+            height: compact ? media.height - 20 : media.height * 0.88,
+            child: Column(
               children: [
-                pw.Expanded(
-                  child: pw.Text(
-                    'Cliente: ${sale.customerName ?? 'Consumidor Final'}',
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 10, 12),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.picture_as_pdf_outlined,
+                        color: Color(0xFF0F7C92),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'PDF factura · ${sale.customerName ?? 'Consumidor Final'}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF111827),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Cerrar',
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
                   ),
                 ),
-                pw.Text('Cajero: ${sale.userName ?? sale.userId}'),
+                const Divider(height: 1),
+                Expanded(
+                  child: PdfPreview(
+                    canChangePageFormat: false,
+                    canChangeOrientation: false,
+                    canDebug: false,
+                    allowPrinting: true,
+                    allowSharing: true,
+                    maxPageWidth: compact ? 640 : 900,
+                    pdfFileName: filename,
+                    build: (_) async => bytes,
+                  ),
+                ),
               ],
             ),
           ),
-          pw.SizedBox(height: 16),
-          pw.TableHelper.fromTextArray(
-            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
-            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            cellAlignment: pw.Alignment.centerLeft,
-            headers: const ['Producto', 'Cant.', 'Precio', 'Total'],
-            data: sale.items
-                .map(
-                  (item) => [
-                    item.productNameSnapshot,
-                    _qty(item.qty),
-                    formatRdCurrencyAccounting(item.priceSoldUnit),
-                    formatRdCurrencyAccounting(item.subtotalSold),
-                  ],
-                )
-                .toList(),
-          ),
-          pw.SizedBox(height: 18),
-          pw.Align(
-            alignment: pw.Alignment.centerRight,
-            child: pw.Container(
-              width: 260,
-              child: pw.Column(
-                children: [
-                  _pdfTotalLine('Subtotal', subtotal),
-                  pw.Divider(),
-                  _pdfTotalLine('Total factura', sale.totalSold, strong: true),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
-
-    return doc.save();
   }
 
   @override
@@ -1150,28 +1124,4 @@ String _filterButtonLabel(_InvoiceFilter filter) {
     _InvoiceFilter.returned => 'Devueltas',
     _InvoiceFilter.all => 'Todas',
   };
-}
-
-pw.Widget _pdfTotalLine(String label, double value, {bool strong = false}) {
-  return pw.Padding(
-    padding: const pw.EdgeInsets.symmetric(vertical: 3),
-    child: pw.Row(
-      children: [
-        pw.Expanded(
-          child: pw.Text(
-            label,
-            style: pw.TextStyle(
-              fontWeight: strong ? pw.FontWeight.bold : pw.FontWeight.normal,
-            ),
-          ),
-        ),
-        pw.Text(
-          formatRdCurrencyAccounting(value),
-          style: pw.TextStyle(
-            fontWeight: strong ? pw.FontWeight.bold : pw.FontWeight.normal,
-          ),
-        ),
-      ],
-    ),
-  );
 }

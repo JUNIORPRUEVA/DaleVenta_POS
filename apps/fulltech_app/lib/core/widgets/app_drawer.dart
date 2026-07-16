@@ -704,77 +704,86 @@ class _DrawerMenuSubgroupSectionState
     final subgroup = widget.subgroup;
     return Padding(
       padding: EdgeInsets.only(top: compact ? 5 : 6, bottom: compact ? 2 : 3),
-      child: Column(
-        children: [
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () => setState(() => _expanded = !_expanded),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                height: compact ? 38 : 40,
-                padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12),
-                decoration: BoxDecoration(
-                  color: _expanded
-                      ? AppColors.primary.withValues(alpha: 0.07)
-                      : AppColors.surfaceMuted.withValues(alpha: 0.56),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: AppColors.border.withValues(alpha: 0.9),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      subgroup.icon,
-                      size: compact ? 17 : 18,
-                      color: AppColors.primary,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) {
+          if (!_expanded) setState(() => _expanded = true);
+        },
+        onExit: (_) {
+          if (_expanded) setState(() => _expanded = false);
+        },
+        child: Column(
+          children: [
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => setState(() => _expanded = !_expanded),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  height: compact ? 38 : 40,
+                  padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12),
+                  decoration: BoxDecoration(
+                    color: _expanded
+                        ? AppColors.primary.withValues(alpha: 0.07)
+                        : AppColors.surfaceMuted.withValues(alpha: 0.56),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppColors.border.withValues(alpha: 0.9),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        subgroup.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.small.copyWith(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w700,
-                          fontSize: compact ? 12.2 : 12.8,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        subgroup.icon,
+                        size: compact ? 17 : 18,
+                        color: AppColors.primary,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          subgroup.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.small.copyWith(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w700,
+                            fontSize: compact ? 12.2 : 12.8,
+                          ),
                         ),
                       ),
-                    ),
-                    AnimatedRotation(
-                      turns: _expanded ? 0.5 : 0,
-                      duration: const Duration(milliseconds: 160),
-                      child: Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        size: 18,
-                        color: AppColors.textSecondary,
+                      AnimatedRotation(
+                        turns: _expanded ? 0.5 : 0,
+                        duration: const Duration(milliseconds: 160),
+                        child: Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          size: 18,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
-                    ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            AnimatedCrossFade(
+              firstChild: const SizedBox(width: double.infinity),
+              secondChild: Padding(
+                padding: EdgeInsets.only(left: compact ? 8 : 10, top: 3),
+                child: Column(
+                  children: [
+                    for (final item in subgroup.items) widget.itemBuilder(item),
                   ],
                 ),
               ),
+              crossFadeState: _expanded
+                  ? CrossFadeState.showSecond
+                  : CrossFadeState.showFirst,
+              duration: const Duration(milliseconds: 160),
+              sizeCurve: Curves.easeOut,
             ),
-          ),
-          AnimatedCrossFade(
-            firstChild: const SizedBox(width: double.infinity),
-            secondChild: Padding(
-              padding: EdgeInsets.only(left: compact ? 8 : 10, top: 3),
-              child: Column(
-                children: [
-                  for (final item in subgroup.items) widget.itemBuilder(item),
-                ],
-              ),
-            ),
-            crossFadeState: _expanded
-                ? CrossFadeState.showSecond
-                : CrossFadeState.showFirst,
-            duration: const Duration(milliseconds: 160),
-            sizeCurve: Curves.easeOut,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/debug/app_error_reporter.dart';
+import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/widgets/fulltech_dialog.dart';
 
 double? parseDominicanAmount(String raw) {
@@ -13,13 +14,37 @@ double? parseDominicanAmount(String raw) {
       .replaceAll('rd\$', '')
       .replaceAll(' ', '');
   if (value.isEmpty) return null;
-  if (value.contains(',') && value.contains('.')) {
+  if (value.startsWith('-')) return null;
+
+  final commaCount = ','.allMatches(value).length;
+  final dotCount = '.'.allMatches(value).length;
+  if (commaCount > 0 && dotCount > 0) {
     value = value.replaceAll(',', '');
-  } else {
-    value = value.replaceAll(',', '.');
+  } else if (commaCount > 0) {
+    final parts = value.split(',');
+    final last = parts.last;
+    final allGroupsAreThousands =
+        parts.length > 1 &&
+        parts.skip(1).every((part) => RegExp(r'^\d{3}$').hasMatch(part));
+    if (allGroupsAreThousands || last.length == 3) {
+      value = value.replaceAll(',', '');
+    } else if (commaCount == 1 && last.length <= 2) {
+      value = value.replaceAll(',', '.');
+    } else {
+      return null;
+    }
+  } else if (dotCount > 1) {
+    final parts = value.split('.');
+    final allGroupsAreThousands =
+        parts.length > 1 &&
+        parts.skip(1).every((part) => RegExp(r'^\d{3}$').hasMatch(part));
+    if (!allGroupsAreThousands) return null;
+    value = value.replaceAll('.', '');
   }
   final parsed = double.tryParse(value);
-  if (parsed == null || parsed.isNaN || parsed.isInfinite) return null;
+  if (parsed == null || parsed < 0 || parsed.isNaN || parsed.isInfinite) {
+    return null;
+  }
   return double.parse(parsed.toStringAsFixed(2));
 }
 
@@ -120,6 +145,350 @@ Future<double?> showCashAmountDialog(
       Navigator.of(context).pop(value);
     },
   ).whenComplete(() => controller.dispose());
+}
+
+class CloseShiftResult {
+  const CloseShiftResult._({required this.success, this.printResult});
+
+  final bool success;
+  final PrintTicketResult? printResult;
+
+  factory CloseShiftResult.success(PrintTicketResult? printResult) {
+    return CloseShiftResult._(success: true, printResult: printResult);
+  }
+}
+
+Future<CloseShiftResult?> showCloseShiftDialog(
+  BuildContext context, {
+  required double expectedCash,
+  required Future<PrintTicketResult?> Function(double countedAmount)
+  onCloseShift,
+}) {
+  return showDialog<CloseShiftResult>(
+    context: context,
+    useRootNavigator: true,
+    barrierDismissible: false,
+    barrierColor: FullTechDialogTokens.overlayColor,
+    builder: (_) => CloseShiftDialog(
+      expectedCash: expectedCash,
+      onCloseShift: onCloseShift,
+    ),
+  );
+}
+
+class CloseShiftDialog extends StatefulWidget {
+  const CloseShiftDialog({
+    super.key,
+    required this.expectedCash,
+    required this.onCloseShift,
+  });
+
+  final double expectedCash;
+  final Future<PrintTicketResult?> Function(double countedAmount) onCloseShift;
+
+  @override
+  State<CloseShiftDialog> createState() => _CloseShiftDialogState();
+}
+
+class _CloseShiftDialogState extends State<CloseShiftDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _amountController;
+  late final FocusNode _amountFocusNode;
+  bool _isSubmitting = false;
+  String? _inlineError;
+
+  @override
+  void initState() {
+    super.initState();
+    debugPrint('[CloseShiftDialog] initState');
+    _amountController = TextEditingController(
+      text: widget.expectedCash.toStringAsFixed(2),
+    );
+    _amountFocusNode = FocusNode();
+  }
+
+  @override
+  void dispose() {
+    debugPrint('[CloseShiftDialog] dispose');
+    _amountController.dispose();
+    _amountFocusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_isSubmitting) return;
+    debugPrint('[CloseShiftDialog] submit start');
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
+
+    final countedAmount = parseDominicanAmount(_amountController.text)!;
+    debugPrint('[CloseShiftDialog] amount=$countedAmount');
+    setState(() {
+      _isSubmitting = true;
+      _inlineError = null;
+    });
+
+    try {
+      debugPrint('[CloseShiftDialog] request start');
+      final printResult = await widget.onCloseShift(countedAmount);
+      debugPrint('[CloseShiftDialog] request success');
+      if (!mounted) return;
+      debugPrint('[CloseShiftDialog] pop');
+      Navigator.of(
+        context,
+        rootNavigator: true,
+      ).pop(CloseShiftResult.success(printResult));
+    } catch (error, stack) {
+      if (!mounted) return;
+      setState(() => _inlineError = resolveCashError(error));
+      AppErrorReporter.instance.record(
+        error,
+        stack,
+        context: 'Cerrar turno',
+        notifyUser: false,
+      );
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  void _dismiss() {
+    if (_isSubmitting) return;
+    Navigator.of(context, rootNavigator: true).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_isSubmitting,
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.enter): _submit,
+          const SingleActivator(LogicalKeyboardKey.numpadEnter): _submit,
+          const SingleActivator(LogicalKeyboardKey.escape): _dismiss,
+        },
+        child: Focus(
+          autofocus: true,
+          child: Dialog(
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 24,
+            ),
+            backgroundColor: Colors.transparent,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 430),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(28, 28, 28, 24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: const Color(0xFFBFDBFE),
+                    width: 1.2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.10),
+                      blurRadius: 32,
+                      offset: const Offset(0, 18),
+                    ),
+                  ],
+                ),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Cerrar turno',
+                                  style: TextStyle(
+                                    color: Color(0xFF0F172A),
+                                    fontSize: 21,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                SizedBox(height: 6),
+                                Text(
+                                  'Ingresa el efectivo contado para hacer el corte.',
+                                  style: TextStyle(
+                                    color: Color(0xFF52667C),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Cerrar',
+                            onPressed: _isSubmitting ? null : _dismiss,
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Efectivo contado',
+                        style: TextStyle(
+                          color: Color(0xFF0F172A),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _amountController,
+                        focusNode: _amountFocusNode,
+                        autofocus: true,
+                        enabled: !_isSubmitting,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) => _submit(),
+                        validator: (value) {
+                          final amount = parseDominicanAmount(value ?? '');
+                          if (amount == null) {
+                            return 'Ingresa un monto válido. Ej: RD\$ 1,200.00';
+                          }
+                          return null;
+                        },
+                        style: const TextStyle(
+                          color: Color(0xFF0F172A),
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                        decoration: InputDecoration(
+                          errorText: _inlineError,
+                          prefixIcon: Container(
+                            width: 64,
+                            alignment: Alignment.center,
+                            margin: const EdgeInsets.fromLTRB(10, 8, 8, 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEAF1FF),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Text(
+                              r'RD$',
+                              style: TextStyle(
+                                color: Color(0xFF1957E6),
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          hintText: '0.00',
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 18,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF2563EB),
+                              width: 1.4,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF2563EB),
+                              width: 1.4,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF2563EB),
+                              width: 1.8,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: _isSubmitting ? null : _dismiss,
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(50),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              child: const Text('Cancelar'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: _isSubmitting ? null : _submit,
+                              icon: _isSubmitting
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(Icons.lock_rounded, size: 18),
+                              label: Text(
+                                _isSubmitting ? 'Cerrando...' : 'Cerrar turno',
+                              ),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF2563EB),
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size.fromHeight(50),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                textStyle: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        _isSubmitting
+                            ? 'Procesando cierre e impresión...'
+                            : 'Enter para cerrar · Esc para cancelar',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Color(0xFF64748B),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _OpenCashDialog extends StatefulWidget {
