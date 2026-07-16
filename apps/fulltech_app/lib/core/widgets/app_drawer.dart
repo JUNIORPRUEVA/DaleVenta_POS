@@ -382,6 +382,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(List<AppNavigationSection> sections) {
     Routes.cajaRegistrarSalida,
     Routes.cajaMovimientos,
   ]);
+  final salesCreditItem = pick(Routes.ventasCreditos);
   final reportsItem = pick(Routes.ventas);
   if (ventasItems.isNotEmpty ||
       inventoryItems.isNotEmpty ||
@@ -393,6 +394,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(List<AppNavigationSection> sections) {
         items: const [],
         trailingItems: [
           ...inventoryItems,
+          if (salesCreditItem != null) salesCreditItem,
           if (reportsItem != null) reportsItem,
         ],
         subgroups: [

@@ -50,7 +50,8 @@ import 'utils/cotizacion_pdf_service.dart';
 enum _CheckoutPaymentMethod {
   cash('Efectivo', Icons.payments_outlined),
   transfer('Transferencia', Icons.account_balance_outlined),
-  mixed('Mixto', Icons.call_split_rounded);
+  mixed('Mixto', Icons.call_split_rounded),
+  credit('Crédito', Icons.credit_score_outlined);
 
   const _CheckoutPaymentMethod(this.label, this.icon);
   final String label;
@@ -62,11 +63,13 @@ class _CheckoutResult {
     required this.method,
     required this.cashAmount,
     required this.transferAmount,
+    required this.creditAmount,
   });
 
   final _CheckoutPaymentMethod method;
   final double cashAmount;
   final double transferAmount;
+  final double creditAmount;
 }
 
 class _ManualItemMetric extends StatelessWidget {
@@ -1720,146 +1723,154 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            insetPadding: const EdgeInsets.symmetric(
-              horizontal: 24,
-              vertical: 24,
-            ),
-            contentPadding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-            titlePadding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
-            title: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Descuento general',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Cerrar',
-                  onPressed: () => Navigator.pop(dialogContext),
-                  icon: const Icon(Icons.close_rounded, size: 18),
-                ),
-              ],
-            ),
-            content: SizedBox(
-              width: 320,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<_DiscountType>(
-                    initialValue: type,
-                    isDense: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Tipo',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: _DiscountType.fixed,
-                        child: Text('Monto (RD\$)'),
+          builder: (context, setDialogState) {
+            void apply() {
+              final amount = type == _DiscountType.percent
+                  ? double.tryParse(amountCtrl.text.trim().replaceAll(',', '.'))
+                  : _parseAccountingInput(amountCtrl.text);
+              if (amount == null || amount <= 0) {
+                _showSalesNotice(
+                  title: 'Valor inválido',
+                  message: 'Ingresa un valor válido.',
+                  icon: Icons.warning_amber_rounded,
+                  accent: const Color(0xFFF59E0B),
+                );
+                return;
+              }
+              final nextDiscount = type == _DiscountType.percent
+                  ? _grossTotalBeforeGeneralDiscount * (amount / 100)
+                  : amount;
+              final boundedDiscount = nextDiscount
+                  .clamp(0, _grossTotalBeforeGeneralDiscount)
+                  .toDouble();
+              _commitEditorChange(() {
+                _generalDiscountAmount = boundedDiscount;
+              });
+              Navigator.pop(dialogContext);
+            }
+
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 24,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 22, 24, 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Descuento general',
+                              style: TextStyle(
+                                color: Color(0xFF0F172A),
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Cerrar',
+                            onPressed: () => Navigator.pop(dialogContext),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
                       ),
-                      DropdownMenuItem(
-                        value: _DiscountType.percent,
-                        child: Text('Porcentaje (%)'),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Aplica una rebaja al total completo de la venta.',
+                        style: TextStyle(
+                          color: Color(0xFF64748B),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      SegmentedButton<_DiscountType>(
+                        segments: const [
+                          ButtonSegment(
+                            value: _DiscountType.fixed,
+                            label: Text(r'RD$'),
+                          ),
+                          ButtonSegment(
+                            value: _DiscountType.percent,
+                            label: Text('%'),
+                          ),
+                        ],
+                        selected: {type},
+                        onSelectionChanged: (value) =>
+                            setDialogState(() => type = value.first),
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: amountCtrl,
+                        autofocus: true,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => apply(),
+                        decoration: InputDecoration(
+                          labelText: type == _DiscountType.fixed
+                              ? 'Monto de descuento'
+                              : 'Porcentaje de descuento',
+                          prefixText: type == _DiscountType.fixed
+                              ? r'RD$ '
+                              : null,
+                          suffixText: type == _DiscountType.percent
+                              ? '%'
+                              : null,
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Row(
+                        children: [
+                          if (_effectiveGeneralDiscountAmount > 0)
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  _commitEditorChange(() {
+                                    _generalDiscountAmount = 0;
+                                  });
+                                  Navigator.pop(dialogContext);
+                                },
+                                icon: const Icon(Icons.undo_rounded, size: 18),
+                                label: const Text('Quitar'),
+                              ),
+                            ),
+                          if (_effectiveGeneralDiscountAmount > 0)
+                            const SizedBox(width: 10),
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: apply,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF1957E6),
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size.fromHeight(46),
+                              ),
+                              child: const Text('Aplicar descuento'),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setDialogState(() => type = value);
-                    },
                   ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: amountCtrl,
-                    autofocus: true,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    textInputAction: TextInputAction.done,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      labelText: type == _DiscountType.fixed
-                          ? 'Monto'
-                          : 'Porcentaje',
-                      hintText: type == _DiscountType.fixed ? '500' : '10',
-                      border: const OutlineInputBorder(),
-                    ),
-                    onSubmitted: (_) {
-                      final amount = type == _DiscountType.percent
-                          ? double.tryParse(
-                              amountCtrl.text.trim().replaceAll(',', '.'),
-                            )
-                          : _parseAccountingInput(amountCtrl.text);
-                      if (amount == null || amount <= 0) {
-                        _showSalesNotice(
-                          title: 'Valor inválido',
-                          message: 'Ingresa un valor válido.',
-                          icon: Icons.warning_amber_rounded,
-                          accent: const Color(0xFFF59E0B),
-                        );
-                        return;
-                      }
-                      final nextDiscount = type == _DiscountType.percent
-                          ? _grossTotalBeforeGeneralDiscount * (amount / 100)
-                          : amount;
-                      final boundedDiscount = nextDiscount
-                          .clamp(0, _grossTotalBeforeGeneralDiscount)
-                          .toDouble();
-                      _commitEditorChange(() {
-                        _generalDiscountAmount = boundedDiscount;
-                      });
-                      Navigator.pop(dialogContext);
-                    },
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              if (_effectiveGeneralDiscountAmount > 0)
-                TextButton.icon(
-                  onPressed: () {
-                    _commitEditorChange(() {
-                      _generalDiscountAmount = 0;
-                    });
-                    Navigator.pop(dialogContext);
-                  },
-                  icon: const Icon(Icons.undo_rounded, size: 16),
-                  label: const Text('Quitar'),
                 ),
-              FilledButton(
-                onPressed: () {
-                  final amount = type == _DiscountType.percent
-                      ? double.tryParse(
-                          amountCtrl.text.trim().replaceAll(',', '.'),
-                        )
-                      : _parseAccountingInput(amountCtrl.text);
-                  if (amount == null || amount <= 0) {
-                    _showSalesNotice(
-                      title: 'Valor inválido',
-                      message: 'Ingresa un valor válido.',
-                      icon: Icons.warning_amber_rounded,
-                      accent: const Color(0xFFF59E0B),
-                    );
-                    return;
-                  }
-                  final nextDiscount = type == _DiscountType.percent
-                      ? _grossTotalBeforeGeneralDiscount * (amount / 100)
-                      : amount;
-                  final boundedDiscount = nextDiscount
-                      .clamp(0, _grossTotalBeforeGeneralDiscount)
-                      .toDouble();
-                  _commitEditorChange(() {
-                    _generalDiscountAmount = boundedDiscount;
-                  });
-                  Navigator.pop(dialogContext);
-                },
-                child: const Text('Aplicar'),
               ),
-            ],
-          ),
+            );
+          },
         ),
       );
     } finally {
@@ -4311,9 +4322,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     _CheckoutPaymentMethod.cash => 'cash',
                     _CheckoutPaymentMethod.transfer => 'transfer',
                     _CheckoutPaymentMethod.mixed => 'mixed',
+                    _CheckoutPaymentMethod.credit => 'credit',
                   },
             paymentCashAmount: checkout?.cashAmount,
             paymentTransferAmount: checkout?.transferAmount,
+            creditAmount: checkout?.creditAmount,
             items: _items
                 .map(
                   (item) => SaleDraftItem(
@@ -5063,7 +5076,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                               selectedClientName: _selectedClientName,
                               includeItbis: _includeItbis,
                               subtotalBeforeDiscount: _subtotalBeforeDiscount,
-                              discountAmount: _discountAmount,
+                              discountAmount: _lineDiscountAmount,
                               generalDiscountAmount:
                                   _effectiveGeneralDiscountAmount,
                               subtotal: _subtotal,
@@ -5085,6 +5098,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                       unawaited(_confirmAndClearSale());
                                     },
                               onFinalize: _openCheckoutDialog,
+                              onApplyGeneralDiscount: _applyGeneralDiscount,
                               onMinusQty: (index) =>
                                   _setQty(index, _items[index].qty - 1),
                               onPlusQty: (index) =>
@@ -5798,6 +5812,7 @@ class _CheckoutPaymentDialog extends StatefulWidget {
 class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
   _CheckoutPaymentMethod _method = _CheckoutPaymentMethod.cash;
   late final TextEditingController _cashController;
+  late final TextEditingController _transferController;
 
   @override
   void initState() {
@@ -5805,12 +5820,15 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
     _cashController = TextEditingController(
       text: _formatAccountingInput(widget.total),
     );
+    _transferController = TextEditingController(text: '0.00');
     _cashController.addListener(() => setState(() {}));
+    _transferController.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
     _cashController.dispose();
+    _transferController.dispose();
     super.dispose();
   }
 
@@ -5820,8 +5838,9 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
 
   double get _transferAmount {
     if (_method == _CheckoutPaymentMethod.transfer) return widget.total;
-    if (_method == _CheckoutPaymentMethod.mixed) {
-      return (widget.total - _cashAmount).clamp(0, widget.total);
+    if (_method == _CheckoutPaymentMethod.mixed ||
+        _method == _CheckoutPaymentMethod.credit) {
+      return _parseAccountingInput(_transferController.text) ?? 0;
     }
     return 0;
   }
@@ -5832,12 +5851,22 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
     return _cashAmount + _transferAmount;
   }
 
+  double get _creditAmount {
+    if (_method != _CheckoutPaymentMethod.credit) return 0;
+    return (widget.total - _coveredAmount).clamp(0, widget.total).toDouble();
+  }
+
   double get _changeAmount {
     if (_method == _CheckoutPaymentMethod.transfer) return 0;
     return (_coveredAmount - widget.total).clamp(0, double.infinity);
   }
 
-  bool get _canConfirm => _coveredAmount + 0.0001 >= widget.total;
+  bool get _canConfirm {
+    if (_method == _CheckoutPaymentMethod.credit) {
+      return _coveredAmount >= 0 && _coveredAmount <= widget.total + 0.0001;
+    }
+    return _coveredAmount + 0.0001 >= widget.total;
+  }
 
   _CheckoutResult _result() {
     final cashAmount = switch (_method) {
@@ -5845,17 +5874,26 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
       _CheckoutPaymentMethod.transfer => 0.0,
       _CheckoutPaymentMethod.mixed =>
         _cashAmount.clamp(0, widget.total).toDouble(),
+      _CheckoutPaymentMethod.credit =>
+        _cashAmount.clamp(0, widget.total).toDouble(),
     };
     final transferAmount = switch (_method) {
       _CheckoutPaymentMethod.cash => 0.0,
       _CheckoutPaymentMethod.transfer => widget.total,
       _CheckoutPaymentMethod.mixed =>
-        (widget.total - cashAmount).clamp(0, widget.total).toDouble(),
+        _transferAmount.clamp(0, widget.total - cashAmount).toDouble(),
+      _CheckoutPaymentMethod.credit =>
+        _transferAmount.clamp(0, widget.total).toDouble(),
     };
     return _CheckoutResult(
       method: _method,
       cashAmount: cashAmount,
       transferAmount: transferAmount,
+      creditAmount: _method == _CheckoutPaymentMethod.credit
+          ? (widget.total - cashAmount - transferAmount)
+                .clamp(0, widget.total)
+                .toDouble()
+          : 0,
     );
   }
 
@@ -5864,8 +5902,16 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
       _method = method;
       if (method == _CheckoutPaymentMethod.transfer) {
         _cashController.text = '0.00';
+        _transferController.text = _formatAccountingInput(widget.total);
+      } else if (method == _CheckoutPaymentMethod.mixed) {
+        _cashController.text = _formatAccountingInput(widget.total);
+        _transferController.text = '0.00';
+      } else if (method == _CheckoutPaymentMethod.credit) {
+        _cashController.text = '0.00';
+        _transferController.text = '0.00';
       } else if (_cashAmount <= 0) {
         _cashController.text = _formatAccountingInput(widget.total);
+        _transferController.text = '0.00';
       }
     });
   }
@@ -5880,6 +5926,7 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
     final theme = Theme.of(context);
     final isTransfer = _method == _CheckoutPaymentMethod.transfer;
     final isMixed = _method == _CheckoutPaymentMethod.mixed;
+    final isCredit = _method == _CheckoutPaymentMethod.credit;
 
     return CallbackShortcuts(
       bindings: {
@@ -5992,26 +6039,46 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                             if (!isTransfer) ...[
                               _PaymentAmountInput(
                                 label: isMixed
-                                    ? 'Efectivo recibido'
+                                    ? 'Efectivo'
+                                    : isCredit
+                                    ? 'Efectivo abonado'
                                     : 'Cliente paga con',
                                 controller: _cashController,
                                 enabled: true,
                               ),
                               const SizedBox(height: 10),
                             ],
-                            if (isTransfer || isMixed) ...[
+                            if (isMixed || isCredit) ...[
+                              _PaymentAmountInput(
+                                label: isCredit
+                                    ? 'Transferencia abonada'
+                                    : 'Transferencia',
+                                controller: _transferController,
+                                enabled: true,
+                              ),
+                              const SizedBox(height: 10),
+                            ] else if (isTransfer) ...[
                               _ReadonlyPaymentLine(
                                 icon: Icons.account_balance_outlined,
                                 label: 'Transferencia',
-                                value: widget.money(_transferAmount),
+                                value: widget.money(widget.total),
+                              ),
+                              const SizedBox(height: 10),
+                            ],
+                            if (isCredit) ...[
+                              _ReadonlyPaymentLine(
+                                icon: Icons.credit_score_outlined,
+                                label: 'Queda a crédito',
+                                value: widget.money(_creditAmount),
+                                strong: _creditAmount > 0,
                               ),
                               const SizedBox(height: 10),
                             ],
                             _ReadonlyPaymentLine(
                               icon: Icons.keyboard_return_rounded,
                               label: 'Devuelta',
-                              value: widget.money(_changeAmount),
-                              strong: _changeAmount > 0,
+                              value: widget.money(isCredit ? 0 : _changeAmount),
+                              strong: !isCredit && _changeAmount > 0,
                             ),
                           ],
                         ),
@@ -6056,6 +6123,8 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                         child: Text(
                           _canConfirm
                               ? 'Enter/F9 para cobrar · Esc para salir'
+                              : isCredit
+                              ? 'El abono no puede superar el total de la factura'
                               : 'Monto recibido insuficiente para completar el cobro',
                           style: TextStyle(
                             color: _canConfirm
@@ -6073,7 +6142,11 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                       FilledButton.icon(
                         onPressed: _canConfirm ? _confirmCheckout : null,
                         icon: const Icon(Icons.receipt_long_outlined),
-                        label: const Text('Cobrar y facturar'),
+                        label: Text(
+                          _method == _CheckoutPaymentMethod.credit
+                              ? 'Crear crédito'
+                              : 'Cobrar y facturar',
+                        ),
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF1957E6),
                           foregroundColor: Colors.white,
@@ -7372,6 +7445,7 @@ class _DesktopQuotePanel extends StatelessWidget {
     required this.onOpenNote,
     required this.onClear,
     required this.onFinalize,
+    required this.onApplyGeneralDiscount,
     required this.onMinusQty,
     required this.onPlusQty,
     required this.onChangePrice,
@@ -7399,6 +7473,7 @@ class _DesktopQuotePanel extends StatelessWidget {
   final VoidCallback onOpenNote;
   final VoidCallback? onClear;
   final VoidCallback onFinalize;
+  final VoidCallback onApplyGeneralDiscount;
   final ValueChanged<int> onMinusQty;
   final ValueChanged<int> onPlusQty;
   final void Function(int index, double value) onChangePrice;
@@ -7546,9 +7621,9 @@ class _DesktopQuotePanel extends StatelessWidget {
                       ),
                     if (generalDiscountAmount > 0)
                       _CompactTotalLine(
-                        label: 'Rebaja',
+                        label: 'Desc. general',
                         value: '-${money(generalDiscountAmount)}',
-                        valueColor: const Color(0xFF1957E6),
+                        valueColor: Colors.red.shade700,
                       ),
                     if (includeItbis)
                       _CompactTotalLine(
@@ -7568,34 +7643,37 @@ class _DesktopQuotePanel extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child: FilledButton(
-                      onPressed: onFinalize,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF1957E6),
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size.fromHeight(70),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(7),
+                    child: GestureDetector(
+                      onDoubleTap: onApplyGeneralDiscount,
+                      child: FilledButton(
+                        onPressed: onFinalize,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF1957E6),
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size.fromHeight(70),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(7),
+                          ),
                         ),
-                      ),
-                      child: Row(
-                        children: [
-                          const Text(
-                            'Cobrar',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
+                        child: Row(
+                          children: [
+                            const Text(
+                              'Cobrar',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                              ),
                             ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            money(total),
-                            style: const TextStyle(
-                              fontSize: 26,
-                              fontWeight: FontWeight.w900,
+                            const Spacer(),
+                            Text(
+                              money(total),
+                              style: const TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.w900,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -9066,10 +9144,15 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                           runSpacing: 4,
                           children: [
                             if (hasDiscount)
-                              _buildTicketTag(
-                                label: 'Desc. -$discountText',
-                                backgroundColor: Colors.red.shade50,
-                                foregroundColor: Colors.red.shade700,
+                              Text(
+                                'desc: $discountText',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.red.shade700,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                ),
                               ),
                             if (item.isExternal)
                               _buildTicketTag(

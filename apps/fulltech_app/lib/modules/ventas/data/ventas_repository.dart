@@ -136,6 +136,52 @@ class VentasRepository {
     }
   }
 
+  Future<List<SaleModel>> listCredits({bool includePaid = false}) async {
+    try {
+      final res = await _dio.get(
+        ApiRoutes.salesCredits,
+        queryParameters: {if (includePaid) 'includePaid': 'true'},
+        options: Options(extra: const {'skipLoader': true}),
+      );
+      final rows = res.data is List ? (res.data as List) : const [];
+      return rows
+          .whereType<Map>()
+          .map((e) => SaleModel.fromJson(e.cast<String, dynamic>()))
+          .toList(growable: false);
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(e.response?.data, 'No se pudieron cargar los créditos'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<SaleModel> addCreditPayment({
+    required String saleId,
+    required double cashAmount,
+    required double transferAmount,
+    String? note,
+  }) async {
+    try {
+      final res = await _dio.post(
+        ApiRoutes.saleCreditPayments(saleId),
+        data: {
+          'cashAmount': cashAmount,
+          'transferAmount': transferAmount,
+          if ((note ?? '').trim().isNotEmpty) 'note': note!.trim(),
+        },
+      );
+      final data = (res.data as Map).cast<String, dynamic>();
+      final sale = data['sale'];
+      return SaleModel.fromJson((sale as Map).cast<String, dynamic>());
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(e.response?.data, 'No se pudo registrar el abono'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
   Future<Map<String, dynamic>> reportsSalesOverview({
     required DateTime from,
     required DateTime to,
@@ -143,10 +189,7 @@ class VentasRepository {
     try {
       final res = await _dio.get(
         ApiRoutes.reportsSalesOverview,
-        queryParameters: {
-          'from': _dateOnly(from),
-          'to': _dateOnly(to),
-        },
+        queryParameters: {'from': _dateOnly(from), 'to': _dateOnly(to)},
         options: Options(extra: const {'skipLoader': true}),
       );
       return ((res.data as Map?) ?? const <String, dynamic>{})
@@ -277,6 +320,7 @@ class VentasRepository {
     String? paymentMethod,
     double? paymentCashAmount,
     double? paymentTransferAmount,
+    double? creditAmount,
     required List<SaleDraftItem> items,
   }) async {
     if (items.isEmpty) {
@@ -297,6 +341,7 @@ class VentasRepository {
           if (paymentCashAmount != null) 'paymentCashAmount': paymentCashAmount,
           if (paymentTransferAmount != null)
             'paymentTransferAmount': paymentTransferAmount,
+          if (creditAmount != null) 'creditAmount': creditAmount,
           'items': items.map((item) => item.toPayload()).toList(),
         },
       );

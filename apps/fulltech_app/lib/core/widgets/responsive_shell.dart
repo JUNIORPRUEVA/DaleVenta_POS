@@ -796,6 +796,11 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
       'Cotizaciones',
       Icons.edit_note_outlined,
     );
+    final creditosVentas = nav(
+      Routes.ventasCreditos,
+      'Créditos',
+      Icons.credit_score_outlined,
+    );
     final creditos = nav(
       Routes.contabilidadPagosPendientes,
       'Créditos',
@@ -836,7 +841,6 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
     final clientRoutes = {
       if (clientes != null) clientes.route,
       if (cotizaciones != null) cotizaciones.route,
-      if (creditos != null) creditos.route,
     };
     final cashRoutes = {
       if (cashIngreso != null) cashIngreso.route,
@@ -1109,6 +1113,19 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                                 ),
                             ],
                           ),
+                          if (creditosVentas != null)
+                            _PremiumSidebarNavItem(
+                              item: creditosVentas,
+                              collapsed: visualCollapsed,
+                              currentLocation: widget.currentLocation,
+                              textColor: textColor,
+                              activeColor: activeColor,
+                              hoverColor: hoverColor,
+                              baseColor: baseColor,
+                              scale: scale,
+                              onTap: () =>
+                                  widget.onNavigate(creditosVentas.route),
+                            ),
                           if (reportes != null)
                             _PremiumSidebarNavItem(
                               item: reportes,

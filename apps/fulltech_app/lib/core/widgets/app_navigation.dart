@@ -119,6 +119,12 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Historial',
             route: Routes.cajaMovimientos,
           ),
+        if (can(AppPermission.viewSales))
+          const AppNavigationItem(
+            icon: Icons.credit_score_outlined,
+            title: 'Créditos',
+            route: Routes.ventasCreditos,
+          ),
         if (can(AppPermission.viewPunch))
           const AppNavigationItem(
             icon: Icons.access_time_rounded,

@@ -18,6 +18,7 @@ class Routes {
   static const clientes = '/clientes';
   static const ventas = '/ventas';
   static const ventasLista = '/ventas/lista';
+  static const ventasCreditos = '/ventas/creditos';
   static const caja = '/caja';
   static const cajaRegistrarIngreso = '/caja/registrar-ingreso';
   static const cajaRegistrarSalida = '/caja/registrar-salida';

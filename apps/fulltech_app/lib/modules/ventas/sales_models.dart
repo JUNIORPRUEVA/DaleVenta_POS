@@ -163,6 +163,13 @@ class SaleModel {
   final double totalCost;
   final double totalProfit;
   final double commissionAmount;
+  final String paymentMethod;
+  final double paymentCashAmount;
+  final double paymentTransferAmount;
+  final double creditAmount;
+  final double creditPaidAmount;
+  final double creditBalance;
+  final String creditStatus;
   final bool isDeleted;
   final DateTime? deletedAt;
   final List<SaleItemModel> items;
@@ -179,6 +186,13 @@ class SaleModel {
     required this.totalCost,
     required this.totalProfit,
     required this.commissionAmount,
+    required this.paymentMethod,
+    required this.paymentCashAmount,
+    required this.paymentTransferAmount,
+    required this.creditAmount,
+    required this.creditPaidAmount,
+    required this.creditBalance,
+    required this.creditStatus,
     required this.isDeleted,
     required this.deletedAt,
     required this.items,
@@ -214,6 +228,13 @@ class SaleModel {
       totalCost: _toDouble(json['totalCost']),
       totalProfit: _toDouble(json['totalProfit']),
       commissionAmount: _toDouble(json['commissionAmount']),
+      paymentMethod: (json['paymentMethod'] ?? '').toString(),
+      paymentCashAmount: _toDouble(json['paymentCashAmount']),
+      paymentTransferAmount: _toDouble(json['paymentTransferAmount']),
+      creditAmount: _toDouble(json['creditAmount']),
+      creditPaidAmount: _toDouble(json['creditPaidAmount']),
+      creditBalance: _toDouble(json['creditBalance']),
+      creditStatus: (json['creditStatus'] ?? '').toString(),
       isDeleted: json['isDeleted'] == true,
       deletedAt: json['deletedAt'] != null
           ? DateTime.tryParse(json['deletedAt'].toString())

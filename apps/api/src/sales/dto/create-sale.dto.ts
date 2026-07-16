@@ -36,8 +36,8 @@ export class CreateSaleDto {
   note?: string;
 
   @IsOptional()
-  @IsIn(['cash', 'transfer', 'mixed'])
-  paymentMethod?: 'cash' | 'transfer' | 'mixed';
+  @IsIn(['cash', 'transfer', 'mixed', 'credit'])
+  paymentMethod?: 'cash' | 'transfer' | 'mixed' | 'credit';
 
   @IsOptional()
   @Type(() => Number)
@@ -50,6 +50,12 @@ export class CreateSaleDto {
   @IsNumber()
   @Min(0)
   paymentTransferAmount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  creditAmount?: number;
 
   @IsArray()
   @ArrayMinSize(1)

@@ -162,11 +162,13 @@ class ApiRoutes {
   // Ventas
   static const sales = '/sales';
   static const salesInvoices = '/sales/invoices';
+  static const salesCredits = '/sales/credits';
   static const salesDebugPurge = '/sales/debug/purge';
   static const salesSummary = '/sales/summary';
   static const reportsSalesOverview = '/reports/sales-overview';
   static String saleDetail(String id) => '/sales/$id';
   static String saleReturn(String id) => '/sales/$id/return';
+  static String saleCreditPayments(String id) => '/sales/$id/credit-payments';
   static const cashState = '/cash/state';
   static const cashOpenSession = '/cash/sessions/open';
   static const cashCloseSession = '/cash/sessions/close';

@@ -617,6 +617,7 @@ model User {
   payrollServiceCommissionRequestsReviewed PayrollServiceCommissionRequest[] @relation("PayrollServiceCommissionReviewedByUser")
   punches Punch[]
   sales Sale[]
+  saleCreditPayments SaleCreditPayment[]
   deletedSales Sale[] @relation("SaleDeletedBy")
   createdServices Service[] @relation("ServiceCreatedBy")
   assignedServices ServiceAssignment[]
@@ -1745,6 +1746,10 @@ model Sale {
   paymentMethod    String    @default("cash")
   paymentCashAmount Decimal  @default(0) @db.Decimal(12, 2)
   paymentTransferAmount Decimal @default(0) @db.Decimal(12, 2)
+  creditAmount     Decimal   @default(0) @db.Decimal(12, 2)
+  creditPaidAmount Decimal   @default(0) @db.Decimal(12, 2)
+  creditBalance    Decimal   @default(0) @db.Decimal(12, 2)
+  creditStatus     String    @default("none")
   kind             String    @default("invoice")
   status           String    @default("PAID")
   totalSold        Decimal   @db.Decimal(12, 2)
@@ -1763,12 +1768,37 @@ model Sale {
   cashSession CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
   deletedBy User?     @relation("SaleDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   items     SaleItem[]
+  creditPayments SaleCreditPayment[]
 
   @@index([userId])
   @@index([customerId])
   @@index([cashSessionId])
+  @@index([creditStatus])
   @@index([saleDate])
   @@index([isDeleted])
+}
+
+model SaleCreditPayment {
+  id              String   @id @default(uuid()) @db.Uuid
+  saleId          String   @db.Uuid
+  userId          String   @db.Uuid
+  cashSessionId   String?  @db.Uuid
+  amount          Decimal  @db.Decimal(12, 2)
+  cashAmount      Decimal  @default(0) @db.Decimal(12, 2)
+  transferAmount  Decimal  @default(0) @db.Decimal(12, 2)
+  note            String?
+  paidAt          DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  sale        Sale         @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  cashSession CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+
+  @@index([saleId])
+  @@index([userId])
+  @@index([cashSessionId])
+  @@index([paidAt])
+  @@map("sale_credit_payments")
 }
 
 model CashboxDaily {
@@ -1813,6 +1843,7 @@ model CashSession {
   cashboxDaily    CashboxDaily?  @relation(fields: [cashboxDailyId], references: [id], onDelete: SetNull)
   movements       CashMovement[]
   sales           Sale[]
+  creditPayments  SaleCreditPayment[]
 
   @@index([openedByUserId, status])
   @@index([cashboxDailyId])

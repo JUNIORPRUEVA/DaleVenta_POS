@@ -308,7 +308,7 @@ export class CashService {
       throw new NotFoundException("No encontramos el turno solicitado.");
     }
 
-    const [sales, movements] = await Promise.all([
+    const [sales, movements, creditPayments] = await Promise.all([
       this.prisma.sale.findMany({
         where: { cashSessionId: sessionId },
         select: {
@@ -321,6 +321,7 @@ export class CashService {
         },
       }),
       this.prisma.cashMovement.findMany({ where: { sessionId } }),
+      this.prisma.saleCreditPayment.findMany({ where: { cashSessionId: sessionId } }),
     ]);
 
     let salesCashTotal = 0;
@@ -329,6 +330,7 @@ export class CashService {
     let refundsCash = 0;
     let totalTickets = 0;
     let totalRefunds = 0;
+    let creditAbonos = 0;
 
     for (const sale of sales) {
       const cash = this.toNumber(sale.paymentCashAmount);
@@ -340,6 +342,15 @@ export class CashService {
       }
       totalTickets += 1;
       totalSales += this.toNumber(sale.totalSold);
+      salesCashTotal += cash;
+      salesTransferTotal += transfer;
+    }
+
+    for (const payment of creditPayments) {
+      const cash = this.toNumber(payment.cashAmount);
+      const transfer = this.toNumber(payment.transferAmount);
+      const amount = this.toNumber(payment.amount);
+      creditAbonos += amount;
       salesCashTotal += cash;
       salesTransferTotal += transfer;
     }
@@ -377,12 +388,14 @@ export class CashService {
       totalWithdrawals,
       cashInManual,
       cashOutManual,
-      creditAbonos: 0,
+      creditAbonos,
       layawayAbonos: 0,
       salesCashTotal,
       salesCardTotal: 0,
       salesTransferTotal,
-      salesCreditTotal: 0,
+      salesCreditTotal: sales
+        .filter((sale) => !sale.isDeleted && sale.paymentMethod === "credit")
+        .reduce((sum, sale) => sum + Math.max(0, this.toNumber(sale.totalSold) - this.toNumber(sale.paymentCashAmount) - this.toNumber(sale.paymentTransferAmount)), 0),
       refundsCash,
       expectedCash,
       totalTickets,

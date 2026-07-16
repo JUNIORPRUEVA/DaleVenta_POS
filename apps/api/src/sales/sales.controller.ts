@@ -25,6 +25,12 @@ export class SalesController {
     return this.sales.listInvoices(user, query.from, query.to, query.customerId, query.includeDeleted === 'true');
   }
 
+  @Get('credits')
+  listCredits(@Req() req: Request, @Query('includePaid') includePaid?: string) {
+    const user = req.user as { id: string; role: Role };
+    return this.sales.listCredits(user, includePaid === 'true');
+  }
+
   @Get('summary')
   summaryMine(@Req() req: Request, @Query() query: SalesRangeQueryDto) {
     const user = req.user as { id: string; role: string };
@@ -48,6 +54,16 @@ export class SalesController {
   remove(@Req() req: Request, @Param('id') id: string) {
     const user = req.user as { id: string; role: string };
     return this.sales.remove(user.id, id);
+  }
+
+  @Post(':id/credit-payments')
+  addCreditPayment(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: { cashAmount?: number; transferAmount?: number; note?: string },
+  ) {
+    const user = req.user as { id: string; role: Role };
+    return this.sales.addCreditPayment(user, id, dto);
   }
 
   @Post(':id/return')

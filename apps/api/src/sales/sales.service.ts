@@ -24,6 +24,9 @@ export class SalesService {
         },
       },
       items: true,
+      creditPayments: {
+        orderBy: { paidAt: 'desc' },
+      },
     } satisfies Prisma.SaleInclude;
   }
 
@@ -308,8 +311,21 @@ export class SalesService {
     const paymentTransferAmount = new Prisma.Decimal(
       dto.paymentTransferAmount ?? (paymentMethod === 'transfer' ? totalSold.toNumber() : 0),
     );
-    if (paymentCashAmount.plus(paymentTransferAmount).lessThan(totalSold)) {
+    const paidAmount = paymentCashAmount.plus(paymentTransferAmount);
+    const requestedCreditAmount = new Prisma.Decimal(dto.creditAmount ?? 0);
+    const computedCreditAmount = totalSold.minus(paidAmount);
+    const creditAmount =
+      paymentMethod === 'credit'
+        ? requestedCreditAmount.greaterThan(computedCreditAmount)
+          ? requestedCreditAmount
+          : computedCreditAmount
+        : new Prisma.Decimal(0);
+    const creditBalance = paymentMethod === 'credit' ? creditAmount : new Prisma.Decimal(0);
+    if (paymentMethod !== 'credit' && paidAmount.lessThan(totalSold)) {
       throw new BadRequestException('El monto pagado no cubre el total de la factura.');
+    }
+    if (paymentMethod === 'credit' && paidAmount.greaterThan(totalSold)) {
+      throw new BadRequestException('El abono inicial no puede superar el total de la factura.');
     }
 
     try {
@@ -342,8 +358,16 @@ export class SalesService {
             paymentMethod,
             paymentCashAmount,
             paymentTransferAmount,
+            creditAmount,
+            creditPaidAmount: paidAmount,
+            creditBalance,
             kind: 'invoice',
-            status: 'PAID',
+            status: paymentMethod === 'credit' && creditBalance.greaterThan(0) ? 'CREDIT' : 'PAID',
+            creditStatus: paymentMethod === 'credit'
+              ? creditBalance.greaterThan(0)
+                ? 'open'
+                : 'paid'
+              : 'none',
             totalSold,
             totalCost,
             totalProfit,
@@ -477,6 +501,90 @@ export class SalesService {
       if (!this.isSchemaMismatch(error)) throw error;
       throw new NotFoundException('Venta no encontrada');
     }
+  }
+
+  async listCredits(user: { id: string; role: Role }, includePaid = false) {
+    const where: Prisma.SaleWhereInput = {
+      isDeleted: false,
+      creditStatus: includePaid ? { in: ['open', 'paid'] } : 'open',
+      ...(user.role === Role.ADMIN || user.role === Role.ASISTENTE ? {} : { userId: user.id }),
+    };
+
+    try {
+      return await this.prisma.sale.findMany({
+        where,
+        orderBy: { saleDate: 'desc' },
+        include: this.saleInclude(),
+      });
+    } catch (error) {
+      if (!this.isSchemaMismatch(error)) throw error;
+      return [];
+    }
+  }
+
+  async addCreditPayment(
+    user: { id: string; role: Role },
+    saleId: string,
+    dto: { cashAmount?: number; transferAmount?: number; note?: string },
+  ) {
+    const sale = await this.prisma.sale.findUnique({
+      where: { id: saleId },
+      include: { customer: true },
+    });
+    if (!sale || sale.isDeleted || sale.creditStatus === 'none') {
+      throw new NotFoundException('Crédito no encontrado');
+    }
+    if (sale.userId !== user.id && user.role !== Role.ADMIN && user.role !== Role.ASISTENTE) {
+      throw new ForbiddenException('No puedes modificar este crédito');
+    }
+
+    const activeSession = await this.prisma.cashSession.findFirst({
+      where: { openedByUserId: user.id, status: 'OPEN', closedAt: null },
+      orderBy: { openedAt: 'desc' },
+    });
+    if (!activeSession) {
+      throw new BadRequestException('Debes abrir caja antes de registrar un abono.');
+    }
+
+    const cashAmount = new Prisma.Decimal(dto.cashAmount ?? 0);
+    const transferAmount = new Prisma.Decimal(dto.transferAmount ?? 0);
+    const amount = cashAmount.plus(transferAmount);
+    if (amount.lte(0)) {
+      throw new BadRequestException('El abono debe ser mayor que cero.');
+    }
+    if (amount.greaterThan(sale.creditBalance)) {
+      throw new BadRequestException('El abono no puede superar el saldo pendiente.');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const payment = await tx.saleCreditPayment.create({
+        data: {
+          saleId,
+          userId: user.id,
+          cashSessionId: activeSession.id,
+          amount,
+          cashAmount,
+          transferAmount,
+          note: dto.note?.trim() || null,
+        },
+      });
+      const nextPaid = sale.creditPaidAmount.plus(amount);
+      const nextBalance = sale.creditBalance.minus(amount);
+      const nextStatus = nextBalance.lte(0) ? 'paid' : 'open';
+      const updatedSale = await tx.sale.update({
+        where: { id: saleId },
+        data: {
+          paymentCashAmount: sale.paymentCashAmount.plus(cashAmount),
+          paymentTransferAmount: sale.paymentTransferAmount.plus(transferAmount),
+          creditPaidAmount: nextPaid,
+          creditBalance: nextBalance,
+          creditStatus: nextStatus,
+          status: nextStatus === 'paid' ? 'PAID' : 'CREDIT',
+        },
+        include: this.saleInclude(),
+      });
+      return { payment, sale: updatedSale };
+    });
   }
 
   async purgeAllForDebug(user: { id: string; role: string }) {
