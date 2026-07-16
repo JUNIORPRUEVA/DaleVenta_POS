@@ -14,10 +14,10 @@ import '../../core/models/user_model.dart';
 import '../../core/realtime/operations_realtime_service.dart';
 import '../../core/routing/routes.dart';
 import '../../core/utils/app_feedback.dart';
+import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/app_navigation.dart';
-import '../../core/widgets/custom_app_bar.dart';
-import '../../core/utils/safe_url_launcher.dart';
+import '../../core/widgets/fulltech_page_header.dart';
 import '../clientes/cliente_model.dart';
 import '../clientes/client_location_utils.dart';
 import 'application/service_orders_list_controller.dart';
@@ -362,18 +362,11 @@ class _ServiceOrdersListScreenState
         .length;
 
     return Scaffold(
-      drawer: isDesktop
-          ? null
-          : buildAdaptiveDrawer(context, currentUser: currentUser),
+      drawer: buildAdaptiveDrawer(context, currentUser: currentUser),
       floatingActionButton: _CreateOrderFab(onPressed: _createOrder),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      appBar: CustomAppBar(
+      appBar: FullTechPageHeader(
         title: 'Operaciones',
-        toolbarHeight: 54,
-        centerTitle: false,
-        titleSpacing: isDesktop ? 16 : 0,
-        showLogo: false,
-        showDepartmentLabel: false,
         actions: [
           _PriorityMapButton(
             onPressed: () => context.push(Routes.clientesMapa),
@@ -3118,7 +3111,7 @@ class _DesktopDatePresetButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: colorScheme.surfaceVariant.withValues(alpha: 0.16),
+          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.16),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: colorScheme.outlineVariant.withValues(alpha: 0.7),
@@ -5404,51 +5397,58 @@ class _InlineStatusButton extends StatelessWidget {
       onTap: busy
           ? null
           : () async {
-              final selected = useDesktopStatusDropdown
-                  ? await _showDesktopStatusMenu(context, buttonKey, statuses)
-                  : await showModalBottomSheet<ServiceOrderStatus>(
-                      context: context,
-                      showDragHandle: true,
-                      builder: (sheetContext) {
-                        final theme = Theme.of(sheetContext);
-                        return SafeArea(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Cambiar estado',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Selecciona el estado actual de la orden.',
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                                const SizedBox(height: 14),
-                                ...statuses.map(
-                                  (status) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 10),
-                                    child: _InlineStatusSheetOption(
-                                      status: status,
-                                      isCurrent: status == order.status,
-                                      onTap: () =>
-                                          Navigator.pop(sheetContext, status),
-                                    ),
-                                  ),
-                                ),
-                              ],
+              ServiceOrderStatus? selected;
+              if (useDesktopStatusDropdown) {
+                selected = await _showDesktopStatusMenu(
+                  context,
+                  buttonKey,
+                  statuses,
+                );
+              } else {
+                selected = await showModalBottomSheet<ServiceOrderStatus>(
+                  context: context,
+                  showDragHandle: true,
+                  builder: (sheetContext) {
+                    final theme = Theme.of(sheetContext);
+                    return SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Cambiar estado',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
-                          ),
-                        );
-                      },
+                            const SizedBox(height: 6),
+                            Text(
+                              'Selecciona el estado actual de la orden.',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            ...statuses.map(
+                              (status) => Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: _InlineStatusSheetOption(
+                                  status: status,
+                                  isCurrent: status == order.status,
+                                  onTap: () =>
+                                      Navigator.pop(sheetContext, status),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     );
+                  },
+                );
+              }
 
               if (selected == null || selected == order.status) {
                 return;

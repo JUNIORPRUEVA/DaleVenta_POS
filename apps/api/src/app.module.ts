@@ -32,6 +32,7 @@ import { EmployeeWarningsModule } from './employee-warnings/employee-warnings.mo
 import { MarketingModule } from './marketing/marketing.module';
 import { CrmCommercialModule } from './crm-commercial/crm-commercial.module';
 import { CashModule } from './cash/cash.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { CashModule } from './cash/cash.module';
     MarketingModule,
     CrmCommercialModule,
     CashModule,
+    ReportsModule,
   ]
 })
 export class AppModule {}

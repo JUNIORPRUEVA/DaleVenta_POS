@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../modules/cash/cash_dialogs.dart';
+import '../../modules/cash/cash_providers.dart';
 import '../auth/auth_provider.dart';
 import '../auth/app_role.dart';
 import '../models/user_model.dart';
@@ -35,6 +37,46 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
   void _closeGroup(int index) {
     if (_openGroupIndex != index) return;
     setState(() => _openGroupIndex = null);
+  }
+
+  Future<void> _openMovementDialog(BuildContext context, String type) async {
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
+    final controller = ref.read(activeCashSessionControllerProvider.notifier);
+    Navigator.pop(context);
+    await Future<void>.delayed(Duration.zero);
+    if (!rootContext.mounted) return;
+    final input = await showCashMovementDialog(rootContext, type: type);
+    if (input == null || !rootContext.mounted) return;
+    try {
+      await controller.addMovement(
+        type: type,
+        amount: input.amount,
+        reason: input.reason,
+        movementType: input.movementType,
+        affectsProfit: input.affectsProfit,
+      );
+      if (!rootContext.mounted) return;
+      showCashToast(
+        rootContext,
+        type == 'IN' ? 'Ingreso registrado' : 'Salida registrada',
+      );
+    } catch (error) {
+      if (!rootContext.mounted) return;
+      showCashToast(rootContext, resolveCashError(error), isError: true);
+    }
+  }
+
+  void _handleItemTap(BuildContext context, AppNavigationItem item) {
+    if (item.route == Routes.cajaRegistrarIngreso) {
+      _openMovementDialog(context, 'IN');
+      return;
+    }
+    if (item.route == Routes.cajaRegistrarSalida) {
+      _openMovementDialog(context, 'OUT');
+      return;
+    }
+    Navigator.pop(context);
+    context.go(item.route);
   }
 
   @override
@@ -216,10 +258,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                         index: i,
                         compact: isCompactMobile,
                         expanded: _openGroupIndex == i,
-                        selected: groups[i].items.any(
-                          (item) =>
-                              isNavigationRouteActive(location, item.route),
-                        ),
+                        selected: groups[i].containsActiveRoute(location),
                         onHoverOpen: isDesktop ? () => _openGroup(i) : null,
                         onHoverExit: isDesktop ? () => _closeGroup(i) : null,
                         onTapHeader: () => _toggleGroup(i),
@@ -232,10 +271,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                             item.route,
                           ),
                           showIndicator: item.showIndicator,
-                          onTap: () {
-                            Navigator.pop(context);
-                            context.go(item.route);
-                          },
+                          onTap: () => _handleItemTap(context, item),
                         ),
                       ),
                   ],
@@ -332,13 +368,51 @@ List<_DrawerMenuGroup> _buildDrawerGroups(List<AppNavigationSection> sections) {
     groups.add(_DrawerMenuGroup(title: title, icon: icon, items: items));
   }
 
-  addGroup('Ventas POS', Icons.point_of_sale_rounded, [
-    Routes.cotizaciones,
-    Routes.ventasLista,
-    Routes.caja,
-    Routes.catalogo,
-    Routes.ventas,
+  List<AppNavigationItem> pickItems(List<String> routes) {
+    return [
+      for (final route in routes)
+        if (pick(route) case final item?) item,
+    ];
+  }
+
+  final ventasItems = pickItems([Routes.cotizaciones, Routes.ventasLista]);
+  final inventoryItems = pickItems([Routes.catalogo]);
+  final cashItems = pickItems([
+    Routes.cajaRegistrarIngreso,
+    Routes.cajaRegistrarSalida,
+    Routes.cajaMovimientos,
   ]);
+  final reportsItem = pick(Routes.ventas);
+  if (ventasItems.isNotEmpty ||
+      inventoryItems.isNotEmpty ||
+      cashItems.isNotEmpty) {
+    groups.add(
+      _DrawerMenuGroup(
+        title: 'Ventas POS',
+        icon: Icons.point_of_sale_rounded,
+        items: const [],
+        trailingItems: [
+          ...inventoryItems,
+          if (reportsItem != null) reportsItem,
+        ],
+        subgroups: [
+          if (ventasItems.isNotEmpty)
+            _DrawerMenuSubgroup(
+              title: 'Ventas',
+              icon: Icons.receipt_long_outlined,
+              items: ventasItems,
+            ),
+          if (cashItems.isNotEmpty)
+            _DrawerMenuSubgroup(
+              title: 'Movimiento efectivo',
+              icon: Icons.account_balance_wallet_outlined,
+              items: cashItems,
+            ),
+        ],
+      ),
+    );
+  }
+
   addGroup('Operaciones', Icons.work_outline_rounded, [
     Routes.serviceOrders,
     Routes.mediaGallery,
@@ -386,6 +460,37 @@ List<_DrawerMenuGroup> _buildDrawerGroups(List<AppNavigationSection> sections) {
 
 class _DrawerMenuGroup {
   const _DrawerMenuGroup({
+    required this.title,
+    required this.icon,
+    required this.items,
+    this.trailingItems = const [],
+    this.subgroups = const [],
+  });
+
+  final String title;
+  final IconData icon;
+  final List<AppNavigationItem> items;
+  final List<AppNavigationItem> trailingItems;
+  final List<_DrawerMenuSubgroup> subgroups;
+
+  int get count =>
+      items.length +
+      trailingItems.length +
+      subgroups.fold<int>(0, (sum, subgroup) => sum + subgroup.items.length);
+
+  bool containsActiveRoute(String location) {
+    bool active(AppNavigationItem item) {
+      return isNavigationRouteActive(location, item.route);
+    }
+
+    return items.any(active) ||
+        trailingItems.any(active) ||
+        subgroups.any((subgroup) => subgroup.items.any(active));
+  }
+}
+
+class _DrawerMenuSubgroup {
+  const _DrawerMenuSubgroup({
     required this.title,
     required this.icon,
     required this.items,
@@ -511,7 +616,7 @@ class _DrawerMenuGroupTile extends StatelessWidget {
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
-                            '${group.items.length}',
+                            '${group.count}',
                             textAlign: TextAlign.center,
                             style: AppTextStyles.small.copyWith(
                               color: AppColors.textSecondary,
@@ -547,6 +652,13 @@ class _DrawerMenuGroupTile extends StatelessWidget {
                   child: Column(
                     children: [
                       for (final item in group.items) itemBuilder(item),
+                      for (final subgroup in group.subgroups)
+                        _DrawerMenuSubgroupSection(
+                          subgroup: subgroup,
+                          compact: compact,
+                          itemBuilder: itemBuilder,
+                        ),
+                      for (final item in group.trailingItems) itemBuilder(item),
                     ],
                   ),
                 ),
@@ -559,6 +671,108 @@ class _DrawerMenuGroupTile extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _DrawerMenuSubgroupSection extends StatefulWidget {
+  const _DrawerMenuSubgroupSection({
+    required this.subgroup,
+    required this.compact,
+    required this.itemBuilder,
+  });
+
+  final _DrawerMenuSubgroup subgroup;
+  final bool compact;
+  final Widget Function(AppNavigationItem item) itemBuilder;
+
+  @override
+  State<_DrawerMenuSubgroupSection> createState() =>
+      _DrawerMenuSubgroupSectionState();
+}
+
+class _DrawerMenuSubgroupSectionState
+    extends State<_DrawerMenuSubgroupSection> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final compact = widget.compact;
+    final subgroup = widget.subgroup;
+    return Padding(
+      padding: EdgeInsets.only(top: compact ? 5 : 6, bottom: compact ? 2 : 3),
+      child: Column(
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => setState(() => _expanded = !_expanded),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                height: compact ? 38 : 40,
+                padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12),
+                decoration: BoxDecoration(
+                  color: _expanded
+                      ? AppColors.primary.withValues(alpha: 0.07)
+                      : AppColors.surfaceMuted.withValues(alpha: 0.56),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppColors.border.withValues(alpha: 0.9),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      subgroup.icon,
+                      size: compact ? 17 : 18,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        subgroup.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.small.copyWith(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: compact ? 12.2 : 12.8,
+                        ),
+                      ),
+                    ),
+                    AnimatedRotation(
+                      turns: _expanded ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 160),
+                      child: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 18,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            firstChild: const SizedBox(width: double.infinity),
+            secondChild: Padding(
+              padding: EdgeInsets.only(left: compact ? 8 : 10, top: 3),
+              child: Column(
+                children: [
+                  for (final item in subgroup.items) widget.itemBuilder(item),
+                ],
+              ),
+            ),
+            crossFadeState: _expanded
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 160),
+            sizeCurve: Curves.easeOut,
+          ),
+        ],
       ),
     );
   }

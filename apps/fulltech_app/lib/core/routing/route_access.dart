@@ -26,6 +26,12 @@ class RouteAccess {
       case Routes.ventas:
       case Routes.ventasLista:
       case Routes.caja:
+      case Routes.cajaRegistrarIngreso:
+      case Routes.cajaRegistrarSalida:
+      case Routes.cajaMovimientos:
+      case Routes.cajaRegistrarGasto:
+      case Routes.cajaGastosHistorial:
+      case Routes.cajaTurnosHistorial:
       case Routes.registrarVenta:
         return AppPermission.viewSales;
       case Routes.serviceOrders:

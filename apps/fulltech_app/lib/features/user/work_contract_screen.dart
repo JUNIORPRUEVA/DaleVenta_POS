@@ -149,7 +149,7 @@ class _WorkContractScreenState extends ConsumerState<WorkContractScreen> {
     }
 
     final currency = NumberFormat.currency(
-      locale: 'es_DO',
+      locale: 'en_US',
       symbol: 'RD\$ ',
       decimalDigits: 2,
     );

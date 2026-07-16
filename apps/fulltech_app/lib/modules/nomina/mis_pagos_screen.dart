@@ -227,7 +227,7 @@ class _MisPagosScreenState extends ConsumerState<MisPagosScreen>
   }) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
+    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
     final filteredHistory = _applyDesktopFilters(historyItems);
     final filteredPaid = filteredHistory
         .where((item) => item.isPaid)
@@ -694,7 +694,7 @@ class _MisPagosScreenState extends ConsumerState<MisPagosScreen>
   }
 
   Future<Uint8List> _buildPayrollPdf(PayrollHistoryItem item) async {
-    final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
+    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
     final range =
         '${DateFormat('dd/MM/yyyy').format(item.periodStart)} - ${DateFormat('dd/MM/yyyy').format(item.periodEnd)}';
     final currentUser = ref.read(authStateProvider).user;
@@ -818,7 +818,7 @@ class _MisPagosScreenState extends ConsumerState<MisPagosScreen>
 
   Future<void> _showPayrollDetailsDialog(PayrollHistoryItem item) async {
     final net = NumberFormat.currency(
-      locale: 'es_DO',
+      locale: 'en_US',
       symbol: 'RD\$',
     ).format(item.netTotal);
     final range =
@@ -982,7 +982,7 @@ class _CurrentPeriodCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
+    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
     if (item == null) {
       return Container(
         width: double.infinity,
@@ -1251,7 +1251,7 @@ class _HistoryTile extends StatelessWidget {
     final range =
         '${DateFormat('dd/MM/yyyy').format(item.periodStart)} - ${DateFormat('dd/MM/yyyy').format(item.periodEnd)}';
     final net = NumberFormat.currency(
-      locale: 'es_DO',
+      locale: 'en_US',
       symbol: 'RD\$',
     ).format(item.netTotal);
     final statusColor = item.isPaid
@@ -1365,7 +1365,7 @@ class _DetailRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = value is num
-        ? NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$').format(value)
+        ? NumberFormat.currency(locale: 'en_US', symbol: 'RD\$').format(value)
         : value.toString();
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
@@ -1578,7 +1578,7 @@ class _MisPagosHistoryScreenState
   }
 
   Future<Uint8List> _buildHistoryPdf(PayrollHistoryItem item) async {
-    final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
+    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
     final user = ref.read(authStateProvider).user;
     final employeeName = item.employeeName.trim().isNotEmpty
         ? item.employeeName.trim()
@@ -2559,7 +2559,7 @@ class _DesktopCurrentPeriodCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
+    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
 
     if (item == null) {
       return Container(
@@ -2760,7 +2760,7 @@ class _DesktopPaymentsHistoryRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
+    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
     final range =
         '${DateFormat('dd/MM/yyyy').format(item.periodStart)} - ${DateFormat('dd/MM/yyyy').format(item.periodEnd)}';
 

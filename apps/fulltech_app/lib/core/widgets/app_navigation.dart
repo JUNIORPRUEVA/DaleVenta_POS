@@ -89,7 +89,7 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Clientes',
             route: Routes.clientes,
           ),
-        if (can(AppPermission.viewQuotes))
+        if (can(AppPermission.viewSales))
           const AppNavigationItem(
             icon: Icons.point_of_sale_outlined,
             title: 'Facturación',
@@ -103,9 +103,21 @@ List<AppNavigationSection> buildAppNavigationSections(
           ),
         if (can(AppPermission.viewSales))
           const AppNavigationItem(
-            icon: Icons.point_of_sale_rounded,
-            title: 'Caja',
-            route: Routes.caja,
+            icon: Icons.add_circle_outline_rounded,
+            title: 'Registrar entrada',
+            route: Routes.cajaRegistrarIngreso,
+          ),
+        if (can(AppPermission.viewSales))
+          const AppNavigationItem(
+            icon: Icons.remove_circle_outline_rounded,
+            title: 'Registrar salida',
+            route: Routes.cajaRegistrarSalida,
+          ),
+        if (can(AppPermission.viewSales))
+          const AppNavigationItem(
+            icon: Icons.history_rounded,
+            title: 'Historial',
+            route: Routes.cajaMovimientos,
           ),
         if (can(AppPermission.viewPunch))
           const AppNavigationItem(
@@ -250,6 +262,9 @@ bool isNavigationRouteActive(String location, String route) {
   if (route == Routes.ventasLista) {
     return path == Routes.ventasLista;
   }
+  if (route == Routes.caja) {
+    return path == Routes.caja;
+  }
   if (route == Routes.serviceOrderCommissions) {
     return location == Routes.serviceOrderCommissions;
   }
@@ -283,9 +298,13 @@ String resolveNavigationTitle(
   if (path == Routes.mediaGallery) return 'Galería media';
   if (path == Routes.serviceOrderCreate) return 'Crear orden';
   if (path == Routes.documentFlows) return 'Flujo documental';
-  if (path == Routes.cotizacionesHistorial) return 'Historial de ventas';
+  if (path == Routes.cotizacionesHistorial) return 'Cotizaciones';
   if (path == Routes.ventasLista) return 'Lista de ventas';
-  if (path == Routes.caja) return 'Caja';
+  if (path == Routes.caja) return 'Movimiento caja';
+  if (path == Routes.cajaMovimientos) return 'Historial de efectivo';
+  if (path == Routes.cajaRegistrarGasto) return 'Registrar gasto';
+  if (path == Routes.cajaGastosHistorial) return 'Historial de gastos';
+  if (path == Routes.cajaTurnosHistorial) return 'Historial de turnos';
   if (path == Routes.clienteNuevo) return 'Nuevo cliente';
   if (path == Routes.ai) return 'IA';
   if (path == Routes.publicidad) return 'Publicidad';

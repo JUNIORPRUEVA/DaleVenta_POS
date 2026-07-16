@@ -13,6 +13,7 @@ import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/routing/routes.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
+import '../../core/widgets/fulltech_page_header.dart';
 import 'data/ventas_repository.dart';
 import 'sales_models.dart';
 
@@ -319,28 +320,8 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFEFF6FA),
       drawer: buildAdaptiveDrawer(context, currentUser: user),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0E5261),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        leading: Builder(
-          builder: (context) => Padding(
-            padding: const EdgeInsets.all(8),
-            child: Material(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              child: IconButton(
-                tooltip: 'Menu',
-                onPressed: () => Scaffold.of(context).openDrawer(),
-                icon: const Icon(Icons.menu_rounded, color: Color(0xFF1957E6)),
-              ),
-            ),
-          ),
-        ),
-        title: const Text(
-          'Facturacion',
-          style: TextStyle(fontWeight: FontWeight.w900),
-        ),
+      appBar: FullTechPageHeader(
+        title: 'Facturacion',
         actions: [
           _MetricBadge(
             icon: Icons.receipt_long_outlined,

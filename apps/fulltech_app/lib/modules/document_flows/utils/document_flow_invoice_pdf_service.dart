@@ -28,7 +28,7 @@ Future<Uint8List> buildDocumentFlowInvoicePdf({
   CompanySettings? company,
 }) async {
   final money = NumberFormat.currency(
-    locale: 'es_DO',
+    locale: 'en_US',
     symbol: _currencySymbol(currency),
   );
   final qtyFmt = NumberFormat('#,##0.##', 'es_DO');

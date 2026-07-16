@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/printing/unified_ticket_printer.dart';
+import 'cash_close_ticket_printer.dart';
 import 'cash_models.dart';
 import 'cash_repository.dart';
 
@@ -14,11 +17,17 @@ final activeCashSessionProvider = FutureProvider<ActiveCashSession?>((
   return state.activeSession;
 });
 
-final cashSummaryProvider = FutureProvider<CashSummaryModel>((ref) {
+final cashSummaryProvider = FutureProvider<CashSummaryModel?>((ref) async {
+  final active = await ref.watch(activeCashSessionProvider.future);
+  if (active == null) return null;
   return ref.watch(cashRepositoryProvider).summary();
 });
 
-final cashMovementsProvider = FutureProvider<List<CashMovementModel>>((ref) {
+final cashMovementsProvider = FutureProvider<List<CashMovementModel>>((
+  ref,
+) async {
+  final active = await ref.watch(activeCashSessionProvider.future);
+  if (active == null) return const [];
   return ref.watch(cashRepositoryProvider).movements();
 });
 
@@ -34,7 +43,9 @@ class ActiveCashSessionController
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
       final gate = await ref.read(cashRepositoryProvider).state();
+      debugPrint('[CashController] current shift loaded');
       ref.invalidate(cashGateStateProvider);
+      debugPrint('[CashController] refresh complete');
       return gate.activeSession;
     });
   }
@@ -51,14 +62,27 @@ class ActiveCashSessionController
     });
   }
 
-  Future<void> close(double closingAmount, {String? note}) async {
-    await ref
-        .read(cashRepositoryProvider)
-        .closeSession(closingAmount: closingAmount, note: note);
+  Future<PrintTicketResult?> close(double closingAmount, {String? note}) async {
+    final repo = ref.read(cashRepositoryProvider);
+    final stateBeforeClose = await repo.state();
+    final summaryBeforeClose = await repo.summary();
+    final movementsBeforeClose = await repo.movements();
+    final snapshot = CashCloseTicketSnapshot(
+      state: stateBeforeClose,
+      summary: summaryBeforeClose,
+      movements: movementsBeforeClose,
+      closingAmount: closingAmount,
+      note: note,
+      capturedAt: DateTime.now(),
+    );
+
+    await repo.closeSession(closingAmount: closingAmount, note: note);
     ref.invalidate(cashGateStateProvider);
     ref.invalidate(cashSummaryProvider);
     ref.invalidate(cashMovementsProvider);
     state = const AsyncData(null);
+
+    return ref.read(cashCloseTicketPrinterProvider).printCloseTicket(snapshot);
   }
 
   Future<void> addMovement({

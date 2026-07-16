@@ -13,11 +13,13 @@ import '../../core/models/product_model.dart';
 import '../../core/realtime/catalog_realtime_service.dart';
 import '../../core/routing/app_route_observer.dart';
 import '../../core/routing/routes.dart';
+import '../../core/utils/media_file_actions.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/string_utils.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
+import '../../core/widgets/fulltech_dialog.dart';
 import '../../core/widgets/product_network_image.dart';
 import '../../core/widgets/sync_status_banner.dart';
 import 'application/catalog_controller.dart';
@@ -31,6 +33,7 @@ String _formatStock(double? stock) {
 double? _parseCatalogNumber(String raw) {
   var value = raw
       .trim()
+      .replaceAll('\ufeff', '')
       .replaceAll('RD\$', '')
       .replaceAll('rd\$', '')
       .replaceAll(' ', '');
@@ -40,6 +43,55 @@ double? _parseCatalogNumber(String raw) {
     value = value.replaceAll(',', '.');
   }
   return double.tryParse(value);
+}
+
+String _catalogExportFileName() {
+  final now = DateTime.now();
+  String two(int value) => value.toString().padLeft(2, '0');
+  return 'catalogo_fulltech_${now.year}${two(now.month)}${two(now.day)}_${two(now.hour)}${two(now.minute)}.csv';
+}
+
+String _csvCell(String value) {
+  final escaped = value.replaceAll('"', '""');
+  return '"$escaped"';
+}
+
+String _csvNumber(num? value) {
+  if (value == null) return '0';
+  final number = value.toDouble();
+  if (number % 1 == 0) return number.toStringAsFixed(0);
+  return number.toStringAsFixed(2);
+}
+
+String _buildCatalogCsv(List<ProductModel> products) {
+  const headers = [
+    'codigo',
+    'nombre',
+    'categoria',
+    'precio',
+    'costo',
+    'stock',
+    'descripcion',
+    'fotoUrl',
+  ];
+  final lines = <String>[
+    headers.map(_csvCell).join(';'),
+    for (final product in products)
+      [
+        product.codigo ?? '',
+        product.nombre,
+        product.categoriaLabel,
+        _csvNumber(product.precio),
+        _csvNumber(product.costo),
+        _csvNumber(product.stock),
+        product.descripcion ?? '',
+        product.displayFotoUrl ??
+            product.fotoUrl ??
+            product.originalFotoUrl ??
+            '',
+      ].map(_csvCell).join(';'),
+  ];
+  return '\ufeff${lines.join('\r\n')}';
 }
 
 class CatalogoScreen extends ConsumerStatefulWidget {
@@ -385,6 +437,15 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                       label: const Text('Importar'),
                     ),
                   ),
+                if (canManage)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: OutlinedButton.icon(
+                      onPressed: _exportProductsToCsv,
+                      icon: const Icon(Icons.download_rounded, size: 18),
+                      label: const Text('Exportar'),
+                    ),
+                  ),
                 Padding(
                   padding: const EdgeInsets.only(right: 4),
                   child: Badge(
@@ -726,27 +787,14 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
 
   Future<void> _confirmDelete(ProductModel product) async {
     final controller = ref.read(catalogControllerProvider.notifier);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Eliminar producto'),
-          content: Text('¿Eliminar "${product.nombre}"?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error,
-              ),
-              child: const Text('Eliminar'),
-            ),
-          ],
-        );
-      },
+    final confirmed = await FullTechConfirmDialog.show(
+      context,
+      title: 'Eliminar producto',
+      message: '¿Eliminar "${product.nombre}"?',
+      confirmText: 'Eliminar',
+      cancelText: 'Cancelar',
+      icon: Icons.delete_outline_rounded,
+      iconColor: FullTechDialogTokens.errorColor,
     );
     if (confirmed != true) return;
 
@@ -792,6 +840,38 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
     );
   }
 
+  Future<void> _exportProductsToCsv() async {
+    final products = ref.read(catalogControllerProvider).items;
+    if (products.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay productos para exportar')),
+      );
+      return;
+    }
+
+    try {
+      final saved = await saveMediaBytes(
+        bytes: Uint8List.fromList(utf8.encode(_buildCatalogCsv(products))),
+        fileName: _catalogExportFileName(),
+        allowedExtensions: const ['csv'],
+        mimeType: 'text/csv',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            saved ? 'Catálogo exportado para Excel' : 'Exportación cancelada',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo exportar el catálogo: $e')),
+      );
+    }
+  }
+
   Future<void> _importProductsFromCsv() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -815,6 +895,18 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
         );
         return;
       }
+
+      if (!mounted) return;
+      final confirmed = await FullTechConfirmDialog.show(
+        context,
+        title: 'Importar catálogo',
+        message:
+            'Se crearán ${drafts.length} productos desde el archivo seleccionado. ¿Deseas continuar?',
+        confirmText: 'Importar',
+        cancelText: 'Cancelar',
+        icon: Icons.upload_file_rounded,
+      );
+      if (confirmed != true || !mounted) return;
 
       final imported = await ref
           .read(catalogControllerProvider.notifier)
@@ -899,6 +991,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
 
   String _normalizeCsvHeader(String value) {
     return value
+        .replaceAll('\ufeff', '')
         .trim()
         .toLowerCase()
         .replaceAll('á', 'a')
@@ -975,9 +1068,12 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
     required VoidCallback onDelete,
   }) async {
     if (_isDesktopWidth(MediaQuery.of(context).size.width)) {
-      await showDialog<void>(
-        context: context,
-        builder: (context) => _DesktopProductDetailDialog(
+      await FullTechDialog.show<void>(
+        context,
+        title: product.nombre,
+        maxWidth: FullTechDialogTokens.maxWidthXLarge,
+        showCloseButton: true,
+        child: _DesktopProductDetailContent(
           product: product,
           showCost: showCost,
           canManage: canManage,
@@ -2130,8 +2226,8 @@ class _DesktopProductCard extends StatelessWidget {
   }
 }
 
-class _DesktopProductDetailDialog extends StatelessWidget {
-  const _DesktopProductDetailDialog({
+class _DesktopProductDetailContent extends StatelessWidget {
+  const _DesktopProductDetailContent({
     required this.product,
     required this.showCost,
     required this.canManage,
@@ -2150,166 +2246,150 @@ class _DesktopProductDetailDialog extends StatelessWidget {
     final theme = Theme.of(context);
     final imageUrl = product.displayFotoUrl;
 
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 80, vertical: 42),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1040, maxHeight: 760),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 6,
-              child: ClipRRect(
-                borderRadius: const BorderRadius.horizontal(
-                  left: Radius.circular(28),
-                ),
-                child: imageUrl == null || imageUrl.isEmpty
-                    ? Container(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        alignment: Alignment.center,
-                        child: Icon(
-                          Icons.image_outlined,
-                          size: 58,
-                          color: theme.colorScheme.outline,
-                        ),
-                      )
-                    : ProductNetworkImage(
-                        imageUrl: imageUrl,
-                        productId: product.id,
-                        productName: product.nombre,
-                        originalUrl: product.originalFotoUrl,
-                        fit: BoxFit.cover,
-                        loading: Container(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          alignment: Alignment.center,
-                          child: const SizedBox(
-                            width: 28,
-                            height: 28,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        ),
-                        fallback: Container(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          alignment: Alignment.center,
-                          child: Icon(
-                            Icons.broken_image_outlined,
-                            size: 58,
-                            color: theme.colorScheme.outline,
-                          ),
-                        ),
-                      ),
-              ),
+    return Row(
+      children: [
+        Expanded(
+          flex: 6,
+          child: ClipRRect(
+            borderRadius: const BorderRadius.horizontal(
+              left: Radius.circular(28),
             ),
-            Expanded(
-              flex: 5,
-              child: Padding(
-                padding: const EdgeInsets.all(28),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            product.nombre,
-                            style: theme.textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
+            child: imageUrl == null || imageUrl.isEmpty
+                ? Container(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    alignment: Alignment.center,
+                    child: Icon(
+                      Icons.image_outlined,
+                      size: 58,
+                      color: theme.colorScheme.outline,
                     ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _DesktopInfoChip(
-                          icon: Icons.category_outlined,
-                          label: 'Categoría',
-                          value: product.categoriaLabel,
-                        ),
-                        _DesktopInfoChip(
-                          icon: Icons.inventory_2_outlined,
-                          label: 'Stock',
-                          value: _formatStock(product.stock),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    _ProductDetailLine(
-                      label: 'Precio',
-                      value: formatRdAccountingAmount(product.precio),
-                    ),
-                    if (showCost)
-                      _ProductDetailLine(
-                        label: 'Costo',
-                        value: formatRdAccountingAmount(product.costo),
+                  )
+                : ProductNetworkImage(
+                    imageUrl: imageUrl,
+                    productId: product.id,
+                    productName: product.nombre,
+                    originalUrl: product.originalFotoUrl,
+                    fit: BoxFit.cover,
+                    loading: Container(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      alignment: Alignment.center,
+                      child: const SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
-                    _ProductDetailLine(
-                      label: 'Disponible',
+                    ),
+                    fallback: Container(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      alignment: Alignment.center,
+                      child: Icon(
+                        Icons.broken_image_outlined,
+                        size: 58,
+                        color: theme.colorScheme.outline,
+                      ),
+                    ),
+                  ),
+          ),
+        ),
+        Expanded(
+          flex: 5,
+          child: Padding(
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  product.nombre,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _DesktopInfoChip(
+                      icon: Icons.category_outlined,
+                      label: 'Categoría',
+                      value: product.categoriaLabel,
+                    ),
+                    _DesktopInfoChip(
+                      icon: Icons.inventory_2_outlined,
+                      label: 'Stock',
                       value: _formatStock(product.stock),
                     ),
-                    _ProductDetailLine(
-                      label: 'Fecha',
-                      value: product.createdAt == null
-                          ? '—'
-                          : '${product.createdAt!.day.toString().padLeft(2, '0')}/${product.createdAt!.month.toString().padLeft(2, '0')}/${product.createdAt!.year}',
-                    ),
-                    if ((product.descripcion ?? '').trim().isNotEmpty) ...[
-                      const SizedBox(height: 18),
-                      Text(
-                        'Descripción',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        product.descripcion!.trim(),
-                        style: theme.textTheme.bodyLarge?.copyWith(height: 1.5),
-                      ),
-                    ],
-                    const Spacer(),
-                    if (canManage)
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                Navigator.of(context).pop();
-                                onEdit();
-                              },
-                              icon: const Icon(Icons.edit_outlined),
-                              label: const Text('Editar'),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: FilledButton.icon(
-                              style: FilledButton.styleFrom(
-                                backgroundColor: theme.colorScheme.error,
-                              ),
-                              onPressed: () {
-                                Navigator.of(context).pop();
-                                onDelete();
-                              },
-                              icon: const Icon(Icons.delete_outline),
-                              label: const Text('Eliminar'),
-                            ),
-                          ),
-                        ],
-                      ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 18),
+                _ProductDetailLine(
+                  label: 'Precio',
+                  value: formatRdAccountingAmount(product.precio),
+                ),
+                if (showCost)
+                  _ProductDetailLine(
+                    label: 'Costo',
+                    value: formatRdAccountingAmount(product.costo),
+                  ),
+                _ProductDetailLine(
+                  label: 'Disponible',
+                  value: _formatStock(product.stock),
+                ),
+                _ProductDetailLine(
+                  label: 'Fecha',
+                  value: product.createdAt == null
+                      ? '—'
+                      : '${product.createdAt!.day.toString().padLeft(2, '0')}/${product.createdAt!.month.toString().padLeft(2, '0')}/${product.createdAt!.year}',
+                ),
+                if ((product.descripcion ?? '').trim().isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  Text(
+                    'Descripción',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    product.descripcion!.trim(),
+                    style: theme.textTheme.bodyLarge?.copyWith(height: 1.5),
+                  ),
+                ],
+                const Spacer(),
+                if (canManage)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            onEdit();
+                          },
+                          icon: const Icon(Icons.edit_outlined),
+                          label: const Text('Editar'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: theme.colorScheme.error,
+                          ),
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            onDelete();
+                          },
+                          icon: const Icon(Icons.delete_outline),
+                          label: const Text('Eliminar'),
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }

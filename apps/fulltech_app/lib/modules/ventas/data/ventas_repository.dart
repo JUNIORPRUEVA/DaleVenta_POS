@@ -136,6 +136,29 @@ class VentasRepository {
     }
   }
 
+  Future<Map<String, dynamic>> reportsSalesOverview({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    try {
+      final res = await _dio.get(
+        ApiRoutes.reportsSalesOverview,
+        queryParameters: {
+          'from': _dateOnly(from),
+          'to': _dateOnly(to),
+        },
+        options: Options(extra: const {'skipLoader': true}),
+      );
+      return ((res.data as Map?) ?? const <String, dynamic>{})
+          .cast<String, dynamic>();
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(e.response?.data, 'No se pudo cargar el reporte'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
   Future<AdminSalesUsersSummary> adminSummaryByUser({
     required DateTime from,
     required DateTime to,

@@ -27,6 +27,7 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
   final bool centerTitle;
   final double? titleSpacing;
   final String? fallbackRoute;
+  final bool preferDrawerLeading;
 
   const CustomAppBar({
     super.key,
@@ -45,11 +46,10 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
     this.centerTitle = false,
     this.titleSpacing,
     this.fallbackRoute,
+    this.preferDrawerLeading = false,
   });
 
-  double get _resolvedToolbarHeight =>
-      toolbarHeight ??
-      ((showLogo || showDepartmentLabel) ? 70 : kToolbarHeight);
+  double get _resolvedToolbarHeight => toolbarHeight ?? kToolbarHeight;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -63,6 +63,9 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
     final role = ref.watch(authStateProvider).user?.appRole;
     final branding = resolveRoleBranding(role ?? AppRole.unknown);
     final appBarColor = branding.drawerSolidColor;
+    const desktopForeground = Color(0xFF111827);
+    const desktopAccent = Color(0xFF1957E6);
+    const desktopLine = Color(0xFFD3E0E7);
     final shadowColor = Colors.black.withValues(
       alpha: highContrast
           ? 0.28
@@ -88,25 +91,52 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
         _buildDefaultPrimaryAvatar(context: context, ref: ref),
     ];
 
+    final drawerButton = (onMenuPressed != null || hasDrawer)
+        ? Padding(
+            padding: const EdgeInsets.only(left: 10, top: 8, bottom: 8),
+            child: IconButton(
+              tooltip: 'Menú',
+              onPressed:
+                  onMenuPressed ??
+                  () {
+                    scaffold?.openDrawer();
+                  },
+              icon: const Icon(Icons.menu_rounded),
+              color: isMobileLayout ? Colors.white : desktopAccent,
+              style: IconButton.styleFrom(
+                backgroundColor: isMobileLayout
+                    ? Colors.white.withValues(alpha: 0.14)
+                    : const Color(0xFFEAF1FF),
+                side: BorderSide(
+                  color: isMobileLayout
+                      ? Colors.white.withValues(alpha: 0.18)
+                      : const Color(0xFFCFE0FF),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          )
+        : null;
+
     final resolvedLeading =
         leading ??
-        backButton ??
-        ((onMenuPressed != null || hasDrawer)
-            ? IconButton(
-                tooltip: 'Menú',
-                onPressed:
-                    onMenuPressed ??
-                    () {
-                      scaffold?.openDrawer();
-                    },
-                icon: const Icon(Icons.menu_rounded),
-              )
-            : null);
+        (preferDrawerLeading ? drawerButton : backButton) ??
+        drawerButton ??
+        backButton;
 
     final resolvedTitle =
         titleWidget ??
         (!(showLogo || showDepartmentLabel)
-            ? Text(title, overflow: TextOverflow.ellipsis)
+            ? Text(
+                title,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: isMobileLayout ? Colors.white : desktopForeground,
+                  fontWeight: FontWeight.w900,
+                ),
+              )
             : Row(
                 children: [
                   if (showLogo)
@@ -121,16 +151,22 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
                         ),
                       ),
                       padding: const EdgeInsets.all(5),
-                      child: Image.asset(
-                        'assets/logoprincipal.png',
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) {
-                          return const Icon(
-                            Icons.business,
-                            color: Colors.white,
-                          );
-                        },
-                      ),
+                      child: isMobileLayout
+                          ? Image.asset(
+                              'assets/logoprincipal.png',
+                              fit: BoxFit.contain,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Icon(
+                                  Icons.business,
+                                  color: Colors.white,
+                                );
+                              },
+                            )
+                          : const Icon(
+                              Icons.business_rounded,
+                              color: Color(0xFF1957E6),
+                              size: 20,
+                            ),
                     ),
                   if (showLogo) const SizedBox(width: 12),
                   Expanded(
@@ -141,14 +177,17 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
                         Text(
                           title,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.2,
+                            color: isMobileLayout
+                                ? Colors.white
+                                : desktopForeground,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0,
                           ),
                         ),
                         if (showDepartmentLabel) const SizedBox(height: 2),
-                        if (showDepartmentLabel)
+                        if (showDepartmentLabel && isMobileLayout)
                           Text(
                             branding.departmentName,
                             overflow: TextOverflow.ellipsis,
@@ -174,24 +213,70 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
       actions: resolvedActions.isEmpty ? null : resolvedActions,
       bottom: bottom,
       elevation: 0,
-      flexibleSpace: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: isMobileLayout ? null : branding.appBarDarkGradient,
-          color: isMobileLayout ? appBarColor : null,
-          boxShadow: [
-            BoxShadow(
-              color: shadowColor,
-              blurRadius: 14,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-      ),
-      backgroundColor: appBarColor,
+      shape: isMobileLayout
+          ? null
+          : const Border(bottom: BorderSide(color: desktopLine)),
+      flexibleSpace: isMobileLayout
+          ? DecoratedBox(
+              decoration: BoxDecoration(
+                color: appBarColor,
+                boxShadow: [
+                  BoxShadow(
+                    color: shadowColor,
+                    blurRadius: 14,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+            )
+          : null,
+      backgroundColor: isMobileLayout ? appBarColor : Colors.white,
       surfaceTintColor: Colors.transparent,
-      foregroundColor: Colors.white,
+      foregroundColor: isMobileLayout ? Colors.white : desktopForeground,
+      iconTheme: IconThemeData(
+        color: isMobileLayout ? Colors.white : desktopAccent,
+      ),
+      actionsIconTheme: IconThemeData(
+        color: isMobileLayout ? Colors.white : desktopAccent,
+      ),
     );
   }
+
+  Widget _desktopAvatarWrapper(Widget child) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF1FF),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFCFE0FF)),
+      ),
+      padding: const EdgeInsets.all(2),
+      child: child,
+    );
+  }
+
+  Widget _mobileAvatarWrapper(Widget child) {
+    return Ink(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  @override
+  Size get preferredSize => Size.fromHeight(
+    _resolvedToolbarHeight + (bottom?.preferredSize.height ?? 0),
+  );
 
   Widget? _buildPrimaryPendingAction({
     required BuildContext context,
@@ -208,6 +293,7 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
     final user = ref.watch(authStateProvider).user;
     if (user == null) return const SizedBox.shrink();
     final photoUrl = (user.fotoPersonalUrl ?? '').trim();
+    final isMobileLayout = MediaQuery.sizeOf(context).width < 900;
 
     return Padding(
       padding: const EdgeInsets.only(right: 10),
@@ -225,67 +311,75 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
             child: InkWell(
               borderRadius: BorderRadius.circular(999),
               onTap: () => context.push(Routes.profile),
-              child: Ink(
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.13),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.24),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.12),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 280),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  transitionBuilder: (child, animation) {
-                    return FadeTransition(
-                      opacity: animation,
-                      child: ScaleTransition(
-                        scale: Tween<double>(begin: 0.94, end: 1).animate(
-                          CurvedAnimation(
-                            parent: animation,
-                            curve: Curves.easeOutBack,
-                          ),
-                        ),
-                        child: child,
+              child: isMobileLayout
+                  ? _mobileAvatarWrapper(
+                      _AvatarContent(
+                        photoUrl: photoUrl,
+                        userName: user.nombreCompleto,
                       ),
-                    );
-                  },
-                  child: UserAvatar(
-                    key: ValueKey(photoUrl),
-                    radius: 16,
-                    backgroundColor: Colors.white24,
-                    imageUrl: photoUrl,
-                    child: Text(
-                      _getInitials(user.nombreCompleto),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
+                    )
+                  : _desktopAvatarWrapper(
+                      _AvatarContent(
+                        photoUrl: photoUrl,
+                        userName: user.nombreCompleto,
+                        foregroundColor: const Color(0xFF1957E6),
+                        backgroundColor: Colors.white,
                       ),
                     ),
-                  ),
-                ),
-              ),
             ),
           ),
         ),
       ),
     );
   }
+}
+
+class _AvatarContent extends StatelessWidget {
+  const _AvatarContent({
+    required this.photoUrl,
+    required this.userName,
+    this.foregroundColor = Colors.white,
+    this.backgroundColor = Colors.white24,
+  });
+
+  final String photoUrl;
+  final String userName;
+  final Color foregroundColor;
+  final Color backgroundColor;
 
   @override
-  Size get preferredSize => Size.fromHeight(
-    _resolvedToolbarHeight + (bottom?.preferredSize.height ?? 0),
-  );
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 280),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.94, end: 1).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
+            ),
+            child: child,
+          ),
+        );
+      },
+      child: UserAvatar(
+        key: ValueKey(photoUrl),
+        radius: 16,
+        backgroundColor: backgroundColor,
+        imageUrl: photoUrl,
+        child: Text(
+          _getInitials(userName),
+          style: TextStyle(
+            color: foregroundColor,
+            fontWeight: FontWeight.w700,
+            fontSize: 12,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 String _getInitials(String name) {

@@ -42,7 +42,7 @@ class DepositOrderPdfData {
 Future<Uint8List> buildDepositOrderPdf({
   required DepositOrderPdfData data,
 }) async {
-  final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$ ');
+  final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$ ');
   final dateTimeFmt = DateFormat('dd/MM/yyyy h:mm a', 'es_DO');
   final detailRows = _buildRows(data);
 

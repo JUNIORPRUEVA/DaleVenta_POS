@@ -210,7 +210,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     final role = authState.user?.appRole ?? AppRole.unknown;
 
     return MaterialApp.router(
-      title: 'FullTech',
+      title: 'FullTech - Sistema POS Administrativo',
       debugShowCheckedModeBanner: false,
       locale: const Locale('es', 'DO'),
       supportedLocales: const [Locale('es', 'DO'), Locale('es')],

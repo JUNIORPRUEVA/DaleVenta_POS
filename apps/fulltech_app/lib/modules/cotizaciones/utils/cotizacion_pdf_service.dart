@@ -24,7 +24,7 @@ Future<Uint8List> buildCotizacionPdf({
   required CotizacionModel cotizacion,
   CompanySettings? company,
 }) async {
-  final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
+  final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
   final dateFmt = DateFormat('dd/MM/yyyy h:mm a', 'es_DO');
   final qtyFmt = NumberFormat('#,##0.##', 'es_DO');
   final logoImage = await _resolveCompanyLogo(company);

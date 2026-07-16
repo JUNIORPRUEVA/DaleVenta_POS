@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../debug/trace_log.dart';
+import '../widgets/fulltech_dialog.dart';
 
 class AppFeedback {
   static Future<void> showInfo(
@@ -72,20 +73,17 @@ class AppFeedback {
       return;
     }
 
-    TraceLog.log(scope, 'feedback via AlertDialog fallback', seq: seq);
-    await showDialog<void>(
-      context: dialogContext,
-      useRootNavigator: true,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(isError ? 'Error' : 'Mensaje'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Aceptar'),
-          ),
-        ],
-      ),
+    TraceLog.log(scope, 'feedback via FullTechDialog fallback', seq: seq);
+    await FullTechConfirmDialog.show(
+      dialogContext,
+      title: isError ? 'Error' : 'Mensaje',
+      message: message,
+      confirmText: 'Aceptar',
+      cancelText: '',
+      icon: isError ? Icons.error_outline_rounded : Icons.info_outline_rounded,
+      iconColor: isError
+          ? FullTechDialogTokens.errorColor
+          : FullTechDialogTokens.primaryButtonColor,
     );
   }
 

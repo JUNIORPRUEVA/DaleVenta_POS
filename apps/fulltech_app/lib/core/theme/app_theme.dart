@@ -51,20 +51,22 @@ class AppTheme {
       fontFamily: 'Inter',
 
       appBarTheme: AppBarTheme(
-        backgroundColor: branding.drawerSolidColor,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF111827),
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
-        shadowColor: Colors.black.withValues(alpha: 0.20),
+        shadowColor: Colors.transparent,
+        shape: const Border(bottom: BorderSide(color: Color(0xFFD3E0E7))),
         centerTitle: false,
-        titleTextStyle: TextStyle(
-          fontWeight: FontWeight.w700,
+        titleTextStyle: const TextStyle(
+          fontWeight: FontWeight.w900,
           fontSize: 19,
-          color: Colors.white,
-          letterSpacing: 0.15,
+          color: Color(0xFF111827),
+          letterSpacing: 0,
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: Color(0xFF1957E6)),
+        actionsIconTheme: const IconThemeData(color: Color(0xFF1957E6)),
       ),
 
       textTheme: const TextTheme(

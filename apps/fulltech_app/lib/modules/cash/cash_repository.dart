@@ -107,6 +107,66 @@ class CashRepository {
     }
   }
 
+  Future<List<CashMovementModel>> movementHistory({
+    String? type,
+    String? movementType,
+    DateTime? from,
+    DateTime? to,
+    int take = 160,
+  }) async {
+    try {
+      final res = await _dio.get(
+        ApiRoutes.cashMovementsHistory,
+        queryParameters: {
+          if ((type ?? '').trim().isNotEmpty) 'type': type!.trim(),
+          if ((movementType ?? '').trim().isNotEmpty)
+            'movementType': movementType!.trim(),
+          if (from != null) 'from': _dateOnly(from),
+          if (to != null) 'to': _dateOnly(to),
+          'take': take,
+        },
+        options: Options(extra: const {'skipLoader': true}),
+      );
+      final rows = res.data is List ? res.data as List : const [];
+      return rows
+          .whereType<Map>()
+          .map((row) => CashMovementModel.fromJson(row.cast<String, dynamic>()))
+          .toList(growable: false);
+    } on DioException catch (e) {
+      throw ApiException(
+        _message(e.response?.data, 'No se pudo cargar historial de caja'),
+      );
+    }
+  }
+
+  String _dateOnly(DateTime date) {
+    final local = DateTime(date.year, date.month, date.day);
+    return '${local.year.toString().padLeft(4, '0')}-'
+        '${local.month.toString().padLeft(2, '0')}-'
+        '${local.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<List<CashSessionHistoryModel>> closedSessions() async {
+    try {
+      final res = await _dio.get(
+        ApiRoutes.cashClosedSessions,
+        options: Options(extra: const {'skipLoader': true}),
+      );
+      final rows = res.data is List ? res.data as List : const [];
+      return rows
+          .whereType<Map>()
+          .map(
+            (row) =>
+                CashSessionHistoryModel.fromJson(row.cast<String, dynamic>()),
+          )
+          .toList(growable: false);
+    } on DioException catch (e) {
+      throw ApiException(
+        _message(e.response?.data, 'No se pudo cargar historial de turnos'),
+      );
+    }
+  }
+
   Future<void> addMovement({
     required String type,
     required double amount,

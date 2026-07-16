@@ -31,7 +31,7 @@ Future<Uint8List> buildPayableReceiptPdf({
   required PayableReceiptPdfData data,
 }) async {
   final pdf = pw.Document();
-  final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$ ');
+  final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$ ');
   final dateFmt = DateFormat('dd/MM/yyyy');
   final nowFmt = DateFormat('dd/MM/yyyy h:mm a', 'es_DO');
 

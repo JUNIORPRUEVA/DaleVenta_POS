@@ -72,14 +72,15 @@ Future<ProductFormResult?> _pumpEditor(
               body: Center(
                 child: ElevatedButton(
                   onPressed: () async {
-                    result = await Navigator.of(context).push<ProductFormResult>(
-                      MaterialPageRoute<ProductFormResult>(
-                        builder: (_) => InventoryProductEditorPage(
-                          product: product,
-                          categories: const ['General', 'Herramientas'],
-                        ),
-                      ),
-                    );
+                    result = await Navigator.of(context)
+                        .push<ProductFormResult>(
+                          MaterialPageRoute<ProductFormResult>(
+                            builder: (_) => InventoryProductEditorPage(
+                              product: product,
+                              categories: const ['General', 'Herramientas'],
+                            ),
+                          ),
+                        );
                   },
                   child: const Text('Abrir'),
                 ),
@@ -96,36 +97,37 @@ Future<ProductFormResult?> _pumpEditor(
 }
 
 void main() {
-  testWidgets('crear producto cierra el formulario sin errores de EditableText', (
-    tester,
-  ) async {
-    final errors = <FlutterErrorDetails>[];
-    final previousOnError = FlutterError.onError;
-    FlutterError.onError = errors.add;
-    addTearDown(() => FlutterError.onError = previousOnError);
+  testWidgets(
+    'crear producto cierra el formulario sin errores de EditableText',
+    (tester) async {
+      final errors = <FlutterErrorDetails>[];
+      final previousOnError = FlutterError.onError;
+      FlutterError.onError = errors.add;
+      addTearDown(() => FlutterError.onError = previousOnError);
 
-    final repo = _FakeCatalogRepository();
-    await _pumpEditor(tester, repo: repo);
+      final repo = _FakeCatalogRepository();
+      await _pumpEditor(tester, repo: repo);
 
-    await tester.enterText(find.byType(TextField).at(0), 'Producto prueba');
-    await tester.enterText(find.byType(TextField).at(1), '100');
-    await tester.enterText(find.byType(TextField).at(2), '60');
-    await tester.enterText(find.byType(TextField).at(3), '5');
-    await tester.enterText(find.byType(TextField).at(4), 'General');
-    await tester.tap(find.text('Crear producto'));
-    await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(0), 'Producto prueba');
+      await tester.enterText(find.byType(TextField).at(1), '100');
+      await tester.enterText(find.byType(TextField).at(2), '60');
+      await tester.enterText(find.byType(TextField).at(3), '5');
+      await tester.enterText(find.byType(TextField).at(4), 'General');
+      await tester.tap(find.text('Crear producto'));
+      await tester.pumpAndSettle();
 
-    expect(repo.creates, 1);
-    expect(find.text('Nuevo producto'), findsNothing);
-    expect(
-      errors.map((e) => e.exceptionAsString()).join('\n'),
-      isNot(contains('EditableText')),
-    );
-    expect(
-      errors.map((e) => e.exceptionAsString()).join('\n'),
-      isNot(contains('wrong build scope')),
-    );
-  });
+      expect(repo.creates, 1);
+      expect(find.text('Nuevo producto'), findsNothing);
+      expect(
+        errors.map((e) => e.exceptionAsString()).join('\n'),
+        isNot(contains('EditableText')),
+      );
+      expect(
+        errors.map((e) => e.exceptionAsString()).join('\n'),
+        isNot(contains('wrong build scope')),
+      );
+    },
+  );
 
   testWidgets('editar conserva imagen si no se selecciona una nueva', (
     tester,

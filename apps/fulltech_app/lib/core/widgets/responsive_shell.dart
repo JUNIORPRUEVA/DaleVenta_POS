@@ -3,9 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../modules/cash/cash_dialogs.dart';
+import '../../modules/cash/cash_providers.dart';
 import '../auth/app_role.dart';
 import '../auth/auth_provider.dart';
 import '../location/location_tracker_provider.dart';
@@ -144,14 +145,6 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 ],
               ),
             ),
-            if (!showShellAppBar && location != Routes.cotizaciones)
-              Positioned(
-                left: 14,
-                top: 14,
-                child: _GlobalDrawerButton(
-                  onPressed: () => _shellScaffoldKey.currentState?.openDrawer(),
-                ),
-              ),
           ],
         ),
       ),
@@ -214,39 +207,6 @@ class DesktopShellFooter extends ConsumerWidget {
   }
 }
 
-class _GlobalDrawerButton extends StatelessWidget {
-  const _GlobalDrawerButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.96),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFCFE0FF)),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF0F172A).withValues(alpha: 0.10),
-              blurRadius: 14,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: IconButton(
-          tooltip: 'Menú',
-          onPressed: onPressed,
-          icon: const Icon(Icons.menu_rounded),
-          color: const Color(0xFF1957E6),
-        ),
-      ),
-    );
-  }
-}
-
 class DesktopShellAppBar extends ConsumerWidget {
   const DesktopShellAppBar({
     super.key,
@@ -266,7 +226,6 @@ class DesktopShellAppBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final today = DateFormat('EEEE, d MMMM', 'es').format(DateTime.now());
     final photoUrl = (currentUser?.fotoPersonalUrl ?? '').trim();
     final branding = resolveRoleBranding(
       currentUser?.appRole ?? AppRole.unknown,
@@ -274,19 +233,11 @@ class DesktopShellAppBar extends ConsumerWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 240),
       curve: Curves.easeOutCubic,
-      height: 72,
-      padding: EdgeInsets.symmetric(horizontal: collapsed ? 14 : 18),
+      height: kToolbarHeight,
+      padding: EdgeInsets.symmetric(horizontal: collapsed ? 10 : 14),
       decoration: BoxDecoration(
-        gradient: branding.appBarDarkGradient,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.14),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        color: Colors.white,
+        border: const Border(bottom: BorderSide(color: Color(0xFFD3E0E7))),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -301,16 +252,17 @@ class DesktopShellAppBar extends ConsumerWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(14),
+                  color: const Color(0xFFEAF1FF),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFCFE0FF)),
                 ),
                 child: IconButton(
-                  tooltip: collapsed ? 'Expandir menú' : 'Colapsar menú',
+                  tooltip: 'Menú',
                   onPressed: onToggleSidebar,
-                  icon: AnimatedRotation(
-                    turns: collapsed ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 240),
-                    child: const Icon(Icons.menu_open_rounded, size: 20),
+                  icon: const Icon(
+                    Icons.menu_rounded,
+                    color: Color(0xFF1957E6),
+                    size: 22,
                   ),
                 ),
               ),
@@ -321,25 +273,26 @@ class DesktopShellAppBar extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Espacio de trabajo FULLTECH',
+                      title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w900,
-                        letterSpacing: -0.2,
-                        color: Colors.white,
+                        letterSpacing: 0,
+                        color: const Color(0xFF111827),
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      branding.departmentName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.76),
-                        fontWeight: FontWeight.w600,
+                    if (showUserMeta) const SizedBox(height: 2),
+                    if (showUserMeta)
+                      Text(
+                        branding.departmentName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFF64748B),
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -352,25 +305,27 @@ class DesktopShellAppBar extends ConsumerWidget {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.12),
+                      color: const Color(0xFFEAF1FF),
                       borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.12),
-                      ),
+                      border: Border.all(color: const Color(0xFFCFE0FF)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.circle, size: 8, color: Colors.white),
+                        const Icon(
+                          Icons.circle,
+                          size: 8,
+                          color: Color(0xFF1957E6),
+                        ),
                         const SizedBox(width: 8),
                         Flexible(
                           child: Text(
-                            '$title · $today',
+                            title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.labelLarge?.copyWith(
                               fontWeight: FontWeight.w800,
-                              color: Colors.white,
+                              color: const Color(0xFF1957E6),
                             ),
                           ),
                         ),
@@ -392,20 +347,21 @@ class DesktopShellAppBar extends ConsumerWidget {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(16),
+                    color: const Color(0xFFEAF1FF),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: const Color(0xFFCFE0FF)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       UserAvatar(
                         radius: 15,
-                        backgroundColor: Colors.white.withValues(alpha: 0.14),
+                        backgroundColor: Colors.white,
                         imageUrl: photoUrl,
                         child: Text(
                           userInitials(currentUser),
                           style: const TextStyle(
-                            color: Colors.white,
+                            color: Color(0xFF1957E6),
                             fontWeight: FontWeight.w800,
                             fontSize: 12,
                           ),
@@ -425,7 +381,7 @@ class DesktopShellAppBar extends ConsumerWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.labelLarge?.copyWith(
                                   fontWeight: FontWeight.w800,
-                                  color: Colors.white,
+                                  color: const Color(0xFF111827),
                                 ),
                               ),
                               Text(
@@ -433,7 +389,7 @@ class DesktopShellAppBar extends ConsumerWidget {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                  color: Colors.white.withValues(alpha: 0.74),
+                                  color: const Color(0xFF64748B),
                                 ),
                               ),
                             ],
@@ -685,6 +641,31 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
   String? _openGroupKey;
   bool _clientsExpanded = false;
   bool _adminExpanded = false;
+  bool _cashExpanded = false;
+
+  Future<void> _openCashMovement(String type) async {
+    final input = await showCashMovementDialog(context, type: type);
+    if (input == null || !mounted) return;
+    try {
+      await ref
+          .read(activeCashSessionControllerProvider.notifier)
+          .addMovement(
+            type: type,
+            amount: input.amount,
+            reason: input.reason,
+            movementType: input.movementType,
+            affectsProfit: input.affectsProfit,
+          );
+      if (!mounted) return;
+      showCashToast(
+        context,
+        type == 'IN' ? 'Ingreso registrado' : 'Salida registrada',
+      );
+    } catch (error) {
+      if (!mounted) return;
+      showCashToast(context, resolveCashError(error), isError: true);
+    }
+  }
 
   @override
   void initState() {
@@ -721,6 +702,11 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
         path.startsWith(Routes.cotizacionesHistorial) ||
         path.startsWith(Routes.contabilidadPagosPendientes)) {
       _clientsExpanded = true;
+    }
+    if (path.startsWith(Routes.cajaRegistrarIngreso) ||
+        path.startsWith(Routes.cajaRegistrarSalida) ||
+        path.startsWith(Routes.cajaMovimientos)) {
+      _cashExpanded = true;
     }
     if (path.startsWith(Routes.administracion) ||
         path.startsWith(Routes.contabilidad) ||
@@ -816,6 +802,21 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
       Icons.credit_card_outlined,
     );
     final reportes = nav(Routes.ventas, 'Reportes', Icons.bar_chart_rounded);
+    final cashIngreso = nav(
+      Routes.cajaRegistrarIngreso,
+      'Registrar entrada',
+      Icons.add_circle_outline_rounded,
+    );
+    final cashSalida = nav(
+      Routes.cajaRegistrarSalida,
+      'Registrar salida',
+      Icons.remove_circle_outline_rounded,
+    );
+    final cashHistorial = nav(
+      Routes.cajaMovimientos,
+      'Historial efectivo',
+      Icons.history_rounded,
+    );
     final compras = nav(
       Routes.contabilidad,
       'Compras',
@@ -836,6 +837,11 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
       if (clientes != null) clientes.route,
       if (cotizaciones != null) cotizaciones.route,
       if (creditos != null) creditos.route,
+    };
+    final cashRoutes = {
+      if (cashIngreso != null) cashIngreso.route,
+      if (cashSalida != null) cashSalida.route,
+      if (cashHistorial != null) cashHistorial.route,
     };
     final adminRoutes = {
       if (compras != null) compras.route,
@@ -1018,6 +1024,88 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                                   scale: scale,
                                   onTap: () =>
                                       widget.onNavigate(creditos.route),
+                                ),
+                            ],
+                          ),
+                          if (cashRoutes.isNotEmpty)
+                            _PremiumSidebarNavItem(
+                              item: const AppNavigationItem(
+                                icon: Icons.account_balance_wallet_outlined,
+                                title: 'Movimiento efectivo',
+                                route: '__cash__',
+                              ),
+                              activeRoutes: cashRoutes,
+                              collapsed: visualCollapsed,
+                              currentLocation: widget.currentLocation,
+                              textColor: textColor,
+                              activeColor: activeColor,
+                              hoverColor: hoverColor,
+                              baseColor: baseColor,
+                              scale: scale,
+                              showSubmenuBadge: true,
+                              trailing: AnimatedRotation(
+                                turns: _cashExpanded ? 0.25 : 0,
+                                duration: const Duration(milliseconds: 220),
+                                curve: Curves.easeOutCubic,
+                                child: Icon(
+                                  Icons.chevron_right_rounded,
+                                  size: 16,
+                                  color: textColor.withValues(alpha: 0.58),
+                                ),
+                              ),
+                              onTap: () {
+                                if (visualCollapsed) {
+                                  _toggleSidebar();
+                                  setState(() => _cashExpanded = true);
+                                } else {
+                                  setState(
+                                    () => _cashExpanded = !_cashExpanded,
+                                  );
+                                }
+                              },
+                            ),
+                          _PremiumSidebarSubmenu(
+                            visible: !visualCollapsed && _cashExpanded,
+                            children: [
+                              if (cashIngreso != null)
+                                _PremiumSidebarNavItem(
+                                  item: cashIngreso,
+                                  collapsed: false,
+                                  lowEmphasis: true,
+                                  currentLocation: widget.currentLocation,
+                                  textColor: textColor,
+                                  activeColor: activeColor,
+                                  hoverColor: hoverColor,
+                                  baseColor: baseColor,
+                                  scale: scale,
+                                  onTap: () => _openCashMovement('IN'),
+                                ),
+                              if (cashSalida != null)
+                                _PremiumSidebarNavItem(
+                                  item: cashSalida,
+                                  collapsed: false,
+                                  lowEmphasis: true,
+                                  currentLocation: widget.currentLocation,
+                                  textColor: textColor,
+                                  activeColor: activeColor,
+                                  hoverColor: hoverColor,
+                                  baseColor: baseColor,
+                                  scale: scale,
+                                  onTap: () => _openCashMovement('OUT'),
+                                ),
+                              if (cashHistorial != null)
+                                _PremiumSidebarNavItem(
+                                  item: cashHistorial,
+                                  collapsed: false,
+                                  lowEmphasis: true,
+                                  currentLocation: widget.currentLocation,
+                                  textColor: textColor,
+                                  activeColor: activeColor,
+                                  hoverColor: hoverColor,
+                                  baseColor: baseColor,
+                                  scale: scale,
+                                  onTap: () =>
+                                      widget.onNavigate(cashHistorial.route),
                                 ),
                             ],
                           ),

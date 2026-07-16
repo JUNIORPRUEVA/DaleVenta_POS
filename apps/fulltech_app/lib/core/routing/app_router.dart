@@ -24,6 +24,7 @@ import '../../features/media_gallery/presentation/media_gallery_screen.dart';
 import '../../modules/clientes/cliente_detail_screen.dart';
 import '../../modules/clientes/clientes_screen.dart';
 import '../../modules/cash/cash_box_screen.dart';
+import '../../modules/cash/cash_management_screens.dart';
 import '../../modules/clientes/clientes_map_screen.dart';
 import '../../modules/clientes/cliente_form_screen.dart';
 import '../../modules/nomina/nomina_screen.dart';
@@ -230,6 +231,22 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: Routes.caja,
             builder: (context, state) => const CashBoxScreen(),
+          ),
+          GoRoute(
+            path: Routes.cajaMovimientos,
+            builder: (context, state) => const CashMovementsHistoryScreen(),
+          ),
+          GoRoute(
+            path: Routes.cajaRegistrarGasto,
+            builder: (context, state) => const CashExpenseScreen(),
+          ),
+          GoRoute(
+            path: Routes.cajaGastosHistorial,
+            builder: (context, state) => const CashExpensesHistoryScreen(),
+          ),
+          GoRoute(
+            path: Routes.cajaTurnosHistorial,
+            builder: (context, state) => const CashTurnHistoryScreen(),
           ),
           GoRoute(
             path: Routes.ventas,

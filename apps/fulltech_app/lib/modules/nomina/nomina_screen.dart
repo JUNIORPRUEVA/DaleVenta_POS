@@ -59,7 +59,7 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
     WidgetRef ref,
     NominaHomeState state,
   ) {
-    final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
+    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
     final openPeriod = state.openPeriod;
     final activePayrollEmployees = state.employees
         .where((employee) => employee.activo)
@@ -148,7 +148,7 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
     WidgetRef ref,
     NominaHomeState state,
   ) {
-    final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
+    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
     final openPeriod = state.openPeriod;
     final activePayrollEmployees = state.employees
         .where((employee) => employee.activo)
@@ -578,7 +578,7 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
     NominaHomeState state,
     PayrollPeriod period,
   ) async {
-    final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
+    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
     final repo = ref.read(nominaRepositoryProvider);
     final rows = await _loadRowsForPeriod(ref, state, period);
     if (!context.mounted) return;
@@ -660,7 +660,7 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
       return;
     }
 
-    final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
+    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
     final rows = await _loadOpenPeriodRows(ref, state);
     if (!context.mounted) return;
 
@@ -760,7 +760,7 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
     PayrollPeriod open,
     List<_PayrollPeriodRow> rows,
   ) async {
-    final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
+    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
     final doc = pw.Document();
 
     final totalBase = rows.fold<double>(
@@ -871,7 +871,7 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
     final entries = await ref
         .read(nominaRepositoryProvider)
         .listEntries(period.id, employee.id);
-    final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
+    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
     final companyName = settings.companyName.trim().isEmpty
         ? 'FULLTECH'
         : settings.companyName.trim();
@@ -1842,7 +1842,7 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
     }
 
     final repo = ref.read(nominaRepositoryProvider);
-    final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
+    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
 
     var effectivePaidLocked = paidLocked;
     if (!effectivePaidLocked) {
@@ -3268,7 +3268,7 @@ class _EmployeeCardState extends ConsumerState<_EmployeeCard>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
+    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
     final employee = widget.employee;
     final anyExpanded = _expandedInfo || _expandedMovements;
 
@@ -4663,7 +4663,7 @@ class _PayrollHistoryFullScreenState
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final filtered = _filteredItems;
-    final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
+    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
     final visibleTotal = filtered.fold<double>(0, (s, i) => s + i.total);
     final activeFilters = [
       if (_searchController.text.trim().isNotEmpty) 1,
@@ -4932,7 +4932,7 @@ class _PayrollHistoryFullScreenState
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final filtered = _filteredItems;
-    final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
+    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
     final visibleTotal = filtered.fold<double>(0, (s, i) => s + i.total);
     final latestClose = filtered.isEmpty
         ? null
@@ -6431,7 +6431,7 @@ class _PayrollHistoryPeriodCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$');
+    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
     final range =
         '${DateFormat('dd/MM/yyyy').format(item.period.startDate)} - ${DateFormat('dd/MM/yyyy').format(item.period.endDate)}';
 

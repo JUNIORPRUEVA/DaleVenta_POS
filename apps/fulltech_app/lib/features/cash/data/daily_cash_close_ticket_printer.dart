@@ -22,7 +22,7 @@ class DailyCashCloseTicketPrinter {
     final state = await repo.state();
     final summary = await repo.summary();
     final movements = await repo.movements();
-    final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$ ');
+    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$ ');
     final date = DateFormat('dd/MM/yyyy HH:mm');
     final active = state.activeSession;
     final finalCash = closingAmount ?? summary.expectedCash;

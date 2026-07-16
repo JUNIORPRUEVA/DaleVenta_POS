@@ -18,6 +18,15 @@ Future<bool> saveMediaBytes({
 
   if (path == null || path.trim().isEmpty) return false;
 
-  await File(path).writeAsBytes(bytes, flush: true);
+  var targetPath = path.trim();
+  final extension = allowedExtensions.isEmpty
+      ? ''
+      : allowedExtensions.first.trim().replaceFirst(RegExp(r'^\.'), '');
+  if (extension.isNotEmpty &&
+      !targetPath.toLowerCase().endsWith('.${extension.toLowerCase()}')) {
+    targetPath = '$targetPath.$extension';
+  }
+
+  await File(targetPath).writeAsBytes(bytes, flush: true);
   return true;
 }

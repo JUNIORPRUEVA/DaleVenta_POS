@@ -19,6 +19,12 @@ class Routes {
   static const ventas = '/ventas';
   static const ventasLista = '/ventas/lista';
   static const caja = '/caja';
+  static const cajaRegistrarIngreso = '/caja/registrar-ingreso';
+  static const cajaRegistrarSalida = '/caja/registrar-salida';
+  static const cajaMovimientos = '/caja/movimientos';
+  static const cajaRegistrarGasto = '/caja/registrar-gasto';
+  static const cajaGastosHistorial = '/caja/gastos';
+  static const cajaTurnosHistorial = '/caja/turnos';
   static const cotizaciones = '/cotizaciones';
   static const cotizacionesHistorial = '/cotizaciones/historial';
   static const serviceOrders = '/service-orders';

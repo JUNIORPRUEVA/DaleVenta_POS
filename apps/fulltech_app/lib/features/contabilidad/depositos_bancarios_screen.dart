@@ -62,7 +62,7 @@ class DepositosBancariosScreen extends ConsumerStatefulWidget {
 class _DepositosBancariosScreenState
     extends ConsumerState<DepositosBancariosScreen> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
-  final _money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$ ');
+  final _money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$ ');
   final _dateFmt = DateFormat('dd/MM/yyyy');
   final _amountInputFmt = NumberFormat.currency(
     locale: 'en_US',
@@ -1122,8 +1122,9 @@ class _DepositosBancariosScreenState
                                         fit: BoxFit.contain,
                                         loadingBuilder:
                                             (context, child, loadingProgress) {
-                                              if (loadingProgress == null)
+                                              if (loadingProgress == null) {
                                                 return child;
+                                              }
                                               return const Padding(
                                                 padding: EdgeInsets.all(24),
                                                 child: Center(
@@ -1465,15 +1466,7 @@ class _DepositosBancariosScreenState
         key: _scaffoldKey,
         appBar: CustomAppBar(
           title: 'Depósitos bancarios',
-          showLogo: false,
-          showDepartmentLabel: false,
-          actions: [
-            IconButton(
-              tooltip: 'Menú',
-              onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-              icon: const Icon(Icons.menu_rounded),
-            ),
-          ],
+          onMenuPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
         drawer: buildAdaptiveDrawer(context, currentUser: user),
         body: Padding(
@@ -1522,14 +1515,8 @@ class _DepositosBancariosScreenState
       key: _scaffoldKey,
       appBar: CustomAppBar(
         title: 'Depósitos bancarios',
-        showLogo: false,
-        showDepartmentLabel: false,
+        onMenuPressed: () => _scaffoldKey.currentState?.openDrawer(),
         actions: [
-          IconButton(
-            tooltip: 'Menú',
-            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-            icon: const Icon(Icons.menu_rounded),
-          ),
           IconButton(
             tooltip: _dateRange == null ? 'Filtrar' : 'Cambiar filtro',
             onPressed: _pickDateRangeFromAppBar,

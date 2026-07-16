@@ -24,7 +24,7 @@ class ServiceOrderCommissionsScreen extends ConsumerWidget {
     );
     final theme = Theme.of(context);
     final isMobile = MediaQuery.sizeOf(context).width < 760;
-    final currency = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$ ');
+    final currency = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$ ');
     final dateFormat = DateFormat('dd/MM/yyyy', 'es_DO');
 
     return Scaffold(

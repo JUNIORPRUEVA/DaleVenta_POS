@@ -1,7 +1,16 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, Role } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { CloseCashSessionDto, CreateCashMovementDto, OpenCashSessionDto } from './dto/cash.dto';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { Prisma, Role } from "@prisma/client";
+import { PrismaService } from "../prisma/prisma.service";
+import {
+  CloseCashSessionDto,
+  CreateCashMovementDto,
+  OpenCashSessionDto,
+} from "./dto/cash.dto";
 
 type RequestUser = { id: string; role: Role };
 
@@ -15,7 +24,7 @@ export class CashService {
 
   private toNumber(value: Prisma.Decimal | number | null | undefined) {
     if (value == null) return 0;
-    if (typeof value === 'number') return value;
+    if (typeof value === "number") return value;
     return value.toNumber();
   }
 
@@ -25,9 +34,9 @@ export class CashService {
       select: { nombreCompleto: true, email: true, blocked: true },
     });
     if (!user || user.blocked) {
-      throw new ForbiddenException('No se pudo confirmar el usuario actual.');
+      throw new ForbiddenException("No se pudo confirmar el usuario actual.");
     }
-    return user.nombreCompleto || user.email || 'Usuario';
+    return user.nombreCompleto || user.email || "Usuario";
   }
 
   async gateState(user: RequestUser) {
@@ -35,8 +44,8 @@ export class CashService {
     const [cashboxToday, userOpenShift] = await Promise.all([
       this.prisma.cashboxDaily.findUnique({ where: { businessDate } }),
       this.prisma.cashSession.findFirst({
-        where: { openedByUserId: user.id, status: 'OPEN', closedAt: null },
-        orderBy: { openedAt: 'desc' },
+        where: { openedByUserId: user.id, status: "OPEN", closedAt: null },
+        orderBy: { openedAt: "desc" },
       }),
     ]);
 
@@ -47,7 +56,7 @@ export class CashService {
       activeSession: userOpenShift
         ? this.mapActiveSession(userOpenShift)
         : null,
-      canOperate: userOpenShift?.status === 'OPEN',
+      canOperate: userOpenShift?.status === "OPEN",
     };
   }
 
@@ -58,8 +67,8 @@ export class CashService {
 
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.cashSession.findFirst({
-        where: { openedByUserId: user.id, status: 'OPEN', closedAt: null },
-        orderBy: { openedAt: 'desc' },
+        where: { openedByUserId: user.id, status: "OPEN", closedAt: null },
+        orderBy: { openedAt: "desc" },
       });
       if (existing) return this.mapActiveSession(existing);
 
@@ -73,7 +82,7 @@ export class CashService {
           note: dto.note,
         },
         update: {
-          status: 'OPEN',
+          status: "OPEN",
           closedAt: null,
           closedByUserId: null,
         },
@@ -97,16 +106,18 @@ export class CashService {
   async addMovement(user: RequestUser, dto: CreateCashMovementDto) {
     const session = await this.requireOpenSession(user.id);
     const amount = new Prisma.Decimal(dto.amount);
-    if (dto.type === 'OUT') {
+    if (dto.type === "OUT") {
       const summary = await this.buildSummaryForSession(session.id);
       if (summary.expectedCash < dto.amount) {
-        throw new BadRequestException('No hay efectivo suficiente en caja para este retiro.');
+        throw new BadRequestException(
+          "No hay efectivo suficiente en caja para este retiro.",
+        );
       }
     }
 
-    const movementType = dto.movementType ?? 'expense';
+    const movementType = dto.movementType ?? "expense";
     const affectsProfit =
-      dto.affectsProfit ?? (dto.type === 'OUT' && movementType === 'expense');
+      dto.affectsProfit ?? (dto.type === "OUT" && movementType === "expense");
 
     return this.prisma.cashMovement.create({
       data: {
@@ -132,7 +143,7 @@ export class CashService {
       const closed = await tx.cashSession.update({
         where: { id: session.id },
         data: {
-          status: 'CLOSED',
+          status: "CLOSED",
           closingAmount,
           expectedAmount,
           difference,
@@ -145,7 +156,7 @@ export class CashService {
       const otherOpen = await tx.cashSession.findFirst({
         where: {
           cashboxDailyId: session.cashboxDailyId,
-          status: 'OPEN',
+          status: "OPEN",
           closedAt: null,
           id: { not: session.id },
         },
@@ -156,7 +167,7 @@ export class CashService {
         await tx.cashboxDaily.update({
           where: { id: session.cashboxDailyId },
           data: {
-            status: 'CLOSED',
+            status: "CLOSED",
             closedAt: new Date(),
             closedByUserId: user.id,
             currentAmount: closingAmount,
@@ -164,7 +175,11 @@ export class CashService {
         });
       }
 
-      return { session: closed, summary, difference: this.toNumber(difference) };
+      return {
+        session: closed,
+        summary,
+        difference: this.toNumber(difference),
+      };
     });
   }
 
@@ -177,28 +192,110 @@ export class CashService {
     const session = await this.requireOpenSession(user.id);
     return this.prisma.cashMovement.findMany({
       where: { sessionId: session.id },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
+  }
+
+  async movementHistory(user: RequestUser, query: Record<string, string> = {}) {
+    const takeParam = Number(query.take ?? 160);
+    const take = Number.isFinite(takeParam)
+      ? Math.min(Math.max(takeParam, 1), 250)
+      : 160;
+    const type = ["IN", "OUT"].includes(query.type ?? "")
+      ? query.type
+      : undefined;
+    const movementType = ["expense", "owner_draw", "transfer"].includes(
+      query.movementType ?? "",
+    )
+      ? query.movementType
+      : undefined;
+
+    const where: Prisma.CashMovementWhereInput = {
+      ...(type ? { type } : {}),
+      ...(movementType ? { movementType } : {}),
+      ...this.movementDateRange(query.from, query.to),
+      ...(user.role === Role.ADMIN || user.role === Role.ASISTENTE
+        ? {}
+        : { session: { openedByUserId: user.id } }),
+    };
+
+    const rows = await this.prisma.cashMovement.findMany({
+      where,
+      include: {
+        session: {
+          select: {
+            userName: true,
+            businessDate: true,
+            status: true,
+            openedAt: true,
+            closedAt: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take,
+    });
+
+    return rows.map(({ session, ...movement }) => ({
+      ...movement,
+      userName: session.userName ?? "Usuario",
+      businessDate: session.businessDate,
+      sessionStatus: session.status,
+      sessionOpenedAt: session.openedAt,
+      sessionClosedAt: session.closedAt,
+    }));
+  }
+
+  private movementDateRange(from?: string, to?: string): Prisma.CashMovementWhereInput {
+    if (!from && !to) return {};
+    const createdAt: Prisma.DateTimeFilter = {};
+    if (from) {
+      const start = this.parseDominicanDate(from, true);
+      if (Number.isNaN(start.getTime())) {
+        throw new BadRequestException("Parámetro from inválido.");
+      }
+      createdAt.gte = start;
+    }
+    if (to) {
+      const end = this.parseDominicanDate(to, false);
+      if (Number.isNaN(end.getTime())) {
+        throw new BadRequestException("Parámetro to inválido.");
+      }
+      createdAt.lte = end;
+    }
+    return { createdAt };
+  }
+
+  private parseDominicanDate(value: string, startOfDay: boolean) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim().slice(0, 10));
+    if (!match) return new Date(Number.NaN);
+    const year = Number(match[1]);
+    const month = Number(match[2]) - 1;
+    const day = Number(match[3]);
+    if (startOfDay) return new Date(Date.UTC(year, month, day, 4, 0, 0, 0));
+    return new Date(Date.UTC(year, month, day + 1, 3, 59, 59, 999));
   }
 
   async closedSessions(user: RequestUser) {
     return this.prisma.cashSession.findMany({
       where:
         user.role === Role.ADMIN || user.role === Role.ASISTENTE
-          ? { status: 'CLOSED' }
-          : { status: 'CLOSED', openedByUserId: user.id },
-      orderBy: { closedAt: 'desc' },
+          ? { status: "CLOSED" }
+          : { status: "CLOSED", openedByUserId: user.id },
+      orderBy: { closedAt: "desc" },
       take: 60,
     });
   }
 
   async requireOpenSession(userId: string) {
     const session = await this.prisma.cashSession.findFirst({
-      where: { openedByUserId: userId, status: 'OPEN', closedAt: null },
-      orderBy: { openedAt: 'desc' },
+      where: { openedByUserId: userId, status: "OPEN", closedAt: null },
+      orderBy: { openedAt: "desc" },
     });
     if (!session) {
-      throw new NotFoundException('No encontramos un turno abierto para operar.');
+      throw new NotFoundException(
+        "No encontramos un turno abierto para operar.",
+      );
     }
     return session;
   }
@@ -208,7 +305,7 @@ export class CashService {
       where: { id: sessionId },
     });
     if (!session) {
-      throw new NotFoundException('No encontramos el turno solicitado.');
+      throw new NotFoundException("No encontramos el turno solicitado.");
     }
 
     const [sales, movements] = await Promise.all([
@@ -236,7 +333,7 @@ export class CashService {
     for (const sale of sales) {
       const cash = this.toNumber(sale.paymentCashAmount);
       const transfer = this.toNumber(sale.paymentTransferAmount);
-      if (sale.isDeleted || sale.kind === 'return') {
+      if (sale.isDeleted || sale.kind === "return") {
         refundsCash += cash;
         totalRefunds += 1;
         continue;
@@ -253,10 +350,10 @@ export class CashService {
     let totalWithdrawals = 0;
     for (const movement of movements) {
       const amount = this.toNumber(movement.amount);
-      if (movement.type === 'IN') cashInManual += amount;
-      if (movement.type === 'OUT') {
+      if (movement.type === "IN") cashInManual += amount;
+      if (movement.type === "OUT") {
         cashOutManual += amount;
-        if (movement.movementType === 'expense' && movement.affectsProfit) {
+        if (movement.movementType === "expense" && movement.affectsProfit) {
           totalExpenses += amount;
         } else {
           totalWithdrawals += amount;
@@ -266,7 +363,11 @@ export class CashService {
 
     const openingAmount = this.toNumber(session.initialAmount);
     const expectedCash =
-      openingAmount + salesCashTotal - refundsCash + cashInManual - cashOutManual;
+      openingAmount +
+      salesCashTotal -
+      refundsCash +
+      cashInManual -
+      cashOutManual;
 
     return {
       sessionId,
@@ -304,7 +405,7 @@ export class CashService {
       shiftId: session.id,
       openedAt: session.openedAt,
       status: session.status,
-      userName: session.userName ?? 'Usuario',
+      userName: session.userName ?? "Usuario",
       businessDate: session.businessDate ?? this.businessDate(),
     };
   }

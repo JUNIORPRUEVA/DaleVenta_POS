@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/widgets/fulltech_dialog.dart';
 import '../service_order_models.dart';
 
 Future<bool> showServiceOrderStatusConfirmationDialog({
@@ -121,67 +122,17 @@ Future<bool> showServiceOrderStatusConfirmationDialog({
               },
               child: Focus(
                 autofocus: true,
-                child: AlertDialog(
-                  title: Text(
-                    requiresScheduledAt
-                        ? 'Reprogramar orden'
-                        : 'Aplicar cambio',
-                  ),
-                  content: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 420),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          requiresScheduledAt
-                              ? 'Marca la nueva fecha de esta orden pospuesta y presiona Enter para guardar.'
-                              : '¿Estás seguro de que deseas marcar esta orden como ${status.confirmationLabel}?',
-                        ),
-                        if (requiresScheduledAt) ...[
-                          const SizedBox(height: 16),
-                          InkWell(
-                            onTap: isSubmitting ? null : pickScheduledAt,
-                            borderRadius: BorderRadius.circular(12),
-                            child: InputDecorator(
-                              decoration: InputDecoration(
-                                labelText: 'Nueva fecha y hora',
-                                border: const OutlineInputBorder(),
-                                errorText: validationMessage,
-                                suffixIcon: const Icon(
-                                  Icons.edit_calendar_outlined,
-                                ),
-                              ),
-                              child: Text(
-                                selectedScheduledAt == null
-                                    ? 'Seleccionar fecha'
-                                    : DateFormat(
-                                        'dd/MM/yyyy h:mm a',
-                                        'es_DO',
-                                      ).format(selectedScheduledAt!.toLocal()),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'Debes elegir una fecha futura.',
-                            style: Theme.of(dialogContext).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: Theme.of(
-                                    dialogContext,
-                                  ).colorScheme.onSurfaceVariant,
-                                ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
+                child: FullTechDialog(
+                  title: requiresScheduledAt
+                      ? 'Reprogramar orden'
+                      : 'Aplicar cambio',
+                  maxWidth: FullTechDialogTokens.maxWidthSmall,
                   actions: [
-                    TextButton(
+                    DialogSecondaryButton(
+                      label: 'Cancelar',
                       onPressed: isSubmitting
                           ? null
                           : () => Navigator.of(dialogContext).pop(),
-                      child: const Text('Cancelar'),
                     ),
                     if (requiresScheduledAt)
                       OutlinedButton.icon(
@@ -189,23 +140,60 @@ Future<bool> showServiceOrderStatusConfirmationDialog({
                         icon: const Icon(Icons.calendar_today_outlined),
                         label: const Text('Cambiar fecha'),
                       ),
-                    FilledButton(
+                    DialogPrimaryButton(
+                      label: requiresScheduledAt
+                          ? 'Guardar fecha'
+                          : 'Guardar cambio',
                       onPressed: isSubmitting ? null : handleConfirm,
-                      child: isSubmitting
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.2,
-                              ),
-                            )
-                          : Text(
-                              requiresScheduledAt
-                                  ? 'Guardar fecha'
-                                  : 'Guardar cambio',
-                            ),
+                      isLoading: isSubmitting,
                     ),
                   ],
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        requiresScheduledAt
+                            ? 'Marca la nueva fecha de esta orden pospuesta y presiona Enter para guardar.'
+                            : '¿Estás seguro de que deseas marcar esta orden como ${status.confirmationLabel}?',
+                      ),
+                      if (requiresScheduledAt) ...[
+                        const SizedBox(height: 16),
+                        InkWell(
+                          onTap: isSubmitting ? null : pickScheduledAt,
+                          borderRadius: BorderRadius.circular(12),
+                          child: InputDecorator(
+                            decoration: InputDecoration(
+                              labelText: 'Nueva fecha y hora',
+                              border: const OutlineInputBorder(),
+                              errorText: validationMessage,
+                              suffixIcon: const Icon(
+                                Icons.edit_calendar_outlined,
+                              ),
+                            ),
+                            child: Text(
+                              selectedScheduledAt == null
+                                  ? 'Seleccionar fecha'
+                                  : DateFormat(
+                                      'dd/MM/yyyy h:mm a',
+                                      'es_DO',
+                                    ).format(selectedScheduledAt!.toLocal()),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Debes elegir una fecha futura.',
+                          style: Theme.of(dialogContext).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  dialogContext,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ),

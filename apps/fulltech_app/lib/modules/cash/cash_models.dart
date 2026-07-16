@@ -124,6 +124,9 @@ class CashMovementModel {
     required this.movementType,
     required this.affectsProfit,
     required this.createdAt,
+    this.userName,
+    this.businessDate,
+    this.sessionStatus,
   });
 
   final String id;
@@ -134,6 +137,9 @@ class CashMovementModel {
   final String movementType;
   final bool affectsProfit;
   final DateTime createdAt;
+  final String? userName;
+  final String? businessDate;
+  final String? sessionStatus;
 
   bool get isIn => type == 'IN';
 
@@ -147,6 +153,50 @@ class CashMovementModel {
       movementType: (json['movementType'] ?? 'expense').toString(),
       affectsProfit: json['affectsProfit'] != false,
       createdAt: _asDate(json['createdAt']) ?? DateTime.now(),
+      userName: json['userName']?.toString(),
+      businessDate: json['businessDate']?.toString(),
+      sessionStatus: json['sessionStatus']?.toString(),
+    );
+  }
+}
+
+class CashSessionHistoryModel {
+  const CashSessionHistoryModel({
+    required this.id,
+    required this.userName,
+    required this.businessDate,
+    required this.openedAt,
+    this.closedAt,
+    required this.initialAmount,
+    required this.closingAmount,
+    required this.expectedAmount,
+    required this.difference,
+    required this.status,
+  });
+
+  final String id;
+  final String userName;
+  final String businessDate;
+  final DateTime openedAt;
+  final DateTime? closedAt;
+  final double initialAmount;
+  final double closingAmount;
+  final double expectedAmount;
+  final double difference;
+  final String status;
+
+  factory CashSessionHistoryModel.fromJson(Map<String, dynamic> json) {
+    return CashSessionHistoryModel(
+      id: (json['id'] ?? '').toString(),
+      userName: (json['userName'] ?? 'Usuario').toString(),
+      businessDate: (json['businessDate'] ?? '').toString(),
+      openedAt: _asDate(json['openedAt']) ?? DateTime.now(),
+      closedAt: _asDate(json['closedAt']),
+      initialAmount: _asDouble(json['initialAmount']),
+      closingAmount: _asDouble(json['closingAmount']),
+      expectedAmount: _asDouble(json['expectedAmount']),
+      difference: _asDouble(json['difference']),
+      status: (json['status'] ?? '').toString(),
     );
   }
 }

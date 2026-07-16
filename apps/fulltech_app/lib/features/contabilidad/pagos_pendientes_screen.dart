@@ -43,7 +43,7 @@ class PagosPendientesScreen extends ConsumerStatefulWidget {
 }
 
 class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
-  final _money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$ ');
+  final _money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$ ');
   final _dateFmt = DateFormat('dd/MM/yyyy');
 
   bool _loading = true;

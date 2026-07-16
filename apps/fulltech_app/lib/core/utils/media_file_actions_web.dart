@@ -8,6 +8,15 @@ Future<bool> saveMediaBytes({
   required List<String> allowedExtensions,
   String? mimeType,
 }) async {
+  var downloadName = fileName.trim().isEmpty ? 'archivo' : fileName.trim();
+  final extension = allowedExtensions.isEmpty
+      ? ''
+      : allowedExtensions.first.trim().replaceFirst(RegExp(r'^\.'), '');
+  if (extension.isNotEmpty &&
+      !downloadName.toLowerCase().endsWith('.${extension.toLowerCase()}')) {
+    downloadName = '$downloadName.$extension';
+  }
+
   final dataUrl = Uri.dataFromBytes(
     bytes,
     mimeType: mimeType ?? 'application/octet-stream',
@@ -15,7 +24,7 @@ Future<bool> saveMediaBytes({
 
   final anchor = web.HTMLAnchorElement()
     ..href = dataUrl
-    ..download = fileName
+    ..download = downloadName
     ..style.display = 'none';
 
   web.document.body?.append(anchor);

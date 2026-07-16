@@ -18,7 +18,7 @@ class InvoiceLetterPdf {
     String? footerMessage,
   }) async {
     final doc = pw.Document(title: 'Factura ${_number(sale.id)}');
-    final money = NumberFormat.currency(locale: 'es_DO', symbol: 'RD\$ ');
+    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$ ');
     final date = DateFormat('dd/MM/yyyy HH:mm');
     final color = PdfColor.fromInt(brandColorArgb);
     final subtotal = items.fold(0.0, (sum, item) => sum + item.subtotalSold);

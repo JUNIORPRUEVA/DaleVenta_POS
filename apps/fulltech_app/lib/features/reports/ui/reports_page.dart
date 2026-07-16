@@ -65,6 +65,27 @@ class KpisData {
       cashExpense: summary.totalCost,
     );
   }
+
+  factory KpisData.fromReport(Map<String, dynamic> json) {
+    final kpis = ((json['kpis'] as Map?) ?? const <String, dynamic>{})
+        .cast<String, dynamic>();
+    final totalSales = (kpis['totalSales'] as num?)?.toInt() ?? 0;
+    final totalSold = _toDouble(kpis['netSales'] ?? kpis['totalSold']);
+    return KpisData(
+      totalSales: totalSold,
+      totalProfit: _toDouble(kpis['totalProfit']),
+      netProfit: _toDouble(kpis['netProfit'] ?? kpis['totalProfit']),
+      totalCost: _toDouble(kpis['totalCost']),
+      salesCount: totalSales,
+      quotesCount: 0,
+      quotesConverted: 0,
+      avgTicket: _toDouble(
+        kpis['avgTicket'] ?? (totalSales == 0 ? 0 : totalSold / totalSales),
+      ),
+      cashIncome: _toDouble(kpis['cashIncome']),
+      cashExpense: _toDouble(kpis['cashExpense']),
+    );
+  }
 }
 
 class PaymentMethodData {
@@ -157,22 +178,22 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       final repo = ref.read(ventasRepositoryProvider);
       final range = _range;
       final results = await Future.wait([
-        repo.summary(from: range.start, to: range.end),
+        repo.reportsSalesOverview(from: range.start, to: range.end),
         repo.listSales(from: range.start, to: range.end),
       ]);
-      final summary = results[0] as SalesSummaryModel;
+      final report = results[0] as Map<String, dynamic>;
       final sales = results[1] as List<SaleModel>;
       final comparisons = await _loadComparisons(repo);
 
       if (!mounted) return;
       setState(() {
-        _kpis = KpisData.fromSummary(summary);
+        _kpis = KpisData.fromReport(report);
         _sales = sales;
-        _salesSeries = _buildSalesSeries(sales);
-        _profitSeries = _buildProfitSeries(sales);
-        _paymentMethods = _buildPaymentMethods(sales);
-        _topProducts = _buildTopProducts(sales);
-        _topClients = _buildTopClients(sales);
+        _salesSeries = _parseSeries(report['salesSeries']);
+        _profitSeries = _parseSeries(report['profitSeries']);
+        _paymentMethods = _parsePaymentMethods(report['paymentMethods']);
+        _topProducts = _parseTopProducts(report['topProducts']);
+        _topClients = _parseTopClients(report['topClients']);
         _comparisons = comparisons;
         _loading = false;
       });
@@ -1531,101 +1552,68 @@ const _chartColors = [
   Color(0xFFFBBF24),
 ];
 
-List<SeriesDataPoint> _buildSalesSeries(List<SaleModel> sales) {
-  final map = <String, double>{};
-  for (final sale in sales) {
-    final date = sale.saleDate ?? DateTime.now();
-    final key = DateFormat('yyyy-MM-dd').format(date);
-    map.update(
-      key,
-      (value) => value + sale.totalSold,
-      ifAbsent: () => sale.totalSold,
-    );
-  }
-  final rows = map.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
-  return [
-    for (final row in rows) SeriesDataPoint(label: row.key, value: row.value),
-  ];
+double _toDouble(dynamic value) {
+  if (value is num) return value.toDouble();
+  if (value == null) return 0;
+  return double.tryParse(value.toString()) ?? 0;
 }
 
-List<SeriesDataPoint> _buildProfitSeries(List<SaleModel> sales) {
-  final map = <String, double>{};
-  for (final sale in sales) {
-    final date = sale.saleDate ?? DateTime.now();
-    final key = DateFormat('yyyy-MM-dd').format(date);
-    map.update(
-      key,
-      (value) => value + sale.totalProfit,
-      ifAbsent: () => sale.totalProfit,
-    );
-  }
-  final rows = map.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
-  return [
-    for (final row in rows) SeriesDataPoint(label: row.key, value: row.value),
-  ];
+List<SeriesDataPoint> _parseSeries(dynamic raw) {
+  final rows = raw is List ? raw : const [];
+  return rows
+      .whereType<Map>()
+      .map(
+        (row) => SeriesDataPoint(
+          label: (row['label'] ?? '').toString(),
+          value: _toDouble(row['value']),
+        ),
+      )
+      .where((row) => row.label.trim().isNotEmpty)
+      .toList(growable: false);
 }
 
-List<PaymentMethodData> _buildPaymentMethods(List<SaleModel> sales) {
-  final total = sales.fold<double>(0, (sum, sale) => sum + sale.totalSold);
-  return total <= 0
-      ? const []
-      : [
-          PaymentMethodData(
-            method: 'Ventas',
-            amount: total,
-            count: sales.length,
-          ),
-        ];
+List<PaymentMethodData> _parsePaymentMethods(dynamic raw) {
+  final rows = raw is List ? raw : const [];
+  return rows
+      .whereType<Map>()
+      .map(
+        (row) => PaymentMethodData(
+          method: (row['method'] ?? '').toString(),
+          amount: _toDouble(row['amount']),
+          count: (row['count'] as num?)?.toInt() ?? 0,
+        ),
+      )
+      .where((row) => row.method.trim().isNotEmpty)
+      .toList(growable: false);
 }
 
-List<TopProduct> _buildTopProducts(List<SaleModel> sales) {
-  final map = <String, ({double sales, double qty, double profit})>{};
-  for (final sale in sales) {
-    for (final item in sale.items) {
-      final name = item.productNameSnapshot.trim().isEmpty
-          ? 'Producto sin nombre'
-          : item.productNameSnapshot.trim();
-      final current = map[name] ?? (sales: 0, qty: 0, profit: 0);
-      map[name] = (
-        sales: current.sales + item.subtotalSold,
-        qty: current.qty + item.qty,
-        profit: current.profit + item.profit,
-      );
-    }
-  }
-  final rows = map.entries.toList()
-    ..sort((a, b) => b.value.sales.compareTo(a.value.sales));
-  return [
-    for (final row in rows.take(10))
-      TopProduct(
-        productName: row.key,
-        totalSales: row.value.sales,
-        totalQty: row.value.qty,
-        totalProfit: row.value.profit,
-      ),
-  ];
+List<TopProduct> _parseTopProducts(dynamic raw) {
+  final rows = raw is List ? raw : const [];
+  return rows
+      .whereType<Map>()
+      .map(
+        (row) => TopProduct(
+          productName: (row['productName'] ?? '').toString(),
+          totalSales: _toDouble(row['totalSales']),
+          totalQty: _toDouble(row['totalQty']),
+          totalProfit: _toDouble(row['totalProfit']),
+        ),
+      )
+      .where((row) => row.productName.trim().isNotEmpty)
+      .toList(growable: false);
 }
 
-List<TopClient> _buildTopClients(List<SaleModel> sales) {
-  final map = <String, ({double spent, int count})>{};
-  for (final sale in sales) {
-    final name = (sale.customerName ?? '').trim().isEmpty
-        ? 'Cliente General'
-        : sale.customerName!.trim();
-    final current = map[name] ?? (spent: 0, count: 0);
-    map[name] = (
-      spent: current.spent + sale.totalSold,
-      count: current.count + 1,
-    );
-  }
-  final rows = map.entries.toList()
-    ..sort((a, b) => b.value.spent.compareTo(a.value.spent));
-  return [
-    for (final row in rows.take(10))
-      TopClient(
-        clientName: row.key,
-        totalSpent: row.value.spent,
-        purchaseCount: row.value.count,
-      ),
-  ];
+List<TopClient> _parseTopClients(dynamic raw) {
+  final rows = raw is List ? raw : const [];
+  return rows
+      .whereType<Map>()
+      .map(
+        (row) => TopClient(
+          clientName: (row['clientName'] ?? '').toString(),
+          totalSpent: _toDouble(row['totalSpent']),
+          purchaseCount: (row['purchaseCount'] as num?)?.toInt() ?? 0,
+        ),
+      )
+      .where((row) => row.clientName.trim().isNotEmpty)
+      .toList(growable: false);
 }
