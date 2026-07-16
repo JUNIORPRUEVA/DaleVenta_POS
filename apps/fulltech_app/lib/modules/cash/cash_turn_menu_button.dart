@@ -813,10 +813,17 @@ class _TurnComposition extends StatelessWidget {
           ),
           _Line(
             'Créditos',
-            0,
+            summary.creditSalesTotal,
             icon: Icons.account_balance_wallet_outlined,
             color: Color(0xFFB45309),
           ),
+          if (summary.creditBalanceTotal > 0)
+            _Line(
+              'Balance crédito',
+              summary.creditBalanceTotal,
+              icon: Icons.pending_actions_outlined,
+              color: Color(0xFFB45309),
+            ),
           _Line(
             'Entradas manuales',
             summary.cashInManual,
@@ -829,6 +836,55 @@ class _TurnComposition extends StatelessWidget {
             negative: true,
             icon: Icons.remove_circle_outline_rounded,
             color: Color(0xFFDC2626),
+          ),
+          if (summary.categorySummary.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Divider(height: 1, color: Color(0xFFE2E8F0)),
+            const SizedBox(height: 8),
+            const Text(
+              'Ventas y ganancia por categoría',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+            ),
+            const SizedBox(height: 6),
+            for (final item in summary.categorySummary.take(5))
+              _CategoryLine(item: item),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CategoryLine extends StatelessWidget {
+  const _CategoryLine({required this.item});
+
+  final CashCategorySummaryModel item;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              item.category,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xFF52667C),
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          Text(
+            '${formatRdCurrencyAccounting(item.totalSold)} · ${formatRdCurrencyAccounting(item.totalProfit)}',
+            style: const TextStyle(
+              color: Color(0xFF0F172A),
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
           ),
         ],
       ),

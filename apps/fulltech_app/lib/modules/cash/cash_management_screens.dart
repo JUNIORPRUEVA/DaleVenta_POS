@@ -1165,6 +1165,14 @@ class _TurnHistoryWideCard extends StatelessWidget {
 
   final CashSessionHistoryModel row;
 
+  Future<void> _showDetail(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.34),
+      builder: (context) => _TurnDetailDialog(row: row),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final fmt = DateFormat('dd/MM/yyyy HH:mm', 'es_DO');
@@ -1179,11 +1187,18 @@ class _TurnHistoryWideCard extends StatelessWidget {
         : _danger;
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _cashLine),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFDDE8F1)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A0B3550),
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -1233,6 +1248,267 @@ class _TurnHistoryWideCard extends StatelessWidget {
               title: 'Diferencia',
               subtitle: formatRdCurrencyAccounting(row.difference),
               color: diffColor,
+            ),
+          ),
+          const SizedBox(width: 8),
+          OutlinedButton.icon(
+            onPressed: () => _showDetail(context),
+            icon: const Icon(Icons.visibility_outlined, size: 17),
+            label: const Text('Ver detalle'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _cashBlue,
+              side: const BorderSide(color: Color(0xFFC7D8FF)),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(9),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TurnDetailDialog extends StatelessWidget {
+  const _TurnDetailDialog({required this.row});
+
+  final CashSessionHistoryModel row;
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = DateFormat('dd/MM/yyyy HH:mm', 'es_DO');
+    final opened = fmt.format(row.openedAt.toLocal());
+    final closed = row.closedAt == null
+        ? 'Sin cierre'
+        : fmt.format(row.closedAt!.toLocal());
+    final diffColor = row.difference.abs() < 0.01
+        ? _cashMuted
+        : row.difference > 0
+        ? const Color(0xFF16A34A)
+        : _danger;
+
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      backgroundColor: Colors.transparent,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x330B1720),
+                blurRadius: 28,
+                offset: Offset(0, 16),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEAF1FF),
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                      child: const Icon(
+                        Icons.point_of_sale_rounded,
+                        color: _cashBlue,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            row.userName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: _cashText,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          Text(
+                            'Turno ${row.businessDate}',
+                            style: const TextStyle(
+                              color: _cashMuted,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Cerrar',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1, color: _cashLine),
+              Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _TurnDetailAmount(
+                            label: 'Base inicial',
+                            value: row.initialAmount,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _TurnDetailAmount(
+                            label: 'Efectivo esperado',
+                            value: row.expectedAmount,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _TurnDetailAmount(
+                            label: 'Efectivo contado',
+                            value: row.closingAmount,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: diffColor.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: diffColor.withValues(alpha: 0.20),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Diferencia del turno',
+                              style: TextStyle(
+                                color: _cashText,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            formatRdCurrencyAccounting(row.difference),
+                            style: TextStyle(
+                              color: diffColor,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _TurnDetailLine(label: 'Estado', value: row.status),
+                    _TurnDetailLine(label: 'Abrió', value: opened),
+                    _TurnDetailLine(label: 'Cerró', value: closed),
+                    _TurnDetailLine(label: 'ID turno', value: row.id),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TurnDetailAmount extends StatelessWidget {
+  const _TurnDetailAmount({required this.label, required this.value});
+
+  final String label;
+  final double value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FBFF),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _cashLine),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: _cashMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            formatRdCurrencyAccounting(value),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: _cashText,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TurnDetailLine extends StatelessWidget {
+  const _TurnDetailLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: _cashMuted,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                color: _cashText,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ],

@@ -20,6 +20,8 @@ import 'utils/sales_pdf_service.dart';
 
 enum _InvoiceFilter { active, all, returned }
 
+enum _PaymentFilter { all, cash, transfer, mixed, credit }
+
 class TpvSalesHistoryScreen extends ConsumerStatefulWidget {
   const TpvSalesHistoryScreen({super.key});
 
@@ -35,12 +37,23 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   List<SaleModel> _sales = const [];
   SaleModel? _selected;
   _InvoiceFilter _filter = _InvoiceFilter.active;
+  _PaymentFilter _paymentFilter = _PaymentFilter.all;
+  String? _cashierFilter;
+  late DateTime _fromDate;
+  late DateTime _toDate;
   bool _loading = true;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _fromDate = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(const Duration(days: 90));
+    _toDate = DateTime(now.year, now.month, now.day);
     _searchController.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
@@ -57,18 +70,10 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
       _error = null;
     });
 
-    final now = DateTime.now();
-    final from = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).subtract(const Duration(days: 90));
-    final to = DateTime(now.year, now.month, now.day);
-
     try {
       final rows = await ref
           .read(ventasRepositoryProvider)
-          .listInvoices(from: from, to: to, includeDeleted: true);
+          .listInvoices(from: _fromDate, to: _toDate, includeDeleted: true);
       if (!mounted) return;
       setState(() {
         _sales = rows;
@@ -102,6 +107,14 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
             _InvoiceFilter.all => true,
           };
           if (!matchesStatus) return false;
+          if ((_cashierFilter ?? '').trim().isNotEmpty &&
+              (sale.userName ?? sale.userId) != _cashierFilter) {
+            return false;
+          }
+          if (_paymentFilter != _PaymentFilter.all &&
+              sale.paymentMethod != _paymentFilter.name) {
+            return false;
+          }
           if (query.isEmpty) return true;
 
           final haystack = [
@@ -109,6 +122,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
             sale.id,
             sale.customerName ?? '',
             sale.userName ?? '',
+            _paymentLabel(sale.paymentMethod),
             sale.totalSold.toStringAsFixed(2),
             formatRdCurrencyAccounting(sale.totalSold),
           ].join(' ').toLowerCase();
@@ -123,6 +137,17 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
       .where((sale) => !sale.isDeleted)
       .fold(0.0, (sum, sale) => sum + sale.totalSold);
 
+  List<String> get _cashiers {
+    final values =
+        _sales
+            .map((sale) => (sale.userName ?? sale.userId).trim())
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    return values;
+  }
+
   String _invoiceNumber(SaleModel sale) {
     final digits = sale.id.replaceAll(RegExp(r'[^0-9]'), '');
     if (digits.length >= 8) return digits.substring(digits.length - 8);
@@ -134,6 +159,73 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   String _qty(double value) {
     if (value == value.truncateToDouble()) return value.toStringAsFixed(0);
     return value.toStringAsFixed(2);
+  }
+
+  Future<void> _openFilterPanel() async {
+    final result = await showGeneralDialog<_SalesFilterResult>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Filtros de ventas',
+      barrierColor: Colors.black.withValues(alpha: 0.26),
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: _SalesFilterPanel(
+            fromDate: _fromDate,
+            toDate: _toDate,
+            invoiceFilter: _filter,
+            paymentFilter: _paymentFilter,
+            cashierFilter: _cashierFilter,
+            cashiers: _cashiers,
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
+        );
+      },
+    );
+    if (result == null || !mounted) return;
+    final shouldReload =
+        !_sameCalendarDay(result.fromDate, _fromDate) ||
+        !_sameCalendarDay(result.toDate, _toDate);
+    setState(() {
+      _fromDate = result.fromDate;
+      _toDate = result.toDate;
+      _filter = result.invoiceFilter;
+      _paymentFilter = result.paymentFilter;
+      _cashierFilter = result.cashierFilter;
+    });
+    if (shouldReload) {
+      await _load();
+    }
+  }
+
+  void _clearFilters() {
+    final now = DateTime.now();
+    setState(() {
+      _fromDate = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(const Duration(days: 90));
+      _toDate = DateTime(now.year, now.month, now.day);
+      _filter = _InvoiceFilter.active;
+      _paymentFilter = _PaymentFilter.all;
+      _cashierFilter = null;
+    });
+    _load();
   }
 
   Future<void> _returnSale(SaleModel sale) async {
@@ -316,8 +408,13 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
           _Toolbar(
             controller: _searchController,
             filter: _filter,
+            paymentFilter: _paymentFilter,
+            cashierFilter: _cashierFilter,
+            fromDate: _fromDate,
+            toDate: _toDate,
             onBack: () => context.go(Routes.cotizaciones),
-            onFilterChanged: (value) => setState(() => _filter = value),
+            onOpenFilters: _openFilterPanel,
+            onClearFilters: _clearFilters,
           ),
           Expanded(
             child: Padding(
@@ -374,14 +471,24 @@ class _Toolbar extends StatelessWidget {
   const _Toolbar({
     required this.controller,
     required this.filter,
+    required this.paymentFilter,
+    required this.cashierFilter,
+    required this.fromDate,
+    required this.toDate,
     required this.onBack,
-    required this.onFilterChanged,
+    required this.onOpenFilters,
+    required this.onClearFilters,
   });
 
   final TextEditingController controller;
   final _InvoiceFilter filter;
+  final _PaymentFilter paymentFilter;
+  final String? cashierFilter;
+  final DateTime fromDate;
+  final DateTime toDate;
   final VoidCallback onBack;
-  final ValueChanged<_InvoiceFilter> onFilterChanged;
+  final VoidCallback onOpenFilters;
+  final VoidCallback onClearFilters;
 
   @override
   Widget build(BuildContext context) {
@@ -442,19 +549,9 @@ class _Toolbar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          PopupMenuButton<_InvoiceFilter>(
-            onSelected: onFilterChanged,
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: _InvoiceFilter.active,
-                child: Text('Facturas activas'),
-              ),
-              PopupMenuItem(
-                value: _InvoiceFilter.returned,
-                child: Text('Devueltas'),
-              ),
-              PopupMenuItem(value: _InvoiceFilter.all, child: Text('Todas')),
-            ],
+          InkWell(
+            onTap: onOpenFilters,
+            borderRadius: BorderRadius.circular(9),
             child: Container(
               height: 42,
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -474,7 +571,7 @@ class _Toolbar extends StatelessWidget {
                   const Icon(Icons.filter_alt_outlined, color: Colors.white),
                   const SizedBox(width: 8),
                   Text(
-                    _filterButtonLabel(filter),
+                    _filterButtonLabel(filter, paymentFilter, cashierFilter),
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w800,
@@ -484,7 +581,30 @@ class _Toolbar extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(width: 10),
+          OutlinedButton.icon(
+            onPressed: onClearFilters,
+            icon: const Icon(Icons.filter_alt_off_rounded, size: 18),
+            label: const Text('Limpiar'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF334155),
+              backgroundColor: Colors.white,
+              side: const BorderSide(color: Color(0xFFC9DAE6)),
+              minimumSize: const Size(116, 42),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(9),
+              ),
+            ),
+          ),
           const Spacer(),
+          Text(
+            '${DateFormat('dd/MM/yyyy').format(fromDate)} - ${DateFormat('dd/MM/yyyy').format(toDate)}',
+            style: const TextStyle(
+              color: Color(0xFF52667C),
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+            ),
+          ),
         ],
       ),
     );
@@ -629,6 +749,382 @@ class _InvoiceListCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SalesFilterResult {
+  const _SalesFilterResult({
+    required this.fromDate,
+    required this.toDate,
+    required this.invoiceFilter,
+    required this.paymentFilter,
+    required this.cashierFilter,
+  });
+
+  final DateTime fromDate;
+  final DateTime toDate;
+  final _InvoiceFilter invoiceFilter;
+  final _PaymentFilter paymentFilter;
+  final String? cashierFilter;
+}
+
+class _SalesFilterPanel extends StatefulWidget {
+  const _SalesFilterPanel({
+    required this.fromDate,
+    required this.toDate,
+    required this.invoiceFilter,
+    required this.paymentFilter,
+    required this.cashierFilter,
+    required this.cashiers,
+  });
+
+  final DateTime fromDate;
+  final DateTime toDate;
+  final _InvoiceFilter invoiceFilter;
+  final _PaymentFilter paymentFilter;
+  final String? cashierFilter;
+  final List<String> cashiers;
+
+  @override
+  State<_SalesFilterPanel> createState() => _SalesFilterPanelState();
+}
+
+class _SalesFilterPanelState extends State<_SalesFilterPanel> {
+  late DateTime _fromDate;
+  late DateTime _toDate;
+  late _InvoiceFilter _invoiceFilter;
+  late _PaymentFilter _paymentFilter;
+  String? _cashierFilter;
+
+  @override
+  void initState() {
+    super.initState();
+    _fromDate = widget.fromDate;
+    _toDate = widget.toDate;
+    _invoiceFilter = widget.invoiceFilter;
+    _paymentFilter = widget.paymentFilter;
+    _cashierFilter = widget.cashierFilter;
+  }
+
+  Future<void> _pickDate({required bool from}) async {
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: from ? _fromDate : _toDate,
+      firstDate: DateTime(DateTime.now().year - 5),
+      lastDate: DateTime(DateTime.now().year + 1),
+      locale: const Locale('es', 'DO'),
+      helpText: from ? 'Fecha inicial' : 'Fecha final',
+      cancelText: 'Cancelar',
+      confirmText: 'Aplicar',
+    );
+    if (selected == null || !mounted) return;
+    setState(() {
+      if (from) {
+        _fromDate = selected;
+        if (_fromDate.isAfter(_toDate)) _toDate = selected;
+      } else {
+        _toDate = selected;
+        if (_toDate.isBefore(_fromDate)) _fromDate = selected;
+      }
+    });
+  }
+
+  void _apply() {
+    Navigator.of(context).pop(
+      _SalesFilterResult(
+        fromDate: _fromDate,
+        toDate: _toDate,
+        invoiceFilter: _invoiceFilter,
+        paymentFilter: _paymentFilter,
+        cashierFilter: (_cashierFilter ?? '').trim().isEmpty
+            ? null
+            : _cashierFilter,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.sizeOf(context);
+    final width = media.width < 520 ? media.width : 430.0;
+    final dateFmt = DateFormat('dd/MM/yyyy', 'es_DO');
+
+    return Material(
+      color: Colors.white,
+      elevation: 18,
+      child: SizedBox(
+        width: width,
+        height: media.height,
+        child: SafeArea(
+          left: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEAF1FF),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.filter_alt_rounded,
+                        color: Color(0xFF1957E6),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Filtros de ventas',
+                            style: TextStyle(
+                              color: Color(0xFF0F172A),
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Rango, cajero, estado y metodo de pago',
+                            style: TextStyle(
+                              color: Color(0xFF64748B),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Cerrar',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1, color: Color(0xFFE2E8F0)),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+                  children: [
+                    _FilterSectionTitle('Intervalo de fecha'),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _DateFilterButton(
+                            label: 'Desde',
+                            value: dateFmt.format(_fromDate),
+                            onTap: () => _pickDate(from: true),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _DateFilterButton(
+                            label: 'Hasta',
+                            value: dateFmt.format(_toDate),
+                            onTap: () => _pickDate(from: false),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    _FilterSectionTitle('Estado'),
+                    SegmentedButton<_InvoiceFilter>(
+                      segments: const [
+                        ButtonSegment(
+                          value: _InvoiceFilter.active,
+                          label: Text('Activas'),
+                        ),
+                        ButtonSegment(
+                          value: _InvoiceFilter.returned,
+                          label: Text('Devueltas'),
+                        ),
+                        ButtonSegment(
+                          value: _InvoiceFilter.all,
+                          label: Text('Todas'),
+                        ),
+                      ],
+                      selected: {_invoiceFilter},
+                      onSelectionChanged: (value) =>
+                          setState(() => _invoiceFilter = value.first),
+                    ),
+                    const SizedBox(height: 18),
+                    _FilterSectionTitle('Cajero'),
+                    DropdownButtonFormField<String>(
+                      initialValue: (_cashierFilter ?? '').isEmpty
+                          ? ''
+                          : _cashierFilter,
+                      isExpanded: true,
+                      decoration: _filterInputDecoration('Cajero'),
+                      items: [
+                        const DropdownMenuItem(
+                          value: '',
+                          child: Text('Todos los cajeros'),
+                        ),
+                        ...widget.cashiers.map(
+                          (cashier) => DropdownMenuItem(
+                            value: cashier,
+                            child: Text(
+                              cashier,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) => setState(
+                        () => _cashierFilter = (value ?? '').isEmpty
+                            ? null
+                            : value,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    _FilterSectionTitle('Metodo de pago'),
+                    DropdownButtonFormField<_PaymentFilter>(
+                      initialValue: _paymentFilter,
+                      isExpanded: true,
+                      decoration: _filterInputDecoration('Metodo'),
+                      items: _PaymentFilter.values
+                          .map(
+                            (value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(_paymentFilterLabel(value)),
+                            ),
+                          )
+                          .toList(growable: false),
+                      onChanged: (value) => setState(
+                        () => _paymentFilter = value ?? _PaymentFilter.all,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF8FBFF),
+                  border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(46),
+                        ),
+                        child: const Text('Cancelar'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _apply,
+                        icon: const Icon(Icons.check_rounded),
+                        label: const Text('Aplicar'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF1957E6),
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size.fromHeight(46),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterSectionTitle extends StatelessWidget {
+  const _FilterSectionTitle(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Color(0xFF334155),
+          fontWeight: FontWeight.w900,
+          fontSize: 13,
+        ),
+      ),
+    );
+  }
+}
+
+class _DateFilterButton extends StatelessWidget {
+  const _DateFilterButton({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFD6E3F5)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFF64748B),
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    value,
+                    style: const TextStyle(
+                      color: Color(0xFF0F172A),
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                const Icon(
+                  Icons.calendar_month_rounded,
+                  size: 18,
+                  color: Color(0xFF1957E6),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -822,7 +1318,7 @@ class _InvoiceDetailPanel extends StatelessWidget {
                   dateFmt.format(sale.saleDate ?? DateTime.now()),
                 ),
                 _DetailLine('Cajero', sale.userName ?? sale.userId),
-                _DetailLine('Pago', 'Efectivo'),
+                _DetailLine('Pago', _paymentLabel(sale.paymentMethod)),
               ],
             ),
           ),
@@ -1118,10 +1614,62 @@ String _filterLabel(_InvoiceFilter filter) {
   };
 }
 
-String _filterButtonLabel(_InvoiceFilter filter) {
+String _filterButtonLabel(
+  _InvoiceFilter filter,
+  _PaymentFilter payment,
+  String? cashier,
+) {
+  final extraFilters =
+      payment != _PaymentFilter.all || (cashier ?? '').trim().isNotEmpty;
+  if (extraFilters) return 'Filtros activos';
   return switch (filter) {
     _InvoiceFilter.active => 'Filtro',
     _InvoiceFilter.returned => 'Devueltas',
     _InvoiceFilter.all => 'Todas',
   };
+}
+
+String _paymentFilterLabel(_PaymentFilter filter) {
+  return switch (filter) {
+    _PaymentFilter.all => 'Todos los métodos',
+    _PaymentFilter.cash => 'Efectivo',
+    _PaymentFilter.transfer => 'Transferencia',
+    _PaymentFilter.mixed => 'Mixto',
+    _PaymentFilter.credit => 'Crédito',
+  };
+}
+
+String _paymentLabel(String value) {
+  return switch (value) {
+    'cash' => 'Efectivo',
+    'transfer' => 'Transferencia',
+    'mixed' => 'Mixto',
+    'credit' => 'Crédito',
+    _ => value.trim().isEmpty ? 'Sin método' : value,
+  };
+}
+
+InputDecoration _filterInputDecoration(String label) {
+  return InputDecoration(
+    labelText: label,
+    filled: true,
+    fillColor: const Color(0xFFF8FAFC),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Color(0xFFD6E3F5)),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Color(0xFFD6E3F5)),
+    ),
+  );
+}
+
+bool _sameCalendarDay(DateTime a, DateTime b) {
+  final left = a.toLocal();
+  final right = b.toLocal();
+  return left.year == right.year &&
+      left.month == right.month &&
+      left.day == right.day;
 }

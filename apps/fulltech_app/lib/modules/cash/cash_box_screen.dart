@@ -611,9 +611,24 @@ class _CompositionCard extends StatelessWidget {
           const SizedBox(height: 8),
           _Metric('Ventas efectivo', summary.salesCashTotal),
           _Metric('Transferencias', summary.salesTransferTotal),
+          _Metric('Ventas a crédito', summary.creditSalesTotal),
+          _Metric('Balance crédito', summary.creditBalanceTotal),
           _Metric('Entradas manuales', summary.cashInManual),
           _Metric('Salidas de caja', summary.cashOutManual, negative: true),
           _Metric('Devoluciones efectivo', summary.refundsCash, negative: true),
+          if (summary.categorySummary.isNotEmpty) ...[
+            const Divider(color: CashBoxScreen._line),
+            const Text(
+              'Por categoría',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 6),
+            for (final item in summary.categorySummary.take(5))
+              _Metric(
+                '${item.category} · ganancia ${formatRdCurrencyAccounting(item.totalProfit)}',
+                item.totalSold,
+              ),
+          ],
         ],
       ),
     );

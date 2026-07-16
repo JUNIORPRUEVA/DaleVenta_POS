@@ -332,11 +332,24 @@ export class CashService {
         where: { cashSessionId: sessionId },
         select: {
           totalSold: true,
+          totalProfit: true,
           paymentMethod: true,
           paymentCashAmount: true,
           paymentTransferAmount: true,
+          creditAmount: true,
+          creditBalance: true,
           isDeleted: true,
           kind: true,
+          items: {
+            select: {
+              subtotalSold: true,
+              profit: true,
+              productNameSnapshot: true,
+              product: {
+                select: { categoria: true },
+              },
+            },
+          },
         },
       }),
       this.prisma.cashMovement.findMany({ where: { sessionId } }),
@@ -352,6 +365,21 @@ export class CashService {
     let totalTickets = 0;
     let totalRefunds = 0;
     let creditAbonos = 0;
+    let creditSalesTotal = 0;
+    let creditInitialCash = 0;
+    let creditInitialTransfer = 0;
+    let creditBalanceTotal = 0;
+    let creditPaymentCash = 0;
+    let creditPaymentTransfer = 0;
+    const categories = new Map<
+      string,
+      {
+        category: string;
+        totalSold: number;
+        totalProfit: number;
+        items: number;
+      }
+    >();
 
     for (const sale of sales) {
       const cash = this.toNumber(sale.paymentCashAmount);
@@ -365,6 +393,25 @@ export class CashService {
       totalSales += this.toNumber(sale.totalSold);
       salesCashTotal += cash;
       salesTransferTotal += transfer;
+      if (sale.paymentMethod === "credit") {
+        creditSalesTotal += this.toNumber(sale.totalSold);
+        creditInitialCash += cash;
+        creditInitialTransfer += transfer;
+        creditBalanceTotal += this.toNumber(sale.creditBalance);
+      }
+      for (const item of sale.items) {
+        const category = item.product?.categoria?.trim() || "Sin categoria";
+        const current = categories.get(category) ?? {
+          category,
+          totalSold: 0,
+          totalProfit: 0,
+          items: 0,
+        };
+        current.totalSold += this.toNumber(item.subtotalSold);
+        current.totalProfit += this.toNumber(item.profit);
+        current.items += 1;
+        categories.set(category, current);
+      }
     }
 
     for (const payment of creditPayments) {
@@ -372,6 +419,8 @@ export class CashService {
       const transfer = this.toNumber(payment.transferAmount);
       const amount = this.toNumber(payment.amount);
       creditAbonos += amount;
+      creditPaymentCash += cash;
+      creditPaymentTransfer += transfer;
       salesCashTotal += cash;
       salesTransferTotal += transfer;
     }
@@ -410,6 +459,12 @@ export class CashService {
       cashInManual,
       cashOutManual,
       creditAbonos,
+      creditSalesTotal,
+      creditInitialCash,
+      creditInitialTransfer,
+      creditBalanceTotal,
+      creditPaymentCash,
+      creditPaymentTransfer,
       layawayAbonos: 0,
       salesCashTotal,
       salesCardTotal: 0,
@@ -431,6 +486,9 @@ export class CashService {
       expectedCash,
       totalTickets,
       totalRefunds,
+      categorySummary: Array.from(categories.values()).sort(
+        (a, b) => b.totalSold - a.totalSold,
+      ),
     };
   }
 

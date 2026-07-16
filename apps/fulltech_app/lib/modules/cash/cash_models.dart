@@ -73,12 +73,20 @@ class CashSummaryModel {
     required this.totalWithdrawals,
     required this.cashInManual,
     required this.cashOutManual,
+    required this.creditAbonos,
+    required this.creditSalesTotal,
+    required this.creditInitialCash,
+    required this.creditInitialTransfer,
+    required this.creditBalanceTotal,
+    required this.creditPaymentCash,
+    required this.creditPaymentTransfer,
     required this.salesCashTotal,
     required this.salesTransferTotal,
     required this.refundsCash,
     required this.expectedCash,
     required this.totalTickets,
     required this.totalRefunds,
+    required this.categorySummary,
   });
 
   final double openingAmount;
@@ -87,12 +95,20 @@ class CashSummaryModel {
   final double totalWithdrawals;
   final double cashInManual;
   final double cashOutManual;
+  final double creditAbonos;
+  final double creditSalesTotal;
+  final double creditInitialCash;
+  final double creditInitialTransfer;
+  final double creditBalanceTotal;
+  final double creditPaymentCash;
+  final double creditPaymentTransfer;
   final double salesCashTotal;
   final double salesTransferTotal;
   final double refundsCash;
   final double expectedCash;
   final int totalTickets;
   final int totalRefunds;
+  final List<CashCategorySummaryModel> categorySummary;
 
   double difference(double closingAmount) => closingAmount - expectedCash;
 
@@ -104,12 +120,49 @@ class CashSummaryModel {
       totalWithdrawals: _asDouble(json['totalWithdrawals']),
       cashInManual: _asDouble(json['cashInManual']),
       cashOutManual: _asDouble(json['cashOutManual']),
+      creditAbonos: _asDouble(json['creditAbonos']),
+      creditSalesTotal: _asDouble(json['creditSalesTotal']),
+      creditInitialCash: _asDouble(json['creditInitialCash']),
+      creditInitialTransfer: _asDouble(json['creditInitialTransfer']),
+      creditBalanceTotal: _asDouble(json['creditBalanceTotal']),
+      creditPaymentCash: _asDouble(json['creditPaymentCash']),
+      creditPaymentTransfer: _asDouble(json['creditPaymentTransfer']),
       salesCashTotal: _asDouble(json['salesCashTotal']),
       salesTransferTotal: _asDouble(json['salesTransferTotal']),
       refundsCash: _asDouble(json['refundsCash']),
       expectedCash: _asDouble(json['expectedCash']),
       totalTickets: (json['totalTickets'] as num?)?.toInt() ?? 0,
       totalRefunds: (json['totalRefunds'] as num?)?.toInt() ?? 0,
+      categorySummary: ((json['categorySummary'] as List?) ?? const [])
+          .whereType<Map>()
+          .map(
+            (item) =>
+                CashCategorySummaryModel.fromJson(item.cast<String, dynamic>()),
+          )
+          .toList(growable: false),
+    );
+  }
+}
+
+class CashCategorySummaryModel {
+  const CashCategorySummaryModel({
+    required this.category,
+    required this.totalSold,
+    required this.totalProfit,
+    required this.items,
+  });
+
+  final String category;
+  final double totalSold;
+  final double totalProfit;
+  final int items;
+
+  factory CashCategorySummaryModel.fromJson(Map<String, dynamic> json) {
+    return CashCategorySummaryModel(
+      category: (json['category'] ?? 'Sin categoria').toString(),
+      totalSold: _asDouble(json['totalSold']),
+      totalProfit: _asDouble(json['totalProfit']),
+      items: (json['items'] as num?)?.toInt() ?? 0,
     );
   }
 }

@@ -95,6 +95,40 @@ class CashCloseTicketPrinter {
         money.format(snapshot.summary.salesTransferTotal),
         width,
       ),
+      if (snapshot.summary.creditSalesTotal > 0) ...[
+        ReceiptTextUtils.separator(width, 'dashed'),
+        'VENTAS A CREDITO',
+        ReceiptTextUtils.leftRight(
+          'Total credito',
+          money.format(snapshot.summary.creditSalesTotal),
+          width,
+        ),
+        ReceiptTextUtils.leftRight(
+          'Inicial efectivo',
+          money.format(snapshot.summary.creditInitialCash),
+          width,
+        ),
+        ReceiptTextUtils.leftRight(
+          'Inicial transf.',
+          money.format(snapshot.summary.creditInitialTransfer),
+          width,
+        ),
+        ReceiptTextUtils.leftRight(
+          'Abonos efectivo',
+          money.format(snapshot.summary.creditPaymentCash),
+          width,
+        ),
+        ReceiptTextUtils.leftRight(
+          'Abonos transf.',
+          money.format(snapshot.summary.creditPaymentTransfer),
+          width,
+        ),
+        ReceiptTextUtils.leftRight(
+          'Balance credito',
+          money.format(snapshot.summary.creditBalanceTotal),
+          width,
+        ),
+      ],
       ReceiptTextUtils.leftRight(
         'Entradas',
         money.format(snapshot.summary.cashInManual),
@@ -120,7 +154,34 @@ class CashCloseTicketPrinter {
         money.format(snapshot.summary.refundsCash),
         width,
       ),
+      if (snapshot.summary.categorySummary.isNotEmpty) ...[
+        ReceiptTextUtils.separator(width, 'dashed'),
+        'POR CATEGORIA',
+        for (final category in snapshot.summary.categorySummary.take(8)) ...[
+          ...ReceiptTextUtils.wrap(category.category, width),
+          ReceiptTextUtils.leftRight(
+            ' Vendido',
+            money.format(category.totalSold),
+            width,
+          ),
+          ReceiptTextUtils.leftRight(
+            ' Ganancia',
+            money.format(category.totalProfit),
+            width,
+          ),
+        ],
+      ],
       ReceiptTextUtils.separator(width, 'double'),
+      ReceiptTextUtils.leftRight(
+        'Gran total venta',
+        money.format(snapshot.summary.totalSales),
+        width,
+      ),
+      ReceiptTextUtils.leftRight(
+        'Caja apertura',
+        money.format(snapshot.summary.openingAmount),
+        width,
+      ),
       ReceiptTextUtils.leftRight(
         'Efectivo esperado',
         money.format(snapshot.summary.expectedCash),
