@@ -34,23 +34,35 @@ class TicketRenderer {
       return lines;
     }
 
-    add(ReceiptTextUtils.center(company.name, width));
+    add(ReceiptTextUtils.align(company.name, width, layout.headerAlignment));
     if (layout.showBusinessData) {
       if (company.rnc.isNotEmpty) {
-        add(ReceiptTextUtils.center('RNC: ${company.rnc}', width));
+        add(
+          ReceiptTextUtils.align(
+            'RNC: ${company.rnc}',
+            width,
+            layout.headerAlignment,
+          ),
+        );
       }
       if (company.phone.isNotEmpty) {
-        add(ReceiptTextUtils.center('Tel: ${company.phone}', width));
+        add(
+          ReceiptTextUtils.align(
+            'Tel: ${company.phone}',
+            width,
+            layout.headerAlignment,
+          ),
+        );
       }
       if (company.address.isNotEmpty) {
         for (final line in ReceiptTextUtils.wrap(company.address, width)) {
-          add(ReceiptTextUtils.center(line, width));
+          add(ReceiptTextUtils.align(line, width, layout.headerAlignment));
         }
       }
     }
     if (layout.headerExtra.trim().isNotEmpty) {
       for (final line in ReceiptTextUtils.wrap(layout.headerExtra, width)) {
-        add(ReceiptTextUtils.center(line, width));
+        add(ReceiptTextUtils.align(line, width, layout.headerAlignment));
       }
     }
 

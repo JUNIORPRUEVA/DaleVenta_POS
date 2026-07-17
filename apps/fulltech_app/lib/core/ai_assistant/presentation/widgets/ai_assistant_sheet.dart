@@ -497,13 +497,6 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
           'Qué reglas del manual aplican aquí',
           'Qué puedo hacer en este módulo',
         ];
-      case 'document-flows':
-        return const [
-          'Explícame esta pantalla',
-          'Resumen del flujo documental actual',
-          'Qué sigue en este flujo',
-          'Qué puedo hacer en este módulo',
-        ];
       case 'manual-interno':
         return const [
           'Explícame esta pantalla',
@@ -566,8 +559,6 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
         return 'Cotizaciones';
       case 'service-orders':
         return 'Operaciones';
-      case 'document-flows':
-        return 'Flujo documental';
       case 'media-gallery':
         return 'Galería media';
       case 'ponche':

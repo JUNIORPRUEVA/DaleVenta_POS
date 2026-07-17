@@ -10,7 +10,6 @@ enum AppPermission {
 
   // Core modules
   viewOperations,
-  viewDocumentFlows,
   viewPunch,
 
   // Technician
@@ -43,6 +42,7 @@ enum AppPermission {
   editCrmComercialCustomer,
   changeCrmComercialStatus,
   viewCrmComercialHistory,
+  manageWebsite,
 
   // HR
   viewWarnings,
@@ -59,7 +59,6 @@ const Map<AppRole, Set<AppPermission>> rolePermissions = {
     AppPermission.viewMyPayments,
     AppPermission.viewWhatsapp,
     AppPermission.viewOperations,
-    AppPermission.viewDocumentFlows,
     AppPermission.viewTechOperations,
     AppPermission.viewPunch,
     AppPermission.viewCatalog,
@@ -83,6 +82,7 @@ const Map<AppRole, Set<AppPermission>> rolePermissions = {
     AppPermission.editCrmComercialCustomer,
     AppPermission.changeCrmComercialStatus,
     AppPermission.viewCrmComercialHistory,
+    AppPermission.manageWebsite,
     AppPermission.viewWarnings,
     AppPermission.viewMyWarnings,
   },
@@ -91,7 +91,6 @@ const Map<AppRole, Set<AppPermission>> rolePermissions = {
     AppPermission.viewMyPayments,
     AppPermission.viewWhatsapp,
     AppPermission.viewOperations,
-    AppPermission.viewDocumentFlows,
     AppPermission.viewPunch,
     AppPermission.viewCatalog,
     AppPermission.viewSales,
@@ -101,6 +100,7 @@ const Map<AppRole, Set<AppPermission>> rolePermissions = {
     AppPermission.viewCompanyManual,
     AppPermission.viewWarnings,
     AppPermission.viewMyWarnings,
+    AppPermission.manageWebsite,
   },
   AppRole.vendedor: {
     AppPermission.viewProfile,
@@ -127,6 +127,7 @@ const Map<AppRole, Set<AppPermission>> rolePermissions = {
     AppPermission.viewMediaGallery,
     AppPermission.viewCompanyManual,
     AppPermission.viewMyWarnings,
+    AppPermission.manageWebsite,
   },
   AppRole.tecnico: {
     AppPermission.viewProfile,

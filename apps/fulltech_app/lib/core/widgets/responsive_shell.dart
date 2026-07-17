@@ -559,7 +559,7 @@ List<_SidebarMenuGroup> _buildDesktopSidebarGroups(
       key: 'contabilidad',
       title: 'Contabilidad',
       icon: Icons.account_balance_outlined,
-      items: pick([Routes.contabilidad, Routes.documentFlows]),
+      items: pick([Routes.contabilidad]),
     ),
     _SidebarMenuGroup(
       key: 'comunicacion',

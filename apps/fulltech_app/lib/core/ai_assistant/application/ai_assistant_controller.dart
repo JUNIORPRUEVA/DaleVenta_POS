@@ -88,8 +88,6 @@ class AiAssistantController extends StateNotifier<AiAssistantState> {
         return 'Cotizaciones';
       case 'service-orders':
         return 'Operaciones';
-      case 'document-flows':
-        return 'Flujo documental';
       case 'manual-interno':
         return 'Manual Interno';
       default:

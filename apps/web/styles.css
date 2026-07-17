@@ -1,16 +1,17 @@
 :root {
   color-scheme: light;
-  --ink: #172026;
-  --muted: #5d6872;
-  --line: #dce3e8;
-  --brand: #007c89;
-  --brand-dark: #064d56;
+  --ink: #101820;
+  --muted: #53636b;
+  --line: #d9e5e8;
+  --brand: #008c95;
+  --brand-dark: #003f46;
   --accent: #f2b705;
-  --soft: #f4f8f9;
+  --soft: #eef7f8;
+  --blue: #075f7a;
   --white: #ffffff;
   --danger: #9f2d20;
   --ok: #1e7f48;
-  --shadow: 0 18px 46px rgba(23, 32, 38, 0.12);
+  --shadow: 0 18px 46px rgba(0, 63, 70, 0.14);
 }
 
 * {
@@ -25,7 +26,7 @@ body {
   margin: 0;
   font-family: Arial, Helvetica, sans-serif;
   color: var(--ink);
-  background: var(--white);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfc 48%, #ffffff 100%);
   line-height: 1.5;
 }
 
@@ -39,7 +40,7 @@ img {
 }
 
 .topbar {
-  background: var(--brand-dark);
+  background: linear-gradient(90deg, var(--brand-dark), var(--blue));
   color: var(--white);
   font-size: 14px;
 }
@@ -63,7 +64,8 @@ img {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 10px 30px rgba(0, 63, 70, 0.07);
   border-bottom: 1px solid var(--line);
 }
 
@@ -112,7 +114,7 @@ img {
 .button {
   border: 0;
   border-radius: 6px;
-  background: var(--brand);
+  background: linear-gradient(135deg, var(--brand), var(--blue));
   color: var(--white);
   padding: 12px 16px;
   font: inherit;
@@ -139,7 +141,7 @@ img {
 .hero {
   color: var(--white);
   background:
-    linear-gradient(90deg, rgba(6, 77, 86, 0.92), rgba(0, 124, 137, 0.72)),
+    linear-gradient(90deg, rgba(0, 63, 70, 0.94), rgba(0, 140, 149, 0.74)),
     url("https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=1800&q=80") center/cover;
   min-height: 78vh;
   display: grid;
@@ -164,6 +166,14 @@ img {
   margin: 22px 0 0;
   max-width: 680px;
   font-size: 19px;
+}
+
+.hero__eyebrow {
+  margin: 0 0 14px;
+  color: #f7d45b;
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: 13px;
 }
 
 .hero__actions {
@@ -233,6 +243,7 @@ img {
   border-radius: 8px;
   background: var(--white);
   overflow: hidden;
+  box-shadow: 0 10px 26px rgba(0, 63, 70, 0.05);
 }
 
 .card {
@@ -269,6 +280,7 @@ img {
   flex-direction: column;
   gap: 10px;
   flex: 1;
+  min-height: 222px;
 }
 
 .product-card__meta {
@@ -284,6 +296,44 @@ img {
   color: var(--brand-dark);
   font-size: 22px;
   font-weight: 900;
+}
+
+.store-band {
+  background: linear-gradient(135deg, #003f46 0%, #075f7a 52%, #008c95 100%);
+  color: var(--white);
+}
+
+.store-band .lead {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.store-band .product-card {
+  color: var(--ink);
+}
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 22px;
+  max-width: 680px;
+}
+
+.kpi {
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.kpi strong {
+  display: block;
+  font-size: 22px;
+}
+
+.kpi span {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 13px;
 }
 
 .filters {
@@ -304,7 +354,7 @@ img {
 }
 
 .filter.is-active {
-  background: var(--brand-dark);
+  background: linear-gradient(135deg, var(--brand-dark), var(--brand));
   color: var(--white);
 }
 
@@ -314,6 +364,10 @@ img {
   padding: 14px 16px;
   color: #4d3900;
   margin: 22px 0;
+}
+
+.muted {
+  color: var(--muted);
 }
 
 .legal-layout {
@@ -457,6 +511,7 @@ img {
   .trust-strip .section,
   .grid--3,
   .grid--2,
+  .kpi-row,
   .footer__inner,
   .legal-layout {
     grid-template-columns: 1fr;

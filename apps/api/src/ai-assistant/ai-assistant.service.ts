@@ -629,7 +629,7 @@ export class AiAssistantService {
       '1) Internal manual and company rules (primary source of truth)\n' +
       '2) Application modules and their functions\n' +
       '3) Client database\n' +
-      '4) Service operations, document flows and operational records\n' +
+      '4) Service operations and operational records\n' +
       '5) Company products catalog\n' +
       '6) Logged-in user information\n\n' +
       'Rules:\n' +
@@ -802,11 +802,6 @@ export class AiAssistantService {
       case 'service-orders':
       case 'service-order':
         return 'service-orders';
-      case 'document-flows':
-      case 'document-flow':
-      case 'flujo-documental':
-      case 'flujo-documentos':
-        return 'document-flows';
       case 'media-gallery':
       case 'galeria-media':
       case 'galeria':
@@ -868,15 +863,6 @@ export class AiAssistantService {
       return {
         module: 'service-orders',
         screenName: 'Detalle de orden',
-        entityType: 'service-order',
-        entityId: segments[1],
-      };
-    }
-    if (path === '/document-flows') return { module: 'document-flows', screenName: 'Flujo documental' };
-    if (path.startsWith('/document-flows/')) {
-      return {
-        module: 'document-flows',
-        screenName: 'Detalle documental',
         entityType: 'service-order',
         entityId: segments[1],
       };
@@ -969,7 +955,6 @@ export class AiAssistantService {
       case 'catalogo':
         return true;
       case 'service-orders':
-      case 'document-flows':
       case 'media-gallery':
         return true;
       case 'ventas':
@@ -1030,9 +1015,6 @@ export class AiAssistantService {
     const hasMatchedServiceOrder = knowledge.some(
       (item) => item.id.startsWith('app-data:service-order:') || item.id.startsWith('app-data:service-order-match:'),
     );
-    const hasMatchedDocumentFlow = knowledge.some(
-      (item) => item.id.startsWith('app-data:document-flow:') || item.id.startsWith('app-data:document-flow-match:'),
-    );
     const hasContractKnowledge = knowledge.some(
       (item) => item.id.startsWith('app-data:contract:') || item.id.startsWith('app-data:contract-match:'),
     );
@@ -1047,8 +1029,7 @@ export class AiAssistantService {
       (hasLookupIntent && this.hasAnyToken(tokens, ['producto', 'productos', 'catalogo', 'catálogo', 'precio', 'stock', 'inventario']));
     const explicitOperationsLookup =
       hasMatchedServiceOrder ||
-      hasMatchedDocumentFlow ||
-      (hasLookupIntent && this.hasAnyToken(tokens, ['orden', 'ordenes', 'órdenes', 'servicio', 'servicios', 'operacion', 'operación', 'operaciones', 'flujo', 'documental']));
+      (hasLookupIntent && this.hasAnyToken(tokens, ['orden', 'ordenes', 'órdenes', 'servicio', 'servicios', 'operacion', 'operación', 'operaciones']));
     const explicitContractLookup =
       hasContractKnowledge ||
       (hasLookupIntent && this.hasAnyToken(tokens, [
@@ -1085,10 +1066,6 @@ export class AiAssistantService {
 
   private canAccessOperationsData(role: Role) {
     return this.canAccessModule(role, 'service-orders');
-  }
-
-  private canAccessDocumentFlowData(role: Role) {
-    return this.canAccessModule(role, 'document-flows');
   }
 
   private canAccessContractData(role: Role, route?: string) {
@@ -1215,7 +1192,7 @@ export class AiAssistantService {
         'general',
         'guia-app',
         'Cómo pedir ayuda al asistente',
-        'Puedes preguntarme sobre cómo usar módulos, qué significa una opción, qué dice el Manual Interno y dónde encontrar información. Si estás en una pantalla específica, dime el módulo (clientes, catálogo, ventas, cotizaciones, operaciones, flujo documental, galería media, nómina, manual interno, configuración) y qué estás intentando lograr.',
+        'Puedes preguntarme sobre cómo usar módulos, qué significa una opción, qué dice el Manual Interno y dónde encontrar información. Si estás en una pantalla específica, dime el módulo (clientes, catálogo, ventas, cotizaciones, operaciones, galería media, nómina, manual interno, configuración) y qué estás intentando lograr.',
       ),
       this.createAppKnowledgeRecord(
         'app-help:clientes',
@@ -1237,13 +1214,6 @@ export class AiAssistantService {
         'guia-app',
         'Uso del módulo de operaciones',
         'En Operaciones puedes crear, revisar y dar seguimiento a órdenes de servicio. Si ya estás dentro de una orden, el asistente puede resumir el estado, el cliente relacionado y qué sigue en el flujo.',
-      ),
-      this.createAppKnowledgeRecord(
-        'app-help:document-flows',
-        'document-flows',
-        'guia-app',
-        'Uso del flujo documental',
-        'En Flujo documental puedes revisar el estado de factura, garantía, aprobación y envío asociado a una orden de servicio. Si abres un flujo concreto, el asistente prioriza ese contexto.',
       ),
       this.createAppKnowledgeRecord(
         'app-help:media-gallery',
@@ -1326,7 +1296,6 @@ export class AiAssistantService {
     const wantsQuotes = includeModuleContext || this.hasAnyToken(tokens, ['cotizacion', 'cotizaciones', 'ticket', 'propuesta']);
     const wantsSales = includeModuleContext || this.hasAnyToken(tokens, ['venta', 'ventas', 'comision', 'comisión']);
     const wantsOperations = includeModuleContext || this.hasAnyToken(tokens, ['orden', 'ordenes', 'órdenes', 'servicio', 'servicios', 'operacion', 'operación', 'operaciones', 'tecnico', 'técnico']);
-    const wantsDocumentFlows = includeModuleContext || this.hasAnyToken(tokens, ['flujo', 'documental', 'documento', 'documentos', 'garantia', 'garantía']);
     const wantsAccounting = includeModuleContext || this.hasAnyToken(tokens, ['contabilidad', 'cierre', 'cierres', 'deposito', 'depósito', 'factura', 'pago']);
     const wantsSelf = includeModuleContext || this.isSelfInfoRequest(dto.message, dto.context);
     const wantsAdaptiveLearning = includeModuleContext || this.isAdaptiveLearningQuestion(dto.message, dto.context);
@@ -1365,11 +1334,6 @@ export class AiAssistantService {
       knowledge.push(...operationsKnowledge);
     }
 
-    if ((wantsDocumentFlows || dto.context.module === 'document-flows') && this.canAccessDocumentFlowData(user.role)) {
-      const documentFlowKnowledge = await this.buildDocumentFlowKnowledge(user, dto);
-      knowledge.push(...documentFlowKnowledge);
-    }
-
     if ((wantsContracts || dto.context.module === 'nomina') && this.canAccessContractData(user.role, dto.context.route)) {
       const contractKnowledge = await this.buildContractKnowledge(user, dto);
       knowledge.push(...contractKnowledge);
@@ -1399,7 +1363,7 @@ export class AiAssistantService {
     if (this.isScreenExplanationRequest(message, context)) return 'explain-screen';
     if (this.isModuleExplanationRequest(message, context)) return 'explain-module';
     if (this.hasAnyToken(tokens, ['manual', 'interno', 'politica', 'política', 'regla', 'reglas', 'protocolo'])) return 'manual';
-    if (this.hasAnyToken(tokens, ['orden', 'ordenes', 'órdenes', 'servicio', 'servicios', 'operacion', 'operación', 'operaciones', 'flujo', 'documental'])) return 'operations';
+    if (this.hasAnyToken(tokens, ['orden', 'ordenes', 'órdenes', 'servicio', 'servicios', 'operacion', 'operación', 'operaciones'])) return 'operations';
     if (this.hasAnyToken(tokens, ['cliente', 'clientes', 'telefono', 'teléfono', 'direccion', 'dirección'])) return 'clients';
     if (this.hasAnyToken(tokens, ['producto', 'productos', 'catalogo', 'catálogo', 'precio', 'precios', 'stock', 'inventario'])) return 'catalog';
     return 'general';
@@ -1519,8 +1483,6 @@ export class AiAssistantService {
         return 'Cotizaciones';
       case 'service-orders':
         return 'Operaciones';
-      case 'document-flows':
-        return 'Flujo documental';
       case 'media-gallery':
         return 'Galería media';
       case 'contabilidad':
@@ -1566,11 +1528,6 @@ export class AiAssistantService {
         return (
           'Este módulo gestiona operaciones y órdenes de servicio.\n' +
           'Puedes revisar estado, cliente relacionado, técnico asignado y próximos pasos operativos.'
-        );
-      case 'document-flows':
-        return (
-          'Este módulo controla el flujo documental por orden.\n' +
-          'Puedes revisar preparación, aprobación y envío de factura o garantía según la orden seleccionada.'
         );
       case 'media-gallery':
         return (
@@ -1631,13 +1588,6 @@ export class AiAssistantService {
         return 'En Detalle de orden puedes revisar estado, cliente, técnico asignado, notas técnicas, evidencias y reportes relacionados con la operación actual.';
       }
       return 'En Operaciones puedes revisar órdenes de servicio, su estado y el seguimiento operativo de cada caso.';
-    }
-
-    if (mod === 'document-flows') {
-      if (screen.includes('detalle')) {
-        return 'En Detalle documental puedes revisar el estado del flujo de factura y garantía para la orden actual, así como lo pendiente antes del envío.';
-      }
-      return 'En Flujo documental puedes ver el estado de cada expediente documental asociado a órdenes de servicio.';
     }
 
     if (mod === 'media-gallery') {
@@ -2650,136 +2600,6 @@ export class AiAssistantService {
     return result;
   }
 
-  private async buildDocumentFlowKnowledge(user: { id: string; role: Role }, dto: ChatAiAssistantDto): Promise<KnowledgeRecord[]> {
-    const accessibleOrderWhere = this.buildServiceOrderWhereForUser(user);
-    const accessibleFlowWhere: Prisma.OrderDocumentFlowWhereInput = {
-      order: accessibleOrderWhere,
-    };
-    const count = await this.prisma.orderDocumentFlow.count({ where: accessibleFlowWhere });
-
-    const result: KnowledgeRecord[] = [
-      this.createAppKnowledgeRecord(
-        'app-data:document-flows-scope',
-        'document-flows',
-        'dato-autorizado',
-        'Alcance autorizado de flujo documental',
-        'Puedo consultar flujos documentales asociados a órdenes visibles dentro de tu alcance operativo.',
-      ),
-      this.createAppKnowledgeRecord(
-        'app-data:document-flows-count',
-        'document-flows',
-        'dato-autorizado',
-        'Resumen autorizado de flujo documental',
-        `Actualmente hay ${count} flujos documentales visibles para esta consulta.`,
-      ),
-    ];
-
-    const entityId = (dto.context.entityType ?? '').toLowerCase() === 'service-order'
-      ? (dto.context.entityId ?? '').trim()
-      : '';
-    const searchTerms = this.extractMeaningfulQueryTerms(dto.message, {
-      limit: 6,
-      extraNoise: [
-        'flujo',
-        'documental',
-        'documento',
-        'documentos',
-        'factura',
-        'garantia',
-        'garantía',
-        'orden',
-        'servicio',
-        'detalle',
-        'resumen',
-      ],
-    });
-
-    if (!entityId && searchTerms.length === 0) {
-      return result;
-    }
-
-    if (entityId) {
-      const flow = await this.prisma.orderDocumentFlow.findFirst({
-        where: { ...accessibleFlowWhere, orderId: entityId },
-        include: {
-          order: {
-            include: {
-              client: true,
-            },
-          },
-          preparedBy: { select: { id: true, nombreCompleto: true } },
-          approvedBy: { select: { id: true, nombreCompleto: true } },
-        },
-      });
-      if (flow) {
-        result.push(
-          this.createAppKnowledgeRecord(
-            `app-data:document-flow:${flow.orderId}`,
-            'document-flows',
-            'dato-autorizado',
-            `Flujo documental ${this.compactEntityId(flow.orderId)}`,
-            this.describeDocumentFlow(flow),
-          ),
-        );
-      }
-      return result;
-    }
-
-    const documentFlowFilters: Prisma.OrderDocumentFlowWhereInput[] = [
-      ...searchTerms
-        .filter((term) => this.isUuidLike(term))
-        .map((term) => ({ orderId: term })),
-      ...searchTerms.map((term) => ({
-        order: { client: { nombre: { contains: term, mode: 'insensitive' as const } } },
-      })),
-    ];
-
-    const matchingFlows = await this.prisma.orderDocumentFlow.findMany({
-      where: {
-        ...accessibleFlowWhere,
-        OR: documentFlowFilters,
-      },
-      include: {
-        order: {
-          include: {
-            client: true,
-          },
-        },
-        preparedBy: { select: { id: true, nombreCompleto: true } },
-        approvedBy: { select: { id: true, nombreCompleto: true } },
-      },
-      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
-      take: 8,
-    });
-
-    if (matchingFlows.length === 0) {
-      result.push(
-        this.createAppKnowledgeRecord(
-          'app-data:document-flow-search-none',
-          'document-flows',
-          'dato-autorizado',
-          'Flujo documental no encontrado',
-          `No encontré flujos documentales autorizados que coincidan con: ${searchTerms.join(', ')}.`,
-        ),
-      );
-      return result;
-    }
-
-    result.push(
-      ...matchingFlows.map((flow) =>
-        this.createAppKnowledgeRecord(
-          `app-data:document-flow-match:${flow.orderId}`,
-          'document-flows',
-          'dato-autorizado',
-          `Flujo documental ${this.compactEntityId(flow.orderId)}`,
-          this.describeDocumentFlow(flow),
-        ),
-      ),
-    );
-
-    return result;
-  }
-
   private compactEntityId(value: string) {
     const normalized = (value ?? '').replace(/-/g, '').trim().toUpperCase();
     if (!normalized) return 'SIN-ID';
@@ -2823,34 +2643,6 @@ export class AiAssistantService {
       (order.extraRequirements ?? '').trim().length > 0
         ? `Requerimientos: ${this.buildExcerpt(order.extraRequirements ?? '')}.`
         : null,
-    ].filter((x): x is string => !!x);
-    return details.join(' ');
-  }
-
-  private describeDocumentFlow(flow: {
-    orderId: string;
-    status: unknown;
-    sentAt?: Date | string | null;
-    invoiceFinalUrl?: string | null;
-    warrantyFinalUrl?: string | null;
-    updatedAt?: Date | string | null;
-    order?: { client?: { nombre?: string | null } | null } | null;
-    preparedBy?: { nombreCompleto?: string | null } | null;
-    approvedBy?: { nombreCompleto?: string | null } | null;
-  }) {
-    const clientName = flow.order?.client?.nombre?.trim() || 'Cliente no disponible';
-    const preparedBy = flow.preparedBy?.nombreCompleto?.trim();
-    const approvedBy = flow.approvedBy?.nombreCompleto?.trim();
-    const details = [
-      `Flujo documental de la orden ${this.compactEntityId(flow.orderId)}.`,
-      `Cliente relacionado: ${clientName}.`,
-      `Estado actual: ${this.humanizeEnum(flow.status)}.`,
-      flow.invoiceFinalUrl ? 'Factura final: disponible.' : 'Factura final: pendiente.',
-      flow.warrantyFinalUrl ? 'Garantía final: disponible.' : 'Garantía final: pendiente.',
-      preparedBy ? `Preparado por: ${preparedBy}.` : null,
-      approvedBy ? `Aprobado por: ${approvedBy}.` : null,
-      flow.sentAt ? `Enviado al cliente: ${this.formatKnowledgeDate(flow.sentAt)}.` : 'Envío al cliente: pendiente.',
-      flow.updatedAt ? `Última actualización: ${this.formatKnowledgeDate(flow.updatedAt)}.` : null,
     ].filter((x): x is string => !!x);
     return details.join(' ');
   }
@@ -3807,26 +3599,6 @@ export class AiAssistantService {
         source: 'rules-only',
         content: this.personalizeContent(`${intro}\n\n${blocks}`, currentUserName),
         citations: this.toUserVisibleCitations(serviceOrderMatches),
-        denied: false,
-      };
-    }
-
-    const documentFlowMatches = selected.filter(
-      (k) => k.id.startsWith('app-data:document-flow:') || k.id.startsWith('app-data:document-flow-match:'),
-    );
-    if (documentFlowMatches.length > 0) {
-      const intro = documentFlowMatches.length === 1
-        ? 'Sí, encontré este flujo documental relacionado con tu consulta:'
-        : `Sí, encontré ${documentFlowMatches.length} flujos documentales relacionados con tu consulta:`;
-      const blocks = documentFlowMatches
-        .map((k) => k.content.trim())
-        .filter((x) => x.length > 0)
-        .join('\n\n');
-
-      return {
-        source: 'rules-only',
-        content: this.personalizeContent(`${intro}\n\n${blocks}`, currentUserName),
-        citations: this.toUserVisibleCitations(documentFlowMatches),
         denied: false,
       };
     }

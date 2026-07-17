@@ -17,6 +17,7 @@ import '../../core/company/company_settings_repository.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/models/user_model.dart';
 import '../../core/models/product_model.dart';
+import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/realtime/catalog_realtime_service.dart';
 import '../../core/routing/app_route_observer.dart';
 import '../../core/routing/route_access.dart';
@@ -4392,7 +4393,21 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     ].join('\n');
 
     try {
-      await ref
+      final saleItems = _items
+          .map(
+            (item) => SaleDraftItem(
+              productId: item.isExternal ? null : item.productId,
+              name: item.nombre,
+              imageUrl: item.imageUrl,
+              isExternal: item.isExternal,
+              qty: item.qty,
+              priceSoldUnit: item.unitPrice,
+              costUnitSnapshot: item.tracedCostUnit ?? 0,
+            ),
+          )
+          .toList();
+
+      final createdSale = await ref
           .read(ventasRepositoryProvider)
           .createSale(
             customerId: _selectedClientId!,
@@ -4408,20 +4423,25 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             paymentCashAmount: checkout?.cashAmount,
             paymentTransferAmount: checkout?.transferAmount,
             creditAmount: checkout?.creditAmount,
-            items: _items
-                .map(
-                  (item) => SaleDraftItem(
-                    productId: item.isExternal ? null : item.productId,
-                    name: item.nombre,
-                    imageUrl: item.imageUrl,
-                    isExternal: item.isExternal,
-                    qty: item.qty,
-                    priceSoldUnit: item.unitPrice,
-                    costUnitSnapshot: item.tracedCostUnit ?? 0,
-                  ),
-                )
-                .toList(),
+            items: saleItems,
           );
+
+      if (checkout != null && createdSale != null) {
+        final saleToPrint = createdSale.items.isNotEmpty
+            ? createdSale
+            : await ref.read(ventasRepositoryProvider).getById(createdSale.id);
+        final printResult = await ref
+            .read(unifiedTicketPrinterProvider)
+            .printSaleTicket(sale: saleToPrint, items: saleToPrint.items);
+        if (!printResult.success && mounted) {
+          _showSalesNotice(
+            title: 'Factura guardada sin imprimir',
+            message: printResult.message,
+            icon: Icons.print_disabled_outlined,
+            accent: const Color(0xFFF59E0B),
+          );
+        }
+      }
 
       if (checkout?.method == _CheckoutPaymentMethod.credit) {
         ref.invalidate(salesCreditsProvider);

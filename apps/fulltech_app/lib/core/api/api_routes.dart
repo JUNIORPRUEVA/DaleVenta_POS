@@ -159,6 +159,12 @@ class ApiRoutes {
   static String updateProduct(String id) => '/products/$id';
   static String deleteProduct(String id) => '/products/$id';
 
+  // Sitio web / tienda publica
+  static const websiteProducts = '/website/products';
+  static const websiteUpload = '/website/upload';
+  static String websiteProduct(String productId) =>
+      '/website/products/$productId';
+
   // Ventas
   static const sales = '/sales';
   static const salesInvoices = '/sales/invoices';
@@ -364,17 +370,6 @@ class ApiRoutes {
       '/service-orders/$id/evidences';
   static String serviceOrderReport(String id) => '/service-orders/$id/report';
   static String serviceOrderClone(String id) => '/service-orders/$id/clone';
-
-  // Document flows
-  static const documentFlows = '/document-flows';
-  static String documentFlowByOrder(String orderId) =>
-      '/document-flows/$orderId';
-  static String documentFlowEditDraft(String id) =>
-      '/document-flows/$id/edit-draft';
-  static String documentFlowGenerate(String id) =>
-      '/document-flows/$id/generate';
-  static String documentFlowSend(String id) => '/document-flows/$id/send';
-  static String documentFlowDelete(String id) => '/document-flows/$id';
 
   // Asistente IA (global)
   static const aiChat = '/ai/chat';

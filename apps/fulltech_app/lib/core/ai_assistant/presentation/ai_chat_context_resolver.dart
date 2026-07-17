@@ -29,12 +29,6 @@ AiChatContext buildAiChatContextFromLocation(String location) {
       entityType = 'service-order';
       entityId = segments[1];
     }
-  } else if (path.startsWith('/document-flows')) {
-    module = 'document-flows';
-    if (segments.length >= 2) {
-      entityType = 'service-order';
-      entityId = segments[1];
-    }
   } else if (path.startsWith('/media-gallery')) {
     module = 'media-gallery';
   } else if (path.startsWith('/catalogo')) {
@@ -113,8 +107,6 @@ String? _screenNameFromPath(String path) {
       return 'Operaciones';
     case Routes.serviceOrderCreate:
       return 'Crear orden';
-    case Routes.documentFlows:
-      return 'Flujo documental';
     case Routes.mediaGallery:
       return 'Galería media';
     case Routes.nomina:
@@ -145,9 +137,6 @@ String? _screenNameFromPath(String path) {
   }
   if (path.startsWith('/service-orders/')) {
     return 'Detalle de orden';
-  }
-  if (path.startsWith('/document-flows/')) {
-    return 'Detalle documental';
   }
   if (path.startsWith('/users/')) {
     return 'Detalle de usuario';

@@ -425,7 +425,6 @@ List<_DrawerMenuGroup> _buildDrawerGroups(List<AppNavigationSection> sections) {
   addGroup('Operaciones', Icons.work_outline_rounded, [
     Routes.serviceOrders,
     Routes.mediaGallery,
-    Routes.documentFlows,
   ]);
   addGroup('Clientes', Icons.groups_2_outlined, [
     Routes.clientes,
@@ -444,6 +443,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(List<AppNavigationSection> sections) {
   ]);
   addGroup('Comunicación', Icons.campaign_outlined, [
     Routes.publicidad,
+    Routes.sitioWeb,
     Routes.whatsapp,
     Routes.whatsappCrm,
     Routes.ai,

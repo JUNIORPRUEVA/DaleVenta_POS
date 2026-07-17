@@ -1,6 +1,36 @@
-import { FulltechStore as store } from "./data.js";
+import { FulltechStore as fallbackStore } from "./data.js";
 
-(function () {
+(async function () {
+  let store = fallbackStore;
+  try {
+    const apiBase = (window.FULLTECH_API_BASE_URL || "").replace(/\/$/, "");
+    const response = await fetch(`${apiBase}/website/public`, {
+      headers: { Accept: "application/json" }
+    });
+    if (response.ok) {
+      const payload = await response.json();
+      if (Array.isArray(payload.products) && payload.products.length > 0) {
+        store = {
+          ...fallbackStore,
+          company: { ...fallbackStore.company, ...(payload.company || {}) },
+          categories: payload.categories || fallbackStore.categories,
+          products: payload.products.map((product) => ({
+            id: product.id,
+            name: product.name,
+            category: product.category || "Sin categoría",
+            price: Number(product.price || 0),
+            warranty: product.stock == null ? "Consultar" : `${product.stock} disp.`,
+            image: product.image || "assets/logo.png",
+            description: product.description || "Producto disponible en FULLTECH.",
+            featured: product.featured === true
+          }))
+        };
+      }
+    }
+  } catch (_) {
+    store = fallbackStore;
+  }
+
   const money = new Intl.NumberFormat("es-DO", {
     style: "currency",
     currency: "DOP",
@@ -85,7 +115,9 @@ import { FulltechStore as store } from "./data.js";
   function renderFeaturedProducts() {
     const target = document.querySelector("[data-featured-products]");
     if (!target) return;
-    target.innerHTML = store.products.slice(0, 3).map((product) => `
+    const featured = store.products.filter((product) => product.featured).slice(0, 3);
+    const products = featured.length ? featured : store.products.slice(0, 3);
+    target.innerHTML = products.map((product) => `
       <article class="product-card">
         <img class="product-card__image" src="${product.image}" alt="${product.name}" loading="lazy">
         <div class="product-card__body">

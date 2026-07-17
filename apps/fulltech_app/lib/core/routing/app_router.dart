@@ -44,13 +44,12 @@ import '../../features/amonestaciones/presentation/mis_amonestaciones_pendientes
 import '../../modules/manual_interno/manual_interno_screen.dart';
 import '../../modules/cotizaciones/cotizaciones_historial_screen.dart';
 import '../../modules/cotizaciones/cotizaciones_screen.dart';
-import '../../modules/document_flows/document_flow_detail_screen.dart';
-import '../../modules/document_flows/document_flows_screen.dart';
 import '../../modules/service_orders/create_service_order_screen.dart';
 import '../../modules/service_orders/service_order_commissions_screen.dart';
 import '../../modules/service_orders/service_order_detail_screen.dart';
 import '../../modules/service_orders/service_order_models.dart';
 import '../../modules/service_orders/service_orders_list_screen.dart';
+import '../../modules/sitio_web/sitio_web_screen.dart';
 import '../../modules/ventas/tpv_sales_history_screen.dart';
 import '../../modules/ventas/registrar_venta_screen.dart';
 import '../../modules/ventas/sales_credit_screen.dart';
@@ -274,10 +273,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const MediaGalleryScreen(),
           ),
           GoRoute(
-            path: Routes.documentFlows,
-            builder: (context, state) => const DocumentFlowsScreen(),
-          ),
-          GoRoute(
             path: Routes.serviceOrderCreate,
             builder: (context, state) {
               final args = state.extra is ServiceOrderCreateArgs
@@ -291,13 +286,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) {
               final id = state.pathParameters['id'] ?? '';
               return ServiceOrderDetailScreen(orderId: id);
-            },
-          ),
-          GoRoute(
-            path: Routes.documentFlowDetail,
-            builder: (context, state) {
-              final orderId = state.pathParameters['orderId'] ?? '';
-              return DocumentFlowDetailScreen(orderId: orderId);
             },
           ),
           GoRoute(
@@ -382,6 +370,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: Routes.crmComercial,
             builder: (context, state) => const CrmComercialScreen(),
+          ),
+          GoRoute(
+            path: Routes.sitioWeb,
+            builder: (context, state) => const SitioWebScreen(),
           ),
           GoRoute(
             path: Routes.amonestaciones,

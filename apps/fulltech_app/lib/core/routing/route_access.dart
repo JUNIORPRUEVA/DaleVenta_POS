@@ -43,8 +43,6 @@ class RouteAccess {
         return AppPermission.viewMediaGallery;
       case Routes.galeriaPublicidad:
         return AppPermission.viewGaleriaPublicidad;
-      case Routes.documentFlows:
-        return AppPermission.viewDocumentFlows;
       case Routes.cotizaciones:
       case Routes.cotizacionesHistorial:
         return AppPermission.viewQuotes;
@@ -81,6 +79,8 @@ class RouteAccess {
         return AppPermission.viewWhatsappCrm;
       case Routes.crmComercial:
         return AppPermission.viewCrmComercial;
+      case Routes.sitioWeb:
+        return AppPermission.manageWebsite;
       case Routes.amonestaciones:
         return AppPermission.viewWarnings;
       case Routes.misAmonestacionesPendientes:
@@ -100,9 +100,6 @@ class RouteAccess {
     if (path.startsWith('${Routes.serviceOrders}/')) {
       return AppPermission.viewOperations;
     }
-    if (path.startsWith('${Routes.documentFlows}/')) {
-      return AppPermission.viewDocumentFlows;
-    }
     if (path.startsWith('/users/')) {
       return AppPermission.manageUsers;
     }
@@ -117,6 +114,9 @@ class RouteAccess {
     }
     if (path.startsWith('${Routes.publicidad}/')) {
       return AppPermission.viewPublicidad;
+    }
+    if (path.startsWith('${Routes.sitioWeb}/')) {
+      return AppPermission.manageWebsite;
     }
     return null;
   }

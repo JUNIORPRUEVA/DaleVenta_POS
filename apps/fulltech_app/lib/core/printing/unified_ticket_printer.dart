@@ -137,7 +137,10 @@ class UnifiedTicketPrinter {
     final settings = await _ref
         .read(printerSettingsRepositoryProvider)
         .getOrCreate();
-    if (!settings.autoPrintOnPayment) {
+    final hasSelectedPrinter = (settings.selectedPrinterName ?? '')
+        .trim()
+        .isNotEmpty;
+    if (!settings.autoPrintOnPayment && !hasSelectedPrinter) {
       return const PrintTicketResult(
         success: true,
         skipped: true,

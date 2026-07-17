@@ -581,7 +581,7 @@ export class ServiceOrderNotificationsListener {
       `Técnico: ${technicianName}`,
       `Fecha/Hora: ${scheduleLabel}`,
       'Estado actual: EN PROCESO',
-      'Próximo paso documental: preparación de factura/documentación.',
+      'Próximo paso: seguimiento operativo de la orden.',
     ].join('\n');
 
     for (const assistant of customerServiceRecipients) {

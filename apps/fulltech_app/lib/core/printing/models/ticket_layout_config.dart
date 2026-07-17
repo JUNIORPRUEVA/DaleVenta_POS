@@ -74,6 +74,8 @@ class TicketLayoutConfig {
   int get printableChars =>
       (charsPerLine - leftMargin - rightMargin).clamp(24, 64);
 
+  int get printableWidthMm => paperWidthMm == 58 ? 48 : 72;
+
   double get adjustedFontSize => switch (fontSize) {
     'small' => 7.2,
     'large' => 9.2,

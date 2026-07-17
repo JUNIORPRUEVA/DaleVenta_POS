@@ -29,3 +29,26 @@ npm --workspace apps/web run dev
 ```bash
 npm --workspace apps/web run build
 ```
+
+## Docker / EasyPanel
+
+Usa el repositorio completo como build context y este Dockerfile:
+
+```text
+apps/web/Dockerfile
+```
+
+Variable recomendada:
+
+```text
+FULLTECH_API_BASE_URL=https://TU-DOMINIO-DE-API.com
+```
+
+Si la API y la web se sirven bajo el mismo dominio, deja `FULLTECH_API_BASE_URL`
+vacia y la tienda consultara `/website/public` en el mismo host.
+
+Healthcheck:
+
+```text
+/healthz
+```

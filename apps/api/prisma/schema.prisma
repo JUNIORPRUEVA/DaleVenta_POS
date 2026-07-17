@@ -468,17 +468,6 @@ enum ServiceOrderStatus {
   @@map("service_order_status")
 }
 
-enum OrderDocumentFlowStatus {
-  PENDING_PREPARATION   @map("pending_preparation")
-  READY_FOR_REVIEW      @map("ready_for_review")
-  READY_FOR_FINALIZATION @map("ready_for_finalization")
-  APPROVED              @map("approved")
-  REJECTED              @map("rejected")
-  SENT                  @map("sent")
-
-  @@map("order_document_flow_status")
-}
-
 enum ServiceEvidenceType {
   REFERENCIA_TEXTO  @map("referencia_texto")
   REFERENCIA_IMAGEN @map("referencia_imagen")
@@ -508,13 +497,13 @@ enum EmployeeWarningSeverity {
 }
 
 enum EmployeeWarningStatus {
-  DRAFT            @map("draft")
-  ISSUED           @map("issued")
+  DRAFT             @map("draft")
+  ISSUED            @map("issued")
   PENDING_SIGNATURE @map("pending_signature")
-  SIGNED           @map("signed")
-  REFUSED_TO_SIGN  @map("refused_to_sign")
-  ANNULLED         @map("annulled")
-  ARCHIVED         @map("archived")
+  SIGNED            @map("signed")
+  REFUSED_TO_SIGN   @map("refused_to_sign")
+  ANNULLED          @map("annulled")
+  ARCHIVED          @map("archived")
 
   @@map("employee_warning_status")
 }
@@ -548,101 +537,99 @@ enum EmployeeWarningSignatureType {
 }
 
 model User {
-  id               String   @id @default(uuid()) @db.Uuid
-  email            String   @unique
-  passwordHash     String
-  nombreCompleto   String
-  telefono         String
-  numeroFlota      String?
-  telefonoFamiliar String?
-  cedula           String?  @unique
-  fotoCedulaUrl    String?
-  fotoLicenciaUrl  String?
-  fotoPersonalUrl  String?
-  workContractSignatureUrl String?
-  workContractSignedAt     DateTime?
-  workContractVersion      String?
-  workContractJobTitle     String?
-  workContractSalary       String?
+  id                           String    @id @default(uuid()) @db.Uuid
+  email                        String    @unique
+  passwordHash                 String
+  nombreCompleto               String
+  telefono                     String
+  numeroFlota                  String?
+  telefonoFamiliar             String?
+  cedula                       String?   @unique
+  fotoCedulaUrl                String?
+  fotoLicenciaUrl              String?
+  fotoPersonalUrl              String?
+  workContractSignatureUrl     String?
+  workContractSignedAt         DateTime?
+  workContractVersion          String?
+  workContractJobTitle         String?
+  workContractSalary           String?
   workContractPaymentFrequency String?
-  workContractPaymentMethod String?
-  workContractWorkSchedule String?
-  workContractWorkLocation String?
-  workContractClauseOverrides Json?
-  workContractCustomClauses String?
-  workContractStartDate    DateTime?
-  edad             Int
-  tieneHijos       Boolean  @default(false)
-  estaCasado       Boolean  @default(false)
-  casaPropia       Boolean  @default(false)
-  vehiculo         Boolean  @default(false)
-  licenciaConducir Boolean  @default(false)
-  fechaIngreso     DateTime?
-  fechaNacimiento  DateTime?
-  cuentaNominaPreferencial String?
-  habilidades      Json?
-  role             Role
-  blocked          Boolean  @default(false)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  workContractPaymentMethod    String?
+  workContractWorkSchedule     String?
+  workContractWorkLocation     String?
+  workContractClauseOverrides  Json?
+  workContractCustomClauses    String?
+  workContractStartDate        DateTime?
+  edad                         Int
+  tieneHijos                   Boolean   @default(false)
+  estaCasado                   Boolean   @default(false)
+  casaPropia                   Boolean   @default(false)
+  vehiculo                     Boolean   @default(false)
+  licenciaConducir             Boolean   @default(false)
+  fechaIngreso                 DateTime?
+  fechaNacimiento              DateTime?
+  cuentaNominaPreferencial     String?
+  habilidades                  Json?
+  role                         Role
+  blocked                      Boolean   @default(false)
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
 
-  clients Client[]
-  payrollEmployees PayrollEmployee[] @relation("PayrollOwner")
-  confirmedServiceOrders ServiceOrder[] @relation("ServiceOrderConfirmedBy")
-  payrollProfile PayrollEmployee? @relation("PayrollEmployeeUser")
-  payrollPeriods PayrollPeriod[]
-  payrollEmployeeConfigs PayrollEmployeeConfig[]
-  payrollEntries PayrollEntry[]
-  employeeWarningsAssigned EmployeeWarning[] @relation("EmployeeWarningAssignedUser")
-  employeeWarningsCreated EmployeeWarning[] @relation("EmployeeWarningCreatedByUser")
-  employeeWarningsIssued EmployeeWarning[] @relation("EmployeeWarningIssuedByUser")
-  employeeWarningsAnnulled EmployeeWarning[] @relation("EmployeeWarningAnnulledByUser")
-  employeeWarningEvidencesUploaded EmployeeWarningEvidence[] @relation("EmployeeWarningEvidenceUploadedByUser")
-  employeeWarningSignatures EmployeeWarningSignature[] @relation("EmployeeWarningSignatureEmployeeUser")
-  employeeWarningAuditLogs EmployeeWarningAuditLog[] @relation("EmployeeWarningAuditActorUser")
-  marketingStoriesApproved MarketingDailyStory[] @relation("MarketingStoryApprovedByUser")
-  marketingActivityLogs MarketingActivityLog[] @relation("MarketingActivityLogActorUser")
-  marketingFlowConfigsUpdated MarketingFlowConfig[] @relation("MarketingFlowUpdatedByUser")
-  marketingResearchConfigs MarketingResearchConfig[] @relation("MarketingResearchConfigUpdatedByUser")
-  marketingResearchesForced MarketingResearch[]      @relation("MarketingResearchForcedByUser")
-  marketingResearchesApproved MarketingResearch[]    @relation("MarketingResearchApprovedByUser")
-  marketingCampaignsCreated MarketingAdCampaign[]    @relation("MarketingCampaignCreatedByUser")
-  marketingCampaignsUpdated MarketingAdCampaign[]    @relation("MarketingCampaignUpdatedByUser")
-  marketingSocialAccountsCreated MarketingSocialAccount[] @relation("MarketingSocialAccountCreatedByUser")
-  marketingSocialAccountsUpdated MarketingSocialAccount[] @relation("MarketingSocialAccountUpdatedByUser")
-  payrollEmployeePeriodStatuses PayrollEmployeePeriodStatus[]
-  payrollServiceCommissionRequestsOwned PayrollServiceCommissionRequest[] @relation("PayrollServiceCommissionOwner")
-  payrollServiceCommissionRequests PayrollServiceCommissionRequest[] @relation("PayrollServiceCommissionTechnicianUser")
-  payrollServiceCommissionRequestsCreated PayrollServiceCommissionRequest[] @relation("PayrollServiceCommissionCreatedByUser")
+  clients                                  Client[]
+  payrollEmployees                         PayrollEmployee[]                 @relation("PayrollOwner")
+  confirmedServiceOrders                   ServiceOrder[]                    @relation("ServiceOrderConfirmedBy")
+  payrollProfile                           PayrollEmployee?                  @relation("PayrollEmployeeUser")
+  payrollPeriods                           PayrollPeriod[]
+  payrollEmployeeConfigs                   PayrollEmployeeConfig[]
+  payrollEntries                           PayrollEntry[]
+  employeeWarningsAssigned                 EmployeeWarning[]                 @relation("EmployeeWarningAssignedUser")
+  employeeWarningsCreated                  EmployeeWarning[]                 @relation("EmployeeWarningCreatedByUser")
+  employeeWarningsIssued                   EmployeeWarning[]                 @relation("EmployeeWarningIssuedByUser")
+  employeeWarningsAnnulled                 EmployeeWarning[]                 @relation("EmployeeWarningAnnulledByUser")
+  employeeWarningEvidencesUploaded         EmployeeWarningEvidence[]         @relation("EmployeeWarningEvidenceUploadedByUser")
+  employeeWarningSignatures                EmployeeWarningSignature[]        @relation("EmployeeWarningSignatureEmployeeUser")
+  employeeWarningAuditLogs                 EmployeeWarningAuditLog[]         @relation("EmployeeWarningAuditActorUser")
+  marketingStoriesApproved                 MarketingDailyStory[]             @relation("MarketingStoryApprovedByUser")
+  marketingActivityLogs                    MarketingActivityLog[]            @relation("MarketingActivityLogActorUser")
+  marketingFlowConfigsUpdated              MarketingFlowConfig[]             @relation("MarketingFlowUpdatedByUser")
+  marketingResearchConfigs                 MarketingResearchConfig[]         @relation("MarketingResearchConfigUpdatedByUser")
+  marketingResearchesForced                MarketingResearch[]               @relation("MarketingResearchForcedByUser")
+  marketingResearchesApproved              MarketingResearch[]               @relation("MarketingResearchApprovedByUser")
+  marketingCampaignsCreated                MarketingAdCampaign[]             @relation("MarketingCampaignCreatedByUser")
+  marketingCampaignsUpdated                MarketingAdCampaign[]             @relation("MarketingCampaignUpdatedByUser")
+  marketingSocialAccountsCreated           MarketingSocialAccount[]          @relation("MarketingSocialAccountCreatedByUser")
+  marketingSocialAccountsUpdated           MarketingSocialAccount[]          @relation("MarketingSocialAccountUpdatedByUser")
+  payrollEmployeePeriodStatuses            PayrollEmployeePeriodStatus[]
+  payrollServiceCommissionRequestsOwned    PayrollServiceCommissionRequest[] @relation("PayrollServiceCommissionOwner")
+  payrollServiceCommissionRequests         PayrollServiceCommissionRequest[] @relation("PayrollServiceCommissionTechnicianUser")
+  payrollServiceCommissionRequestsCreated  PayrollServiceCommissionRequest[] @relation("PayrollServiceCommissionCreatedByUser")
   payrollServiceCommissionRequestsReviewed PayrollServiceCommissionRequest[] @relation("PayrollServiceCommissionReviewedByUser")
-  punches Punch[]
-  sales Sale[]
-  saleCreditPayments SaleCreditPayment[]
-  deletedSales Sale[] @relation("SaleDeletedBy")
-  createdServices Service[] @relation("ServiceCreatedBy")
-  assignedServices ServiceAssignment[]
-  technicianServices Service[] @relation("ServiceTechnician")
-  serviceStepsDone ServiceStep[] @relation("ServiceStepDoneBy")
-  serviceUpdates ServiceUpdate[]
-  servicePhaseHistory ServicePhaseHistory[]
-  uploadedServiceFiles ServiceFile[]
-  createdServiceOrders ServiceOrder[] @relation("ServiceOrderCreatedBy")
-  assignedServiceOrders ServiceOrder[] @relation("ServiceOrderAssignedTo")
-  statusChangedServiceOrders ServiceOrder[] @relation("ServiceOrderLastStatusChangedBy")
-  serviceOrderStatusChanges ServiceOrderStatusHistory[] @relation("ServiceOrderStatusHistoryChangedBy")
-  createdServiceEvidences ServiceEvidence[] @relation("ServiceEvidenceCreatedBy")
-  createdServiceReports ServiceReport[] @relation("ServiceReportCreatedBy")
-  publicidadImagesUploaded PublicidadImage[] @relation("PublicidadImageUploadedBy")
-  preparedOrderDocumentFlows OrderDocumentFlow[] @relation("OrderDocumentFlowPreparedBy")
-  approvedOrderDocumentFlows OrderDocumentFlow[] @relation("OrderDocumentFlowApprovedBy")
-  serviceExecutionReports ServiceExecutionReport[]
-  serviceExecutionChanges ServiceExecutionChange[]
-  checklistExecutionsChecked ChecklistExecution[] @relation("ChecklistExecutionCheckedBy")
-  cotizaciones Cotizacion[]
-  location UserLocation?
+  punches                                  Punch[]
+  sales                                    Sale[]
+  saleCreditPayments                       SaleCreditPayment[]
+  deletedSales                             Sale[]                            @relation("SaleDeletedBy")
+  createdServices                          Service[]                         @relation("ServiceCreatedBy")
+  assignedServices                         ServiceAssignment[]
+  technicianServices                       Service[]                         @relation("ServiceTechnician")
+  serviceStepsDone                         ServiceStep[]                     @relation("ServiceStepDoneBy")
+  serviceUpdates                           ServiceUpdate[]
+  servicePhaseHistory                      ServicePhaseHistory[]
+  uploadedServiceFiles                     ServiceFile[]
+  createdServiceOrders                     ServiceOrder[]                    @relation("ServiceOrderCreatedBy")
+  assignedServiceOrders                    ServiceOrder[]                    @relation("ServiceOrderAssignedTo")
+  statusChangedServiceOrders               ServiceOrder[]                    @relation("ServiceOrderLastStatusChangedBy")
+  serviceOrderStatusChanges                ServiceOrderStatusHistory[]       @relation("ServiceOrderStatusHistoryChangedBy")
+  createdServiceEvidences                  ServiceEvidence[]                 @relation("ServiceEvidenceCreatedBy")
+  createdServiceReports                    ServiceReport[]                   @relation("ServiceReportCreatedBy")
+  publicidadImagesUploaded                 PublicidadImage[]                 @relation("PublicidadImageUploadedBy")
+  serviceExecutionReports                  ServiceExecutionReport[]
+  serviceExecutionChanges                  ServiceExecutionChange[]
+  checklistExecutionsChecked               ChecklistExecution[]              @relation("ChecklistExecutionCheckedBy")
+  cotizaciones                             Cotizacion[]
+  location                                 UserLocation?
 
-  vehiculosPropios Vehiculo[] @relation("VehiculoPropietario")
-  salidasTecnicas SalidaTecnica[]
+  vehiculosPropios         Vehiculo[]               @relation("VehiculoPropietario")
+  salidasTecnicas          SalidaTecnica[]
   pagosCombustibleTecnicos PagoCombustibleTecnico[]
 
   notificationOutbox NotificationOutbox[]
@@ -652,104 +639,104 @@ model User {
 
   technicalVisits TechnicalVisit[] @relation("TechnicalVisitTechnician")
 
-  crmCommercialCustomersAssigned CrmCommercialCustomer[] @relation("CrmCommercialResponsibleUser")
-  crmCommercialCustomersCreated CrmCommercialCustomer[] @relation("CrmCommercialCreatedByUser")
-  crmCommercialStatusChanges CrmCommercialStatusHistory[] @relation("CrmCommercialStatusChangedByUser")
-  crmCommercialNotes CrmCommercialNote[] @relation("CrmCommercialNoteAuthorUser")
-  crmCommercialActivitiesAssigned CrmCommercialActivity[] @relation("CrmCommercialActivityAssignedToUser")
-  crmCommercialActivitiesCreated CrmCommercialActivity[] @relation("CrmCommercialActivityCreatedByUser")
-  crmCommercialFollowupTasksAssigned  CrmCommercialFollowupTask[] @relation("CrmFollowupTaskAssignedUser")
-  crmCommercialFollowupTasksCreated   CrmCommercialFollowupTask[] @relation("CrmFollowupTaskCreatedByUser")
-  crmCommercialFollowupTasksCompleted CrmCommercialFollowupTask[] @relation("CrmFollowupTaskCompletedByUser")
-  crmCommercialSettingsUpdated CrmCommercialSetting[] @relation("CrmCommercialSettingsUpdatedByUser")
-  crmCommercialLibraryItemsCreated CrmCommercialLibraryItem[] @relation("CrmCommercialLibraryCreatedByUser")
-  crmCommercialLibraryItemsUpdated CrmCommercialLibraryItem[] @relation("CrmCommercialLibraryUpdatedByUser")
+  crmCommercialCustomersAssigned      CrmCommercialCustomer[]      @relation("CrmCommercialResponsibleUser")
+  crmCommercialCustomersCreated       CrmCommercialCustomer[]      @relation("CrmCommercialCreatedByUser")
+  crmCommercialStatusChanges          CrmCommercialStatusHistory[] @relation("CrmCommercialStatusChangedByUser")
+  crmCommercialNotes                  CrmCommercialNote[]          @relation("CrmCommercialNoteAuthorUser")
+  crmCommercialActivitiesAssigned     CrmCommercialActivity[]      @relation("CrmCommercialActivityAssignedToUser")
+  crmCommercialActivitiesCreated      CrmCommercialActivity[]      @relation("CrmCommercialActivityCreatedByUser")
+  crmCommercialFollowupTasksAssigned  CrmCommercialFollowupTask[]  @relation("CrmFollowupTaskAssignedUser")
+  crmCommercialFollowupTasksCreated   CrmCommercialFollowupTask[]  @relation("CrmFollowupTaskCreatedByUser")
+  crmCommercialFollowupTasksCompleted CrmCommercialFollowupTask[]  @relation("CrmFollowupTaskCompletedByUser")
+  crmCommercialSettingsUpdated        CrmCommercialSetting[]       @relation("CrmCommercialSettingsUpdatedByUser")
+  crmCommercialLibraryItemsCreated    CrmCommercialLibraryItem[]   @relation("CrmCommercialLibraryCreatedByUser")
+  crmCommercialLibraryItemsUpdated    CrmCommercialLibraryItem[]   @relation("CrmCommercialLibraryUpdatedByUser")
 
-  workEmployeeConfig WorkEmployeeConfig?
+  workEmployeeConfig     WorkEmployeeConfig?
   warrantyProductConfigs WarrantyProductConfig[]
-  whatsappInstance UserWhatsappInstance?
+  whatsappInstance       UserWhatsappInstance?
 
   @@map("users")
 }
 
 model EmployeeWarning {
-  id                    String                       @id @default(uuid()) @db.Uuid
-  companyId             String                       @map("company_id") @db.Uuid
-  employeeUserId        String                       @map("employee_user_id") @db.Uuid
-  createdByUserId       String                       @map("created_by_user_id") @db.Uuid
-  warningNumber         String                       @map("warning_number")
-  warningDate           DateTime                     @map("warning_date")
-  incidentDate          DateTime                     @map("incident_date")
-  title                 String
-  category              EmployeeWarningCategory
-  severity              EmployeeWarningSeverity
-  legalBasis            String?                      @db.Text @map("legal_basis")
-  internalRuleReference String?                      @db.Text @map("internal_rule_reference")
-  description           String                       @db.Text
-  employeeExplanation   String?                      @db.Text @map("employee_explanation")
-  correctiveAction      String?                      @db.Text @map("corrective_action")
-  consequenceNote       String?                      @db.Text @map("consequence_note")
-  evidenceNotes         String?                      @db.Text @map("evidence_notes")
-  warningType           EmployeeWarningType          @default(WRITTEN) @map("warning_type")
-  reason                String?                      @db.Text
-  details               String?                      @db.Text
-  incidentTime          String?                      @map("incident_time")
-  incidentPlace         String?                      @db.Text @map("incident_place")
-  issuedByUserId        String?                      @map("issued_by_user_id") @db.Uuid
-  issuedByNameSnapshot  String?                      @db.Text @map("issued_by_name_snapshot")
-  issuedByPositionSnapshot String?                   @db.Text @map("issued_by_position_snapshot")
-  internalNotes         String?                      @db.Text @map("internal_notes")
-  generatedText         String?                      @db.Text @map("generated_text")
-  employeeNameSnapshot  String?                      @db.Text @map("employee_name_snapshot")
-  employeeCedulaSnapshot String?                     @db.Text @map("employee_cedula_snapshot")
-  employeePositionSnapshot String?                   @db.Text @map("employee_position_snapshot")
-  employeeDepartmentSnapshot String?                 @db.Text @map("employee_department_snapshot")
-  employeePhoneSnapshot String?                      @db.Text @map("employee_phone_snapshot")
-  companyNameSnapshot   String?                      @db.Text @map("company_name_snapshot")
-  companyRncSnapshot    String?                      @db.Text @map("company_rnc_snapshot")
-  companyAddressSnapshot String?                     @db.Text @map("company_address_snapshot")
-  deletedAt             DateTime?                    @map("deleted_at")
-  status                EmployeeWarningStatus        @default(DRAFT)
-  pdfUrl                String?                      @db.Text @map("pdf_url")
-  signedPdfUrl          String?                      @db.Text @map("signed_pdf_url")
-  createdAt             DateTime                     @default(now()) @map("created_at")
-  updatedAt             DateTime                     @updatedAt @map("updated_at")
-  submittedAt           DateTime?                    @map("submitted_at")
-  signedAt              DateTime?                    @map("signed_at")
-  refusedAt             DateTime?                    @map("refused_at")
-  annulledAt            DateTime?                    @map("annulled_at")
-  annulledByUserId      String?                      @map("annulled_by_user_id") @db.Uuid
-  annulmentReason       String?                      @db.Text @map("annulment_reason")
+  id                         String                  @id @default(uuid()) @db.Uuid
+  companyId                  String                  @map("company_id") @db.Uuid
+  employeeUserId             String                  @map("employee_user_id") @db.Uuid
+  createdByUserId            String                  @map("created_by_user_id") @db.Uuid
+  warningNumber              String                  @map("warning_number")
+  warningDate                DateTime                @map("warning_date")
+  incidentDate               DateTime                @map("incident_date")
+  title                      String
+  category                   EmployeeWarningCategory
+  severity                   EmployeeWarningSeverity
+  legalBasis                 String?                 @map("legal_basis") @db.Text
+  internalRuleReference      String?                 @map("internal_rule_reference") @db.Text
+  description                String                  @db.Text
+  employeeExplanation        String?                 @map("employee_explanation") @db.Text
+  correctiveAction           String?                 @map("corrective_action") @db.Text
+  consequenceNote            String?                 @map("consequence_note") @db.Text
+  evidenceNotes              String?                 @map("evidence_notes") @db.Text
+  warningType                EmployeeWarningType     @default(WRITTEN) @map("warning_type")
+  reason                     String?                 @db.Text
+  details                    String?                 @db.Text
+  incidentTime               String?                 @map("incident_time")
+  incidentPlace              String?                 @map("incident_place") @db.Text
+  issuedByUserId             String?                 @map("issued_by_user_id") @db.Uuid
+  issuedByNameSnapshot       String?                 @map("issued_by_name_snapshot") @db.Text
+  issuedByPositionSnapshot   String?                 @map("issued_by_position_snapshot") @db.Text
+  internalNotes              String?                 @map("internal_notes") @db.Text
+  generatedText              String?                 @map("generated_text") @db.Text
+  employeeNameSnapshot       String?                 @map("employee_name_snapshot") @db.Text
+  employeeCedulaSnapshot     String?                 @map("employee_cedula_snapshot") @db.Text
+  employeePositionSnapshot   String?                 @map("employee_position_snapshot") @db.Text
+  employeeDepartmentSnapshot String?                 @map("employee_department_snapshot") @db.Text
+  employeePhoneSnapshot      String?                 @map("employee_phone_snapshot") @db.Text
+  companyNameSnapshot        String?                 @map("company_name_snapshot") @db.Text
+  companyRncSnapshot         String?                 @map("company_rnc_snapshot") @db.Text
+  companyAddressSnapshot     String?                 @map("company_address_snapshot") @db.Text
+  deletedAt                  DateTime?               @map("deleted_at")
+  status                     EmployeeWarningStatus   @default(DRAFT)
+  pdfUrl                     String?                 @map("pdf_url") @db.Text
+  signedPdfUrl               String?                 @map("signed_pdf_url") @db.Text
+  createdAt                  DateTime                @default(now()) @map("created_at")
+  updatedAt                  DateTime                @updatedAt @map("updated_at")
+  submittedAt                DateTime?               @map("submitted_at")
+  signedAt                   DateTime?               @map("signed_at")
+  refusedAt                  DateTime?               @map("refused_at")
+  annulledAt                 DateTime?               @map("annulled_at")
+  annulledByUserId           String?                 @map("annulled_by_user_id") @db.Uuid
+  annulmentReason            String?                 @map("annulment_reason") @db.Text
 
-  employeeUser          User                         @relation("EmployeeWarningAssignedUser", fields: [employeeUserId], references: [id], onDelete: Restrict)
-  createdByUser         User                         @relation("EmployeeWarningCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  issuedByUser          User?                        @relation("EmployeeWarningIssuedByUser", fields: [issuedByUserId], references: [id], onDelete: SetNull)
-  annulledByUser        User?                        @relation("EmployeeWarningAnnulledByUser", fields: [annulledByUserId], references: [id], onDelete: SetNull)
-  evidences             EmployeeWarningEvidence[]
-  signatures            EmployeeWarningSignature[]
-  auditLogs             EmployeeWarningAuditLog[]
+  employeeUser   User                       @relation("EmployeeWarningAssignedUser", fields: [employeeUserId], references: [id], onDelete: Restrict)
+  createdByUser  User                       @relation("EmployeeWarningCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  issuedByUser   User?                      @relation("EmployeeWarningIssuedByUser", fields: [issuedByUserId], references: [id], onDelete: SetNull)
+  annulledByUser User?                      @relation("EmployeeWarningAnnulledByUser", fields: [annulledByUserId], references: [id], onDelete: SetNull)
+  evidences      EmployeeWarningEvidence[]
+  signatures     EmployeeWarningSignature[]
+  auditLogs      EmployeeWarningAuditLog[]
 
+  @@unique([companyId, warningNumber])
   @@index([companyId, employeeUserId])
   @@index([companyId, status])
   @@index([companyId, warningType])
   @@index([issuedByUserId])
   @@index([companyId, createdAt])
-  @@unique([companyId, warningNumber])
   @@map("employee_warnings")
 }
 
 model EmployeeWarningEvidence {
-  id               String           @id @default(uuid()) @db.Uuid
-  warningId        String           @map("warning_id") @db.Uuid
-  fileUrl          String           @db.Text @map("file_url")
-  fileName         String           @map("file_name")
-  fileType         String           @map("file_type")
-  storageKey       String?          @map("storage_key")
-  uploadedByUserId String           @map("uploaded_by_user_id") @db.Uuid
-  createdAt        DateTime         @default(now()) @map("created_at")
+  id               String   @id @default(uuid()) @db.Uuid
+  warningId        String   @map("warning_id") @db.Uuid
+  fileUrl          String   @map("file_url") @db.Text
+  fileName         String   @map("file_name")
+  fileType         String   @map("file_type")
+  storageKey       String?  @map("storage_key")
+  uploadedByUserId String   @map("uploaded_by_user_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at")
 
-  warning          EmployeeWarning  @relation(fields: [warningId], references: [id], onDelete: Cascade)
-  uploadedByUser   User             @relation("EmployeeWarningEvidenceUploadedByUser", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  warning        EmployeeWarning @relation(fields: [warningId], references: [id], onDelete: Cascade)
+  uploadedByUser User            @relation("EmployeeWarningEvidenceUploadedByUser", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
 
   @@index([warningId, createdAt])
   @@map("employee_warning_evidences")
@@ -760,33 +747,33 @@ model EmployeeWarningSignature {
   warningId         String                       @map("warning_id") @db.Uuid
   employeeUserId    String                       @map("employee_user_id") @db.Uuid
   signatureType     EmployeeWarningSignatureType @map("signature_type")
-  signatureImageUrl String?                      @db.Text @map("signature_image_url")
+  signatureImageUrl String?                      @map("signature_image_url") @db.Text
   typedName         String                       @map("typed_name")
   comment           String?                      @db.Text
   ipAddress         String?                      @map("ip_address")
-  deviceInfo        String?                      @db.Text @map("device_info")
+  deviceInfo        String?                      @map("device_info") @db.Text
   signedAt          DateTime                     @map("signed_at")
   createdAt         DateTime                     @default(now()) @map("created_at")
 
-  warning           EmployeeWarning              @relation(fields: [warningId], references: [id], onDelete: Cascade)
-  employeeUser      User                         @relation("EmployeeWarningSignatureEmployeeUser", fields: [employeeUserId], references: [id], onDelete: Restrict)
+  warning      EmployeeWarning @relation(fields: [warningId], references: [id], onDelete: Cascade)
+  employeeUser User            @relation("EmployeeWarningSignatureEmployeeUser", fields: [employeeUserId], references: [id], onDelete: Restrict)
 
   @@index([warningId, signedAt])
   @@map("employee_warning_signatures")
 }
 
 model EmployeeWarningAuditLog {
-  id          String           @id @default(uuid()) @db.Uuid
-  warningId   String           @map("warning_id") @db.Uuid
-  action      String
-  actorUserId String?          @map("actor_user_id") @db.Uuid
-  oldStatus   EmployeeWarningStatus? @map("old_status")
-  newStatus   EmployeeWarningStatus? @map("new_status")
-  metadataJson Json?           @map("metadata_json")
-  createdAt   DateTime         @default(now()) @map("created_at")
+  id           String                 @id @default(uuid()) @db.Uuid
+  warningId    String                 @map("warning_id") @db.Uuid
+  action       String
+  actorUserId  String?                @map("actor_user_id") @db.Uuid
+  oldStatus    EmployeeWarningStatus? @map("old_status")
+  newStatus    EmployeeWarningStatus? @map("new_status")
+  metadataJson Json?                  @map("metadata_json")
+  createdAt    DateTime               @default(now()) @map("created_at")
 
-  warning     EmployeeWarning  @relation(fields: [warningId], references: [id], onDelete: Cascade)
-  actorUser   User?            @relation("EmployeeWarningAuditActorUser", fields: [actorUserId], references: [id], onDelete: SetNull)
+  warning   EmployeeWarning @relation(fields: [warningId], references: [id], onDelete: Cascade)
+  actorUser User?           @relation("EmployeeWarningAuditActorUser", fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([warningId, createdAt])
   @@map("employee_warning_audit_logs")
@@ -815,61 +802,61 @@ model MarketingFlowConfig {
 }
 
 model MarketingDailyStory {
-  id               String               @id @default(uuid()) @db.Uuid
-  companyId        String               @map("company_id") @db.Uuid
-  date             DateTime             @db.Date
-  type             MarketingStoryType
-  title            String
-  shortText        String               @db.Text @map("short_text")
-  longText         String?              @db.Text @map("long_text")
-  hashtags         String[]             @default([])
-  imagePrompt      String?              @db.Text @map("image_prompt")
-  imageUrl         String?              @db.Text @map("image_url")
-  status           MarketingStoryStatus @default(PENDING)
-  generationAttempt Int                 @default(1) @map("generation_attempt")
-  approvedByUserId String?              @map("approved_by_user_id") @db.Uuid
-  approvedAt       DateTime?            @map("approved_at")
-  rejectedAt       DateTime?            @map("rejected_at")
-  createdAt        DateTime             @default(now()) @map("created_at")
-  updatedAt        DateTime             @updatedAt @map("updated_at")
+  id                String               @id @default(uuid()) @db.Uuid
+  companyId         String               @map("company_id") @db.Uuid
+  date              DateTime             @db.Date
+  type              MarketingStoryType
+  title             String
+  shortText         String               @map("short_text") @db.Text
+  longText          String?              @map("long_text") @db.Text
+  hashtags          String[]             @default([])
+  imagePrompt       String?              @map("image_prompt") @db.Text
+  imageUrl          String?              @map("image_url") @db.Text
+  status            MarketingStoryStatus @default(PENDING)
+  generationAttempt Int                  @default(1) @map("generation_attempt")
+  approvedByUserId  String?              @map("approved_by_user_id") @db.Uuid
+  approvedAt        DateTime?            @map("approved_at")
+  rejectedAt        DateTime?            @map("rejected_at")
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
 
-  researchId       String?              @map("research_id") @db.Uuid
-  mediaAssetId     String?              @map("media_asset_id") @db.Uuid
-  visualConcept    String?              @db.Text @map("visual_concept")
-  designNotes      String?              @db.Text @map("design_notes")
-  platformFormat   MarketingPlatformFormat @default(STORY_9_16) @map("platform_format")
-  imageStatus      MarketingImageStatus @default(PENDING) @map("image_status")
-  generatedImageUrl String?             @db.Text @map("generated_image_url")
-  generatedImageProvider String?        @map("generated_image_provider")
-  imageGenerationMetadata Json?         @map("image_generation_metadata")
-  usedResearchAngle String?             @db.Text @map("used_research_angle")
-  usedOffer        String?              @db.Text @map("used_offer")
-  usedCTA          String?              @db.Text @map("used_cta")
-  publishedAt      DateTime?            @map("published_at")
-  facebookStoryId  String?              @map("facebook_story_id")
-  facebookPostId   String?              @map("facebook_post_id")
-  instagramPostId  String?              @map("instagram_post_id")
-  instagramMediaId String?              @map("instagram_media_id")
-  instagramStoryId String?              @map("instagram_story_id")
-  instagramContainerId String?          @map("instagram_container_id")
-  instagramStoryContainerId String?     @map("instagram_story_container_id")
-  instagramStoryPublishedAt DateTime?   @map("instagram_story_published_at")
-  facebookStoryStatus String?           @map("facebook_story_status")
-  instagramStoryStatus String?          @map("instagram_story_status")
-  facebookPostStatus String?            @map("facebook_post_status")
-  instagramPostStatus String?           @map("instagram_post_status")
-  facebookStoryError String?            @db.Text @map("facebook_story_error")
-  publishedChannels String[]            @default([]) @map("published_channels")
-  publishTargets   String[]             @default([]) @map("publish_targets")
-  publishStatus    String               @default("PENDING") @map("publish_status")
-  publishError     String?              @db.Text @map("publish_error")
-  publishErrorCode String?              @map("publish_error_code")
-  publishErrorDetails Json?             @map("publish_error_details")
-  retryCount       Int                  @default(0) @map("retry_count")
+  researchId                String?                 @map("research_id") @db.Uuid
+  mediaAssetId              String?                 @map("media_asset_id") @db.Uuid
+  visualConcept             String?                 @map("visual_concept") @db.Text
+  designNotes               String?                 @map("design_notes") @db.Text
+  platformFormat            MarketingPlatformFormat @default(STORY_9_16) @map("platform_format")
+  imageStatus               MarketingImageStatus    @default(PENDING) @map("image_status")
+  generatedImageUrl         String?                 @map("generated_image_url") @db.Text
+  generatedImageProvider    String?                 @map("generated_image_provider")
+  imageGenerationMetadata   Json?                   @map("image_generation_metadata")
+  usedResearchAngle         String?                 @map("used_research_angle") @db.Text
+  usedOffer                 String?                 @map("used_offer") @db.Text
+  usedCTA                   String?                 @map("used_cta") @db.Text
+  publishedAt               DateTime?               @map("published_at")
+  facebookStoryId           String?                 @map("facebook_story_id")
+  facebookPostId            String?                 @map("facebook_post_id")
+  instagramPostId           String?                 @map("instagram_post_id")
+  instagramMediaId          String?                 @map("instagram_media_id")
+  instagramStoryId          String?                 @map("instagram_story_id")
+  instagramContainerId      String?                 @map("instagram_container_id")
+  instagramStoryContainerId String?                 @map("instagram_story_container_id")
+  instagramStoryPublishedAt DateTime?               @map("instagram_story_published_at")
+  facebookStoryStatus       String?                 @map("facebook_story_status")
+  instagramStoryStatus      String?                 @map("instagram_story_status")
+  facebookPostStatus        String?                 @map("facebook_post_status")
+  instagramPostStatus       String?                 @map("instagram_post_status")
+  facebookStoryError        String?                 @map("facebook_story_error") @db.Text
+  publishedChannels         String[]                @default([]) @map("published_channels")
+  publishTargets            String[]                @default([]) @map("publish_targets")
+  publishStatus             String                  @default("PENDING") @map("publish_status")
+  publishError              String?                 @map("publish_error") @db.Text
+  publishErrorCode          String?                 @map("publish_error_code")
+  publishErrorDetails       Json?                   @map("publish_error_details")
+  retryCount                Int                     @default(0) @map("retry_count")
 
-  approvedByUser User? @relation("MarketingStoryApprovedByUser", fields: [approvedByUserId], references: [id], onDelete: SetNull)
-  research         MarketingResearch?   @relation(fields: [researchId], references: [id], onDelete: SetNull)
-  mediaAsset       MarketingMediaAsset? @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  approvedByUser User?                @relation("MarketingStoryApprovedByUser", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  research       MarketingResearch?   @relation(fields: [researchId], references: [id], onDelete: SetNull)
+  mediaAsset     MarketingMediaAsset? @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
 
   @@unique([companyId, date, type])
   @@index([companyId, date, status])
@@ -880,25 +867,25 @@ model MarketingDailyStory {
 }
 
 model MarketingMediaAsset {
-  id              String   @id @default(uuid()) @db.Uuid
-  companyId       String   @map("company_id") @db.Uuid
-  fileUrl         String   @db.Text @map("file_url")
-  thumbnailUrl    String?  @db.Text @map("thumbnail_url")
-  fileName        String   @map("file_name")
-  mimeType        String   @map("mime_type")
-  category        String
-  relatedService  String?  @map("related_service")
-  tags            Json?    
-  description     String?  @db.Text
-  isActive        Boolean  @default(true) @map("is_active")
-  isFeatured      Boolean  @default(false) @map("is_featured")
-  useCount        Int      @default(0) @map("use_count")
-  lastUsedAt      DateTime? @map("last_used_at")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id             String    @id @default(uuid()) @db.Uuid
+  companyId      String    @map("company_id") @db.Uuid
+  fileUrl        String    @map("file_url") @db.Text
+  thumbnailUrl   String?   @map("thumbnail_url") @db.Text
+  fileName       String    @map("file_name")
+  mimeType       String    @map("mime_type")
+  category       String
+  relatedService String?   @map("related_service")
+  tags           Json?
+  description    String?   @db.Text
+  isActive       Boolean   @default(true) @map("is_active")
+  isFeatured     Boolean   @default(false) @map("is_featured")
+  useCount       Int       @default(0) @map("use_count")
+  lastUsedAt     DateTime? @map("last_used_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  stories         MarketingDailyStory[]
-  campaigns       MarketingAdCampaign[]
+  stories   MarketingDailyStory[]
+  campaigns MarketingAdCampaign[]
 
   @@index([companyId, isActive, isFeatured])
   @@index([companyId, category, relatedService])
@@ -907,58 +894,58 @@ model MarketingMediaAsset {
 }
 
 model MarketingAdCampaign {
-  id                    String                    @id @default(uuid()) @db.Uuid
-  companyId             String                    @map("company_id") @db.Uuid
-  date                  DateTime                  @db.Date
-  campaignType          MarketingCampaignType     @default(META_ADS) @map("campaign_type")
-  status                MarketingCampaignStatus   @default(DRAFT)
-  phase                 MarketingCampaignPhase    @default(DESIGN)
-  baseImageUrl          String?                   @db.Text @map("base_image_url")
-  finalDesignUrl        String?                   @db.Text @map("final_design_url")
-  galleryAssetId        String?                   @map("gallery_asset_id") @db.Uuid
-  headline              String?
-  primaryText           String?                   @db.Text @map("primary_text")
-  description           String?                   @db.Text
-  cta                   String?
-  hashtags              String[]                  @default([])
-  aiAngle               String?                   @db.Text @map("ai_angle")
-  aiResearchId          String?                   @map("ai_research_id") @db.Uuid
-  recommendedAudienceJson Json?                   @map("recommended_audience_json")
-  finalAudienceJson     Json?                     @map("final_audience_json")
-  dailyBudget           Decimal?                  @db.Decimal(12, 2) @map("daily_budget")
-  totalBudget           Decimal?                  @db.Decimal(12, 2) @map("total_budget")
-  currency              MarketingCampaignCurrency @default(DOP)
-  whatsappPhone         String?                   @map("whatsapp_phone")
-  whatsappMessageTemplate String?                 @db.Text @map("whatsapp_message_template")
-  destinationUrl        String?                   @db.Text @map("destination_url")
-  startTime             DateTime?                 @map("start_time")
-  endTime               DateTime?                 @map("end_time")
-  keepRunningUntilPaused Boolean                  @default(true) @map("keep_running_until_paused")
-  metaCampaignId        String?                   @map("meta_campaign_id")
-  metaAdSetId           String?                   @map("meta_ad_set_id")
-  metaCreativeId        String?                   @map("meta_creative_id")
-  metaAdId              String?                   @map("meta_ad_id")
-  metaImageHash         String?                   @map("meta_image_hash")
-  metaVideoId           String?                   @map("meta_video_id")
-  metaMediaType         String?                   @map("meta_media_type")
-  metaMediaUrl          String?                   @db.Text @map("meta_media_url")
-  metaMediaUploadStatus String?                   @map("meta_media_upload_status")
-  metaPublishProgressJson Json?                   @map("meta_publish_progress_json")
-  metaStatus            String?                   @map("meta_status")
-  metaError             String?                   @db.Text @map("meta_error")
-  metaErrorCode         String?                   @map("meta_error_code")
-  metaErrorSubcode      String?                   @map("meta_error_subcode")
-  fbtraceId             String?                   @map("fbtrace_id")
-  createdByUserId       String?                   @map("created_by_user_id") @db.Uuid
-  updatedByUserId       String?                   @map("updated_by_user_id") @db.Uuid
-  publishedAt           DateTime?                 @map("published_at")
-  createdAt             DateTime                  @default(now()) @map("created_at")
-  updatedAt             DateTime                  @updatedAt @map("updated_at")
+  id                      String                    @id @default(uuid()) @db.Uuid
+  companyId               String                    @map("company_id") @db.Uuid
+  date                    DateTime                  @db.Date
+  campaignType            MarketingCampaignType     @default(META_ADS) @map("campaign_type")
+  status                  MarketingCampaignStatus   @default(DRAFT)
+  phase                   MarketingCampaignPhase    @default(DESIGN)
+  baseImageUrl            String?                   @map("base_image_url") @db.Text
+  finalDesignUrl          String?                   @map("final_design_url") @db.Text
+  galleryAssetId          String?                   @map("gallery_asset_id") @db.Uuid
+  headline                String?
+  primaryText             String?                   @map("primary_text") @db.Text
+  description             String?                   @db.Text
+  cta                     String?
+  hashtags                String[]                  @default([])
+  aiAngle                 String?                   @map("ai_angle") @db.Text
+  aiResearchId            String?                   @map("ai_research_id") @db.Uuid
+  recommendedAudienceJson Json?                     @map("recommended_audience_json")
+  finalAudienceJson       Json?                     @map("final_audience_json")
+  dailyBudget             Decimal?                  @map("daily_budget") @db.Decimal(12, 2)
+  totalBudget             Decimal?                  @map("total_budget") @db.Decimal(12, 2)
+  currency                MarketingCampaignCurrency @default(DOP)
+  whatsappPhone           String?                   @map("whatsapp_phone")
+  whatsappMessageTemplate String?                   @map("whatsapp_message_template") @db.Text
+  destinationUrl          String?                   @map("destination_url") @db.Text
+  startTime               DateTime?                 @map("start_time")
+  endTime                 DateTime?                 @map("end_time")
+  keepRunningUntilPaused  Boolean                   @default(true) @map("keep_running_until_paused")
+  metaCampaignId          String?                   @map("meta_campaign_id")
+  metaAdSetId             String?                   @map("meta_ad_set_id")
+  metaCreativeId          String?                   @map("meta_creative_id")
+  metaAdId                String?                   @map("meta_ad_id")
+  metaImageHash           String?                   @map("meta_image_hash")
+  metaVideoId             String?                   @map("meta_video_id")
+  metaMediaType           String?                   @map("meta_media_type")
+  metaMediaUrl            String?                   @map("meta_media_url") @db.Text
+  metaMediaUploadStatus   String?                   @map("meta_media_upload_status")
+  metaPublishProgressJson Json?                     @map("meta_publish_progress_json")
+  metaStatus              String?                   @map("meta_status")
+  metaError               String?                   @map("meta_error") @db.Text
+  metaErrorCode           String?                   @map("meta_error_code")
+  metaErrorSubcode        String?                   @map("meta_error_subcode")
+  fbtraceId               String?                   @map("fbtrace_id")
+  createdByUserId         String?                   @map("created_by_user_id") @db.Uuid
+  updatedByUserId         String?                   @map("updated_by_user_id") @db.Uuid
+  publishedAt             DateTime?                 @map("published_at")
+  createdAt               DateTime                  @default(now()) @map("created_at")
+  updatedAt               DateTime                  @updatedAt @map("updated_at")
 
-  mediaAsset            MarketingMediaAsset?      @relation(fields: [galleryAssetId], references: [id], onDelete: SetNull)
-  research              MarketingResearch?        @relation(fields: [aiResearchId], references: [id], onDelete: SetNull)
-  createdByUser         User?                     @relation("MarketingCampaignCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  updatedByUser         User?                     @relation("MarketingCampaignUpdatedByUser", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  mediaAsset    MarketingMediaAsset? @relation(fields: [galleryAssetId], references: [id], onDelete: SetNull)
+  research      MarketingResearch?   @relation(fields: [aiResearchId], references: [id], onDelete: SetNull)
+  createdByUser User?                @relation("MarketingCampaignCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedByUser User?                @relation("MarketingCampaignUpdatedByUser", fields: [updatedByUserId], references: [id], onDelete: SetNull)
 
   @@index([companyId, date])
   @@index([companyId, status, updatedAt])
@@ -974,12 +961,12 @@ model MarketingSocialAccount {
   type              MarketingSocialAccountType
   accountName       String                     @map("account_name")
   username          String?                    @map("username")
-  passwordEncrypted String?                    @db.Text @map("password_encrypted")
-  profileLink       String?                    @db.Text @map("profile_link")
+  passwordEncrypted String?                    @map("password_encrypted") @db.Text
+  profileLink       String?                    @map("profile_link") @db.Text
   whatsappNumber    String?                    @map("whatsapp_number")
-  whatsappWaLink    String?                    @db.Text @map("whatsapp_wa_link")
-  observations      String?                    @db.Text @map("observations")
-  avatarUrl         String?                    @db.Text @map("avatar_url")
+  whatsappWaLink    String?                    @map("whatsapp_wa_link") @db.Text
+  observations      String?                    @map("observations") @db.Text
+  avatarUrl         String?                    @map("avatar_url") @db.Text
   isActive          Boolean                    @default(true) @map("is_active")
   createdByUserId   String?                    @map("created_by_user_id") @db.Uuid
   updatedByUserId   String?                    @map("updated_by_user_id") @db.Uuid
@@ -1013,35 +1000,35 @@ model MarketingActivityLog {
 }
 
 model MarketingResearchConfig {
-  id                     String   @id @default(uuid()) @db.Uuid
-  companyId              String   @unique @map("company_id") @db.Uuid
-  defaultResearchPrompt  String   @db.Text @map("default_research_prompt")
-  businessName           String   @default("FULLTECH SRL") @map("business_name")
-  businessLocation       String   @default("Higüey, La Altagracia, República Dominicana") @map("business_location")
-  businessDescription    String?  @db.Text @map("business_description")
-  mainServices           String[] @default([]) @map("main_services")
-  priorityServices       String[] @default([]) @map("priority_services")
-  targetMarket           String?  @db.Text @map("target_market")
-  brandTone              String   @default("Profesional, confiable, claro, dominicano, directo, moderno, orientado a ventas.") @map("brand_tone")
-  learningEnabled        Boolean  @default(true) @map("learning_enabled")
-  researchFrequencyDays  Int      @default(7) @map("research_frequency_days")
-  requireApproval        Boolean  @default(false) @map("require_approval")
-  phone                  String?  @db.Text
-  address                String?  @db.Text
-  city                   String   @default("Higüey")
-  province               String   @default("La Altagracia")
-  country                String   @default("República Dominicana")
-  latitude               Float?
-  longitude              Float?
-  serviceRadiusKm        Int      @default(25) @map("service_radius_km")
-  serviceZones           String[] @default([]) @map("service_zones")
-  defaultCTA             String?  @db.Text @map("default_cta")
-  brandColors            String[] @default([]) @map("brand_colors")
-  businessHours          String?  @db.Text @map("business_hours")
-  internalNotes          String?  @db.Text @map("internal_notes")
-  updatedByUserId        String?  @map("updated_by_user_id") @db.Uuid
-  createdAt              DateTime @default(now()) @map("created_at")
-  updatedAt              DateTime @updatedAt @map("updated_at")
+  id                    String   @id @default(uuid()) @db.Uuid
+  companyId             String   @unique @map("company_id") @db.Uuid
+  defaultResearchPrompt String   @map("default_research_prompt") @db.Text
+  businessName          String   @default("FULLTECH SRL") @map("business_name")
+  businessLocation      String   @default("Higüey, La Altagracia, República Dominicana") @map("business_location")
+  businessDescription   String?  @map("business_description") @db.Text
+  mainServices          String[] @default([]) @map("main_services")
+  priorityServices      String[] @default([]) @map("priority_services")
+  targetMarket          String?  @map("target_market") @db.Text
+  brandTone             String   @default("Profesional, confiable, claro, dominicano, directo, moderno, orientado a ventas.") @map("brand_tone")
+  learningEnabled       Boolean  @default(true) @map("learning_enabled")
+  researchFrequencyDays Int      @default(7) @map("research_frequency_days")
+  requireApproval       Boolean  @default(false) @map("require_approval")
+  phone                 String?  @db.Text
+  address               String?  @db.Text
+  city                  String   @default("Higüey")
+  province              String   @default("La Altagracia")
+  country               String   @default("República Dominicana")
+  latitude              Float?
+  longitude             Float?
+  serviceRadiusKm       Int      @default(25) @map("service_radius_km")
+  serviceZones          String[] @default([]) @map("service_zones")
+  defaultCTA            String?  @map("default_cta") @db.Text
+  brandColors           String[] @default([]) @map("brand_colors")
+  businessHours         String?  @map("business_hours") @db.Text
+  internalNotes         String?  @map("internal_notes") @db.Text
+  updatedByUserId       String?  @map("updated_by_user_id") @db.Uuid
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
 
   updatedByUser User? @relation("MarketingResearchConfigUpdatedByUser", fields: [updatedByUserId], references: [id], onDelete: SetNull)
 
@@ -1052,19 +1039,19 @@ model MarketingResearch {
   id                           String                  @id @default(uuid()) @db.Uuid
   companyId                    String                  @map("company_id") @db.Uuid
   date                         DateTime                @db.Date
-  researchPrompt               String                  @db.Text @map("research_prompt")
+  researchPrompt               String                  @map("research_prompt") @db.Text
   businessSnapshot             Json?                   @map("business_snapshot")
   country                      String                  @default("República Dominicana")
   city                         String                  @default("Higüey")
-  mainFocus                    String?                 @db.Text @map("main_focus")
+  mainFocus                    String?                 @map("main_focus") @db.Text
   servicesAnalyzed             Json?                   @map("services_analyzed")
-  marketSummary                String?                 @db.Text @map("market_summary")
-  competitorPublishingPatterns String?                 @db.Text @map("competitor_publishing_patterns")
-  commonOffers                 String?                 @db.Text @map("common_offers")
-  observedPriceRanges          String?                 @db.Text @map("observed_price_ranges")
+  marketSummary                String?                 @map("market_summary") @db.Text
+  competitorPublishingPatterns String?                 @map("competitor_publishing_patterns") @db.Text
+  commonOffers                 String?                 @map("common_offers") @db.Text
+  observedPriceRanges          String?                 @map("observed_price_ranges") @db.Text
   strongAngles                 Json?                   @map("strong_angles")
   weakAngles                   Json?                   @map("weak_angles")
-  contentOpportunities         String?                 @db.Text @map("content_opportunities")
+  contentOpportunities         String?                 @map("content_opportunities") @db.Text
   recommendedProducts          Json?                   @map("recommended_products")
   recommendedContentTypes      Json?                   @map("recommended_content_types")
   recommendedOffers            Json?                   @map("recommended_offers")
@@ -1114,7 +1101,7 @@ model MarketingLearningMemory {
 
 model UserWhatsappInstance {
   id             String   @id @default(uuid()) @db.Uuid
-  userId         String   @unique @db.Uuid @map("user_id")
+  userId         String   @unique @map("user_id") @db.Uuid
   instanceName   String   @unique @map("instance_name")
   status         String   @default("pending")
   phoneNumber    String?  @map("phone_number")
@@ -1152,7 +1139,7 @@ enum WhatsappMessageType {
 
 model WhatsappConversation {
   id                  String    @id @default(uuid()) @db.Uuid
-  instanceId          String    @db.Uuid @map("instance_id")
+  instanceId          String    @map("instance_id") @db.Uuid
   remoteJid           String    @map("remote_jid")
   remotePhone         String?   @map("remote_phone")
   remoteName          String?   @map("remote_name")
@@ -1169,8 +1156,8 @@ model WhatsappConversation {
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  instance UserWhatsappInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-  messages WhatsappMessage[]
+  instance   UserWhatsappInstance       @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  messages   WhatsappMessage[]
   aiAnalyses WhatsappAiAnalysisReport[]
 
   @@unique([instanceId, remoteJid])
@@ -1180,32 +1167,32 @@ model WhatsappConversation {
 }
 
 model WhatsappMessage {
-  id             String                   @id @default(uuid()) @db.Uuid
-  conversationId String                   @db.Uuid @map("conversation_id")
-  evolutionId    String?                  @unique @map("evolution_id")
-  direction      WhatsappMessageDirection
-  messageType    WhatsappMessageType      @default(TEXT) @map("message_type")
-  body           String?                  @db.Text
-  mediaUrl       String?                  @db.Text @map("media_url")
-  mediaMimeType  String?                  @map("media_mime_type")
-  mediaStorageKey String?                  @map("media_storage_key")
-  mediaFileSize   Int?                     @map("media_file_size")
-  originalFileName String?                 @map("original_file_name")
-  playableStorageKey String?               @map("playable_storage_key")
-  playableMimeType String?                 @map("playable_mime_type")
-  mediaStatus     String?                  @map("media_status")
-  mediaError      String?                  @db.Text @map("media_error")
-  caption        String?                  @db.Text
-  senderName     String?                  @map("sender_name")
-  sentAt         DateTime                 @map("sent_at")
-  aiGenerated    Boolean                  @default(false) @map("ai_generated")
-  aiModel        String?                  @map("ai_model")
-  aiPromptVersion String?                 @map("ai_prompt_version")
-  aiError        String?                  @db.Text @map("ai_error")
-  createdAt      DateTime                 @default(now()) @map("created_at")
-  rawPayload     Json?                    @map("raw_payload")
+  id                 String                   @id @default(uuid()) @db.Uuid
+  conversationId     String                   @map("conversation_id") @db.Uuid
+  evolutionId        String?                  @unique @map("evolution_id")
+  direction          WhatsappMessageDirection
+  messageType        WhatsappMessageType      @default(TEXT) @map("message_type")
+  body               String?                  @db.Text
+  mediaUrl           String?                  @map("media_url") @db.Text
+  mediaMimeType      String?                  @map("media_mime_type")
+  mediaStorageKey    String?                  @map("media_storage_key")
+  mediaFileSize      Int?                     @map("media_file_size")
+  originalFileName   String?                  @map("original_file_name")
+  playableStorageKey String?                  @map("playable_storage_key")
+  playableMimeType   String?                  @map("playable_mime_type")
+  mediaStatus        String?                  @map("media_status")
+  mediaError         String?                  @map("media_error") @db.Text
+  caption            String?                  @db.Text
+  senderName         String?                  @map("sender_name")
+  sentAt             DateTime                 @map("sent_at")
+  aiGenerated        Boolean                  @default(false) @map("ai_generated")
+  aiModel            String?                  @map("ai_model")
+  aiPromptVersion    String?                  @map("ai_prompt_version")
+  aiError            String?                  @map("ai_error") @db.Text
+  createdAt          DateTime                 @default(now()) @map("created_at")
+  rawPayload         Json?                    @map("raw_payload")
 
-  conversation WhatsappConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation   WhatsappConversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   aiMediaSummary WhatsappAiMediaSummary?
 
   @@index([conversationId, sentAt(sort: Desc)])
@@ -1215,12 +1202,12 @@ model WhatsappMessage {
 
 model WhatsappAiMediaSummary {
   id                  String   @id @default(uuid()) @db.Uuid
-  messageId           String   @unique @db.Uuid @map("message_id")
+  messageId           String   @unique @map("message_id") @db.Uuid
   mediaType           String   @map("media_type")
   summary             String?  @db.Text
   evidence            Json?
   transcriptionStatus String   @default("not_applicable") @map("transcription_status")
-  transcriptionText   String?  @db.Text @map("transcription_text")
+  transcriptionText   String?  @map("transcription_text") @db.Text
   model               String?
   generatedAt         DateTime @default(now()) @map("generated_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
@@ -1233,21 +1220,21 @@ model WhatsappAiMediaSummary {
 }
 
 model WhatsappAiAnalysisReport {
-  id                       String    @id @default(uuid()) @db.Uuid
-  conversationId           String?   @db.Uuid @map("conversation_id")
+  id                       String   @id @default(uuid()) @db.Uuid
+  conversationId           String?  @map("conversation_id") @db.Uuid
   scope                    String
-  dateRangeKey             String    @map("date_range_key")
-  startAt                  DateTime  @map("start_at")
-  endAt                    DateTime  @map("end_at")
-  messageFingerprint       String    @map("message_fingerprint")
-  riskLevel                String    @map("risk_level")
-  summary                  String    @db.Text
+  dateRangeKey             String   @map("date_range_key")
+  startAt                  DateTime @map("start_at")
+  endAt                    DateTime @map("end_at")
+  messageFingerprint       String   @map("message_fingerprint")
+  riskLevel                String   @map("risk_level")
+  summary                  String   @db.Text
   alerts                   Json?
-  imageSummaries           Json?     @map("image_summaries")
-  audioTranscriptionStatus Json?     @map("audio_transcription_status")
+  imageSummaries           Json?    @map("image_summaries")
+  audioTranscriptionStatus Json?    @map("audio_transcription_status")
   report                   Json
-  generatedAt              DateTime  @default(now()) @map("generated_at")
-  generatedBy              String?   @db.Uuid @map("generated_by")
+  generatedAt              DateTime @default(now()) @map("generated_at")
+  generatedBy              String?  @map("generated_by") @db.Uuid
 
   conversation WhatsappConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
@@ -1258,8 +1245,8 @@ model WhatsappAiAnalysisReport {
 }
 
 model UserLocation {
-  id             String   @id @default(uuid()) @db.Uuid
-  userId         String   @unique @db.Uuid
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @unique @db.Uuid
   latitude       Float
   longitude      Float
   accuracyMeters Float?
@@ -1267,8 +1254,8 @@ model UserLocation {
   headingDegrees Float?
   speedMps       Float?
   recordedAt     DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1277,42 +1264,42 @@ model UserLocation {
 }
 
 model AppConfig {
-  id           String   @id @default("global")
-  companyName  String   @default("")
-  rnc          String   @default("")
-  phone        String   @default("")
-  phonePreferential String @default("") @map("phone_preferential")
-  address      String   @default("")
-  description  String   @default("")
-  instagramUrl String   @default("") @map("instagram_url")
-  facebookUrl  String   @default("") @map("facebook_url")
-  websiteUrl   String   @default("") @map("website_url")
-  gpsLocationUrl String @default("") @map("gps_location_url")
-  businessHours  String @default("") @map("business_hours")
-  bankAccounts   Json   @default("[]") @map("bank_accounts")
-  legalRepresentativeName         String  @default("") @map("legal_representative_name")
-  legalRepresentativeCedula       String  @default("") @map("legal_representative_cedula")
-  legalRepresentativeRole         String  @default("") @map("legal_representative_role")
-  legalRepresentativeNationality  String  @default("") @map("legal_representative_nationality")
-  legalRepresentativeCivilStatus  String  @default("") @map("legal_representative_civil_status")
-  logoBase64   String?
-  openAiApiKey String?
-  openAiModel  String   @default("gpt-4o-mini")
-  evolutionApiBaseUrl      String  @default("") @map("evolution_api_base_url")
-  evolutionApiInstanceName String  @default("") @map("evolution_api_instance_name")
-  evolutionApiApiKey       String? @map("evolution_api_api_key")
-  whatsappWebhookEnabled   Boolean @default(false) @map("whatsapp_webhook_enabled")
-  operationsTechCanViewAllServices Boolean @default(false) @map("operations_tech_can_view_all_services")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                               String   @id @default("global")
+  companyName                      String   @default("")
+  rnc                              String   @default("")
+  phone                            String   @default("")
+  phonePreferential                String   @default("") @map("phone_preferential")
+  address                          String   @default("")
+  description                      String   @default("")
+  instagramUrl                     String   @default("") @map("instagram_url")
+  facebookUrl                      String   @default("") @map("facebook_url")
+  websiteUrl                       String   @default("") @map("website_url")
+  gpsLocationUrl                   String   @default("") @map("gps_location_url")
+  businessHours                    String   @default("") @map("business_hours")
+  bankAccounts                     Json     @default("[]") @map("bank_accounts")
+  legalRepresentativeName          String   @default("") @map("legal_representative_name")
+  legalRepresentativeCedula        String   @default("") @map("legal_representative_cedula")
+  legalRepresentativeRole          String   @default("") @map("legal_representative_role")
+  legalRepresentativeNationality   String   @default("") @map("legal_representative_nationality")
+  legalRepresentativeCivilStatus   String   @default("") @map("legal_representative_civil_status")
+  logoBase64                       String?
+  openAiApiKey                     String?
+  openAiModel                      String   @default("gpt-4o-mini")
+  evolutionApiBaseUrl              String   @default("") @map("evolution_api_base_url")
+  evolutionApiInstanceName         String   @default("") @map("evolution_api_instance_name")
+  evolutionApiApiKey               String?  @map("evolution_api_api_key")
+  whatsappWebhookEnabled           Boolean  @default(false) @map("whatsapp_webhook_enabled")
+  operationsTechCanViewAllServices Boolean  @default(false) @map("operations_tech_can_view_all_services")
+  createdAt                        DateTime @default(now())
+  updatedAt                        DateTime @updatedAt
 
   @@map("app_config")
 }
 
 model ServiceExecutionReport {
   id                String           @id @default(uuid()) @db.Uuid
-  serviceId         String           @db.Uuid @map("service_id")
-  technicianId      String           @db.Uuid @map("technician_id")
+  serviceId         String           @map("service_id") @db.Uuid
+  technicianId      String           @map("technician_id") @db.Uuid
   phase             ServicePhaseType
   arrivedAt         DateTime?        @map("arrived_at")
   startedAt         DateTime?        @map("started_at")
@@ -1324,10 +1311,10 @@ model ServiceExecutionReport {
   createdAt         DateTime         @default(now()) @map("created_at")
   updatedAt         DateTime         @updatedAt @map("updated_at")
 
-  service          Service          @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  technician       User             @relation(fields: [technicianId], references: [id], onDelete: Restrict)
-  changes          ServiceExecutionChange[]
-  files            ServiceFile[]
+  service    Service                  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  technician User                     @relation(fields: [technicianId], references: [id], onDelete: Restrict)
+  changes    ServiceExecutionChange[]
+  files      ServiceFile[]
 
   @@unique([serviceId, technicianId])
   @@index([serviceId])
@@ -1338,21 +1325,21 @@ model ServiceExecutionReport {
 
 model ServiceExecutionChange {
   id                String   @id @default(uuid()) @db.Uuid
-  serviceId         String   @db.Uuid @map("service_id")
-  executionReportId String   @db.Uuid @map("execution_report_id")
-  createdByUserId   String   @db.Uuid @map("created_by_user_id")
+  serviceId         String   @map("service_id") @db.Uuid
+  executionReportId String   @map("execution_report_id") @db.Uuid
+  createdByUserId   String   @map("created_by_user_id") @db.Uuid
   type              String
   description       String
   quantity          Decimal? @db.Decimal(12, 3)
-  extraCost         Decimal? @db.Decimal(12, 2) @map("extra_cost")
+  extraCost         Decimal? @map("extra_cost") @db.Decimal(12, 2)
   clientApproved    Boolean? @map("client_approved")
   note              String?
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
-  service          Service               @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  executionReport  ServiceExecutionReport @relation(fields: [executionReportId], references: [id], onDelete: Cascade)
-  createdBy        User                  @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  service         Service                @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  executionReport ServiceExecutionReport @relation(fields: [executionReportId], references: [id], onDelete: Cascade)
+  createdBy       User                   @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
 
   @@index([serviceId, createdAt])
   @@index([executionReportId])
@@ -1361,14 +1348,14 @@ model ServiceExecutionChange {
 }
 
 model ServiceCategory {
-  id        String              @id @default(uuid()) @db.Uuid
+  id        String   @id @default(uuid()) @db.Uuid
   name      String
-  code      String              @unique
-  createdAt DateTime            @default(now()) @map("created_at")
-  updatedAt DateTime            @updatedAt @map("updated_at")
+  code      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  services  Service[]
-  templates ChecklistTemplate[]
+  services        Service[]
+  templates       ChecklistTemplate[]
   warrantyConfigs WarrantyProductConfig[]
 
   @@index([name])
@@ -1376,14 +1363,14 @@ model ServiceCategory {
 }
 
 model ServicePhase {
-  id         String              @id @default(uuid()) @db.Uuid
+  id         String   @id @default(uuid()) @db.Uuid
   name       String
-  code       String              @unique
-  orderIndex Int                 @default(0) @map("order_index")
-  createdAt  DateTime            @default(now()) @map("created_at")
-  updatedAt  DateTime            @updatedAt @map("updated_at")
+  code       String   @unique
+  orderIndex Int      @default(0) @map("order_index")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
-  templates  ChecklistTemplate[]
+  templates ChecklistTemplate[]
 
   @@index([orderIndex])
   @@index([name])
@@ -1391,16 +1378,16 @@ model ServicePhase {
 }
 
 model ChecklistTemplate {
-  id         String            @id @default(uuid()) @db.Uuid
-  categoryId String            @db.Uuid @map("category_id")
-  phaseId    String            @db.Uuid @map("phase_id")
+  id         String                @id @default(uuid()) @db.Uuid
+  categoryId String                @map("category_id") @db.Uuid
+  phaseId    String                @map("phase_id") @db.Uuid
   type       ChecklistTemplateType
   title      String
-  createdAt  DateTime          @default(now()) @map("created_at")
-  updatedAt  DateTime          @updatedAt @map("updated_at")
+  createdAt  DateTime              @default(now()) @map("created_at")
+  updatedAt  DateTime              @updatedAt @map("updated_at")
 
-  category   ServiceCategory   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  phase      ServicePhase      @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  category   ServiceCategory      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  phase      ServicePhase         @relation(fields: [phaseId], references: [id], onDelete: Cascade)
   items      ChecklistItem[]
   executions ChecklistExecution[]
 
@@ -1412,15 +1399,15 @@ model ChecklistTemplate {
 }
 
 model ChecklistItem {
-  id         String                 @id @default(uuid()) @db.Uuid
-  templateId String                 @db.Uuid @map("template_id")
+  id         String   @id @default(uuid()) @db.Uuid
+  templateId String   @map("template_id") @db.Uuid
   label      String
-  isRequired Boolean                @default(true) @map("is_required")
-  orderIndex Int                    @default(0) @map("order_index")
-  createdAt  DateTime               @default(now()) @map("created_at")
-  updatedAt  DateTime               @updatedAt @map("updated_at")
+  isRequired Boolean  @default(true) @map("is_required")
+  orderIndex Int      @default(0) @map("order_index")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
-  template   ChecklistTemplate      @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template   ChecklistTemplate    @relation(fields: [templateId], references: [id], onDelete: Cascade)
   executions ChecklistExecution[]
 
   @@index([templateId])
@@ -1429,20 +1416,20 @@ model ChecklistItem {
 }
 
 model ChecklistExecution {
-  id              String            @id @default(uuid()) @db.Uuid
-  serviceOrderId  String            @db.Uuid @map("service_order_id")
-  templateId      String            @db.Uuid @map("template_id")
-  checklistItemId String            @db.Uuid @map("checklist_item_id")
-  isChecked       Boolean           @default(false) @map("is_checked")
-  checkedAt       DateTime?         @map("checked_at")
-  checkedByUserId String?           @db.Uuid @map("checked_by")
-  createdAt       DateTime          @default(now()) @map("created_at")
-  updatedAt       DateTime          @updatedAt @map("updated_at")
+  id              String    @id @default(uuid()) @db.Uuid
+  serviceOrderId  String    @map("service_order_id") @db.Uuid
+  templateId      String    @map("template_id") @db.Uuid
+  checklistItemId String    @map("checklist_item_id") @db.Uuid
+  isChecked       Boolean   @default(false) @map("is_checked")
+  checkedAt       DateTime? @map("checked_at")
+  checkedByUserId String?   @map("checked_by") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  service         Service           @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
-  template        ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  checklistItem   ChecklistItem     @relation(fields: [checklistItemId], references: [id], onDelete: Cascade)
-  checkedBy       User?             @relation("ChecklistExecutionCheckedBy", fields: [checkedByUserId], references: [id], onDelete: SetNull)
+  service       Service           @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
+  template      ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  checklistItem ChecklistItem     @relation(fields: [checklistItemId], references: [id], onDelete: Cascade)
+  checkedBy     User?             @relation("ChecklistExecutionCheckedBy", fields: [checkedByUserId], references: [id], onDelete: SetNull)
 
   @@unique([serviceOrderId, checklistItemId])
   @@index([serviceOrderId])
@@ -1453,29 +1440,29 @@ model ChecklistExecution {
 }
 
 model NotificationOutbox {
-  id                String              @id @default(uuid()) @db.Uuid
-  channel           NotificationChannel @default(WHATSAPP)
-  status            NotificationStatus  @default(PENDING)
-  contentType       NotificationContentType @default(TEXT) @map("content_type")
-  templateKey       String              @map("template_key")
-  dedupeKey         String?             @unique @map("dedupe_key")
-  messageText       String              @map("message_text")
-  mediaBase64       String?             @db.Text @map("media_base64")
-  mediaFileName     String?             @map("media_file_name")
-  mediaMimeType     String?             @map("media_mime_type")
-  payload           Json?
-  recipientUserId   String?             @db.Uuid @map("recipient_user_id")
-  toNumber          String              @map("to_number")
-  toNumberNormalized String             @default("") @map("to_number_normalized")
-  attempts          Int                 @default(0)
-  nextAttemptAt     DateTime            @default(now()) @map("next_attempt_at")
-  lockedAt          DateTime?           @map("locked_at")
-  lockedBy          String?             @map("locked_by")
-  lastError         String?             @map("last_error")
-  lastStatusCode    Int?                @map("last_status_code")
-  sentAt            DateTime?           @map("sent_at")
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+  id                 String                  @id @default(uuid()) @db.Uuid
+  channel            NotificationChannel     @default(WHATSAPP)
+  status             NotificationStatus      @default(PENDING)
+  contentType        NotificationContentType @default(TEXT) @map("content_type")
+  templateKey        String                  @map("template_key")
+  dedupeKey          String?                 @unique @map("dedupe_key")
+  messageText        String                  @map("message_text")
+  mediaBase64        String?                 @map("media_base64") @db.Text
+  mediaFileName      String?                 @map("media_file_name")
+  mediaMimeType      String?                 @map("media_mime_type")
+  payload            Json?
+  recipientUserId    String?                 @map("recipient_user_id") @db.Uuid
+  toNumber           String                  @map("to_number")
+  toNumberNormalized String                  @default("") @map("to_number_normalized")
+  attempts           Int                     @default(0)
+  nextAttemptAt      DateTime                @default(now()) @map("next_attempt_at")
+  lockedAt           DateTime?               @map("locked_at")
+  lockedBy           String?                 @map("locked_by")
+  lastError          String?                 @map("last_error")
+  lastStatusCode     Int?                    @map("last_status_code")
+  sentAt             DateTime?               @map("sent_at")
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
 
   recipientUser User? @relation(fields: [recipientUserId], references: [id], onDelete: SetNull)
 
@@ -1486,7 +1473,7 @@ model NotificationOutbox {
 
 model ServiceOrderNotificationJob {
   id          String                            @id @default(uuid()) @db.Uuid
-  orderId     String                            @db.Uuid @map("order_id")
+  orderId     String                            @map("order_id") @db.Uuid
   kind        ServiceOrderNotificationJobKind
   status      ServiceOrderNotificationJobStatus @default(PENDING)
   dedupeKey   String                            @unique @map("dedupe_key")
@@ -1509,11 +1496,11 @@ model ServiceOrderNotificationJob {
 }
 
 model Punch {
-  id        String     @id @default(uuid()) @db.Uuid
-  userId    String     @db.Uuid
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
   type      PunchType
-  timestamp DateTime   @default(now())
-  createdAt DateTime   @default(now())
+  timestamp DateTime  @default(now())
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1522,40 +1509,62 @@ model Punch {
 }
 
 model Product {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String  @id @default(uuid()) @db.Uuid
   nombre    String
   categoria String
-  costo     Decimal  @db.Decimal(12, 2)
-  precio    Decimal  @db.Decimal(12, 2)
-  stock     Decimal  @default(0) @db.Decimal(12, 2)
+  costo     Decimal @db.Decimal(12, 2)
+  precio    Decimal @db.Decimal(12, 2)
+  stock     Decimal @default(0) @db.Decimal(12, 2)
   imagen    String?
 
-  saleItems SaleItem[]
+  saleItems       SaleItem[]
   cotizacionItems CotizacionItem[]
 }
 
-model Client {
-  id        String   @id @default(uuid()) @db.Uuid
-  ownerId   String   @db.Uuid
-  nombre    String
-  telefono  String
-  phoneNormalized String @default("")
-  email     String?
-  direccion String?
-  notas     String?
-  latitude  Decimal? @db.Decimal(10, 8)
-  longitude Decimal? @db.Decimal(11, 8)
-  locationUrl String? @map("location_url")
-  lastActivityAt DateTime?
-  isDeleted Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model WebsiteProductOverride {
+  id             String   @id @default(uuid()) @db.Uuid
+  productId      String   @unique @map("product_id")
+  title          String?  @db.Text
+  description    String?  @db.Text
+  category       String?  @db.Text
+  imageUrl       String?  @map("image_url") @db.Text
+  extraImageUrls Json?    @map("extra_image_urls")
+  visible        Boolean  @default(true)
+  featured       Boolean  @default(false)
+  sortOrder      Int      @default(0) @map("sort_order")
+  seoTitle       String?  @map("seo_title") @db.Text
+  seoDescription String?  @map("seo_description") @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
-  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  sales Sale[]
-  services Service[]
-  serviceOrders ServiceOrder[]
-  cotizaciones Cotizacion[]
+  @@index([visible])
+  @@index([featured])
+  @@index([sortOrder])
+  @@map("website_product_overrides")
+}
+
+model Client {
+  id              String    @id @default(uuid()) @db.Uuid
+  ownerId         String    @db.Uuid
+  nombre          String
+  telefono        String
+  phoneNormalized String    @default("")
+  email           String?
+  direccion       String?
+  notas           String?
+  latitude        Decimal?  @db.Decimal(10, 8)
+  longitude       Decimal?  @db.Decimal(11, 8)
+  locationUrl     String?   @map("location_url")
+  lastActivityAt  DateTime?
+  isDeleted       Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  owner                  User                    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  sales                  Sale[]
+  services               Service[]
+  serviceOrders          ServiceOrder[]
+  cotizaciones           Cotizacion[]
   crmCommercialCustomers CrmCommercialCustomer[]
 
   @@index([ownerId])
@@ -1584,9 +1593,9 @@ model CrmCommercialCustomer {
   createdAt         DateTime                    @default(now()) @map("fecha_creacion")
   updatedAt         DateTime                    @updatedAt @map("fecha_actualizacion")
 
-  client         Client?                      @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  responsableUser User?                       @relation("CrmCommercialResponsibleUser", fields: [responsableUserId], references: [id], onDelete: SetNull)
-  createdByUser   User                        @relation("CrmCommercialCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  client          Client?                      @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  responsableUser User?                        @relation("CrmCommercialResponsibleUser", fields: [responsableUserId], references: [id], onDelete: SetNull)
+  createdByUser   User                         @relation("CrmCommercialCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
   statusHistory   CrmCommercialStatusHistory[]
   notes           CrmCommercialNote[]
   activities      CrmCommercialActivity[]
@@ -1601,13 +1610,13 @@ model CrmCommercialCustomer {
 }
 
 model CrmCommercialStatusHistory {
-  id              String                      @id @default(uuid()) @db.Uuid
-  customerId      String                      @map("cliente_id") @db.Uuid
+  id              String                       @id @default(uuid()) @db.Uuid
+  customerId      String                       @map("cliente_id") @db.Uuid
   estadoAnterior  CrmCommercialCustomerStatus? @map("estado_anterior")
-  estadoNuevo     CrmCommercialCustomerStatus @map("estado_nuevo")
-  changedByUserId String                      @map("usuario_que_cambio") @db.Uuid
-  nota            String?                     @db.Text
-  createdAt       DateTime                    @default(now()) @map("fecha")
+  estadoNuevo     CrmCommercialCustomerStatus  @map("estado_nuevo")
+  changedByUserId String                       @map("usuario_que_cambio") @db.Uuid
+  nota            String?                      @db.Text
+  createdAt       DateTime                     @default(now()) @map("fecha")
 
   customer      CrmCommercialCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   changedByUser User                  @relation("CrmCommercialStatusChangedByUser", fields: [changedByUserId], references: [id], onDelete: Restrict)
@@ -1655,24 +1664,24 @@ model CrmCommercialActivity {
 }
 
 model CrmCommercialFollowupTask {
-  id                String                             @id @default(uuid()) @db.Uuid
-  customerId        String                             @map("cliente_id") @db.Uuid
-  title             String                             @map("titulo")
-  description       String?                            @map("descripcion") @db.Text
-  dueDate           DateTime?                          @map("fecha_vencimiento")
-  status            CrmCommercialFollowupTaskStatus    @default(PENDIENTE) @map("estado")
-  priority          CrmCommercialFollowupTaskPriority  @default(NORMAL) @map("prioridad")
-  assignedUserId    String?                            @map("asignado_usuario_id") @db.Uuid
-  createdByUserId   String                             @map("creado_por_usuario_id") @db.Uuid
-  completedAt       DateTime?                          @map("completado_en")
-  completedByUserId String?                            @map("completado_por_usuario_id") @db.Uuid
-  createdAt         DateTime                           @default(now()) @map("fecha_creacion")
-  updatedAt         DateTime                           @updatedAt @map("fecha_actualizacion")
+  id                String                            @id @default(uuid()) @db.Uuid
+  customerId        String                            @map("cliente_id") @db.Uuid
+  title             String                            @map("titulo")
+  description       String?                           @map("descripcion") @db.Text
+  dueDate           DateTime?                         @map("fecha_vencimiento")
+  status            CrmCommercialFollowupTaskStatus   @default(PENDIENTE) @map("estado")
+  priority          CrmCommercialFollowupTaskPriority @default(NORMAL) @map("prioridad")
+  assignedUserId    String?                           @map("asignado_usuario_id") @db.Uuid
+  createdByUserId   String                            @map("creado_por_usuario_id") @db.Uuid
+  completedAt       DateTime?                         @map("completado_en")
+  completedByUserId String?                           @map("completado_por_usuario_id") @db.Uuid
+  createdAt         DateTime                          @default(now()) @map("fecha_creacion")
+  updatedAt         DateTime                          @updatedAt @map("fecha_actualizacion")
 
-  customer         CrmCommercialCustomer               @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  assignedUser     User?                               @relation("CrmFollowupTaskAssignedUser", fields: [assignedUserId], references: [id], onDelete: SetNull)
-  createdByUser    User                                @relation("CrmFollowupTaskCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  completedByUser  User?                               @relation("CrmFollowupTaskCompletedByUser", fields: [completedByUserId], references: [id], onDelete: SetNull)
+  customer        CrmCommercialCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  assignedUser    User?                 @relation("CrmFollowupTaskAssignedUser", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  createdByUser   User                  @relation("CrmFollowupTaskCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  completedByUser User?                 @relation("CrmFollowupTaskCompletedByUser", fields: [completedByUserId], references: [id], onDelete: SetNull)
 
   @@index([customerId, status])
   @@index([assignedUserId])
@@ -1682,21 +1691,21 @@ model CrmCommercialFollowupTask {
 }
 
 model CrmCommercialSetting {
-  id                         String   @id @default("global")
-  selectedWhatsappInstanceId String?  @map("selected_whatsapp_instance_id")
-  selectedWhatsappInstanceName String? @map("selected_whatsapp_instance_name")
-  enabled                    Boolean  @default(false)
-  botEnabled                 Boolean  @default(false) @map("bot_enabled")
-  botSystemPrompt            String?  @map("bot_system_prompt") @db.Text
-  businessContext            String?  @map("business_context") @db.Text
-  autoReplyDelaySeconds      Int      @default(2) @map("auto_reply_delay_seconds")
-  humanTakeoverMinutes       Int      @default(30) @map("human_takeover_minutes")
-  botDefaultStatus           String   @default("ACTIVE") @map("bot_default_status")
-  botExcludedNumbers         Json     @default("[]") @map("bot_excluded_numbers")
-  botAllowedChannels         Json     @default("[\"WHATSAPP\"]") @map("bot_allowed_channels")
-  updatedByUserId            String?  @map("updated_by_user_id") @db.Uuid
-  createdAt                  DateTime @default(now()) @map("created_at")
-  updatedAt                  DateTime @updatedAt @map("updated_at")
+  id                           String   @id @default("global")
+  selectedWhatsappInstanceId   String?  @map("selected_whatsapp_instance_id")
+  selectedWhatsappInstanceName String?  @map("selected_whatsapp_instance_name")
+  enabled                      Boolean  @default(false)
+  botEnabled                   Boolean  @default(false) @map("bot_enabled")
+  botSystemPrompt              String?  @map("bot_system_prompt") @db.Text
+  businessContext              String?  @map("business_context") @db.Text
+  autoReplyDelaySeconds        Int      @default(2) @map("auto_reply_delay_seconds")
+  humanTakeoverMinutes         Int      @default(30) @map("human_takeover_minutes")
+  botDefaultStatus             String   @default("ACTIVE") @map("bot_default_status")
+  botExcludedNumbers           Json     @default("[]") @map("bot_excluded_numbers")
+  botAllowedChannels           Json     @default("[\"WHATSAPP\"]") @map("bot_allowed_channels")
+  updatedByUserId              String?  @map("updated_by_user_id") @db.Uuid
+  createdAt                    DateTime @default(now()) @map("created_at")
+  updatedAt                    DateTime @updatedAt @map("updated_at")
 
   updatedByUser User? @relation("CrmCommercialSettingsUpdatedByUser", fields: [updatedByUserId], references: [id], onDelete: SetNull)
 
@@ -1727,8 +1736,8 @@ model CrmCommercialLibraryItem {
   createdAt       DateTime                     @default(now()) @map("created_at")
   updatedAt       DateTime                     @updatedAt @map("updated_at")
 
-  createdByUser   User                         @relation("CrmCommercialLibraryCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  updatedByUser   User                         @relation("CrmCommercialLibraryUpdatedByUser", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  createdByUser User @relation("CrmCommercialLibraryCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedByUser User @relation("CrmCommercialLibraryUpdatedByUser", fields: [updatedByUserId], references: [id], onDelete: Restrict)
 
   @@index([companyId, isActive, sortOrder])
   @@index([companyId, type, isActive])
@@ -1737,37 +1746,37 @@ model CrmCommercialLibraryItem {
 }
 
 model Sale {
-  id               String    @id @default(uuid()) @db.Uuid
-  userId           String    @db.Uuid
-  customerId       String?   @db.Uuid
-  cashSessionId    String?   @db.Uuid
-  saleDate         DateTime  @default(now())
-  note             String?
-  paymentMethod    String    @default("cash")
-  paymentCashAmount Decimal  @default(0) @db.Decimal(12, 2)
-  paymentTransferAmount Decimal @default(0) @db.Decimal(12, 2)
-  creditAmount     Decimal   @default(0) @db.Decimal(12, 2)
-  creditPaidAmount Decimal   @default(0) @db.Decimal(12, 2)
-  creditBalance    Decimal   @default(0) @db.Decimal(12, 2)
-  creditStatus     String    @default("none")
-  kind             String    @default("invoice")
-  status           String    @default("PAID")
-  totalSold        Decimal   @db.Decimal(12, 2)
-  totalCost        Decimal   @db.Decimal(12, 2)
-  totalProfit      Decimal   @db.Decimal(12, 2)
-  commissionRate   Decimal   @default(0.10) @db.Decimal(5, 4)
-  commissionAmount Decimal   @db.Decimal(12, 2)
-  isDeleted        Boolean   @default(false)
-  deletedAt        DateTime?
-  deletedById      String?   @db.Uuid
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                    String    @id @default(uuid()) @db.Uuid
+  userId                String    @db.Uuid
+  customerId            String?   @db.Uuid
+  cashSessionId         String?   @db.Uuid
+  saleDate              DateTime  @default(now())
+  note                  String?
+  paymentMethod         String    @default("cash")
+  paymentCashAmount     Decimal   @default(0) @db.Decimal(12, 2)
+  paymentTransferAmount Decimal   @default(0) @db.Decimal(12, 2)
+  creditAmount          Decimal   @default(0) @db.Decimal(12, 2)
+  creditPaidAmount      Decimal   @default(0) @db.Decimal(12, 2)
+  creditBalance         Decimal   @default(0) @db.Decimal(12, 2)
+  creditStatus          String    @default("none")
+  kind                  String    @default("invoice")
+  status                String    @default("PAID")
+  totalSold             Decimal   @db.Decimal(12, 2)
+  totalCost             Decimal   @db.Decimal(12, 2)
+  totalProfit           Decimal   @db.Decimal(12, 2)
+  commissionRate        Decimal   @default(0.10) @db.Decimal(5, 4)
+  commissionAmount      Decimal   @db.Decimal(12, 2)
+  isDeleted             Boolean   @default(false)
+  deletedAt             DateTime?
+  deletedById           String?   @db.Uuid
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  customer  Client?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  cashSession CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
-  deletedBy User?     @relation("SaleDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
-  items     SaleItem[]
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customer       Client?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  cashSession    CashSession?        @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  deletedBy      User?               @relation("SaleDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  items          SaleItem[]
   creditPayments SaleCreditPayment[]
 
   @@index([userId])
@@ -1779,16 +1788,16 @@ model Sale {
 }
 
 model SaleCreditPayment {
-  id              String   @id @default(uuid()) @db.Uuid
-  saleId          String   @db.Uuid
-  userId          String   @db.Uuid
-  cashSessionId   String?  @db.Uuid
-  amount          Decimal  @db.Decimal(12, 2)
-  cashAmount      Decimal  @default(0) @db.Decimal(12, 2)
-  transferAmount  Decimal  @default(0) @db.Decimal(12, 2)
-  note            String?
-  paidAt          DateTime @default(now())
-  createdAt       DateTime @default(now())
+  id             String   @id @default(uuid()) @db.Uuid
+  saleId         String   @db.Uuid
+  userId         String   @db.Uuid
+  cashSessionId  String?  @db.Uuid
+  amount         Decimal  @db.Decimal(12, 2)
+  cashAmount     Decimal  @default(0) @db.Decimal(12, 2)
+  transferAmount Decimal  @default(0) @db.Decimal(12, 2)
+  note           String?
+  paidAt         DateTime @default(now())
+  createdAt      DateTime @default(now())
 
   sale        Sale         @relation(fields: [saleId], references: [id], onDelete: Cascade)
   user        User         @relation(fields: [userId], references: [id], onDelete: Restrict)
@@ -1802,48 +1811,48 @@ model SaleCreditPayment {
 }
 
 model CashboxDaily {
-  id              String        @id @default(uuid()) @db.Uuid
-  businessDate    String        @unique
-  openedAt        DateTime      @default(now())
-  openedByUserId  String        @db.Uuid
-  initialAmount   Decimal       @default(0) @db.Decimal(12, 2)
-  currentAmount   Decimal       @default(0) @db.Decimal(12, 2)
-  status          String        @default("OPEN")
-  closedAt        DateTime?
-  closedByUserId  String?       @db.Uuid
-  note            String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id             String    @id @default(uuid()) @db.Uuid
+  businessDate   String    @unique
+  openedAt       DateTime  @default(now())
+  openedByUserId String    @db.Uuid
+  initialAmount  Decimal   @default(0) @db.Decimal(12, 2)
+  currentAmount  Decimal   @default(0) @db.Decimal(12, 2)
+  status         String    @default("OPEN")
+  closedAt       DateTime?
+  closedByUserId String?   @db.Uuid
+  note           String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  sessions        CashSession[]
+  sessions CashSession[]
 
   @@index([status])
   @@map("cashbox_daily")
 }
 
 model CashSession {
-  id              String         @id @default(uuid()) @db.Uuid
-  openedByUserId  String         @db.Uuid
+  id              String    @id @default(uuid()) @db.Uuid
+  openedByUserId  String    @db.Uuid
   userName        String?
-  openedAt        DateTime       @default(now())
-  initialAmount   Decimal        @default(0) @db.Decimal(12, 2)
-  closingAmount   Decimal?       @db.Decimal(12, 2)
-  expectedAmount  Decimal?       @db.Decimal(12, 2)
-  difference      Decimal?       @db.Decimal(12, 2)
-  status          String         @default("OPEN")
+  openedAt        DateTime  @default(now())
+  initialAmount   Decimal   @default(0) @db.Decimal(12, 2)
+  closingAmount   Decimal?  @db.Decimal(12, 2)
+  expectedAmount  Decimal?  @db.Decimal(12, 2)
+  difference      Decimal?  @db.Decimal(12, 2)
+  status          String    @default("OPEN")
   closedAt        DateTime?
-  closedByUserId  String?        @db.Uuid
-  cashboxDailyId  String?        @db.Uuid
+  closedByUserId  String?   @db.Uuid
+  cashboxDailyId  String?   @db.Uuid
   businessDate    String?
-  requiresClosure Boolean        @default(false)
+  requiresClosure Boolean   @default(false)
   note            String?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  cashboxDaily    CashboxDaily?  @relation(fields: [cashboxDailyId], references: [id], onDelete: SetNull)
-  movements       CashMovement[]
-  sales           Sale[]
-  creditPayments  SaleCreditPayment[]
+  cashboxDaily   CashboxDaily?       @relation(fields: [cashboxDailyId], references: [id], onDelete: SetNull)
+  movements      CashMovement[]
+  sales          Sale[]
+  creditPayments SaleCreditPayment[]
 
   @@index([openedByUserId, status])
   @@index([cashboxDailyId])
@@ -1852,18 +1861,18 @@ model CashSession {
 }
 
 model CashMovement {
-  id              String       @id @default(uuid()) @db.Uuid
-  sessionId       String       @db.Uuid
-  type            String
-  amount          Decimal      @db.Decimal(12, 2)
-  reason          String?
-  movementType    String       @default("expense")
-  affectsProfit   Boolean      @default(true)
-  userId          String?      @db.Uuid
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  id            String   @id @default(uuid()) @db.Uuid
+  sessionId     String   @db.Uuid
+  type          String
+  amount        Decimal  @db.Decimal(12, 2)
+  reason        String?
+  movementType  String   @default("expense")
+  affectsProfit Boolean  @default(true)
+  userId        String?  @db.Uuid
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  session         CashSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session CashSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
   @@index([createdAt])
@@ -1892,52 +1901,52 @@ model SaleItem {
 }
 
 model Close {
-  id            String    @id @default(uuid()) @db.Uuid
-  type          CloseType
-  date          DateTime  @default(now())
-  status        String    @default("pending") // pending/approved/rejected
-  cash          Decimal   @db.Decimal(12, 2)
-  transfer      Decimal   @db.Decimal(12, 2)
-  transferBank  String?
-  card          Decimal   @db.Decimal(12, 2)
-  otherIncome   Decimal   @default(0) @db.Decimal(12, 2)
-  expenses      Decimal   @db.Decimal(12, 2)
-  cashDelivered Decimal   @db.Decimal(12, 2)
-  totalIncome   Decimal   @default(0) @db.Decimal(12, 2)
-  netTotal      Decimal   @default(0) @db.Decimal(12, 2)
-  difference    Decimal   @default(0) @db.Decimal(12, 2)
-  cashDeposited Boolean   @default(false)
-  cashDepositedAt DateTime?
-  cashDepositedById String? @db.Uuid
+  id                  String          @id @default(uuid()) @db.Uuid
+  type                CloseType
+  date                DateTime        @default(now())
+  status              String          @default("pending") // pending/approved/rejected
+  cash                Decimal         @db.Decimal(12, 2)
+  transfer            Decimal         @db.Decimal(12, 2)
+  transferBank        String?
+  card                Decimal         @db.Decimal(12, 2)
+  otherIncome         Decimal         @default(0) @db.Decimal(12, 2)
+  expenses            Decimal         @db.Decimal(12, 2)
+  cashDelivered       Decimal         @db.Decimal(12, 2)
+  totalIncome         Decimal         @default(0) @db.Decimal(12, 2)
+  netTotal            Decimal         @default(0) @db.Decimal(12, 2)
+  difference          Decimal         @default(0) @db.Decimal(12, 2)
+  cashDeposited       Boolean         @default(false)
+  cashDepositedAt     DateTime?
+  cashDepositedById   String?         @db.Uuid
   cashDepositedByName String?
-  notes         String?
-  evidenceUrl        String?
-  evidenceFileName   String?
-  evidenceStorageKey String?
-  evidenceMimeType   String?
-  expenseDetails     Json?
-  pdfUrl        String?
-  pdfStorageKey String?
-  pdfFileName   String?
-  notificationStatus String?
-  notificationError  String?
-  createdById   String?   @db.Uuid
-  createdByName String?
-  reviewedById  String?   @db.Uuid
-  reviewedByName String?
-  reviewedAt    DateTime?
-  reviewNote    String?
-  aiRiskLevel   String?
-  aiReportSummary String?
-  aiReportJson  Json?
-  aiGeneratedAt DateTime?
-  correctionOfCloseId String? @db.Uuid
-  correctionReason String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  transfers     CloseTransfer[]
-  correctionOf  Close?    @relation("CloseCorrections", fields: [correctionOfCloseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  corrections    Close[]   @relation("CloseCorrections")
+  notes               String?
+  evidenceUrl         String?
+  evidenceFileName    String?
+  evidenceStorageKey  String?
+  evidenceMimeType    String?
+  expenseDetails      Json?
+  pdfUrl              String?
+  pdfStorageKey       String?
+  pdfFileName         String?
+  notificationStatus  String?
+  notificationError   String?
+  createdById         String?         @db.Uuid
+  createdByName       String?
+  reviewedById        String?         @db.Uuid
+  reviewedByName      String?
+  reviewedAt          DateTime?
+  reviewNote          String?
+  aiRiskLevel         String?
+  aiReportSummary     String?
+  aiReportJson        Json?
+  aiGeneratedAt       DateTime?
+  correctionOfCloseId String?         @db.Uuid
+  correctionReason    String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  transfers           CloseTransfer[]
+  correctionOf        Close?          @relation("CloseCorrections", fields: [correctionOfCloseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  corrections         Close[]         @relation("CloseCorrections")
 
   @@index([date])
   @@index([type])
@@ -1979,36 +1988,36 @@ model CloseTransferVoucher {
 }
 
 model DepositOrder {
-  id                String             @id @default(uuid()) @db.Uuid
-  windowFrom        DateTime
-  windowTo          DateTime
-  bankName          String
-  bankAccount       String?
-  collaboratorName  String?
-  note              String?
-  reserveAmount     Decimal            @db.Decimal(12, 2)
-  totalAvailableCash Decimal           @db.Decimal(12, 2)
-  depositTotal      Decimal            @db.Decimal(12, 2)
-  closesCountByType Json
-  depositByType     Json
-  accountByType     Json
-  status            DepositOrderStatus @default(PENDING)
-  voucherUrl        String?
-  voucherFileName   String?
-  voucherMimeType   String?
-  createdById       String?            @db.Uuid
-  createdByName     String?
-  executedById      String?            @db.Uuid
-  executedByName    String?
-  executedAt        DateTime?
-  correctionOfDepositOrderId String?   @db.Uuid
-  correctionReason  String?
-  deletedAt         DateTime?
-  deletedById       String?            @db.Uuid
-  deletedByName     String?
-  deletedReason     String?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  id                         String             @id @default(uuid()) @db.Uuid
+  windowFrom                 DateTime
+  windowTo                   DateTime
+  bankName                   String
+  bankAccount                String?
+  collaboratorName           String?
+  note                       String?
+  reserveAmount              Decimal            @db.Decimal(12, 2)
+  totalAvailableCash         Decimal            @db.Decimal(12, 2)
+  depositTotal               Decimal            @db.Decimal(12, 2)
+  closesCountByType          Json
+  depositByType              Json
+  accountByType              Json
+  status                     DepositOrderStatus @default(PENDING)
+  voucherUrl                 String?
+  voucherFileName            String?
+  voucherMimeType            String?
+  createdById                String?            @db.Uuid
+  createdByName              String?
+  executedById               String?            @db.Uuid
+  executedByName             String?
+  executedAt                 DateTime?
+  correctionOfDepositOrderId String?            @db.Uuid
+  correctionReason           String?
+  deletedAt                  DateTime?
+  deletedById                String?            @db.Uuid
+  deletedByName              String?
+  deletedReason              String?
+  createdAt                  DateTime           @default(now())
+  updatedAt                  DateTime           @updatedAt
 
   @@index([windowFrom, windowTo])
   @@index([status])
@@ -2018,15 +2027,15 @@ model DepositOrder {
 }
 
 model FiscalInvoice {
-  id            String          @id @default(uuid()) @db.Uuid
+  id            String            @id @default(uuid()) @db.Uuid
   kind          FiscalInvoiceKind
   invoiceDate   DateTime
   imageUrl      String
   note          String?
-  createdById   String?         @db.Uuid
+  createdById   String?           @db.Uuid
   createdByName String?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 
   @@index([kind])
   @@index([invoiceDate])
@@ -2034,20 +2043,20 @@ model FiscalInvoice {
 }
 
 model PayableService {
-  id            String             @id @default(uuid()) @db.Uuid
+  id            String              @id @default(uuid()) @db.Uuid
   title         String
   providerKind  PayableProviderKind
   providerName  String
   description   String?
   frequency     PayableFrequency
-  defaultAmount Decimal?           @db.Decimal(12, 2)
+  defaultAmount Decimal?            @db.Decimal(12, 2)
   nextDueDate   DateTime
   lastPaidAt    DateTime?
-  active        Boolean            @default(true)
-  createdById   String?            @db.Uuid
+  active        Boolean             @default(true)
+  createdById   String?             @db.Uuid
   createdByName String?
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
 
   payments PayablePayment[]
 
@@ -2074,25 +2083,25 @@ model PayablePayment {
 }
 
 model PayrollEmployee {
-  id        String   @id @default(uuid()) @db.Uuid
-  ownerId   String   @db.Uuid
-  userId    String?  @unique @db.Uuid @map("user_id")
-  nombre    String
-  telefono  String?
-  puesto    String?
-  salarioBaseQuincenal Decimal @default(0) @db.Decimal(12, 2)
-  cuotaMinima Decimal @default(0) @db.Decimal(12, 2)
-  seguroLeyMonto Decimal @default(0) @db.Decimal(12, 2)
-  seguroLeyMontoLocked Boolean @default(false) @map("seguro_ley_monto_locked")
-  activo    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                   String   @id @default(uuid()) @db.Uuid
+  ownerId              String   @db.Uuid
+  userId               String?  @unique @map("user_id") @db.Uuid
+  nombre               String
+  telefono             String?
+  puesto               String?
+  salarioBaseQuincenal Decimal  @default(0) @db.Decimal(12, 2)
+  cuotaMinima          Decimal  @default(0) @db.Decimal(12, 2)
+  seguroLeyMonto       Decimal  @default(0) @db.Decimal(12, 2)
+  seguroLeyMontoLocked Boolean  @default(false) @map("seguro_ley_monto_locked")
+  activo               Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  owner User @relation("PayrollOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  user User? @relation("PayrollEmployeeUser", fields: [userId], references: [id], onDelete: SetNull)
-  configs PayrollEmployeeConfig[]
-  entries PayrollEntry[]
-  periodStatuses PayrollEmployeePeriodStatus[]
+  owner                     User                              @relation("PayrollOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  user                      User?                             @relation("PayrollEmployeeUser", fields: [userId], references: [id], onDelete: SetNull)
+  configs                   PayrollEmployeeConfig[]
+  entries                   PayrollEntry[]
+  periodStatuses            PayrollEmployeePeriodStatus[]
   serviceCommissionRequests PayrollServiceCommissionRequest[]
 
   @@index([ownerId])
@@ -2110,10 +2119,10 @@ model PayrollPeriod {
   createdAt DateTime            @default(now())
   updatedAt DateTime            @updatedAt
 
-  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  configs PayrollEmployeeConfig[]
-  entries PayrollEntry[]
-  employeeStatuses PayrollEmployeePeriodStatus[]
+  owner                     User                              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  configs                   PayrollEmployeeConfig[]
+  entries                   PayrollEntry[]
+  employeeStatuses          PayrollEmployeePeriodStatus[]
   serviceCommissionRequests PayrollServiceCommissionRequest[]
 
   @@index([ownerId])
@@ -2132,8 +2141,8 @@ model PayrollEmployeeConfig {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  period PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  owner    User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  period   PayrollPeriod   @relation(fields: [periodId], references: [id], onDelete: Cascade)
   employee PayrollEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@unique([ownerId, periodId, employeeId])
@@ -2142,22 +2151,22 @@ model PayrollEmployeeConfig {
 }
 
 model PayrollEntry {
-  id         String           @id @default(uuid()) @db.Uuid
-  ownerId    String           @db.Uuid
-  periodId   String           @db.Uuid
-  employeeId String           @db.Uuid
-  pagoCombustibleTecnicoId String? @unique @db.Uuid @map("pago_combustible_tecnico_id")
-  date       DateTime
-  type       PayrollEntryType
-  concept    String
-  amount     Decimal          @db.Decimal(12, 2)
-  cantidad   Decimal?         @db.Decimal(12, 2)
-  createdAt  DateTime         @default(now())
+  id                       String           @id @default(uuid()) @db.Uuid
+  ownerId                  String           @db.Uuid
+  periodId                 String           @db.Uuid
+  employeeId               String           @db.Uuid
+  pagoCombustibleTecnicoId String?          @unique @map("pago_combustible_tecnico_id") @db.Uuid
+  date                     DateTime
+  type                     PayrollEntryType
+  concept                  String
+  amount                   Decimal          @db.Decimal(12, 2)
+  cantidad                 Decimal?         @db.Decimal(12, 2)
+  createdAt                DateTime         @default(now())
 
-  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  period PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
-  employee PayrollEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  pagoCombustibleTecnico PagoCombustibleTecnico? @relation(fields: [pagoCombustibleTecnicoId], references: [id], onDelete: SetNull)
+  owner                           User                             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  period                          PayrollPeriod                    @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  employee                        PayrollEmployee                  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  pagoCombustibleTecnico          PagoCombustibleTecnico?          @relation(fields: [pagoCombustibleTecnicoId], references: [id], onDelete: SetNull)
   payrollServiceCommissionRequest PayrollServiceCommissionRequest? @relation("PayrollServiceCommissionRequestToEntry")
 
   @@index([ownerId])
@@ -2177,8 +2186,8 @@ model PayrollEmployeePeriodStatus {
   createdAt  DateTime             @default(now())
   updatedAt  DateTime             @updatedAt
 
-  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  period PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  owner    User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  period   PayrollPeriod   @relation(fields: [periodId], references: [id], onDelete: Cascade)
   employee PayrollEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@unique([ownerId, periodId, employeeId])
@@ -2188,37 +2197,37 @@ model PayrollEmployeePeriodStatus {
 }
 
 model PayrollServiceCommissionRequest {
-  id            String                         @id @default(uuid()) @db.Uuid
-  ownerId       String                         @db.Uuid
-  serviceOrderId String                        @unique @db.Uuid @map("service_order_id")
-  quotationId   String?                        @db.Uuid @map("quotation_id")
-  employeeId    String                         @db.Uuid @map("employee_id")
-  technicianUserId String                      @db.Uuid @map("technician_user_id")
-  createdByUserId String?                      @db.Uuid @map("created_by_user_id")
-  reviewedByUserId String?                     @db.Uuid @map("reviewed_by_user_id")
-  periodId      String?                        @db.Uuid @map("period_id")
-  payrollEntryId String?                       @unique @db.Uuid @map("payroll_entry_id")
-  serviceType   ServiceOrderType               @map("service_type")
-  finalizedAt   DateTime                       @map("finalized_at")
-  profitAfterExpense Decimal                   @db.Decimal(12, 2) @map("profit_after_expense")
-  commissionRate Decimal                       @db.Decimal(5, 4) @default(0.1000) @map("commission_rate")
-  commissionAmount Decimal                     @db.Decimal(12, 2) @map("commission_amount")
-  concept       String
-  status        PayrollServiceCommissionStatus @default(PENDING)
-  reviewNote    String?                        @map("review_note")
-  approvedAt    DateTime?                      @map("approved_at")
-  rejectedAt    DateTime?                      @map("rejected_at")
-  createdAt     DateTime                       @default(now()) @map("created_at")
-  updatedAt     DateTime                       @updatedAt @map("updated_at")
+  id                 String                         @id @default(uuid()) @db.Uuid
+  ownerId            String                         @db.Uuid
+  serviceOrderId     String                         @unique @map("service_order_id") @db.Uuid
+  quotationId        String?                        @map("quotation_id") @db.Uuid
+  employeeId         String                         @map("employee_id") @db.Uuid
+  technicianUserId   String                         @map("technician_user_id") @db.Uuid
+  createdByUserId    String?                        @map("created_by_user_id") @db.Uuid
+  reviewedByUserId   String?                        @map("reviewed_by_user_id") @db.Uuid
+  periodId           String?                        @map("period_id") @db.Uuid
+  payrollEntryId     String?                        @unique @map("payroll_entry_id") @db.Uuid
+  serviceType        ServiceOrderType               @map("service_type")
+  finalizedAt        DateTime                       @map("finalized_at")
+  profitAfterExpense Decimal                        @map("profit_after_expense") @db.Decimal(12, 2)
+  commissionRate     Decimal                        @default(0.1000) @map("commission_rate") @db.Decimal(5, 4)
+  commissionAmount   Decimal                        @map("commission_amount") @db.Decimal(12, 2)
+  concept            String
+  status             PayrollServiceCommissionStatus @default(PENDING)
+  reviewNote         String?                        @map("review_note")
+  approvedAt         DateTime?                      @map("approved_at")
+  rejectedAt         DateTime?                      @map("rejected_at")
+  createdAt          DateTime                       @default(now()) @map("created_at")
+  updatedAt          DateTime                       @updatedAt @map("updated_at")
 
-  owner User @relation("PayrollServiceCommissionOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  serviceOrder ServiceOrder @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
-  employee PayrollEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  period PayrollPeriod? @relation(fields: [periodId], references: [id], onDelete: SetNull)
-  payrollEntry PayrollEntry? @relation("PayrollServiceCommissionRequestToEntry", fields: [payrollEntryId], references: [id], onDelete: SetNull)
-  technicianUser User @relation("PayrollServiceCommissionTechnicianUser", fields: [technicianUserId], references: [id], onDelete: Cascade)
-  createdByUser User? @relation("PayrollServiceCommissionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  reviewedByUser User? @relation("PayrollServiceCommissionReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  owner          User            @relation("PayrollServiceCommissionOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  serviceOrder   ServiceOrder    @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
+  employee       PayrollEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  period         PayrollPeriod?  @relation(fields: [periodId], references: [id], onDelete: SetNull)
+  payrollEntry   PayrollEntry?   @relation("PayrollServiceCommissionRequestToEntry", fields: [payrollEntryId], references: [id], onDelete: SetNull)
+  technicianUser User            @relation("PayrollServiceCommissionTechnicianUser", fields: [technicianUserId], references: [id], onDelete: Cascade)
+  createdByUser  User?           @relation("PayrollServiceCommissionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  reviewedByUser User?           @relation("PayrollServiceCommissionReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
 
   @@index([ownerId])
   @@index([ownerId, status])
@@ -2230,89 +2239,89 @@ model PayrollServiceCommissionRequest {
 }
 
 model CompanyManualEntry {
-  id              String                @id @default(uuid()) @db.Uuid
-  ownerId         String                @db.Uuid
+  id              String                 @id @default(uuid()) @db.Uuid
+  ownerId         String                 @db.Uuid
   starterKey      String?
   title           String
-  normalizedTitle String                @default("")
+  normalizedTitle String                 @default("")
   summary         String?
   content         String
-  contentHash     String                @default("")
+  contentHash     String                 @default("")
   kind            CompanyManualEntryKind
-  audience        CompanyManualAudience @default(GENERAL)
-  targetRoles     Role[]                @default([])
+  audience        CompanyManualAudience  @default(GENERAL)
+  targetRoles     Role[]                 @default([])
   moduleKey       String?
-  moduleScopeKey  String                @default("")
-  targetRolesKey  String                @default("")
-  published       Boolean               @default(true)
-  sortOrder       Int                   @default(0)
-  createdByUserId String                @db.Uuid
-  updatedByUserId String?               @db.Uuid
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
+  moduleScopeKey  String                 @default("")
+  targetRolesKey  String                 @default("")
+  published       Boolean                @default(true)
+  sortOrder       Int                    @default(0)
+  createdByUserId String                 @db.Uuid
+  updatedByUserId String?                @db.Uuid
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
 
+  @@unique([ownerId, starterKey], map: "company_manual_owner_starter_key_unique")
+  @@unique([ownerId, normalizedTitle, kind, audience, moduleScopeKey, targetRolesKey, contentHash], map: "company_manual_dedup_unique")
   @@index([ownerId])
   @@index([ownerId, published])
   @@index([ownerId, kind])
   @@index([ownerId, audience])
   @@index([ownerId, normalizedTitle])
   @@index([updatedAt])
-  @@unique([ownerId, starterKey], map: "company_manual_owner_starter_key_unique")
-  @@unique([ownerId, normalizedTitle, kind, audience, moduleScopeKey, targetRolesKey, contentHash], map: "company_manual_dedup_unique")
 }
 
 model Service {
-  id                      String        @id @default(uuid()) @db.Uuid
+  id              String           @id @default(uuid()) @db.Uuid
   // Short human-friendly order number (e.g. YYYYMMDDHHmmssSSSxx). Nullable for backward compatibility.
-  orderNumber             String?       @unique
-  customerId              String        @db.Uuid
-  createdByUserId         String        @db.Uuid
-  serviceType             ServiceType
-  category                String
-  categoryId              String?       @db.Uuid @map("category_id")
-  status                  ServiceStatus @default(RESERVED)
-  currentPhase             ServicePhaseType @default(RESERVA)
-  orderType               OrderType     @default(RESERVA)
-  orderState              OrderState    @default(PENDING)
+  orderNumber     String?          @unique
+  customerId      String           @db.Uuid
+  createdByUserId String           @db.Uuid
+  serviceType     ServiceType
+  category        String
+  categoryId      String?          @map("category_id") @db.Uuid
+  status          ServiceStatus    @default(RESERVED)
+  currentPhase    ServicePhaseType @default(RESERVA)
+  orderType       OrderType        @default(RESERVA)
+  orderState      OrderState       @default(PENDING)
 
   // Admin-only: separate flow phase + operational status.
   // Nullable for backward compatibility (existing rows).
   adminPhase              AdminOrderPhase?
   adminStatus             AdminOrderStatus?
-  technicianId            String?       @db.Uuid
-  priority                Int           @default(2)
+  technicianId            String?           @db.Uuid
+  priority                Int               @default(2)
   title                   String
   description             String
-  quotedAmount            Decimal?      @db.Decimal(12, 2)
-  depositAmount           Decimal?      @db.Decimal(12, 2)
-  paymentStatus           String        @default("pending")
+  quotedAmount            Decimal?          @db.Decimal(12, 2)
+  depositAmount           Decimal?          @db.Decimal(12, 2)
+  paymentStatus           String            @default("pending")
   addressSnapshot         String?
-  orderExtras              Json?
+  orderExtras             Json?
   scheduledStart          DateTime?
   scheduledEnd            DateTime?
   completedAt             DateTime?
-  warrantyParentServiceId String?       @db.Uuid
+  warrantyParentServiceId String?           @db.Uuid
   tags                    String[]
-  createdAt               DateTime      @default(now())
-  updatedAt               DateTime      @updatedAt
-  isDeleted               Boolean       @default(false)
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+  isDeleted               Boolean           @default(false)
 
-  customer Client   @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  categoryRef ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  createdBy User    @relation("ServiceCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  technician User?  @relation("ServiceTechnician", fields: [technicianId], references: [id], onDelete: SetNull)
-  warrantyParent Service?  @relation("WarrantyParent", fields: [warrantyParentServiceId], references: [id], onDelete: SetNull)
-  warrantyChildren Service[] @relation("WarrantyParent")
-  assignments ServiceAssignment[]
-  steps ServiceStep[]
-  updates ServiceUpdate[]
-  files ServiceFile[]
-  phaseHistory ServicePhaseHistory[]
-  executionReports ServiceExecutionReport[]
-  executionChanges ServiceExecutionChange[]
+  customer            Client                   @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  categoryRef         ServiceCategory?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdBy           User                     @relation("ServiceCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  technician          User?                    @relation("ServiceTechnician", fields: [technicianId], references: [id], onDelete: SetNull)
+  warrantyParent      Service?                 @relation("WarrantyParent", fields: [warrantyParentServiceId], references: [id], onDelete: SetNull)
+  warrantyChildren    Service[]                @relation("WarrantyParent")
+  assignments         ServiceAssignment[]
+  steps               ServiceStep[]
+  updates             ServiceUpdate[]
+  files               ServiceFile[]
+  phaseHistory        ServicePhaseHistory[]
+  executionReports    ServiceExecutionReport[]
+  executionChanges    ServiceExecutionChange[]
   checklistExecutions ChecklistExecution[]
 
-  closing ServiceClosing?
+  closing        ServiceClosing?
   technicalVisit TechnicalVisit? @relation("ServiceTechnicalVisit")
 
   salidasTecnicas SalidaTecnica[]
@@ -2334,30 +2343,30 @@ model Service {
 }
 
 model ServiceClosing {
-  id        String   @id @default(uuid()) @db.Uuid
-  serviceId String   @unique @db.Uuid
+  id        String @id @default(uuid()) @db.Uuid
+  serviceId String @unique @db.Uuid
 
   // Draft/editable data snapshots.
   invoiceData  Json?
   warrantyData Json?
 
   // Files (stored as ServiceFile records).
-  invoiceDraftFileId   String? @db.Uuid
-  warrantyDraftFileId  String? @db.Uuid
+  invoiceDraftFileId     String? @db.Uuid
+  warrantyDraftFileId    String? @db.Uuid
   invoiceApprovedFileId  String? @db.Uuid
   warrantyApprovedFileId String? @db.Uuid
-  invoiceFinalFileId   String? @db.Uuid
-  warrantyFinalFileId  String? @db.Uuid
+  invoiceFinalFileId     String? @db.Uuid
+  warrantyFinalFileId    String? @db.Uuid
 
-  approvalStatus ServiceClosingApprovalStatus @default(PENDING)
-  approvedByUserId String? @db.Uuid
-  approvedAt        DateTime?
-  rejectedByUserId  String? @db.Uuid
-  rejectedAt        DateTime?
-  rejectReason      String?
+  approvalStatus   ServiceClosingApprovalStatus @default(PENDING)
+  approvedByUserId String?                      @db.Uuid
+  approvedAt       DateTime?
+  rejectedByUserId String?                      @db.Uuid
+  rejectedAt       DateTime?
+  rejectReason     String?
 
   signatureStatus ServiceClosingSignatureStatus @default(PENDING)
-  signatureFileId String? @db.Uuid
+  signatureFileId String?                       @db.Uuid
   signedAt        DateTime?
 
   sentToTechnicianAt DateTime?
@@ -2373,12 +2382,12 @@ model ServiceClosing {
 
   signatureFile ServiceFile? @relation("ServiceClosingSignatureFile", fields: [signatureFileId], references: [id], onDelete: SetNull)
 
-  invoiceDraftFile ServiceFile? @relation("ServiceClosingInvoiceDraftFile", fields: [invoiceDraftFileId], references: [id], onDelete: SetNull)
-  warrantyDraftFile ServiceFile? @relation("ServiceClosingWarrantyDraftFile", fields: [warrantyDraftFileId], references: [id], onDelete: SetNull)
-  invoiceApprovedFile ServiceFile? @relation("ServiceClosingInvoiceApprovedFile", fields: [invoiceApprovedFileId], references: [id], onDelete: SetNull)
+  invoiceDraftFile     ServiceFile? @relation("ServiceClosingInvoiceDraftFile", fields: [invoiceDraftFileId], references: [id], onDelete: SetNull)
+  warrantyDraftFile    ServiceFile? @relation("ServiceClosingWarrantyDraftFile", fields: [warrantyDraftFileId], references: [id], onDelete: SetNull)
+  invoiceApprovedFile  ServiceFile? @relation("ServiceClosingInvoiceApprovedFile", fields: [invoiceApprovedFileId], references: [id], onDelete: SetNull)
   warrantyApprovedFile ServiceFile? @relation("ServiceClosingWarrantyApprovedFile", fields: [warrantyApprovedFileId], references: [id], onDelete: SetNull)
-  invoiceFinalFile ServiceFile? @relation("ServiceClosingInvoiceFinalFile", fields: [invoiceFinalFileId], references: [id], onDelete: SetNull)
-  warrantyFinalFile ServiceFile? @relation("ServiceClosingWarrantyFinalFile", fields: [warrantyFinalFileId], references: [id], onDelete: SetNull)
+  invoiceFinalFile     ServiceFile? @relation("ServiceClosingInvoiceFinalFile", fields: [invoiceFinalFileId], references: [id], onDelete: SetNull)
+  warrantyFinalFile    ServiceFile? @relation("ServiceClosingWarrantyFinalFile", fields: [warrantyFinalFileId], references: [id], onDelete: SetNull)
 
   @@index([serviceId])
   @@index([approvalStatus])
@@ -2388,23 +2397,23 @@ model ServiceClosing {
 }
 
 model WarrantyProductConfig {
-  id                String               @id @default(uuid()) @db.Uuid
-  ownerId           String               @db.Uuid @map("owner_id")
-  categoryId        String?              @db.Uuid @map("category_id")
-  categoryCode      String?              @map("category_code")
-  categoryName      String?              @map("category_name")
-  productName       String?              @map("product_name")
-  productKey        String?              @map("product_key")
-  hasWarranty       Boolean              @default(true) @map("has_warranty")
-  durationValue     Int?                 @map("duration_value")
+  id                String                @id @default(uuid()) @db.Uuid
+  ownerId           String                @map("owner_id") @db.Uuid
+  categoryId        String?               @map("category_id") @db.Uuid
+  categoryCode      String?               @map("category_code")
+  categoryName      String?               @map("category_name")
+  productName       String?               @map("product_name")
+  productKey        String?               @map("product_key")
+  hasWarranty       Boolean               @default(true) @map("has_warranty")
+  durationValue     Int?                  @map("duration_value")
   durationUnit      WarrantyDurationUnit? @map("duration_unit")
-  warrantySummary   String?              @db.Text @map("warranty_summary")
-  coverageSummary   String?              @db.Text @map("coverage_summary")
-  exclusionsSummary String?              @db.Text @map("exclusions_summary")
-  notes             String?              @db.Text
-  isActive          Boolean              @default(true) @map("is_active")
-  createdAt         DateTime             @default(now()) @map("created_at")
-  updatedAt         DateTime             @updatedAt @map("updated_at")
+  warrantySummary   String?               @map("warranty_summary") @db.Text
+  coverageSummary   String?               @map("coverage_summary") @db.Text
+  exclusionsSummary String?               @map("exclusions_summary") @db.Text
+  notes             String?               @db.Text
+  isActive          Boolean               @default(true) @map("is_active")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
 
   owner    User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   category ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
@@ -2418,45 +2427,45 @@ model WarrantyProductConfig {
 }
 
 model TechnicalVisit {
-  id                 String   @id @default(uuid()) @db.Uuid
-  orderId            String   @unique @db.Uuid @map("order_id")
-  technicianId       String   @db.Uuid @map("technician_id")
+  id           String @id @default(uuid()) @db.Uuid
+  orderId      String @unique @map("order_id") @db.Uuid
+  technicianId String @map("technician_id") @db.Uuid
 
-  reportDescription  String   @db.Text @map("report_description")
-  installationNotes  String   @db.Text @map("installation_notes")
+  reportDescription String @map("report_description") @db.Text
+  installationNotes String @map("installation_notes") @db.Text
 
-  estimatedProducts  Json     @default(dbgenerated("'[]'::jsonb")) @map("estimated_products")
-  photos             Json     @default(dbgenerated("'[]'::jsonb"))
-  videos             Json     @default(dbgenerated("'[]'::jsonb"))
+  estimatedProducts Json @default(dbgenerated("'[]'::jsonb")) @map("estimated_products")
+  photos            Json @default(dbgenerated("'[]'::jsonb"))
+  videos            Json @default(dbgenerated("'[]'::jsonb"))
 
-  visitDate          DateTime @default(now()) @map("visit_date")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  visitDate DateTime @default(now()) @map("visit_date")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  order              Service  @relation("ServiceTechnicalVisit", fields: [orderId], references: [id], onDelete: Cascade)
-  technician         User     @relation("TechnicalVisitTechnician", fields: [technicianId], references: [id], onDelete: Restrict)
+  order      Service @relation("ServiceTechnicalVisit", fields: [orderId], references: [id], onDelete: Cascade)
+  technician User    @relation("TechnicalVisitTechnician", fields: [technicianId], references: [id], onDelete: Restrict)
 
   @@index([technicianId])
   @@map("technical_visits")
 }
 
 model Vehiculo {
-  id                 String   @id @default(uuid()) @db.Uuid
-  nombre             String
-  tipo               String
-  marca              String?
-  modelo             String?
-  placa              String?
-  combustibleTipo    String   @map("combustible_tipo")
-  rendimientoKmLitro Decimal? @db.Decimal(10, 2) @map("rendimiento_km_litro")
-  capacidadTanqueLitros Decimal? @db.Decimal(10, 2) @map("capacidad_tanque_litros")
-  esEmpresa          Boolean  @default(false) @map("es_empresa")
-  tecnicoIdPropietario String? @db.Uuid @map("tecnico_id_propietario")
-  activo             Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                    String   @id @default(uuid()) @db.Uuid
+  nombre                String
+  tipo                  String
+  marca                 String?
+  modelo                String?
+  placa                 String?
+  combustibleTipo       String   @map("combustible_tipo")
+  rendimientoKmLitro    Decimal? @map("rendimiento_km_litro") @db.Decimal(10, 2)
+  capacidadTanqueLitros Decimal? @map("capacidad_tanque_litros") @db.Decimal(10, 2)
+  esEmpresa             Boolean  @default(false) @map("es_empresa")
+  tecnicoIdPropietario  String?  @map("tecnico_id_propietario") @db.Uuid
+  activo                Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  propietario User? @relation("VehiculoPropietario", fields: [tecnicoIdPropietario], references: [id], onDelete: SetNull)
+  propietario User?           @relation("VehiculoPropietario", fields: [tecnicoIdPropietario], references: [id], onDelete: SetNull)
   salidas     SalidaTecnica[]
 
   @@index([esEmpresa])
@@ -2466,13 +2475,13 @@ model Vehiculo {
 }
 
 model PrecioCombustible {
-  id              String   @id @default(uuid()) @db.Uuid
-  combustibleTipo String   @map("combustible_tipo")
-  precioPorLitro  Decimal  @db.Decimal(12, 2) @map("precio_por_litro")
+  id              String    @id @default(uuid()) @db.Uuid
+  combustibleTipo String    @map("combustible_tipo")
+  precioPorLitro  Decimal   @map("precio_por_litro") @db.Decimal(12, 2)
   vigenciaDesde   DateTime? @map("vigencia_desde")
-  activo          Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  activo          Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([combustibleTipo])
   @@index([combustibleTipo, activo])
@@ -2481,18 +2490,18 @@ model PrecioCombustible {
 }
 
 model PagoCombustibleTecnico {
-  id          String                     @id @default(uuid()) @db.Uuid
-  tecnicoId   String                     @db.Uuid @map("tecnico_id")
-  fechaInicio DateTime                   @map("fecha_inicio")
-  fechaFin    DateTime                   @map("fecha_fin")
-  totalMonto  Decimal                    @db.Decimal(12, 2) @map("total_monto")
+  id          String                       @id @default(uuid()) @db.Uuid
+  tecnicoId   String                       @map("tecnico_id") @db.Uuid
+  fechaInicio DateTime                     @map("fecha_inicio")
+  fechaFin    DateTime                     @map("fecha_fin")
+  totalMonto  Decimal                      @map("total_monto") @db.Decimal(12, 2)
   estado      PagoCombustibleTecnicoEstado @default(PENDIENTE)
-  fechaPago   DateTime?                  @map("fecha_pago")
-  createdAt   DateTime                   @default(now())
-  updatedAt   DateTime                   @updatedAt
+  fechaPago   DateTime?                    @map("fecha_pago")
+  createdAt   DateTime                     @default(now())
+  updatedAt   DateTime                     @updatedAt
 
-  tecnico User @relation(fields: [tecnicoId], references: [id], onDelete: Restrict)
-  salidas SalidaTecnica[]
+  tecnico      User            @relation(fields: [tecnicoId], references: [id], onDelete: Restrict)
+  salidas      SalidaTecnica[]
   payrollEntry PayrollEntry?
 
   @@unique([tecnicoId, fechaInicio, fechaFin])
@@ -2502,40 +2511,40 @@ model PagoCombustibleTecnico {
 }
 
 model SalidaTecnica {
-  id                    String            @id @default(uuid()) @db.Uuid
-  servicioId            String            @db.Uuid @map("servicio_id")
-  tecnicoId             String            @db.Uuid @map("tecnico_id")
-  vehiculoId            String            @db.Uuid @map("vehiculo_id")
-  pagoCombustibleId     String?           @db.Uuid @map("pago_combustible_id")
+  id                String  @id @default(uuid()) @db.Uuid
+  servicioId        String  @map("servicio_id") @db.Uuid
+  tecnicoId         String  @map("tecnico_id") @db.Uuid
+  vehiculoId        String  @map("vehiculo_id") @db.Uuid
+  pagoCombustibleId String? @map("pago_combustible_id") @db.Uuid
 
-  esVehiculoPropio      Boolean           @default(false) @map("es_vehiculo_propio")
-  generaPagoCombustible Boolean           @default(false) @map("genera_pago_combustible")
+  esVehiculoPropio      Boolean @default(false) @map("es_vehiculo_propio")
+  generaPagoCombustible Boolean @default(false) @map("genera_pago_combustible")
 
-  fecha                 DateTime          @default(now())
-  horaSalida            DateTime          @map("hora_salida")
-  horaLlegada           DateTime?         @map("hora_llegada")
-  horaFinal             DateTime?         @map("hora_final")
+  fecha       DateTime  @default(now())
+  horaSalida  DateTime  @map("hora_salida")
+  horaLlegada DateTime? @map("hora_llegada")
+  horaFinal   DateTime? @map("hora_final")
 
-  latSalida             Float             @map("lat_salida")
-  lngSalida             Float             @map("lng_salida")
-  latLlegada            Float?            @map("lat_llegada")
-  lngLlegada            Float?            @map("lng_llegada")
-  latFinal              Float?            @map("lat_final")
-  lngFinal              Float?            @map("lng_final")
+  latSalida  Float  @map("lat_salida")
+  lngSalida  Float  @map("lng_salida")
+  latLlegada Float? @map("lat_llegada")
+  lngLlegada Float? @map("lng_llegada")
+  latFinal   Float? @map("lat_final")
+  lngFinal   Float? @map("lng_final")
 
-  kmEstimados           Decimal?          @db.Decimal(12, 2) @map("km_estimados")
-  litrosEstimados       Decimal?          @db.Decimal(12, 2) @map("litros_estimados")
-  precioCombustibleLitro Decimal?         @db.Decimal(12, 2) @map("precio_combustible_litro")
-  montoCombustible      Decimal           @default(0) @db.Decimal(12, 2) @map("monto_combustible")
+  kmEstimados            Decimal? @map("km_estimados") @db.Decimal(12, 2)
+  litrosEstimados        Decimal? @map("litros_estimados") @db.Decimal(12, 2)
+  precioCombustibleLitro Decimal? @map("precio_combustible_litro") @db.Decimal(12, 2)
+  montoCombustible       Decimal  @default(0) @map("monto_combustible") @db.Decimal(12, 2)
 
-  estado                SalidaTecnicaEstado @default(INICIADA)
-  observacion           String?           @map("observacion")
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
+  estado      SalidaTecnicaEstado @default(INICIADA)
+  observacion String?             @map("observacion")
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
 
-  tecnico        User                   @relation(fields: [tecnicoId], references: [id], onDelete: Restrict)
-  vehiculo       Vehiculo               @relation(fields: [vehiculoId], references: [id], onDelete: Restrict)
-  servicio       Service                @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  tecnico         User                    @relation(fields: [tecnicoId], references: [id], onDelete: Restrict)
+  vehiculo        Vehiculo                @relation(fields: [vehiculoId], references: [id], onDelete: Restrict)
+  servicio        Service                 @relation(fields: [servicioId], references: [id], onDelete: Cascade)
   pagoCombustible PagoCombustibleTecnico? @relation(fields: [pagoCombustibleId], references: [id], onDelete: SetNull)
 
   @@index([tecnicoId, fecha])
@@ -2547,12 +2556,12 @@ model SalidaTecnica {
 }
 
 model ServicePhaseHistory {
-  id              String           @id @default(uuid()) @db.Uuid
-  serviceId       String           @db.Uuid
+  id              String            @id @default(uuid()) @db.Uuid
+  serviceId       String            @db.Uuid
   phase           ServicePhaseType
   note            String?
-  changedByUserId String           @db.Uuid
-  changedAt       DateTime         @default(now())
+  changedByUserId String            @db.Uuid
+  changedAt       DateTime          @default(now())
   fromPhase       ServicePhaseType?
   toPhase         ServicePhaseType?
 
@@ -2579,13 +2588,13 @@ model ServiceAssignment {
 }
 
 model ServiceStep {
-  id           String   @id @default(uuid()) @db.Uuid
-  serviceId    String   @db.Uuid
+  id           String    @id @default(uuid()) @db.Uuid
+  serviceId    String    @db.Uuid
   stepKey      String
   stepLabel    String
-  isDone       Boolean  @default(false)
+  isDone       Boolean   @default(false)
   doneAt       DateTime?
-  doneByUserId String?  @db.Uuid
+  doneByUserId String?   @db.Uuid
 
   service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   doneBy  User?   @relation("ServiceStepDoneBy", fields: [doneByUserId], references: [id], onDelete: SetNull)
@@ -2612,38 +2621,38 @@ model ServiceUpdate {
 }
 
 model ServiceFile {
-  id               String   @id @default(uuid()) @db.Uuid
-  serviceId        String   @db.Uuid
-  uploadedByUserId String   @db.Uuid
-  fileUrl          String
-  fileType         String
-  caption          String?
-  storageProvider  String   @default("LOCAL")
-  objectKey        String?
-  originalFileName String?
-  mimeType         String?
-  mediaType        String?
-  kind             String?
-  fileSize         Int?
-  width            Int?
-  height           Int?
-  durationSeconds  Int?
-  executionReportId String? @db.Uuid
-  deletedAt        DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                String    @id @default(uuid()) @db.Uuid
+  serviceId         String    @db.Uuid
+  uploadedByUserId  String    @db.Uuid
+  fileUrl           String
+  fileType          String
+  caption           String?
+  storageProvider   String    @default("LOCAL")
+  objectKey         String?
+  originalFileName  String?
+  mimeType          String?
+  mediaType         String?
+  kind              String?
+  fileSize          Int?
+  width             Int?
+  height            Int?
+  durationSeconds   Int?
+  executionReportId String?   @db.Uuid
+  deletedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  service    Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  uploadedBy User    @relation(fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  service         Service                 @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  uploadedBy      User                    @relation(fields: [uploadedByUserId], references: [id], onDelete: Restrict)
   executionReport ServiceExecutionReport? @relation(fields: [executionReportId], references: [id], onDelete: SetNull)
 
-  serviceClosingSignatureFor ServiceClosing[] @relation("ServiceClosingSignatureFile")
-  serviceClosingInvoiceDraftFor ServiceClosing[] @relation("ServiceClosingInvoiceDraftFile")
-  serviceClosingWarrantyDraftFor ServiceClosing[] @relation("ServiceClosingWarrantyDraftFile")
-  serviceClosingInvoiceApprovedFor ServiceClosing[] @relation("ServiceClosingInvoiceApprovedFile")
+  serviceClosingSignatureFor        ServiceClosing[] @relation("ServiceClosingSignatureFile")
+  serviceClosingInvoiceDraftFor     ServiceClosing[] @relation("ServiceClosingInvoiceDraftFile")
+  serviceClosingWarrantyDraftFor    ServiceClosing[] @relation("ServiceClosingWarrantyDraftFile")
+  serviceClosingInvoiceApprovedFor  ServiceClosing[] @relation("ServiceClosingInvoiceApprovedFile")
   serviceClosingWarrantyApprovedFor ServiceClosing[] @relation("ServiceClosingWarrantyApprovedFile")
-  serviceClosingInvoiceFinalFor ServiceClosing[] @relation("ServiceClosingInvoiceFinalFile")
-  serviceClosingWarrantyFinalFor ServiceClosing[] @relation("ServiceClosingWarrantyFinalFile")
+  serviceClosingInvoiceFinalFor     ServiceClosing[] @relation("ServiceClosingInvoiceFinalFile")
+  serviceClosingWarrantyFinalFor    ServiceClosing[] @relation("ServiceClosingWarrantyFinalFile")
 
   @@index([serviceId])
   @@index([serviceId, createdAt])
@@ -2653,40 +2662,39 @@ model ServiceFile {
 }
 
 model ServiceOrder {
-  id                String               @id @default(uuid()) @db.Uuid
-  clientId          String               @db.Uuid @map("client_id")
-  quotationId       String               @db.Uuid @map("quotation_id")
-  category          ServiceOrderCategory
-  serviceType       ServiceOrderType     @map("service_type")
-  status            ServiceOrderStatus   @default(PENDIENTE)
-  scheduledFor      DateTime?            @map("scheduled_for")
-  finalizedAt       DateTime?            @map("finalized_at")
-  technicianConfirmedAt   DateTime?      @map("technician_confirmed_at")
-  technicianConfirmedById String?        @db.Uuid @map("technician_confirmed_by")
-  technicalNote     String?              @db.Text @map("technical_note")
-  extraRequirements String?              @db.Text @map("extra_requirements")
-  parentOrderId     String?              @db.Uuid @map("parent_order_id")
-  createdById       String               @db.Uuid @map("created_by")
-  assignedToId      String?              @db.Uuid @map("assigned_to")
-  lastStatusChangedAt DateTime           @default(now()) @map("last_status_changed_at")
-  lastStatusChangedByUserId String?      @db.Uuid @map("last_status_changed_by_user_id")
-  createdAt         DateTime             @default(now()) @map("created_at")
-  updatedAt         DateTime             @updatedAt @map("updated_at")
+  id                        String               @id @default(uuid()) @db.Uuid
+  clientId                  String               @map("client_id") @db.Uuid
+  quotationId               String               @map("quotation_id") @db.Uuid
+  category                  ServiceOrderCategory
+  serviceType               ServiceOrderType     @map("service_type")
+  status                    ServiceOrderStatus   @default(PENDIENTE)
+  scheduledFor              DateTime?            @map("scheduled_for")
+  finalizedAt               DateTime?            @map("finalized_at")
+  technicianConfirmedAt     DateTime?            @map("technician_confirmed_at")
+  technicianConfirmedById   String?              @map("technician_confirmed_by") @db.Uuid
+  technicalNote             String?              @map("technical_note") @db.Text
+  extraRequirements         String?              @map("extra_requirements") @db.Text
+  parentOrderId             String?              @map("parent_order_id") @db.Uuid
+  createdById               String               @map("created_by") @db.Uuid
+  assignedToId              String?              @map("assigned_to") @db.Uuid
+  lastStatusChangedAt       DateTime             @default(now()) @map("last_status_changed_at")
+  lastStatusChangedByUserId String?              @map("last_status_changed_by_user_id") @db.Uuid
+  createdAt                 DateTime             @default(now()) @map("created_at")
+  updatedAt                 DateTime             @updatedAt @map("updated_at")
 
-  client      Client          @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  quotation   Cotizacion      @relation(fields: [quotationId], references: [id], onDelete: Restrict)
-  parentOrder ServiceOrder?   @relation("ServiceOrderParent", fields: [parentOrderId], references: [id], onDelete: SetNull)
-  childOrders ServiceOrder[]  @relation("ServiceOrderParent")
-  createdBy   User            @relation("ServiceOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  assignedTo  User?           @relation("ServiceOrderAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
-  lastStatusChangedBy User?   @relation("ServiceOrderLastStatusChangedBy", fields: [lastStatusChangedByUserId], references: [id], onDelete: SetNull)
-  technicianConfirmedBy User? @relation("ServiceOrderConfirmedBy", fields: [technicianConfirmedById], references: [id], onDelete: SetNull)
-  evidences   ServiceEvidence[]
-  reports     ServiceReport[]
-  statusHistory ServiceOrderStatusHistory[]
-  documentFlow OrderDocumentFlow?
+  client                           Client                            @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  quotation                        Cotizacion                        @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  parentOrder                      ServiceOrder?                     @relation("ServiceOrderParent", fields: [parentOrderId], references: [id], onDelete: SetNull)
+  childOrders                      ServiceOrder[]                    @relation("ServiceOrderParent")
+  createdBy                        User                              @relation("ServiceOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  assignedTo                       User?                             @relation("ServiceOrderAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  lastStatusChangedBy              User?                             @relation("ServiceOrderLastStatusChangedBy", fields: [lastStatusChangedByUserId], references: [id], onDelete: SetNull)
+  technicianConfirmedBy            User?                             @relation("ServiceOrderConfirmedBy", fields: [technicianConfirmedById], references: [id], onDelete: SetNull)
+  evidences                        ServiceEvidence[]
+  reports                          ServiceReport[]
+  statusHistory                    ServiceOrderStatusHistory[]
   payrollServiceCommissionRequests PayrollServiceCommissionRequest[]
-  notificationJobs ServiceOrderNotificationJob[]
+  notificationJobs                 ServiceOrderNotificationJob[]
 
   @@index([clientId])
   @@index([quotationId])
@@ -2708,18 +2716,18 @@ model ServiceOrder {
 }
 
 model ServiceOrderStatusHistory {
-  id             String             @id @default(uuid()) @db.Uuid
-  serviceOrderId String             @db.Uuid @map("service_order_id")
-  previousStatus ServiceOrderStatus? @map("previous_status")
-  nextStatus     ServiceOrderStatus @map("next_status")
-  changedAt      DateTime           @default(now()) @map("changed_at")
-  changedByUserId String?           @db.Uuid @map("changed_by_user_id")
-  changedByUserName String?         @db.Text @map("changed_by_user_name")
-  note           String?            @db.Text
-  createdAt      DateTime           @default(now()) @map("created_at")
+  id                String              @id @default(uuid()) @db.Uuid
+  serviceOrderId    String              @map("service_order_id") @db.Uuid
+  previousStatus    ServiceOrderStatus? @map("previous_status")
+  nextStatus        ServiceOrderStatus  @map("next_status")
+  changedAt         DateTime            @default(now()) @map("changed_at")
+  changedByUserId   String?             @map("changed_by_user_id") @db.Uuid
+  changedByUserName String?             @map("changed_by_user_name") @db.Text
+  note              String?             @db.Text
+  createdAt         DateTime            @default(now()) @map("created_at")
 
   serviceOrder ServiceOrder @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
-  changedBy   User?         @relation("ServiceOrderStatusHistoryChangedBy", fields: [changedByUserId], references: [id], onDelete: SetNull)
+  changedBy    User?        @relation("ServiceOrderStatusHistoryChangedBy", fields: [changedByUserId], references: [id], onDelete: SetNull)
 
   @@index([serviceOrderId])
   @@index([serviceOrderId, changedAt])
@@ -2729,10 +2737,10 @@ model ServiceOrderStatusHistory {
 
 model ServiceEvidence {
   id             String              @id @default(uuid()) @db.Uuid
-  serviceOrderId String              @db.Uuid @map("service_order_id")
+  serviceOrderId String              @map("service_order_id") @db.Uuid
   type           ServiceEvidenceType
   content        String              @db.Text
-  createdById    String              @db.Uuid @map("created_by")
+  createdById    String              @map("created_by") @db.Uuid
   createdAt      DateTime            @default(now()) @map("created_at")
   forPublicidad  Boolean             @default(false) @map("for_publicidad")
 
@@ -2747,12 +2755,12 @@ model ServiceEvidence {
 }
 
 model ServiceReport {
-  id             String   @id @default(uuid()) @db.Uuid
-  serviceOrderId String   @db.Uuid @map("service_order_id")
+  id             String            @id @default(uuid()) @db.Uuid
+  serviceOrderId String            @map("service_order_id") @db.Uuid
   type           ServiceReportType @default(OTROS)
-  report         String   @db.Text
-  createdById    String   @db.Uuid @map("created_by")
-  createdAt      DateTime @default(now()) @map("created_at")
+  report         String            @db.Text
+  createdById    String            @map("created_by") @db.Uuid
+  createdAt      DateTime          @default(now()) @map("created_at")
 
   serviceOrder ServiceOrder @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
   createdBy    User         @relation("ServiceReportCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
@@ -2768,7 +2776,7 @@ model PublicidadImage {
   id           String   @id @default(uuid()) @db.Uuid
   url          String   @db.Text
   caption      String?
-  uploadedById String   @db.Uuid @map("uploaded_by_id")
+  uploadedById String   @map("uploaded_by_id") @db.Uuid
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -2779,54 +2787,29 @@ model PublicidadImage {
   @@map("publicidad_images")
 }
 
-model OrderDocumentFlow {
-  id               String                  @id @default(uuid()) @db.Uuid
-  orderId          String                  @unique @db.Uuid @map("order_id")
-  status           OrderDocumentFlowStatus @default(PENDING_PREPARATION)
-  invoiceDraftJson Json?                   @map("invoice_draft_json")
-  warrantyDraftJson Json?                  @map("warranty_draft_json")
-  invoiceFinalUrl  String?                 @db.Text @map("invoice_final_url")
-  warrantyFinalUrl String?                 @db.Text @map("warranty_final_url")
-  preparedById     String?                 @db.Uuid @map("prepared_by")
-  approvedById     String?                 @db.Uuid @map("approved_by")
-  sentAt           DateTime?               @map("sent_at")
-  createdAt        DateTime                @default(now()) @map("created_at")
-  updatedAt        DateTime                @updatedAt @map("updated_at")
-
-  order      ServiceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  preparedBy User?        @relation("OrderDocumentFlowPreparedBy", fields: [preparedById], references: [id], onDelete: SetNull)
-  approvedBy User?        @relation("OrderDocumentFlowApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-
-  @@index([status])
-  @@index([preparedById])
-  @@index([approvedById])
-  @@index([sentAt])
-  @@map("order_document_flows")
-}
-
 model Cotizacion {
-  id              String   @id @default(uuid()) @db.Uuid
-  createdByUserId String   @db.Uuid
-  customerId      String?  @db.Uuid
-  customerName    String
-  customerPhone   String
-  customerPhoneNormalized String @default("")
-  note            String?  
-  includeItbis    Boolean  @default(false)
-  itbisRate       Decimal  @default(0.18) @db.Decimal(5, 4)
-  globalDiscountAmount Decimal @default(0) @db.Decimal(12, 2)
-  subtotal        Decimal  @db.Decimal(12, 2)
-  subtotalCost    Decimal? @db.Decimal(12, 2)
-  itbisAmount     Decimal  @db.Decimal(12, 2)
-  totalCost       Decimal? @db.Decimal(12, 2)
-  total           Decimal  @db.Decimal(12, 2)
-  totalProfit     Decimal? @db.Decimal(12, 2)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                      String   @id @default(uuid()) @db.Uuid
+  createdByUserId         String   @db.Uuid
+  customerId              String?  @db.Uuid
+  customerName            String
+  customerPhone           String
+  customerPhoneNormalized String   @default("")
+  note                    String?
+  includeItbis            Boolean  @default(false)
+  itbisRate               Decimal  @default(0.18) @db.Decimal(5, 4)
+  globalDiscountAmount    Decimal  @default(0) @db.Decimal(12, 2)
+  subtotal                Decimal  @db.Decimal(12, 2)
+  subtotalCost            Decimal? @db.Decimal(12, 2)
+  itbisAmount             Decimal  @db.Decimal(12, 2)
+  totalCost               Decimal? @db.Decimal(12, 2)
+  total                   Decimal  @db.Decimal(12, 2)
+  totalProfit             Decimal? @db.Decimal(12, 2)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
-  createdBy User    @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
-  customer  Client? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  items     CotizacionItem[]
+  createdBy     User             @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  customer      Client?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items         CotizacionItem[]
   serviceOrders ServiceOrder[]
 
   @@index([createdByUserId])
@@ -2837,22 +2820,22 @@ model Cotizacion {
 }
 
 model CotizacionItem {
-  id                   String   @id @default(uuid()) @db.Uuid
-  cotizacionId         String   @db.Uuid
-  productId            String?  @db.Uuid
-  productNameSnapshot  String
-  productImageSnapshot String?
-  qty                  Decimal  @db.Decimal(12, 3)
+  id                        String   @id @default(uuid()) @db.Uuid
+  cotizacionId              String   @db.Uuid
+  productId                 String?  @db.Uuid
+  productNameSnapshot       String
+  productImageSnapshot      String?
+  qty                       Decimal  @db.Decimal(12, 3)
   originalUnitPriceSnapshot Decimal? @db.Decimal(12, 2)
-  unitPrice            Decimal  @db.Decimal(12, 2)
-  costUnitSnapshot     Decimal? @db.Decimal(12, 2)
-  subtotalCost         Decimal? @db.Decimal(12, 2)
-  lineTotal            Decimal  @db.Decimal(12, 2)
-  profit               Decimal? @db.Decimal(12, 2)
-  createdAt            DateTime @default(now())
+  unitPrice                 Decimal  @db.Decimal(12, 2)
+  costUnitSnapshot          Decimal? @db.Decimal(12, 2)
+  subtotalCost              Decimal? @db.Decimal(12, 2)
+  lineTotal                 Decimal  @db.Decimal(12, 2)
+  profit                    Decimal? @db.Decimal(12, 2)
+  createdAt                 DateTime @default(now())
 
   cotizacion Cotizacion @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
-  product   Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+  product    Product?   @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@index([cotizacionId])
   @@index([productId])
@@ -2865,7 +2848,7 @@ model WorkScheduleProfile {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  days WorkScheduleProfileDay[]
+  days            WorkScheduleProfileDay[]
   employeeConfigs WorkEmployeeConfig[]
 
   @@index([isDefault])
@@ -2874,8 +2857,8 @@ model WorkScheduleProfile {
 
 model WorkScheduleProfileDay {
   id          String        @id @default(uuid()) @db.Uuid
-  profileId   String        @db.Uuid @map("profile_id")
-  weekday     Int           // 0=Mon ... 6=Sun
+  profileId   String        @map("profile_id") @db.Uuid
+  weekday     Int // 0=Mon ... 6=Sun
   isWorking   Boolean       @default(true) @map("is_working")
   kind        WorkShiftKind @default(NORMAL)
   startMinute Int           @map("start_minute")
@@ -2891,7 +2874,7 @@ model WorkScheduleProfileDay {
 model WorkCoverageRule {
   id          String   @id @default(uuid()) @db.Uuid
   role        Role
-  weekday     Int      // 0=Mon ... 6=Sun
+  weekday     Int // 0=Mon ... 6=Sun
   minRequired Int      @default(0) @map("min_required")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -2902,23 +2885,23 @@ model WorkCoverageRule {
 }
 
 model WorkEmployeeConfig {
-  id                     String   @id @default(uuid()) @db.Uuid
-  userId                 String   @unique @db.Uuid @map("user_id")
-  enabled                Boolean  @default(true)
-  scheduleProfileId      String?  @db.Uuid @map("schedule_profile_id")
-  preferredDayOffWeekday Int?     @map("preferred_day_off_weekday")
-  fixedDayOffWeekday     Int?     @map("fixed_day_off_weekday")
-  disallowedDayOffWeekdays Int[]  @default([]) @map("disallowed_day_off_weekdays")
-  unavailableWeekdays    Int[]    @default([]) @map("unavailable_weekdays")
-  notes                  String?
-  lastAssignedDayOffWeekday Int?  @map("last_assigned_day_off_weekday")
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  id                        String   @id @default(uuid()) @db.Uuid
+  userId                    String   @unique @map("user_id") @db.Uuid
+  enabled                   Boolean  @default(true)
+  scheduleProfileId         String?  @map("schedule_profile_id") @db.Uuid
+  preferredDayOffWeekday    Int?     @map("preferred_day_off_weekday")
+  fixedDayOffWeekday        Int?     @map("fixed_day_off_weekday")
+  disallowedDayOffWeekdays  Int[]    @default([]) @map("disallowed_day_off_weekdays")
+  unavailableWeekdays       Int[]    @default([]) @map("unavailable_weekdays")
+  notes                     String?
+  lastAssignedDayOffWeekday Int?     @map("last_assigned_day_off_weekday")
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  scheduleProfile WorkScheduleProfile? @relation(fields: [scheduleProfileId], references: [id], onDelete: SetNull)
-  exceptions WorkScheduleException[]
-  assignments WorkDayAssignment[]
+  user            User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scheduleProfile WorkScheduleProfile?    @relation(fields: [scheduleProfileId], references: [id], onDelete: SetNull)
+  exceptions      WorkScheduleException[]
+  assignments     WorkDayAssignment[]
 
   @@index([enabled])
   @@index([scheduleProfileId])
@@ -2926,16 +2909,16 @@ model WorkEmployeeConfig {
 }
 
 model WorkScheduleException {
-  id          String                    @id @default(uuid()) @db.Uuid
-  userId      String?                   @db.Uuid @map("user_id")
-  type        WorkScheduleExceptionType
-  dateFrom    DateTime                  @map("date_from")
-  dateTo      DateTime                  @map("date_to")
-  note        String?
-  createdById String?                   @db.Uuid @map("created_by_id")
-  createdByName String?                 @map("created_by_name")
-  createdAt   DateTime                  @default(now())
-  updatedAt   DateTime                  @updatedAt
+  id            String                    @id @default(uuid()) @db.Uuid
+  userId        String?                   @map("user_id") @db.Uuid
+  type          WorkScheduleExceptionType
+  dateFrom      DateTime                  @map("date_from")
+  dateTo        DateTime                  @map("date_to")
+  note          String?
+  createdById   String?                   @map("created_by_id") @db.Uuid
+  createdByName String?                   @map("created_by_name")
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
 
   employeeConfig WorkEmployeeConfig? @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
@@ -2946,15 +2929,15 @@ model WorkScheduleException {
 }
 
 model WorkWeekSchedule {
-  id            String                @id @default(uuid()) @db.Uuid
-  weekStartDate DateTime              @unique @map("week_start_date")
-  status        WorkWeekScheduleStatus @default(GENERATED)
-  generatedById String?               @db.Uuid @map("generated_by_id")
-  generatedByName String?             @map("generated_by_name")
-  generatedAt   DateTime              @default(now()) @map("generated_at")
-  warnings      Json?                 // array of strings/objects
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
+  id              String                 @id @default(uuid()) @db.Uuid
+  weekStartDate   DateTime               @unique @map("week_start_date")
+  status          WorkWeekScheduleStatus @default(GENERATED)
+  generatedById   String?                @map("generated_by_id") @db.Uuid
+  generatedByName String?                @map("generated_by_name")
+  generatedAt     DateTime               @default(now()) @map("generated_at")
+  warnings        Json? // array of strings/objects
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
 
   days WorkDayAssignment[]
 
@@ -2963,21 +2946,21 @@ model WorkWeekSchedule {
 }
 
 model WorkDayAssignment {
-  id            String               @id @default(uuid()) @db.Uuid
-  weekScheduleId String              @db.Uuid @map("week_schedule_id")
-  userId        String               @db.Uuid @map("user_id")
-  date          DateTime
-  weekday       Int
-  status        WorkAssignmentStatus
-  startMinute   Int?                 @map("start_minute")
-  endMinute     Int?                 @map("end_minute")
-  manualOverride Boolean             @default(false) @map("manual_override")
-  note          String?
-  conflictFlags Json?                @map("conflict_flags")
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
+  id             String               @id @default(uuid()) @db.Uuid
+  weekScheduleId String               @map("week_schedule_id") @db.Uuid
+  userId         String               @map("user_id") @db.Uuid
+  date           DateTime
+  weekday        Int
+  status         WorkAssignmentStatus
+  startMinute    Int?                 @map("start_minute")
+  endMinute      Int?                 @map("end_minute")
+  manualOverride Boolean              @default(false) @map("manual_override")
+  note           String?
+  conflictFlags  Json?                @map("conflict_flags")
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
 
-  weekSchedule WorkWeekSchedule @relation(fields: [weekScheduleId], references: [id], onDelete: Cascade)
+  weekSchedule   WorkWeekSchedule   @relation(fields: [weekScheduleId], references: [id], onDelete: Cascade)
   employeeConfig WorkEmployeeConfig @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
   @@unique([weekScheduleId, userId, date])
@@ -2989,17 +2972,17 @@ model WorkDayAssignment {
 }
 
 model WorkScheduleAuditLog {
-  id            String                 @id @default(uuid()) @db.Uuid
+  id            String                  @id @default(uuid()) @db.Uuid
   action        WorkScheduleAuditAction
-  actorUserId   String?                @db.Uuid @map("actor_user_id")
-  actorUserName String?                @map("actor_user_name")
-  targetUserId  String?                @db.Uuid @map("target_user_id")
-  weekStartDate DateTime?              @map("week_start_date")
-  dateAffected  DateTime?              @map("date_affected")
+  actorUserId   String?                 @map("actor_user_id") @db.Uuid
+  actorUserName String?                 @map("actor_user_name")
+  targetUserId  String?                 @map("target_user_id") @db.Uuid
+  weekStartDate DateTime?               @map("week_start_date")
+  dateAffected  DateTime?               @map("date_affected")
   reason        String?
   before        Json?
   after         Json?
-  createdAt     DateTime               @default(now())
+  createdAt     DateTime                @default(now())
 
   @@index([action])
   @@index([actorUserId])
@@ -3011,8 +2994,8 @@ model WorkScheduleAuditLog {
 
 model AiAssistantConversationTurn {
   id                String   @id @default(uuid()) @db.Uuid
-  ownerId           String   @db.Uuid @map("owner_id")
-  userId            String   @db.Uuid @map("user_id")
+  ownerId           String   @map("owner_id") @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
   module            String   @default("general")
   route             String?
   entityType        String?  @map("entity_type")
@@ -3031,8 +3014,8 @@ model AiAssistantConversationTurn {
 
 model AiAssistantMemory {
   id           String   @id @default(uuid()) @db.Uuid
-  ownerId      String   @db.Uuid @map("owner_id")
-  userId       String   @db.Uuid @map("user_id")
+  ownerId      String   @map("owner_id") @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
   scope        String   @default("user")
   module       String   @default("general")
   topicKey     String   @map("topic_key")

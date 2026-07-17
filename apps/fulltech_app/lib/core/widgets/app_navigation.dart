@@ -77,12 +77,6 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Galería media',
             route: Routes.mediaGallery,
           ),
-        if (can(AppPermission.viewDocumentFlows))
-          const AppNavigationItem(
-            icon: Icons.verified_outlined,
-            title: 'Flujo documental',
-            route: Routes.documentFlows,
-          ),
         if (can(AppPermission.viewClients))
           const AppNavigationItem(
             icon: Icons.group_outlined,
@@ -160,6 +154,12 @@ List<AppNavigationSection> buildAppNavigationSections(
             icon: Icons.campaign_outlined,
             title: 'Publicidad',
             route: Routes.publicidad,
+          ),
+        if (can(AppPermission.manageWebsite))
+          const AppNavigationItem(
+            icon: Icons.language_rounded,
+            title: 'Sitio web',
+            route: Routes.sitioWeb,
           ),
       ],
     ),
@@ -303,7 +303,6 @@ String resolveNavigationTitle(
   if (path == Routes.serviceOrderCommissions) return 'Comisiones';
   if (path == Routes.mediaGallery) return 'Galería media';
   if (path == Routes.serviceOrderCreate) return 'Crear orden';
-  if (path == Routes.documentFlows) return 'Flujo documental';
   if (path == Routes.cotizacionesHistorial) return 'Cotizaciones';
   if (path == Routes.ventasLista) return 'Lista de ventas';
   if (path == Routes.caja) return 'Movimiento caja';
@@ -326,6 +325,7 @@ String resolveNavigationTitle(
   if (path == Routes.galeriaPublicidad) return 'Galería de Publicidad';
   if (path == Routes.whatsappCrm) return 'CRM WhatsApp';
   if (path == Routes.crmComercial) return 'CRM Comercial';
+  if (path == Routes.sitioWeb) return 'Sitio web';
   if (path == Routes.amonestaciones) return 'Amonestaciones';
   if (path == Routes.misAmonestacionesPendientes) {
     return 'Mis pendientes de firma';
@@ -333,7 +333,6 @@ String resolveNavigationTitle(
   if (path.startsWith('/amonestaciones/')) return 'Detalle amonestación';
   if (path == Routes.profile) return 'Perfil';
   if (path.startsWith('${Routes.serviceOrders}/')) return 'Detalle de orden';
-  if (path.startsWith('${Routes.documentFlows}/')) return 'Detalle documental';
   if (path.startsWith('/clientes/') && path.endsWith('/editar')) {
     return 'Editar cliente';
   }
@@ -362,7 +361,6 @@ bool desktopShellShouldShowOwnAppBar(String location) {
     Routes.serviceOrderCommissions,
     Routes.mediaGallery,
     Routes.galeriaPublicidad,
-    Routes.documentFlows,
     Routes.cotizaciones,
     Routes.nomina,
     Routes.misPagos,
@@ -371,6 +369,7 @@ bool desktopShellShouldShowOwnAppBar(String location) {
     Routes.configuracion,
     Routes.administracion,
     Routes.publicidad,
+    Routes.sitioWeb,
     Routes.users,
     Routes.profile,
   ];
@@ -384,7 +383,6 @@ bool desktopShellShouldShowOwnAppBar(String location) {
   if (path == Routes.cotizacionesHistorial) return false;
   if (path == Routes.registrarVenta) return false;
   if (path == Routes.serviceOrderCreate) return false;
-  if (path.startsWith('${Routes.documentFlows}/')) return false;
   if (path == Routes.clienteNuevo) return false;
   if (path.startsWith('${Routes.serviceOrders}/')) return false;
   if (path.startsWith('/clientes/')) return false;

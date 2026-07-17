@@ -1403,9 +1403,18 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
             items: _cart,
           );
       if (created != null) {
-        await ref
+        final printResult = await ref
             .read(unifiedTicketPrinterProvider)
-            .autoPrintSale(sale: created, items: created.items);
+            .printSaleTicket(sale: created, items: created.items);
+        if (!printResult.success && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Venta guardada, pero no se imprimio: ${printResult.message}',
+              ),
+            ),
+          );
+        }
       }
 
       if (!mounted) return;
