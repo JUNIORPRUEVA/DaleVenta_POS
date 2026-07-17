@@ -259,8 +259,12 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                         compact: isCompactMobile,
                         expanded: _openGroupIndex == i,
                         selected: groups[i].containsActiveRoute(location),
-                        onHoverOpen: isDesktop ? () => _openGroup(i) : null,
-                        onHoverExit: isDesktop ? () => _closeGroup(i) : null,
+                        onHoverOpen: isDesktop && groups[i].openOnHover
+                            ? () => _openGroup(i)
+                            : null,
+                        onHoverExit: isDesktop && groups[i].openOnHover
+                            ? () => _closeGroup(i)
+                            : null,
                         onTapHeader: () => _toggleGroup(i),
                         itemBuilder: (item) => _DrawerMenuItem(
                           icon: item.icon,
@@ -392,6 +396,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(List<AppNavigationSection> sections) {
         title: 'Ventas POS',
         icon: Icons.point_of_sale_rounded,
         items: const [],
+        openOnHover: false,
         trailingItems: [
           ...inventoryItems,
           if (salesCreditItem != null) salesCreditItem,
@@ -403,12 +408,14 @@ List<_DrawerMenuGroup> _buildDrawerGroups(List<AppNavigationSection> sections) {
               title: 'Ventas',
               icon: Icons.receipt_long_outlined,
               items: ventasItems,
+              openOnHover: false,
             ),
           if (cashItems.isNotEmpty)
             _DrawerMenuSubgroup(
               title: 'Movimiento efectivo',
               icon: Icons.account_balance_wallet_outlined,
               items: cashItems,
+              openOnHover: false,
             ),
         ],
       ),
@@ -465,6 +472,7 @@ class _DrawerMenuGroup {
     required this.title,
     required this.icon,
     required this.items,
+    this.openOnHover = true,
     this.trailingItems = const [],
     this.subgroups = const [],
   });
@@ -472,6 +480,7 @@ class _DrawerMenuGroup {
   final String title;
   final IconData icon;
   final List<AppNavigationItem> items;
+  final bool openOnHover;
   final List<AppNavigationItem> trailingItems;
   final List<_DrawerMenuSubgroup> subgroups;
 
@@ -496,11 +505,13 @@ class _DrawerMenuSubgroup {
     required this.title,
     required this.icon,
     required this.items,
+    this.openOnHover = true,
   });
 
   final String title;
   final IconData icon;
   final List<AppNavigationItem> items;
+  final bool openOnHover;
 }
 
 Widget? buildAdaptiveDrawer(
@@ -707,9 +718,11 @@ class _DrawerMenuSubgroupSectionState
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         onEnter: (_) {
+          if (!subgroup.openOnHover) return;
           if (!_expanded) setState(() => _expanded = true);
         },
         onExit: (_) {
+          if (!subgroup.openOnHover) return;
           if (_expanded) setState(() => _expanded = false);
         },
         child: Column(

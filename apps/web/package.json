@@ -1,0 +1,14 @@
+{
+  "name": "fulltech-web",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Sitio web publico y tienda online de FULLTECH SRL.",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0"
+  }
+}

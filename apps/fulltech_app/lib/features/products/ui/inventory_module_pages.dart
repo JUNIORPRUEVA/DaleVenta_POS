@@ -15,6 +15,7 @@ import '../../../core/cache/local_json_cache.dart';
 import '../../../core/models/product_model.dart';
 import '../../../core/utils/media_file_actions.dart';
 import '../../../core/utils/money_formatters.dart';
+import '../../../core/utils/local_file_bytes.dart';
 import '../../../core/utils/product_image_url.dart';
 import '../../../core/utils/simple_xlsx.dart';
 import '../../../core/widgets/app_drawer.dart';
@@ -636,6 +637,17 @@ _CatalogImportBundle _parseCatalogCsv(String content) {
   ]);
 }
 
+Future<Uint8List?> _readPickedFileBytes(PlatformFile file) async {
+  final memoryBytes = file.bytes;
+  if (memoryBytes != null && memoryBytes.isNotEmpty) {
+    return Uint8List.fromList(memoryBytes);
+  }
+  final path = file.path;
+  if (path == null || path.trim().isEmpty) return null;
+  final localBytes = await readLocalFileBytes(path);
+  return localBytes.isEmpty ? null : Uint8List.fromList(localBytes);
+}
+
 class InventoryModulePages extends ConsumerStatefulWidget {
   const InventoryModulePages({super.key});
 
@@ -748,15 +760,23 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
       withData: true,
     );
     final file = result?.files.single;
-    final bytes = file?.bytes;
-    if (bytes == null) return;
+    if (file == null) return;
 
     try {
-      final extension = (file?.extension ?? '').trim().toLowerCase();
+      final bytes = await _readPickedFileBytes(file);
+      if (!mounted) return;
+      if (bytes == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se pudo leer el archivo seleccionado'),
+          ),
+        );
+        return;
+      }
+      final extension = (file.extension ?? '').trim().toLowerCase();
       final isExcel = extension == 'xlsx';
-      final typedBytes = Uint8List.fromList(bytes);
       final bundle = isExcel
-          ? _parseCatalogWorkbook(typedBytes)
+          ? _parseCatalogWorkbook(bytes)
           : _parseCatalogCsv(utf8.decode(bytes, allowMalformed: true));
       if (!mounted) return;
       if (bundle.products.isEmpty &&

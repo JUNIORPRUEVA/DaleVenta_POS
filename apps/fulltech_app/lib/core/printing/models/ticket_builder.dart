@@ -34,17 +34,16 @@ class TicketBuilder {
     final maxHeight = 2000 * PdfPageFormat.mm;
     final pageHeight = contentHeight.clamp(minHeight, maxHeight).toDouble();
 
-    final font = switch (layout.fontFamily) {
-      'arial' => pw.Font.helvetica(),
-      'times' => pw.Font.times(),
+    final font = switch (layout.fontFamilyName) {
+      'Helvetica' => pw.Font.helvetica(),
+      'Times' => pw.Font.times(),
       _ => pw.Font.courier(),
     };
-    final bold = switch (layout.fontFamily) {
-      'arial' => pw.Font.helveticaBold(),
-      'times' => pw.Font.timesBold(),
+    final bold = switch (layout.fontFamilyName) {
+      'Helvetica' => pw.Font.helveticaBold(),
+      'Times' => pw.Font.timesBold(),
       _ => pw.Font.courierBold(),
     };
-
     doc.addPage(
       pw.Page(
         pageFormat: PdfPageFormat(pageWidth, pageHeight),

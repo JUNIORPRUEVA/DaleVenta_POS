@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 
 import '../../features/settings/data/printer_settings_model.dart';
@@ -87,16 +88,24 @@ class ThermalPrinterService {
     int? copies,
     String documentName = 'Ticket',
   }) async {
+    final count = copies ?? settings.copies;
+    if (count <= 0) {
+      return const PrintResult(
+        success: true,
+        message: 'Sin copias configuradas (0)',
+      );
+    }
     final status = await checkPrinterStatus(settings);
     if (!status.isAvailable || status.printer == null) {
       return PrintResult(success: false, message: status.message);
     }
-    final count = (copies ?? settings.copies).clamp(1, 5);
+    final normalizedCount = count.clamp(1, 5);
     try {
-      for (var i = 0; i < count; i++) {
+      for (var i = 0; i < normalizedCount; i++) {
         await Printing.directPrintPdf(
           printer: status.printer!,
-          name: documentName,
+          name: '${documentName}_${DateTime.now().millisecondsSinceEpoch}',
+          usePrinterSettings: true,
           onLayout: (_) async => bytes,
         );
       }
@@ -109,5 +118,21 @@ class ThermalPrinterService {
   void clearCache() {
     _cachedPrinter = null;
     _cachedName = null;
+  }
+
+  PdfPageFormat getPageFormat(PrinterSettingsModel settings) {
+    final printableWidthMm = settings.paperWidthMm == 58 ? 48.0 : 72.0;
+    final horizontalMarginMm =
+        (settings.leftMargin + settings.rightMargin).clamp(0, 8) / 2;
+    final width = (printableWidthMm + horizontalMarginMm) * PdfPageFormat.mm;
+    final height = 2000 * PdfPageFormat.mm;
+    return PdfPageFormat(
+      width,
+      height,
+      marginLeft: settings.leftMargin.clamp(0, 4) * PdfPageFormat.mm,
+      marginRight: settings.rightMargin.clamp(0, 4) * PdfPageFormat.mm,
+      marginTop: 2 * PdfPageFormat.mm,
+      marginBottom: 2 * PdfPageFormat.mm,
+    );
   }
 }

@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../../core/debug/app_error_reporter.dart';
 import '../../core/routing/routes.dart';
 import '../../core/utils/money_formatters.dart';
+import 'cash_close_ticket_printer.dart';
 import 'cash_dialogs.dart';
 import 'cash_models.dart';
 import 'cash_providers.dart';
@@ -120,9 +121,25 @@ class CashTurnMenuButton extends ConsumerWidget {
   Future<void> _showHistory(BuildContext context, WidgetRef ref) async {
     final rows = await ref.read(cashRepositoryProvider).closedSessions();
     if (!context.mounted) return;
+    final rootContext = context;
     await showDialog<void>(
       context: context,
-      builder: (context) => _TurnHistoryDialog(rows: rows),
+      builder: (dialogContext) => _TurnHistoryDialog(
+        rows: rows,
+        onPrint: (row) async {
+          final result = await ref
+              .read(cashCloseTicketPrinterProvider)
+              .printHistoryTicket(row);
+          if (!rootContext.mounted) return;
+          showCashToast(
+            rootContext,
+            result.success
+                ? 'Ticket de cierre impreso'
+                : 'No se pudo imprimir: ${result.message}',
+            isError: !result.success,
+          );
+        },
+      ),
     );
   }
 
@@ -938,9 +955,10 @@ class _Line extends StatelessWidget {
 }
 
 class _TurnHistoryDialog extends StatefulWidget {
-  const _TurnHistoryDialog({required this.rows});
+  const _TurnHistoryDialog({required this.rows, required this.onPrint});
 
   final List<CashSessionHistoryModel> rows;
+  final Future<void> Function(CashSessionHistoryModel row) onPrint;
 
   @override
   State<_TurnHistoryDialog> createState() => _TurnHistoryDialogState();
@@ -1051,61 +1069,65 @@ class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
                   onClose: () => Navigator.pop(context),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
                   child: Column(
                     children: [
-                      TextField(
-                        controller: _searchController,
-                        decoration: InputDecoration(
-                          hintText: 'Buscar por cajero, turno o monto...',
-                          prefixIcon: const Icon(Icons.search_rounded),
-                          suffixIcon: _searchController.text.trim().isEmpty
-                              ? null
-                              : IconButton(
-                                  tooltip: 'Limpiar',
-                                  onPressed: () => _searchController.clear(),
-                                  icon: const Icon(Icons.close_rounded),
-                                ),
-                          filled: true,
-                          fillColor: Colors.white,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 12,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFD6E3F5),
-                            ),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFD6E3F5),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
                       Row(
                         children: [
                           Expanded(
+                            child: SizedBox(
+                              height: 42,
+                              child: TextField(
+                                controller: _searchController,
+                                decoration: InputDecoration(
+                                  hintText: 'Buscar turno...',
+                                  prefixIcon: const Icon(
+                                    Icons.search_rounded,
+                                    size: 19,
+                                  ),
+                                  suffixIcon:
+                                      _searchController.text.trim().isEmpty
+                                      ? null
+                                      : IconButton(
+                                          tooltip: 'Limpiar',
+                                          onPressed: () =>
+                                              _searchController.clear(),
+                                          icon: const Icon(
+                                            Icons.close_rounded,
+                                            size: 18,
+                                          ),
+                                        ),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 10,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFFD6E3F5),
+                                    ),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFFD6E3F5),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 132,
                             child: _HistoryFilterDropdown(
                               label: 'Cajero',
                               value: _selectedCashier,
                               values: _cashiers,
                               onChanged: (value) =>
                                   setState(() => _selectedCashier = value),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _HistoryFilterDropdown(
-                              label: 'Turno',
-                              value: _selectedBusinessDate,
-                              values: _dates,
-                              onChanged: (value) =>
-                                  setState(() => _selectedBusinessDate = value),
                             ),
                           ),
                         ],
@@ -1115,6 +1137,17 @@ class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
                         children: [
                           Expanded(
                             child: _HistoryFilterDropdown(
+                              label: 'Turno',
+                              value: _selectedBusinessDate,
+                              values: _dates,
+                              onChanged: (value) =>
+                                  setState(() => _selectedBusinessDate = value),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 142,
+                            child: _HistoryFilterDropdown(
                               label: 'Estado',
                               value: _selectedStatus,
                               values: _statuses,
@@ -1123,16 +1156,27 @@ class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          OutlinedButton.icon(
-                            onPressed: _clearFilters,
-                            icon: const Icon(Icons.filter_alt_off, size: 17),
-                            label: const Text('Limpiar'),
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(118, 48),
-                              foregroundColor: const Color(0xFF334155),
-                              side: const BorderSide(color: Color(0xFFD6E3F5)),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                          SizedBox(
+                            width: 46,
+                            height: 42,
+                            child: Tooltip(
+                              message: 'Limpiar filtros',
+                              child: OutlinedButton(
+                                onPressed: _clearFilters,
+                                style: OutlinedButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  foregroundColor: const Color(0xFF334155),
+                                  side: const BorderSide(
+                                    color: Color(0xFFD6E3F5),
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.filter_alt_off_rounded,
+                                  size: 18,
+                                ),
                               ),
                             ),
                           ),
@@ -1146,12 +1190,15 @@ class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
                   child: rows.isEmpty
                       ? const _HistoryEmptyState()
                       : ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+                          padding: const EdgeInsets.fromLTRB(14, 12, 14, 18),
                           itemCount: rows.length,
                           separatorBuilder: (_, __) =>
-                              const SizedBox(height: 10),
+                              const SizedBox(height: 8),
                           itemBuilder: (context, index) {
-                            return _HistoryTurnCard(row: rows[index]);
+                            return _HistoryTurnCard(
+                              row: rows[index],
+                              onPrint: () => widget.onPrint(rows[index]),
+                            );
                           },
                         ),
                 ),
@@ -1178,7 +1225,7 @@ class _HistoryPanelHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(18, 18, 12, 14),
+      padding: const EdgeInsets.fromLTRB(16, 14, 10, 12),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(bottom: BorderSide(color: Color(0xFFDDE8F6))),
@@ -1186,11 +1233,11 @@ class _HistoryPanelHeader extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 42,
-            height: 42,
+            width: 38,
+            height: 38,
             decoration: BoxDecoration(
               color: const Color(0xFFEAF1FF),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.history_rounded, color: Color(0xFF1957E6)),
           ),
@@ -1203,7 +1250,7 @@ class _HistoryPanelHeader extends StatelessWidget {
                   'Historial de turnos',
                   style: TextStyle(
                     color: Color(0xFF0F172A),
-                    fontSize: 20,
+                    fontSize: 18,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -1245,44 +1292,49 @@ class _HistoryFilterDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DropdownButtonFormField<String>(
-      initialValue: value,
-      isExpanded: true,
-      decoration: InputDecoration(
-        labelText: label,
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 10,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFD6E3F5)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFD6E3F5)),
-        ),
-      ),
-      items: [
-        const DropdownMenuItem<String>(value: '', child: Text('Todos')),
-        ...values.map(
-          (item) => DropdownMenuItem<String>(
-            value: item,
-            child: Text(item, maxLines: 1, overflow: TextOverflow.ellipsis),
+    return SizedBox(
+      height: 42,
+      child: DropdownButtonFormField<String>(
+        initialValue: value,
+        isExpanded: true,
+        isDense: true,
+        decoration: InputDecoration(
+          labelText: label,
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 7,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: Color(0xFFD6E3F5)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: Color(0xFFD6E3F5)),
           ),
         ),
-      ],
-      onChanged: (next) => onChanged((next ?? '').isEmpty ? null : next),
+        items: [
+          const DropdownMenuItem<String>(value: '', child: Text('Todos')),
+          ...values.map(
+            (item) => DropdownMenuItem<String>(
+              value: item,
+              child: Text(item, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+          ),
+        ],
+        onChanged: (next) => onChanged((next ?? '').isEmpty ? null : next),
+      ),
     );
   }
 }
 
 class _HistoryTurnCard extends StatelessWidget {
-  const _HistoryTurnCard({required this.row});
+  const _HistoryTurnCard({required this.row, required this.onPrint});
 
   final CashSessionHistoryModel row;
+  final Future<void> Function() onPrint;
 
   @override
   Widget build(BuildContext context) {
@@ -1298,16 +1350,16 @@ class _HistoryTurnCard extends StatelessWidget {
         : const Color(0xFFDC2626);
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFD6E3F5)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.035),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+            color: Colors.black.withValues(alpha: 0.025),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -1317,19 +1369,19 @@ class _HistoryTurnCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 38,
-                height: 38,
+                width: 32,
+                height: 32,
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(11),
+                  borderRadius: BorderRadius.circular(9),
                 ),
                 child: const Icon(
                   Icons.point_of_sale_rounded,
                   color: Color(0xFF334155),
-                  size: 20,
+                  size: 18,
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 9),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1341,15 +1393,14 @@ class _HistoryTurnCard extends StatelessWidget {
                       style: const TextStyle(
                         color: Color(0xFF0F172A),
                         fontWeight: FontWeight.w900,
-                        fontSize: 14,
+                        fontSize: 13,
                       ),
                     ),
-                    const SizedBox(height: 2),
                     Text(
                       'Turno ${row.businessDate}',
                       style: const TextStyle(
                         color: Color(0xFF64748B),
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -1357,53 +1408,65 @@ class _HistoryTurnCard extends StatelessWidget {
                 ),
               ),
               _HistoryStatusPill(status: row.status),
+              const SizedBox(width: 2),
+              IconButton(
+                tooltip: 'Reimprimir ticket',
+                onPressed: onPrint,
+                constraints: const BoxConstraints.tightFor(
+                  width: 34,
+                  height: 34,
+                ),
+                padding: EdgeInsets.zero,
+                style: IconButton.styleFrom(
+                  foregroundColor: const Color(0xFF1957E6),
+                  backgroundColor: const Color(0xFFEAF1FF),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                ),
+                icon: const Icon(Icons.print_rounded, size: 17),
+              ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 9),
           Row(
             children: [
               Expanded(child: _HistoryAmount('Inicial', row.initialAmount)),
               Expanded(child: _HistoryAmount('Esperado', row.expectedAmount)),
               Expanded(child: _HistoryAmount('Cierre', row.closingAmount)),
+              Expanded(
+                child: _HistoryAmount(
+                  'Dif.',
+                  row.difference,
+                  color: differenceColor,
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+          const SizedBox(height: 8),
+          DecoratedBox(
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
             ),
-            child: Column(
-              children: [
-                _HistoryMetaLine(label: 'Abrió', value: opened),
-                const SizedBox(height: 6),
-                _HistoryMetaLine(label: 'Cerró', value: closed),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Diferencia',
-                        style: TextStyle(
-                          color: Color(0xFF64748B),
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                        ),
-                      ),
+            child: Padding(
+              padding: const EdgeInsets.only(top: 7),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _HistoryDateChip(
+                      icon: Icons.login_rounded,
+                      text: opened,
                     ),
-                    Text(
-                      formatRdCurrencyAccounting(row.difference),
-                      style: TextStyle(
-                        color: differenceColor,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 12,
-                      ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _HistoryDateChip(
+                      icon: Icons.logout_rounded,
+                      text: closed,
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -1412,11 +1475,41 @@ class _HistoryTurnCard extends StatelessWidget {
   }
 }
 
+class _HistoryDateChip extends StatelessWidget {
+  const _HistoryDateChip({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: const Color(0xFF64748B)),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF475569),
+              fontWeight: FontWeight.w800,
+              fontSize: 11,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _HistoryAmount extends StatelessWidget {
-  const _HistoryAmount(this.label, this.value);
+  const _HistoryAmount(this.label, this.value, {this.color});
 
   final String label;
   final double value;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -1427,52 +1520,19 @@ class _HistoryAmount extends StatelessWidget {
           label,
           style: const TextStyle(
             color: Color(0xFF64748B),
-            fontSize: 11,
+            fontSize: 10,
             fontWeight: FontWeight.w700,
           ),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 1),
         Text(
           formatRdCurrencyAccounting(value),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Color(0xFF0F172A),
-            fontSize: 12,
+          style: TextStyle(
+            color: color ?? const Color(0xFF0F172A),
+            fontSize: 11,
             fontWeight: FontWeight.w900,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _HistoryMetaLine extends StatelessWidget {
-  const _HistoryMetaLine({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFF64748B),
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
-            ),
-          ),
-        ),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Color(0xFF334155),
-            fontWeight: FontWeight.w800,
-            fontSize: 12,
           ),
         ),
       ],
@@ -1494,7 +1554,7 @@ class _HistoryStatusPill extends StatelessWidget {
         ? 'Turno'
         : (closed ? 'Cerrado' : status.trim());
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(999),
@@ -1505,7 +1565,7 @@ class _HistoryStatusPill extends StatelessWidget {
         style: TextStyle(
           color: color,
           fontWeight: FontWeight.w900,
-          fontSize: 11,
+          fontSize: 10,
         ),
       ),
     );

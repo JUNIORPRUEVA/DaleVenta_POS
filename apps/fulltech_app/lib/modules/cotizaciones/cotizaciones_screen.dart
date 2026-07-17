@@ -33,6 +33,7 @@ import '../cash/cash_repository.dart';
 import '../cash/cash_turn_menu_button.dart';
 import '../clientes/cliente_model.dart';
 import '../clientes/cliente_form_screen.dart';
+import '../service_orders/create_service_order_screen.dart';
 import '../service_orders/service_order_models.dart';
 import '../ventas/data/ventas_repository.dart';
 import '../ventas/sales_credit_screen.dart';
@@ -379,9 +380,13 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
     final qp = GoRouterState.of(context).uri.queryParameters;
     final quotationId = (qp['quotationId'] ?? '').trim();
+    final duplicate = (qp['duplicate'] ?? '').trim() == '1';
     if (quotationId.isEmpty) return;
-    if ((_editingId ?? '').trim() == quotationId) return;
-    if (_lastLoadedRouteQuotationId == quotationId) return;
+    final routeQuotationKey = duplicate
+        ? '$quotationId:duplicate'
+        : quotationId;
+    if (!duplicate && (_editingId ?? '').trim() == quotationId) return;
+    if (_lastLoadedRouteQuotationId == routeQuotationKey) return;
 
     _loadingRouteQuotation = true;
     try {
@@ -392,13 +397,17 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
       setState(() {
         _applyQuotationToEditor(quotation);
+        if (duplicate) {
+          _editingId = null;
+          _editingCreatedAt = null;
+        }
         _writeActiveDesktopDraft();
       });
       _schedulePersistEditorDraft();
-      _lastLoadedRouteQuotationId = quotationId;
+      _lastLoadedRouteQuotationId = routeQuotationKey;
       unawaited(_syncQuotationAi(triggerAi: false));
     } catch (_) {
-      _lastLoadedRouteQuotationId = quotationId;
+      _lastLoadedRouteQuotationId = routeQuotationKey;
     } finally {
       _loadingRouteQuotation = false;
     }
@@ -1473,9 +1482,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     });
     _schedulePersistEditorDraft(immediate: true);
 
-    final opened = await context.push<bool>(
-      Routes.serviceOrderCreate,
-      extra: ServiceOrderCreateArgs(
+    final opened = await openCreateServiceOrderAdaptive(
+      context,
+      args: ServiceOrderCreateArgs(
         initialQuotation: savedQuotation,
         initialClientId: savedQuotation.customerId,
       ),

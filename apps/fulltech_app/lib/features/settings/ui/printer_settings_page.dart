@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
@@ -24,6 +26,13 @@ class _PrinterSettingsPageState extends ConsumerState<PrinterSettingsPage> {
   bool _loading = true;
   bool _saving = false;
   bool _testing = false;
+  Timer? _saveDebounce;
+
+  @override
+  void dispose() {
+    _saveDebounce?.cancel();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -55,6 +64,7 @@ class _PrinterSettingsPageState extends ConsumerState<PrinterSettingsPage> {
   }
 
   Future<void> _save(PrinterSettingsModel settings) async {
+    _saveDebounce?.cancel();
     setState(() {
       _settings = settings;
       _saving = true;
@@ -68,6 +78,15 @@ class _PrinterSettingsPageState extends ConsumerState<PrinterSettingsPage> {
     setState(() {
       _preview = preview;
       _saving = false;
+    });
+  }
+
+  void _queueSave(PrinterSettingsModel settings) {
+    setState(() => _settings = settings);
+    _saveDebounce?.cancel();
+    _saveDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      unawaited(_save(settings));
     });
   }
 
@@ -130,6 +149,22 @@ class _PrinterSettingsPageState extends ConsumerState<PrinterSettingsPage> {
           children: [
             Row(
               children: [
+                const Expanded(
+                  child: Text(
+                    'Impresora y ticket',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _settings == null ? null : () => _save(_settings!),
+                  icon: const Icon(Icons.save_outlined),
+                  label: const Text('Guardar ahora'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: selectedExists ? selectedName : null,
@@ -176,6 +211,11 @@ class _PrinterSettingsPageState extends ConsumerState<PrinterSettingsPage> {
               ),
             ],
             const SizedBox(height: 14),
+            const Text(
+              'Impresora',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 8),
             SegmentedButton<int>(
               segments: const [
                 ButtonSegment(value: 58, label: Text('58 mm')),
@@ -193,6 +233,37 @@ class _PrinterSettingsPageState extends ConsumerState<PrinterSettingsPage> {
               },
             ),
             const SizedBox(height: 14),
+            const Text(
+              'Logo y negocio',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+            _switch(
+              title: 'Mostrar logo',
+              value: settings.showLogo,
+              onChanged: (value) => _save(settings.copyWith(showLogo: value)),
+            ),
+            SegmentedButton<int>(
+              segments: const [
+                ButtonSegment(value: 40, label: Text('Pequeño')),
+                ButtonSegment(value: 70, label: Text('Normal')),
+                ButtonSegment(value: 100, label: Text('Grande')),
+              ],
+              selected: {settings.logoSize},
+              onSelectionChanged: (value) =>
+                  _save(settings.copyWith(logoSize: value.first)),
+            ),
+            _switch(
+              title: 'Mostrar datos del negocio',
+              value: settings.showBusinessData,
+              onChanged: (value) =>
+                  _save(settings.copyWith(showBusinessData: value)),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Tamaño del texto',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
@@ -238,10 +309,41 @@ class _PrinterSettingsPageState extends ConsumerState<PrinterSettingsPage> {
               onChanged: (value) =>
                   _save(settings.copyWith(autoPrintOnPayment: value)),
             ),
-            _switch(
-              title: 'Mostrar logo',
-              value: settings.showLogo,
-              onChanged: (value) => _save(settings.copyWith(showLogo: value)),
+            const SizedBox(height: 8),
+            const Text(
+              'Formato del ticket',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'compact', label: Text('Compacto')),
+                ButtonSegment(value: 'detailed', label: Text('Detallado')),
+              ],
+              selected: {
+                settings.showClient &&
+                        settings.showCashier &&
+                        settings.showPaymentMethod &&
+                        settings.showSubtotalItbisTotal
+                    ? 'detailed'
+                    : 'compact',
+              },
+              onSelectionChanged: (value) {
+                final detailed = value.first == 'detailed';
+                _save(
+                  settings.copyWith(
+                    showClient: detailed,
+                    showCashier: detailed,
+                    showPaymentMethod: detailed,
+                    showSubtotalItbisTotal: detailed,
+                    showDiscounts: detailed,
+                    showElectronicInvoiceReference: detailed,
+                    showCode: detailed,
+                    showDatetime: detailed,
+                    showItbis: detailed,
+                  ),
+                );
+              },
             ),
             _switch(
               title: 'Mostrar cliente',
@@ -268,8 +370,8 @@ class _PrinterSettingsPageState extends ConsumerState<PrinterSettingsPage> {
                 border: OutlineInputBorder(),
               ),
               maxLines: 2,
-              onFieldSubmitted: (value) =>
-                  _save(settings.copyWith(headerExtra: value)),
+              onChanged: (value) =>
+                  _queueSave(settings.copyWith(headerExtra: value)),
             ),
             const SizedBox(height: 10),
             TextFormField(
@@ -279,8 +381,19 @@ class _PrinterSettingsPageState extends ConsumerState<PrinterSettingsPage> {
                 border: OutlineInputBorder(),
               ),
               maxLines: 2,
-              onFieldSubmitted: (value) =>
-                  _save(settings.copyWith(footerMessage: value)),
+              onChanged: (value) =>
+                  _queueSave(settings.copyWith(footerMessage: value)),
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              initialValue: settings.warrantyPolicy,
+              decoration: const InputDecoration(
+                labelText: 'Política de garantía',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 4,
+              onChanged: (value) =>
+                  _queueSave(settings.copyWith(warrantyPolicy: value)),
             ),
             const SizedBox(height: 14),
             Wrap(

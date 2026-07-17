@@ -63,6 +63,25 @@ class ReceiptTextUtils {
     return char * width;
   }
 
+  static String right(String value, int width) {
+    final text = _clean(value);
+    if (text.length >= width) return truncate(text, width);
+    return '${' ' * (width - text.length)}$text';
+  }
+
+  static String align(String value, int width, String alignment) {
+    final text = _clean(value);
+    if (text.length >= width) return truncate(text, width);
+    switch (alignment) {
+      case 'right':
+        return right(text, width);
+      case 'center':
+        return center(text, width);
+      default:
+        return text;
+    }
+  }
+
   static String _clean(String value) {
     return value.replaceAll(RegExp(r'\s+'), ' ').trim();
   }

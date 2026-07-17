@@ -44,6 +44,77 @@ class CashCloseTicketPrinter {
         );
   }
 
+  Future<PrintTicketResult> printHistoryTicket(CashSessionHistoryModel row) {
+    final date = row.closedAt ?? row.openedAt;
+    final ticketDate = row.businessDate.trim().isNotEmpty
+        ? row.businessDate.trim().replaceAll(RegExp(r'[^0-9]'), '')
+        : DateFormat('yyyyMMdd').format(date);
+    final suffix = row.id.replaceAll('-', '');
+    final compactSuffix = suffix.substring(
+      0,
+      suffix.length < 6 ? suffix.length : 6,
+    );
+    return _ref
+        .read(unifiedTicketPrinterProvider)
+        .printCustomLines(
+          lines: buildHistoryLines(row),
+          ticketNumber: 'CIERRE-$ticketDate-$compactSuffix',
+        );
+  }
+
+  List<String> buildHistoryLines(CashSessionHistoryModel row) {
+    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$ ');
+    final date = DateFormat('dd/MM/yyyy HH:mm');
+    const width = 32;
+    final closedAt = row.closedAt;
+
+    return [
+      ReceiptTextUtils.center('REIMPRESION CORTE', width),
+      ReceiptTextUtils.center('DE TURNO', width),
+      ReceiptTextUtils.separator(width, 'double'),
+      ReceiptTextUtils.leftRight('Turno', row.businessDate, width),
+      ReceiptTextUtils.leftRight('Cajero', row.userName, width),
+      ReceiptTextUtils.leftRight(
+        'Apertura',
+        date.format(row.openedAt.toLocal()),
+        width,
+      ),
+      ReceiptTextUtils.leftRight(
+        'Cierre',
+        closedAt == null ? 'Sin cierre' : date.format(closedAt.toLocal()),
+        width,
+      ),
+      ReceiptTextUtils.leftRight('Estado', row.status, width),
+      ReceiptTextUtils.separator(width, 'double'),
+      ReceiptTextUtils.leftRight(
+        'Base inicial',
+        money.format(row.initialAmount),
+        width,
+      ),
+      ReceiptTextUtils.leftRight(
+        'Efectivo esperado',
+        money.format(row.expectedAmount),
+        width,
+      ),
+      ReceiptTextUtils.leftRight(
+        'Efectivo contado',
+        money.format(row.closingAmount),
+        width,
+      ),
+      ReceiptTextUtils.leftRight(
+        'Diferencia',
+        money.format(row.difference),
+        width,
+      ),
+      ReceiptTextUtils.separator(width, 'double'),
+      ReceiptTextUtils.center('FIRMA CAJERO', width),
+      '',
+      '____________________________',
+      '',
+      ...ReceiptTextUtils.wrap('ID: ${row.id}', width),
+    ];
+  }
+
   List<String> buildLines(CashCloseTicketSnapshot snapshot) {
     final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$ ');
     final date = DateFormat('dd/MM/yyyy HH:mm');

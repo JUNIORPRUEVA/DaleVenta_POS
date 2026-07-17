@@ -108,7 +108,9 @@ class UnifiedTicketPrinter {
   Future<PrintTicketResult> printCustomLines({
     required List<String> lines,
     required String ticketNumber,
+    bool includeLogo = true,
     int? overrideCopies,
+    TicketLayoutConfig? layoutOverride,
   }) {
     return printTicket(
       TicketData.custom(lines: lines, ticketNumber: ticketNumber),
@@ -139,7 +141,7 @@ class UnifiedTicketPrinter {
       return const PrintTicketResult(
         success: true,
         skipped: true,
-        message: 'Auto-impresion desactivada.',
+        message: 'Auto-print desactivado',
       );
     }
     return printSaleTicket(sale: sale, items: items);
@@ -178,10 +180,11 @@ class UnifiedTicketPrinter {
   }
 
   Future<PrintTicketResult> openCashDrawerPulse() async {
-    return const PrintTicketResult(
-      success: false,
-      message:
-          'Apertura de cajon por pulso ESC/POS no esta disponible con impresion PDF.',
+    return printCustomLines(
+      lines: const ['', ''],
+      ticketNumber: 'DRAWER',
+      includeLogo: false,
+      overrideCopies: 1,
     );
   }
 

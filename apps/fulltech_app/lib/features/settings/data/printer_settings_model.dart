@@ -1,5 +1,6 @@
 class PrinterSettingsModel {
   const PrinterSettingsModel({
+    this.id,
     this.selectedPrinterName,
     this.paperWidthMm = 80,
     this.charsPerLine = 48,
@@ -7,14 +8,19 @@ class PrinterSettingsModel {
     this.autoOpenDrawerOnChargeWithoutTicket = false,
     this.copies = 1,
     this.showItbis = true,
+    this.showElectronicInvoiceReference = true,
     this.showCashier = true,
     this.showClient = true,
     this.showPaymentMethod = true,
     this.showDiscounts = true,
     this.showCode = true,
     this.showDatetime = true,
+    this.headerBusinessName = 'FULLPOS',
+    this.headerRnc = '',
+    this.headerAddress = '',
+    this.headerPhone = '',
     this.headerExtra = '',
-    this.footerMessage = 'Gracias por su compra',
+    this.footerMessage = '¡Gracias por su preferencia!',
     this.warrantyPolicy = '',
     this.leftMargin = 0,
     this.rightMargin = 0,
@@ -26,6 +32,7 @@ class PrinterSettingsModel {
     this.logoSize = 70,
     this.showBusinessData = true,
     this.showSubtotalItbisTotal = true,
+    this.autoHeight = true,
     this.topMargin = 8,
     this.bottomMargin = 8,
     this.fontSizeLevel = 6,
@@ -35,8 +42,11 @@ class PrinterSettingsModel {
     this.headerAlignment = 'center',
     this.detailsAlignment = 'left',
     this.totalsAlignment = 'right',
+    this.createdAtMs = 0,
+    this.updatedAtMs = 0,
   });
 
+  final int? id;
   final String? selectedPrinterName;
   final int paperWidthMm;
   final int charsPerLine;
@@ -44,12 +54,17 @@ class PrinterSettingsModel {
   final bool autoOpenDrawerOnChargeWithoutTicket;
   final int copies;
   final bool showItbis;
+  final bool showElectronicInvoiceReference;
   final bool showCashier;
   final bool showClient;
   final bool showPaymentMethod;
   final bool showDiscounts;
   final bool showCode;
   final bool showDatetime;
+  final String headerBusinessName;
+  final String headerRnc;
+  final String headerAddress;
+  final String headerPhone;
   final String headerExtra;
   final String footerMessage;
   final String warrantyPolicy;
@@ -63,6 +78,7 @@ class PrinterSettingsModel {
   final int logoSize;
   final bool showBusinessData;
   final bool showSubtotalItbisTotal;
+  final bool autoHeight;
   final int topMargin;
   final int bottomMargin;
   final int fontSizeLevel;
@@ -72,8 +88,11 @@ class PrinterSettingsModel {
   final String headerAlignment;
   final String detailsAlignment;
   final String totalsAlignment;
+  final int createdAtMs;
+  final int updatedAtMs;
 
   PrinterSettingsModel copyWith({
+    int? id,
     String? selectedPrinterName,
     bool clearPrinter = false,
     int? paperWidthMm,
@@ -82,12 +101,17 @@ class PrinterSettingsModel {
     bool? autoOpenDrawerOnChargeWithoutTicket,
     int? copies,
     bool? showItbis,
+    bool? showElectronicInvoiceReference,
     bool? showCashier,
     bool? showClient,
     bool? showPaymentMethod,
     bool? showDiscounts,
     bool? showCode,
     bool? showDatetime,
+    String? headerBusinessName,
+    String? headerRnc,
+    String? headerAddress,
+    String? headerPhone,
     String? headerExtra,
     String? footerMessage,
     String? warrantyPolicy,
@@ -101,6 +125,7 @@ class PrinterSettingsModel {
     int? logoSize,
     bool? showBusinessData,
     bool? showSubtotalItbisTotal,
+    bool? autoHeight,
     int? topMargin,
     int? bottomMargin,
     int? fontSizeLevel,
@@ -110,8 +135,11 @@ class PrinterSettingsModel {
     String? headerAlignment,
     String? detailsAlignment,
     String? totalsAlignment,
+    int? createdAtMs,
+    int? updatedAtMs,
   }) {
     return PrinterSettingsModel(
+      id: id ?? this.id,
       selectedPrinterName: clearPrinter
           ? null
           : (selectedPrinterName ?? this.selectedPrinterName),
@@ -123,12 +151,18 @@ class PrinterSettingsModel {
           this.autoOpenDrawerOnChargeWithoutTicket,
       copies: copies ?? this.copies,
       showItbis: showItbis ?? this.showItbis,
+      showElectronicInvoiceReference:
+          showElectronicInvoiceReference ?? this.showElectronicInvoiceReference,
       showCashier: showCashier ?? this.showCashier,
       showClient: showClient ?? this.showClient,
       showPaymentMethod: showPaymentMethod ?? this.showPaymentMethod,
       showDiscounts: showDiscounts ?? this.showDiscounts,
       showCode: showCode ?? this.showCode,
       showDatetime: showDatetime ?? this.showDatetime,
+      headerBusinessName: headerBusinessName ?? this.headerBusinessName,
+      headerRnc: headerRnc ?? this.headerRnc,
+      headerAddress: headerAddress ?? this.headerAddress,
+      headerPhone: headerPhone ?? this.headerPhone,
       headerExtra: headerExtra ?? this.headerExtra,
       footerMessage: footerMessage ?? this.footerMessage,
       warrantyPolicy: warrantyPolicy ?? this.warrantyPolicy,
@@ -143,6 +177,7 @@ class PrinterSettingsModel {
       showBusinessData: showBusinessData ?? this.showBusinessData,
       showSubtotalItbisTotal:
           showSubtotalItbisTotal ?? this.showSubtotalItbisTotal,
+      autoHeight: autoHeight ?? this.autoHeight,
       topMargin: topMargin ?? this.topMargin,
       bottomMargin: bottomMargin ?? this.bottomMargin,
       fontSizeLevel: fontSizeLevel ?? this.fontSizeLevel,
@@ -153,10 +188,13 @@ class PrinterSettingsModel {
       headerAlignment: headerAlignment ?? this.headerAlignment,
       detailsAlignment: detailsAlignment ?? this.detailsAlignment,
       totalsAlignment: totalsAlignment ?? this.totalsAlignment,
+      createdAtMs: createdAtMs ?? this.createdAtMs,
+      updatedAtMs: updatedAtMs ?? this.updatedAtMs,
     );
   }
 
   Map<String, dynamic> toMap() => {
+    'id': id,
     'selectedPrinterName': selectedPrinterName,
     'paperWidthMm': paperWidthMm,
     'charsPerLine': charsPerLine,
@@ -164,12 +202,17 @@ class PrinterSettingsModel {
     'autoOpenDrawerOnChargeWithoutTicket': autoOpenDrawerOnChargeWithoutTicket,
     'copies': copies,
     'showItbis': showItbis,
+    'showElectronicInvoiceReference': showElectronicInvoiceReference,
     'showCashier': showCashier,
     'showClient': showClient,
     'showPaymentMethod': showPaymentMethod,
     'showDiscounts': showDiscounts,
     'showCode': showCode,
     'showDatetime': showDatetime,
+    'headerBusinessName': headerBusinessName,
+    'headerRnc': headerRnc,
+    'headerAddress': headerAddress,
+    'headerPhone': headerPhone,
     'headerExtra': headerExtra,
     'footerMessage': footerMessage,
     'warrantyPolicy': warrantyPolicy,
@@ -183,6 +226,7 @@ class PrinterSettingsModel {
     'logoSize': logoSize,
     'showBusinessData': showBusinessData,
     'showSubtotalItbisTotal': showSubtotalItbisTotal,
+    'autoHeight': autoHeight,
     'topMargin': topMargin,
     'bottomMargin': bottomMargin,
     'fontSizeLevel': fontSizeLevel,
@@ -192,6 +236,8 @@ class PrinterSettingsModel {
     'headerAlignment': headerAlignment,
     'detailsAlignment': detailsAlignment,
     'totalsAlignment': totalsAlignment,
+    'createdAtMs': createdAtMs,
+    'updatedAtMs': updatedAtMs,
   };
 
   factory PrinterSettingsModel.fromMap(Map<String, dynamic> map) {
@@ -221,6 +267,7 @@ class PrinterSettingsModel {
     }
 
     return PrinterSettingsModel(
+      id: map['id'] is num ? (map['id'] as num).toInt() : null,
       selectedPrinterName: map['selectedPrinterName']?.toString(),
       paperWidthMm: i('paperWidthMm', 80),
       charsPerLine: i('charsPerLine', 48),
@@ -229,16 +276,21 @@ class PrinterSettingsModel {
         'autoOpenDrawerOnChargeWithoutTicket',
         false,
       ),
-      copies: i('copies', 1).clamp(1, 5),
+      copies: i('copies', 1).clamp(0, 5),
       showItbis: b('showItbis', true),
+      showElectronicInvoiceReference: b('showElectronicInvoiceReference', true),
       showCashier: b('showCashier', true),
       showClient: b('showClient', true),
       showPaymentMethod: b('showPaymentMethod', true),
       showDiscounts: b('showDiscounts', true),
       showCode: b('showCode', true),
       showDatetime: b('showDatetime', true),
+      headerBusinessName: s('headerBusinessName', 'FULLPOS'),
+      headerRnc: s('headerRnc', ''),
+      headerAddress: s('headerAddress', ''),
+      headerPhone: s('headerPhone', ''),
       headerExtra: s('headerExtra', ''),
-      footerMessage: s('footerMessage', 'Gracias por su compra'),
+      footerMessage: s('footerMessage', '¡Gracias por su preferencia!'),
       warrantyPolicy: s('warrantyPolicy', ''),
       leftMargin: i('leftMargin', 0),
       rightMargin: i('rightMargin', 0),
@@ -250,6 +302,7 @@ class PrinterSettingsModel {
       logoSize: i('logoSize', 70),
       showBusinessData: b('showBusinessData', true),
       showSubtotalItbisTotal: b('showSubtotalItbisTotal', true),
+      autoHeight: b('autoHeight', true),
       topMargin: i('topMargin', 8),
       bottomMargin: i('bottomMargin', 8),
       fontSizeLevel: i('fontSizeLevel', 6),
@@ -259,6 +312,8 @@ class PrinterSettingsModel {
       headerAlignment: s('headerAlignment', 'center'),
       detailsAlignment: s('detailsAlignment', 'left'),
       totalsAlignment: s('totalsAlignment', 'right'),
+      createdAtMs: i('createdAtMs', 0),
+      updatedAtMs: i('updatedAtMs', 0),
     );
   }
 }

@@ -10,7 +10,9 @@
     "api:smoke": "npm --workspace apps/api run test:smoke",
     "api:migrate:dev": "npm --workspace apps/api run prisma:migrate:dev",
     "api:migrate:deploy": "npm --workspace apps/api run prisma:migrate:deploy",
-    "api:seed": "npm --workspace apps/api run prisma:seed"
+    "api:seed": "npm --workspace apps/api run prisma:seed",
+    "web:dev": "npm --workspace apps/web run dev",
+    "web:build": "npm --workspace apps/web run build",
+    "web:preview": "npm --workspace apps/web run preview"
   }
 }
-

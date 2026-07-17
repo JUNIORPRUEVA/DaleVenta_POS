@@ -20,6 +20,16 @@ class TicketLayoutConfig {
     required this.footerMessage,
     required this.warrantyPolicy,
     required this.headerExtra,
+    required this.headerBusinessName,
+    required this.headerRnc,
+    required this.headerAddress,
+    required this.headerPhone,
+    required this.fontSizeLevel,
+    required this.lineSpacingLevel,
+    required this.sectionSpacingLevel,
+    required this.headerAlignment,
+    required this.detailsAlignment,
+    required this.totalsAlignment,
     required this.topMargin,
     required this.bottomMargin,
     required this.leftMargin,
@@ -45,6 +55,16 @@ class TicketLayoutConfig {
   final String footerMessage;
   final String warrantyPolicy;
   final String headerExtra;
+  final String headerBusinessName;
+  final String headerRnc;
+  final String headerAddress;
+  final String headerPhone;
+  final int fontSizeLevel;
+  final int lineSpacingLevel;
+  final int sectionSpacingLevel;
+  final String headerAlignment;
+  final String detailsAlignment;
+  final String totalsAlignment;
   final int topMargin;
   final int bottomMargin;
   final int leftMargin;
@@ -88,6 +108,16 @@ class TicketLayoutConfig {
       footerMessage: settings.footerMessage,
       warrantyPolicy: settings.warrantyPolicy,
       headerExtra: settings.headerExtra,
+      headerBusinessName: settings.headerBusinessName,
+      headerRnc: settings.headerRnc,
+      headerAddress: settings.headerAddress,
+      headerPhone: settings.headerPhone,
+      fontSizeLevel: settings.fontSizeLevel,
+      lineSpacingLevel: settings.lineSpacingLevel,
+      sectionSpacingLevel: settings.sectionSpacingLevel,
+      headerAlignment: settings.headerAlignment,
+      detailsAlignment: settings.detailsAlignment,
+      totalsAlignment: settings.totalsAlignment,
       topMargin: settings.topMargin,
       bottomMargin: settings.bottomMargin,
       leftMargin: settings.leftMargin,

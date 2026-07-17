@@ -13,6 +13,7 @@ import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../clientes/cliente_model.dart';
 import '../clientes/data/clientes_repository.dart';
+import '../service_orders/create_service_order_screen.dart';
 import '../service_orders/service_order_models.dart';
 import '../ventas/data/ventas_repository.dart';
 import 'cotizacion_models.dart';
@@ -75,6 +76,7 @@ class _CotizacionesHistorialScreenState
   DateTime? _fromDate;
   DateTime? _toDate;
   bool _ownOnly = false;
+  String? _selectedQuotationId;
 
   String _money(double value) => formatRdCurrencyAccounting(value);
 
@@ -137,9 +139,9 @@ class _CotizacionesHistorialScreenState
       return;
     }
 
-    final opened = await context.push<bool>(
-      Routes.serviceOrderCreate,
-      extra: ServiceOrderCreateArgs(
+    final opened = await openCreateServiceOrderAdaptive(
+      context,
+      args: ServiceOrderCreateArgs(
         initialQuotation: item,
         initialClientId: customerId,
       ),
@@ -151,6 +153,47 @@ class _CotizacionesHistorialScreenState
         content: Text('Orden de servicio creada desde la cotización.'),
       ),
     );
+  }
+
+  void _selectQuotation(CotizacionModel item) {
+    setState(() => _selectedQuotationId = item.id);
+  }
+
+  CotizacionModel? _selectedQuotationFrom(List<CotizacionModel> visibleItems) {
+    if (visibleItems.isEmpty) return null;
+    final selectedId = (_selectedQuotationId ?? '').trim();
+    if (selectedId.isNotEmpty) {
+      for (final item in visibleItems) {
+        if (item.id == selectedId) return item;
+      }
+    }
+    return visibleItems.first;
+  }
+
+  void _openAsSalesTicket(CotizacionModel item) {
+    if (widget.pickForEditor && Navigator.of(context).canPop()) {
+      Navigator.pop(
+        context,
+        CotizacionEditorPayload(source: item, duplicate: false),
+      );
+      return;
+    }
+
+    final quotationId = Uri.encodeQueryComponent(item.id);
+    context.go('${Routes.cotizaciones}?quotationId=$quotationId');
+  }
+
+  void _duplicateQuotation(CotizacionModel item) {
+    if (widget.pickForEditor && Navigator.of(context).canPop()) {
+      Navigator.pop(
+        context,
+        CotizacionEditorPayload(source: item, duplicate: true),
+      );
+      return;
+    }
+
+    final quotationId = Uri.encodeQueryComponent(item.id);
+    context.go('${Routes.cotizaciones}?quotationId=$quotationId&duplicate=1');
   }
 
   @override
@@ -1193,6 +1236,7 @@ class _CotizacionesHistorialScreenState
     BuildContext context,
     List<CotizacionModel> visibleItems,
   ) {
+    final isMobile = MediaQuery.sizeOf(context).width < 860;
     final phone = (widget.customerPhone ?? '').trim();
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
@@ -1255,32 +1299,34 @@ class _CotizacionesHistorialScreenState
         itemBuilder: (context, index) {
           final item = visibleItems[index];
           final canEditOrDelete = _canEditOrDelete(item);
-          final canDuplicate = widget.pickForEditor;
+          final canDuplicate = true;
           final quoteTag = _quoteTags(item).firstOrNull ?? 'General';
           final isOwnClient = _isOwnClient(item);
+          final selected =
+              !isMobile &&
+              (_selectedQuotationId == item.id ||
+                  (_selectedQuotationId == null &&
+                      visibleItems.isNotEmpty &&
+                      visibleItems.first.id == item.id));
           final dateFmt = DateFormat(
             'dd/MM/yy · h:mm a',
             'es_DO',
           ).format(item.createdAt);
           return _HistorialListCard(
             item: item,
+            selected: selected,
             dateFmt: dateFmt,
             quoteTag: quoteTag,
             isOwnClient: isOwnClient,
             money: _money(item.total),
             canEdit: canEditOrDelete,
             canDuplicate: canDuplicate,
-            onTap: () => _viewDetail(item),
+            onTap: () => isMobile ? _viewDetail(item) : _selectQuotation(item),
             onView: () => _viewDetail(item),
             onPdf: () => _openPdfPreview(item),
             onSendToServiceOrder: () => _sendToServiceOrder(item),
             onEdit: canEditOrDelete ? () => _editQuotation(item) : null,
-            onDuplicate: canDuplicate
-                ? () => Navigator.pop(
-                    context,
-                    CotizacionEditorPayload(source: item, duplicate: true),
-                  )
-                : null,
+            onDuplicate: () => _duplicateQuotation(item),
             onDelete: canEditOrDelete ? () => _delete(item) : null,
           );
         },
@@ -1305,6 +1351,7 @@ class _CotizacionesHistorialScreenState
             customerName: item.customerName,
           ),
       }.length;
+      final selectedQuotation = _selectedQuotationFrom(visibleItems);
 
       return Scaffold(
         appBar: CustomAppBar(
@@ -1324,35 +1371,7 @@ class _CotizacionesHistorialScreenState
               Expanded(
                 child: Column(
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-                      child: TextField(
-                        controller: _searchCtrl,
-                        decoration: InputDecoration(
-                          hintText: 'Buscar cliente, teléfono o fecha…',
-                          isDense: true,
-                          prefixIcon: const Icon(Icons.search_rounded),
-                          suffixIcon: _searchQuery.isEmpty
-                              ? null
-                              : IconButton(
-                                  onPressed: () => _searchCtrl.clear(),
-                                  icon: const Icon(Icons.close_rounded),
-                                ),
-                          filled: true,
-                          fillColor: Theme.of(
-                            context,
-                          ).colorScheme.surfaceContainerHigh,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
-                          ),
-                        ),
-                      ),
-                    ),
+                    _buildToolbar(context, isMobile: false),
                     if (_refreshing)
                       const LinearProgressIndicator(minHeight: 2),
                     Expanded(child: _buildListContent(context, visibleItems)),
@@ -1367,49 +1386,66 @@ class _CotizacionesHistorialScreenState
                 ).colorScheme.outlineVariant.withValues(alpha: 0.40),
               ),
               SizedBox(
-                width: 272,
-                child: _HistorialDesktopSidebar(
-                  totalCount: visibleItems.length,
-                  totalAmount: totalVisible,
-                  uniqueClients: uniqueClients,
-                  ownOnly: _ownOnly,
-                  selectedTag: _selectedQuoteTag,
-                  availableTags: _availableTags,
-                  fromDate: _fromDate,
-                  toDate: _toDate,
-                  hasActiveFilters:
-                      _activeFilterCount > 0 ||
-                      _searchQuery.isNotEmpty ||
-                      _ownOnly,
-                  onToggleOwn: (v) => setState(() {
-                    _ownOnly = v;
-                    _selectedClientKey = null;
-                  }),
-                  onSelectTag: (tag) => setState(() => _selectedQuoteTag = tag),
-                  onPickFrom: () async {
-                    final now = DateTime.now();
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: _fromDate ?? now,
-                      firstDate: DateTime(now.year - 5),
-                      lastDate: DateTime(now.year + 2),
-                      locale: const Locale('es', 'DO'),
-                    );
-                    if (picked != null) setState(() => _fromDate = picked);
-                  },
-                  onPickTo: () async {
-                    final now = DateTime.now();
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: _toDate ?? now,
-                      firstDate: DateTime(now.year - 5),
-                      lastDate: DateTime(now.year + 2),
-                      locale: const Locale('es', 'DO'),
-                    );
-                    if (picked != null) setState(() => _toDate = picked);
-                  },
-                  onClearFilters: _clearFilters,
-                ),
+                width: MediaQuery.sizeOf(context).width >= 1280 ? 430 : 380,
+                child: selectedQuotation == null
+                    ? _HistorialDesktopSidebar(
+                        totalCount: visibleItems.length,
+                        totalAmount: totalVisible,
+                        uniqueClients: uniqueClients,
+                        ownOnly: _ownOnly,
+                        selectedTag: _selectedQuoteTag,
+                        availableTags: _availableTags,
+                        fromDate: _fromDate,
+                        toDate: _toDate,
+                        hasActiveFilters:
+                            _activeFilterCount > 0 ||
+                            _searchQuery.isNotEmpty ||
+                            _ownOnly,
+                        onToggleOwn: (v) => setState(() {
+                          _ownOnly = v;
+                          _selectedClientKey = null;
+                        }),
+                        onSelectTag: (tag) =>
+                            setState(() => _selectedQuoteTag = tag),
+                        onPickFrom: () async {
+                          final now = DateTime.now();
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: _fromDate ?? now,
+                            firstDate: DateTime(now.year - 5),
+                            lastDate: DateTime(now.year + 2),
+                            locale: const Locale('es', 'DO'),
+                          );
+                          if (picked != null) {
+                            setState(() => _fromDate = picked);
+                          }
+                        },
+                        onPickTo: () async {
+                          final now = DateTime.now();
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: _toDate ?? now,
+                            firstDate: DateTime(now.year - 5),
+                            lastDate: DateTime(now.year + 2),
+                            locale: const Locale('es', 'DO'),
+                          );
+                          if (picked != null) setState(() => _toDate = picked);
+                        },
+                        onClearFilters: _clearFilters,
+                      )
+                    : _QuotationDetailSidePanel(
+                        item: selectedQuotation,
+                        money: _money,
+                        canEdit: _canEditOrDelete(selectedQuotation),
+                        onEdit: () => _editQuotation(selectedQuotation),
+                        onDuplicate: () =>
+                            _duplicateQuotation(selectedQuotation),
+                        onPdf: () => _openPdfPreview(selectedQuotation),
+                        onServiceOrder: () =>
+                            _sendToServiceOrder(selectedQuotation),
+                        onSalesTicket: () =>
+                            _openAsSalesTicket(selectedQuotation),
+                      ),
               ),
             ],
           ),
@@ -1489,7 +1525,7 @@ class _CotizacionesHistorialScreenState
                           final item = visibleItems[index];
                           final canEditOrDelete = _canEditOrDelete(item);
                           final canEdit = canEditOrDelete;
-                          final canDuplicate = widget.pickForEditor;
+                          final canDuplicate = true;
                           final quoteTag =
                               _quoteTags(item).firstOrNull ?? 'General';
                           final isOwnClient = _isOwnClient(item);
@@ -1500,6 +1536,7 @@ class _CotizacionesHistorialScreenState
 
                           return _HistorialListCard(
                             item: item,
+                            selected: false,
                             dateFmt: dateFmt,
                             quoteTag: quoteTag,
                             isOwnClient: isOwnClient,
@@ -1512,15 +1549,7 @@ class _CotizacionesHistorialScreenState
                             onSendToServiceOrder: () =>
                                 _sendToServiceOrder(item),
                             onEdit: canEdit ? () => _editQuotation(item) : null,
-                            onDuplicate: canDuplicate
-                                ? () => Navigator.pop(
-                                    context,
-                                    CotizacionEditorPayload(
-                                      source: item,
-                                      duplicate: true,
-                                    ),
-                                  )
-                                : null,
+                            onDuplicate: () => _duplicateQuotation(item),
                             onDelete: canEditOrDelete
                                 ? () => _delete(item)
                                 : null,
@@ -1531,6 +1560,422 @@ class _CotizacionesHistorialScreenState
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Desktop quotation detail
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _QuotationDetailSidePanel extends StatelessWidget {
+  const _QuotationDetailSidePanel({
+    required this.item,
+    required this.money,
+    required this.canEdit,
+    required this.onEdit,
+    required this.onDuplicate,
+    required this.onPdf,
+    required this.onServiceOrder,
+    required this.onSalesTicket,
+  });
+
+  final CotizacionModel item;
+  final String Function(double value) money;
+  final bool canEdit;
+  final VoidCallback onEdit;
+  final VoidCallback onDuplicate;
+  final VoidCallback onPdf;
+  final VoidCallback onServiceOrder;
+  final VoidCallback onSalesTicket;
+
+  String _qty(double value) =>
+      value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(2);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primary = theme.colorScheme.primary;
+    final customerPhone = (item.customerPhone ?? '').trim();
+    final createdBy = (item.createdByUserName ?? '').trim();
+    final note = item.note.trim();
+
+    return Container(
+      color: theme.colorScheme.surface,
+      child: SafeArea(
+        left: false,
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+              decoration: BoxDecoration(
+                color: primary.withValues(alpha: 0.08),
+                border: Border(
+                  bottom: BorderSide(
+                    color: theme.colorScheme.outlineVariant.withValues(
+                      alpha: 0.55,
+                    ),
+                  ),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: primary.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(Icons.description_outlined, color: primary),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.customerName.trim().isEmpty
+                                  ? 'Cliente sin nombre'
+                                  : item.customerName.trim(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              DateFormat(
+                                'dd/MM/yyyy · h:mm a',
+                                'es_DO',
+                              ).format(item.createdAt),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    money(item.total),
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      color: primary,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${item.items.length} lineas · ITBIS ${item.includeItbis ? 'aplicado' : 'no aplicado'}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+                children: [
+                  _DetailInfoRow(
+                    icon: Icons.person_outline,
+                    label: 'Cliente',
+                    value: item.customerName.trim().isEmpty
+                        ? 'Sin nombre'
+                        : item.customerName.trim(),
+                  ),
+                  if (customerPhone.isNotEmpty)
+                    _DetailInfoRow(
+                      icon: Icons.call_outlined,
+                      label: 'Telefono',
+                      value: customerPhone,
+                    ),
+                  if (createdBy.isNotEmpty)
+                    _DetailInfoRow(
+                      icon: Icons.badge_outlined,
+                      label: 'Creada por',
+                      value: createdBy,
+                    ),
+                  if (note.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    _DetailNote(note: note),
+                  ],
+                  const SizedBox(height: 14),
+                  Text(
+                    'Productos',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final line in item.items)
+                    _DetailProductLine(
+                      title: line.nombre,
+                      subtitle: '${_qty(line.qty)} x ${money(line.unitPrice)}',
+                      total: money(line.total),
+                    ),
+                  const SizedBox(height: 12),
+                  _DetailTotalRow(
+                    label: 'Subtotal',
+                    value: money(item.subtotal),
+                  ),
+                  _DetailTotalRow(
+                    label: item.includeItbis ? 'ITBIS 18%' : 'ITBIS',
+                    value: money(item.itbisAmount),
+                  ),
+                  if (item.globalDiscountAmount > 0)
+                    _DetailTotalRow(
+                      label: 'Descuento',
+                      value: '-${money(item.globalDiscountAmount)}',
+                    ),
+                  const Divider(height: 20),
+                  _DetailTotalRow(
+                    label: 'Total',
+                    value: money(item.total),
+                    strong: true,
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerLow,
+                border: Border(
+                  top: BorderSide(
+                    color: theme.colorScheme.outlineVariant.withValues(
+                      alpha: 0.55,
+                    ),
+                  ),
+                ),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: onSalesTicket,
+                          icon: const Icon(Icons.point_of_sale_outlined),
+                          label: const Text('Pasar a ticket'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: onDuplicate,
+                          icon: const Icon(Icons.content_copy_outlined),
+                          label: const Text('Duplicar'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: onServiceOrder,
+                          icon: const Icon(Icons.assignment_add),
+                          label: const Text('Orden'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.outlined(
+                        tooltip: 'Ver PDF',
+                        onPressed: onPdf,
+                        icon: const Icon(Icons.picture_as_pdf_outlined),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.outlined(
+                        tooltip: 'Editar',
+                        onPressed: canEdit ? onEdit : null,
+                        icon: const Icon(Icons.edit_outlined),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailInfoRow extends StatelessWidget {
+  const _DetailInfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: theme.colorScheme.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                Text(
+                  value,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailNote extends StatelessWidget {
+  const _DetailNote({required this.note});
+
+  final String note;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Text(note, style: theme.textTheme.bodyMedium),
+    );
+  }
+}
+
+class _DetailProductLine extends StatelessWidget {
+  const _DetailProductLine({
+    required this.title,
+    required this.subtitle,
+    required this.total,
+  });
+
+  final String title;
+  final String subtitle;
+  final String total;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.55),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            total,
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailTotalRow extends StatelessWidget {
+  const _DetailTotalRow({
+    required this.label,
+    required this.value,
+    this.strong = false,
+  });
+
+  final String label;
+  final String value;
+  final bool strong;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: strong ? FontWeight.w900 : FontWeight.w600,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: strong ? theme.colorScheme.primary : null,
+              fontWeight: strong ? FontWeight.w900 : FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1964,6 +2409,7 @@ class _HDateButton extends StatelessWidget {
 class _HistorialListCard extends StatefulWidget {
   const _HistorialListCard({
     required this.item,
+    required this.selected,
     required this.dateFmt,
     required this.quoteTag,
     required this.isOwnClient,
@@ -1980,6 +2426,7 @@ class _HistorialListCard extends StatefulWidget {
   });
 
   final CotizacionModel item;
+  final bool selected;
   final String dateFmt;
   final String quoteTag;
   final bool isOwnClient;
@@ -2016,7 +2463,9 @@ class _HistorialListCardState extends State<_HistorialListCard> {
         item.customerPhone!.trim(),
       if (widget.isOwnClient) 'Mi cliente',
     ].join(' · ');
-    final activeColor = theme.colorScheme.surfaceContainerHigh;
+    final activeColor = widget.selected
+        ? theme.colorScheme.primary.withValues(alpha: 0.10)
+        : theme.colorScheme.surfaceContainerHigh;
     final activeBorder = theme.colorScheme.outlineVariant.withValues(
       alpha: 0.45,
     );
@@ -2040,9 +2489,17 @@ class _HistorialListCardState extends State<_HistorialListCard> {
             onFocusChange: (focused) => setState(() => _active = focused),
             child: Ink(
               decoration: BoxDecoration(
-                color: _active ? activeColor : theme.colorScheme.surface,
+                color: _active || widget.selected
+                    ? activeColor
+                    : theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _active ? activeBorder : idleBorder),
+                border: Border.all(
+                  color: widget.selected
+                      ? theme.colorScheme.primary.withValues(alpha: 0.55)
+                      : _active
+                      ? activeBorder
+                      : idleBorder,
+                ),
               ),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),

@@ -37,6 +37,9 @@ Map<String, List<List<String>>> readSimpleXlsx(Uint8List bytes) {
   final archive = ZipDecoder().decodeBytes(bytes);
   final workbookXml = _archiveText(archive, 'xl/workbook.xml');
   final relsXml = _archiveText(archive, 'xl/_rels/workbook.xml.rels');
+  final sharedStrings = _readSharedStrings(
+    _archiveText(archive, 'xl/sharedStrings.xml'),
+  );
   final sheetNames = <String, String>{};
   final relTargets = <String, String>{};
 
@@ -54,12 +57,25 @@ Map<String, List<List<String>>> readSimpleXlsx(Uint8List bytes) {
   final result = <String, List<List<String>>>{};
   for (final entry in sheetNames.entries) {
     final target = relTargets[entry.key];
-    if (target == null || !target.contains('worksheets/')) continue;
-    final path = target.startsWith('xl/') ? target : 'xl/$target';
+    if (target == null) continue;
+    final path = _workbookTargetPath(target);
+    if (!path.contains('worksheets/')) continue;
     final xml = _archiveText(archive, path);
-    result[entry.value] = _readWorksheet(xml);
+    result[entry.value] = _readWorksheet(xml, sharedStrings: sharedStrings);
   }
   return result;
+}
+
+String _workbookTargetPath(String target) {
+  var normalized = target.replaceAll('\\', '/').trim();
+  if (normalized.startsWith('/')) {
+    normalized = normalized.substring(1);
+  }
+  while (normalized.startsWith('../')) {
+    normalized = normalized.substring(3);
+  }
+  if (normalized.startsWith('xl/')) return normalized;
+  return 'xl/$normalized';
 }
 
 String _archiveText(Archive archive, String path) {
@@ -160,7 +176,27 @@ String _cellXml(String ref, Object? value, {required bool header}) {
   return '<c r="$ref" t="inlineStr"$style><is><t>$text</t></is></c>';
 }
 
-List<List<String>> _readWorksheet(String xml) {
+List<String> _readSharedStrings(String xml) {
+  if (xml.trim().isEmpty) return const [];
+  final strings = <String>[];
+  for (final itemMatch in RegExp(
+    r'<si[^>]*>(.*?)</si>',
+    dotAll: true,
+  ).allMatches(xml)) {
+    final item = itemMatch.group(1)!;
+    final fragments = RegExp(r'<t[^>]*>(.*?)</t>', dotAll: true)
+        .allMatches(item)
+        .map((match) => _unescapeXml(match.group(1) ?? ''))
+        .join();
+    strings.add(fragments);
+  }
+  return strings;
+}
+
+List<List<String>> _readWorksheet(
+  String xml, {
+  required List<String> sharedStrings,
+}) {
   final rows = <List<String>>[];
   for (final rowMatch in RegExp(
     r'<row[^>]*>(.*?)</row>',
@@ -184,9 +220,18 @@ List<List<String>> _readWorksheet(String xml) {
         dotAll: true,
       ).firstMatch(body);
       final valueMatch = RegExp(r'<v>(.*?)</v>', dotAll: true).firstMatch(body);
-      cellsByColumn[column] = _unescapeXml(
-        textMatch?.group(1) ?? valueMatch?.group(1) ?? '',
-      );
+      final rawValue = textMatch?.group(1) ?? valueMatch?.group(1) ?? '';
+      if (RegExp(r'\bt="s"').hasMatch(attrs)) {
+        final sharedIndex = int.tryParse(rawValue.trim());
+        cellsByColumn[column] =
+            sharedIndex != null &&
+                sharedIndex >= 0 &&
+                sharedIndex < sharedStrings.length
+            ? sharedStrings[sharedIndex]
+            : '';
+      } else {
+        cellsByColumn[column] = _unescapeXml(rawValue);
+      }
     }
     if (cellsByColumn.isEmpty) continue;
     final width = cellsByColumn.keys.reduce((a, b) => a > b ? a : b);
