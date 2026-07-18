@@ -71,6 +71,15 @@ img { max-width: 100%; display: block; }
   letter-spacing: 0;
   color: var(--brand-dark);
 }
+.brand span {
+  display: grid;
+  gap: 2px;
+}
+.brand small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
 .brand img {
   width: 48px;
   height: 48px;
@@ -161,6 +170,15 @@ img { max-width: 100%; display: block; }
   background: var(--accent);
   color: #201500;
 }
+.button--primary {
+  background: #2463ff;
+  color: var(--white);
+}
+.button--glass {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--white);
+  border: 1px solid rgba(255, 255, 255, 0.30);
+}
 .button--quiet {
   background: #edf3f4;
   color: var(--brand-dark);
@@ -241,6 +259,26 @@ img { max-width: 100%; display: block; }
   line-height: 1;
   margin-bottom: 7px;
   text-transform: uppercase;
+}
+.whatsapp-float {
+  position: fixed;
+  right: 28px;
+  bottom: 26px;
+  z-index: 30;
+  width: 60px;
+  height: 60px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #25d366;
+  color: var(--white);
+  box-shadow: 0 16px 34px rgba(37, 211, 102, 0.35);
+  text-decoration: none;
+}
+.whatsapp-float svg {
+  width: 31px;
+  height: 31px;
+  fill: currentColor;
 }
 
 .page-hero {
@@ -945,8 +983,11 @@ img { max-width: 100%; display: block; }
 }
 
 @media (max-width: 760px) {
+  body {
+    background: #eef3f7;
+  }
   .topbar {
-    font-size: 12px;
+    display: none;
   }
   .topbar__inner {
     display: grid;
@@ -971,19 +1012,39 @@ img { max-width: 100%; display: block; }
   }
   .site-header {
     overflow: visible;
+    background: #0c1016;
+    border-bottom-color: rgba(255, 255, 255, 0.10);
+    box-shadow: none;
   }
   .nav {
     position: relative;
     min-height: auto;
     gap: 12px;
-    padding: 10px 0;
+    padding: 12px 0;
+  }
+  .brand {
+    color: var(--white);
+  }
+  .brand small {
+    color: #9ba6b2;
   }
   .menu-toggle {
     display: inline-flex;
     margin-left: auto;
-    padding: 10px 12px;
-    border-color: rgba(0, 63, 70, 0.22);
-    box-shadow: 0 10px 22px rgba(0, 63, 70, 0.15);
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    justify-content: center;
+    flex-direction: column;
+    border-radius: 8px;
+    border-color: rgba(255, 255, 255, 0.16);
+    background: #111720;
+    box-shadow: none;
+  }
+  .menu-toggle span {
+    width: 18px;
+    height: 2px;
+    border-radius: 999px;
   }
   .site-header::after {
     content: "";
@@ -1082,13 +1143,13 @@ img { max-width: 100%; display: block; }
   .home-hero {
     min-height: auto;
     background:
-      linear-gradient(180deg, rgba(0, 25, 31, 0.70) 0%, rgba(0, 63, 70, 0.92) 50%, rgba(0, 63, 70, 0.98) 100%),
-      url("assets/storefront.jpeg") center top/cover;
+      linear-gradient(90deg, rgba(5, 19, 43, 0.96) 0%, rgba(8, 19, 32, 0.88) 50%, rgba(8, 14, 20, 0.78) 100%),
+      url("assets/storefront.jpeg") center/cover;
   }
-  .hero__inner { padding: 42px 0 48px; }
+  .hero__inner { padding: 70px 0 70px; }
   .hero h1 {
-    font-size: 36px;
-    line-height: 1.03;
+    font-size: 34px;
+    line-height: 1.10;
     max-width: 430px;
   }
   .hero p {
@@ -1098,20 +1159,40 @@ img { max-width: 100%; display: block; }
   .hero__actions {
     display: grid;
     gap: 10px;
-    margin-top: 22px;
+    margin-top: 32px;
   }
   .hero__actions .button {
     width: 100%;
+    min-height: 48px;
   }
   .hero-service-list {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
-    margin-top: 18px;
+    margin-top: 28px;
   }
   .hero-service-list span {
     border-radius: 8px;
-    padding: 11px;
+    padding: 12px 8px;
+    text-align: center;
+    font-size: 12px;
+  }
+  .hero__eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--white);
+    border: 1px solid rgba(255, 255, 255, 0.20);
+  }
+  .hero__eyebrow::before {
+    content: "";
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: var(--white) url("assets/logo.png") center/contain no-repeat;
   }
   .section h2,
   .page-title {
