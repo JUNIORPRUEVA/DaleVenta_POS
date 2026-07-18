@@ -265,6 +265,7 @@ class ApiRoutes {
   static const cotizacionAiAnalyze = '/cotizaciones/ai/analyze';
   static const cotizacionAiChat = '/cotizaciones/ai/chat';
   static const cotizacionSendWhatsapp = '/cotizaciones/send-whatsapp';
+  static const cotizacionPdfShareLink = '/cotizaciones/pdf-share-link';
 
   // Service orders
   static const serviceOrders = '/service-orders';

@@ -5,20 +5,32 @@ import {
   Injectable,
   NotFoundException,
   ServiceUnavailableException,
-} from '@nestjs/common';
-import { Logger } from '@nestjs/common';
-import { createHash } from 'node:crypto';
-import { ConfigService } from '@nestjs/config';
-import { CompanyManualAudience, CompanyManualEntryKind, Prisma, Role } from '@prisma/client';
-import { RedisService } from '../common/redis/redis.service';
-import { EvolutionWhatsAppService } from '../notifications/evolution-whatsapp.service';
-import { PrismaService } from '../prisma/prisma.service';
-import { normalizePhone } from '../common/utils/normalize-phone';
-import { AnalyzeCotizacionAiDto } from './dto/analyze-cotizacion-ai.dto';
-import { ChatCotizacionAiDto } from './dto/chat-cotizacion-ai.dto';
-import { CreateCotizacionDto, CreateCotizacionItemDto } from './dto/create-cotizacion.dto';
-import { SendCotizacionWhatsappDto } from './dto/send-cotizacion-whatsapp.dto';
-import { UpdateCotizacionDto } from './dto/update-cotizacion.dto';
+} from "@nestjs/common";
+import { Logger } from "@nestjs/common";
+import { createHash } from "node:crypto";
+import * as fs from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
+import * as path from "node:path";
+import { ConfigService } from "@nestjs/config";
+import {
+  CompanyManualAudience,
+  CompanyManualEntryKind,
+  Prisma,
+  Role,
+} from "@prisma/client";
+import { RedisService } from "../common/redis/redis.service";
+import { EvolutionWhatsAppService } from "../notifications/evolution-whatsapp.service";
+import { PrismaService } from "../prisma/prisma.service";
+import { normalizePhone } from "../common/utils/normalize-phone";
+import { AnalyzeCotizacionAiDto } from "./dto/analyze-cotizacion-ai.dto";
+import { ChatCotizacionAiDto } from "./dto/chat-cotizacion-ai.dto";
+import { CreateCotizacionPdfShareLinkDto } from "./dto/create-cotizacion-pdf-share-link.dto";
+import {
+  CreateCotizacionDto,
+  CreateCotizacionItemDto,
+} from "./dto/create-cotizacion.dto";
+import { SendCotizacionWhatsappDto } from "./dto/send-cotizacion-whatsapp.dto";
+import { UpdateCotizacionDto } from "./dto/update-cotizacion.dto";
 
 type AiRuntimeConfig = {
   apiKey: string;
@@ -34,24 +46,24 @@ type BusinessRuleRecord = {
   content: string;
   summary: string | null;
   keywords: string[];
-  severity: 'info' | 'warning' | 'critical';
+  severity: "info" | "warning" | "critical";
   active: boolean;
   createdAt: string | null;
   updatedAt: string | null;
 };
 
-const QUOTES_LIST_CACHE_PATTERN = 'quotes:list:*';
-const QUOTES_DETAIL_CACHE_PATTERN = 'quotes:detail:*';
+const QUOTES_LIST_CACHE_PATTERN = "quotes:list:*";
+const QUOTES_DETAIL_CACHE_PATTERN = "quotes:detail:*";
 
 @Injectable()
 export class CotizacionesService {
   private readonly logger = new Logger(CotizacionesService.name);
   private static readonly noRuleMessage =
-    'No encontré una regla oficial para eso dentro del sistema.';
+    "No encontré una regla oficial para eso dentro del sistema.";
   private static readonly rulesOnlyReminder =
-    'Solo puedo responder con base en el Manual Interno y el conocimiento autorizado de la app. Hazme una pregunta concreta sobre una regla, un proceso o un modulo del sistema.';
+    "Solo puedo responder con base en el Manual Interno y el conocimiento autorizado de la app. Hazme una pregunta concreta sobre una regla, un proceso o un modulo del sistema.";
   private static readonly unauthorizedMessage =
-    'No puedo ayudar con informacion privada de otro usuario ni mostrar datos para los que no tienes autorizacion.';
+    "No puedo ayudar con informacion privada de otro usuario ni mostrar datos para los que no tienes autorizacion.";
 
   constructor(
     private readonly prisma: PrismaService,
@@ -62,7 +74,7 @@ export class CotizacionesService {
 
   private buildQuoteInclude() {
     return {
-      items: { orderBy: { createdAt: 'asc' as const } },
+      items: { orderBy: { createdAt: "asc" as const } },
       createdBy: {
         select: {
           id: true,
@@ -74,24 +86,24 @@ export class CotizacionesService {
   }
 
   private parsePdfBase64(value: string) {
-    const trimmed = (value ?? '').trim();
+    const trimmed = (value ?? "").trim();
     if (!trimmed) {
-      throw new BadRequestException('Debes enviar el PDF de la cotización.');
+      throw new BadRequestException("Debes enviar el PDF de la cotización.");
     }
 
-    const base64 = trimmed.startsWith('data:')
-      ? trimmed.slice(trimmed.indexOf(',') + 1)
+    const base64 = trimmed.startsWith("data:")
+      ? trimmed.slice(trimmed.indexOf(",") + 1)
       : trimmed;
 
     let bytes: Buffer;
     try {
-      bytes = Buffer.from(base64, 'base64');
+      bytes = Buffer.from(base64, "base64");
     } catch {
-      throw new BadRequestException('El PDF de la cotización no es válido.');
+      throw new BadRequestException("El PDF de la cotización no es válido.");
     }
 
     if (!bytes.length) {
-      throw new BadRequestException('El PDF de la cotización llegó vacío.');
+      throw new BadRequestException("El PDF de la cotización llegó vacío.");
     }
 
     const maxPdfBytes = 8 * 1024 * 1024;
@@ -105,8 +117,44 @@ export class CotizacionesService {
     return bytes;
   }
 
+  private resolveUploadDir() {
+    const fromEnv = (this.config.get<string>("UPLOAD_DIR") ?? "").trim();
+    const volumeDir = "/uploads";
+    const volumeExists = fs.existsSync(volumeDir);
+
+    if (fromEnv) {
+      if ((fromEnv === "./uploads" || fromEnv === "uploads") && volumeExists) {
+        return volumeDir;
+      }
+      return fromEnv;
+    }
+
+    return volumeExists ? volumeDir : path.join(process.cwd(), "uploads");
+  }
+
+  private publicBaseUrl(requestBaseUrl?: string) {
+    const raw =
+      (this.config.get<string>("PUBLIC_BASE_URL") ?? "").trim() ||
+      (this.config.get<string>("API_BASE_URL") ?? "").trim() ||
+      (process.env.PUBLIC_BASE_URL ?? "").trim() ||
+      (process.env.API_BASE_URL ?? "").trim() ||
+      (requestBaseUrl ?? "").trim();
+
+    return raw.replace(/\/+$/, "");
+  }
+
+  private sanitizePdfFileName(value: string, fallback: string) {
+    const source = (value || fallback).trim() || fallback;
+    const base = path
+      .basename(source)
+      .replace(/[^a-zA-Z0-9._-]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    const withExt = base.toLowerCase().endsWith(".pdf") ? base : `${base}.pdf`;
+    return withExt || fallback;
+  }
+
   private extractEvolutionHttpStatus(errorMessage: string) {
-    const normalized = (errorMessage ?? '').toString();
+    const normalized = (errorMessage ?? "").toString();
     const matches = [
       /HTTP\s+(\d{3})/i.exec(normalized),
       /status\s*[:=]\s*(\d{3})/i.exec(normalized),
@@ -134,45 +182,45 @@ export class CotizacionesService {
       const normalized = message.toLowerCase();
       const status = this.extractEvolutionHttpStatus(message);
 
-      if (normalized.includes('ephemeralmessage')) {
+      if (normalized.includes("ephemeralmessage")) {
         return new BadGatewayException(
-          'El proveedor Evolution (v2.3.1) tiene un fallo interno al procesar documentos PDF (ephemeralMessage). Debes actualizar Evolution a una versión estable más reciente o aplicar su parche de media para que el envío funcione.',
+          "El proveedor Evolution (v2.3.1) tiene un fallo interno al procesar documentos PDF (ephemeralMessage). Debes actualizar Evolution a una versión estable más reciente o aplicar su parche de media para que el envío funcione.",
         );
       }
 
-      if (normalized.includes('timeout')) {
+      if (normalized.includes("timeout")) {
         return new ServiceUnavailableException(
-          'No se pudo enviar por WhatsApp porque el servicio tardó demasiado en responder. Revisa conexión e intenta nuevamente.',
+          "No se pudo enviar por WhatsApp porque el servicio tardó demasiado en responder. Revisa conexión e intenta nuevamente.",
         );
       }
 
       if (status === 401 || status === 403) {
         return new BadRequestException(
-          'El servidor de WhatsApp rechazó la conexión (credenciales o instancia). Revisa API Key, instancia y estado de conexión.',
+          "El servidor de WhatsApp rechazó la conexión (credenciales o instancia). Revisa API Key, instancia y estado de conexión.",
         );
       }
 
       if (status === 404) {
         return new BadRequestException(
-          'La instancia de WhatsApp configurada no existe en el servidor de mensajería. Verifica el nombre de la instancia.',
+          "La instancia de WhatsApp configurada no existe en el servidor de mensajería. Verifica el nombre de la instancia.",
         );
       }
 
       if (status === 413) {
         return new BadRequestException(
-          'El archivo PDF es demasiado pesado para WhatsApp. Reduce el tamaño del PDF y reintenta.',
+          "El archivo PDF es demasiado pesado para WhatsApp. Reduce el tamaño del PDF y reintenta.",
         );
       }
 
       if (status === 415 || status === 422) {
         return new BadRequestException(
-          'El servidor de WhatsApp rechazó el formato del PDF enviado. Regenera el PDF e intenta nuevamente.',
+          "El servidor de WhatsApp rechazó el formato del PDF enviado. Regenera el PDF e intenta nuevamente.",
         );
       }
 
       if (status != null && status >= 500) {
         return new BadGatewayException(
-          'El proveedor de mensajería WhatsApp reportó un error interno. El envío no se completó; intenta nuevamente en unos minutos.',
+          "El proveedor de mensajería WhatsApp reportó un error interno. El envío no se completó; intenta nuevamente en unos minutos.",
         );
       }
 
@@ -182,18 +230,18 @@ export class CotizacionesService {
     }
 
     return new BadGatewayException(
-      'No se pudo completar el envío por WhatsApp por un error inesperado del servidor.',
+      "No se pudo completar el envío por WhatsApp por un error inesperado del servidor.",
     );
   }
 
   private async buildQuoteWhatsAppCaption(customerName: string) {
     const row = await this.prisma.appConfig.findUnique({
-      where: { id: 'global' },
+      where: { id: "global" },
       select: { companyName: true },
     });
 
-    const companyName = (row?.companyName ?? '').trim() || 'FULLTECH';
-    const safeCustomerName = customerName.trim() || 'cliente';
+    const companyName = (row?.companyName ?? "").trim() || "FULLTECH";
+    const safeCustomerName = customerName.trim() || "cliente";
 
     return `Hola ${safeCustomerName}, te compartimos tu cotización de ${companyName}. Si deseas continuar, responde a este mensaje y te ayudamos.`;
   }
@@ -204,7 +252,9 @@ export class CotizacionesService {
   ) {
     if (user.role === Role.ADMIN) return;
     if (quotation.createdByUserId !== user.id) {
-      throw new ForbiddenException('No tienes permiso para enviar esta cotización.');
+      throw new ForbiddenException(
+        "No tienes permiso para enviar esta cotización.",
+      );
     }
   }
 
@@ -219,11 +269,11 @@ export class CotizacionesService {
       },
     });
 
-    const status = (instance?.status ?? '').trim().toLowerCase();
-    const isConnected = status === 'connected' || status === 'open';
+    const status = (instance?.status ?? "").trim().toLowerCase();
+    const isConnected = status === "connected" || status === "open";
     if (!instance || !isConnected) {
       throw new BadRequestException(
-        'Debes conectar tu WhatsApp antes de enviar cotizaciones.',
+        "Debes conectar tu WhatsApp antes de enviar cotizaciones.",
       );
     }
 
@@ -248,7 +298,7 @@ export class CotizacionesService {
     });
 
     const appConfig = await this.prisma.appConfig.findUnique({
-      where: { id: 'global' },
+      where: { id: "global" },
       select: {
         phonePreferential: true,
         phone: true,
@@ -257,23 +307,27 @@ export class CotizacionesService {
 
     const candidates: string[] = [];
     for (const admin of adminUsers) {
-      candidates.push(admin.whatsappInstance?.phoneNumber ?? '');
-      candidates.push(admin.telefono ?? '');
+      candidates.push(admin.whatsappInstance?.phoneNumber ?? "");
+      candidates.push(admin.telefono ?? "");
     }
-    candidates.push(appConfig?.phonePreferential ?? '');
-    candidates.push(appConfig?.phone ?? '');
-    candidates.push(this.config.get<string>('QUOTATION_APPROVAL_ADMIN_PHONE') ?? '');
-    candidates.push(process.env.QUOTATION_APPROVAL_ADMIN_PHONE ?? '');
+    candidates.push(appConfig?.phonePreferential ?? "");
+    candidates.push(appConfig?.phone ?? "");
+    candidates.push(
+      this.config.get<string>("QUOTATION_APPROVAL_ADMIN_PHONE") ?? "",
+    );
+    candidates.push(process.env.QUOTATION_APPROVAL_ADMIN_PHONE ?? "");
 
     const destinations = Array.from(
       new Set(
         candidates
           .map((value) =>
-            this.evolutionWhatsApp.normalizeWhatsAppNumber((value ?? '').trim()),
+            this.evolutionWhatsApp.normalizeWhatsAppNumber(
+              (value ?? "").trim(),
+            ),
           )
           .filter(
             (value): value is string =>
-                !!value && value.length >= 11 && value.length <= 15,
+              !!value && value.length >= 11 && value.length <= 15,
           ),
       ),
     );
@@ -283,7 +337,7 @@ export class CotizacionesService {
     }
 
     throw new BadRequestException(
-      'No hay teléfonos admin válidos para recibir cotizaciones por WhatsApp.',
+      "No hay teléfonos admin válidos para recibir cotizaciones por WhatsApp.",
     );
   }
 
@@ -310,11 +364,11 @@ export class CotizacionesService {
         select: { telefono: true, phoneNormalized: true },
       });
 
-      const clientPhoneRaw = (customer?.telefono ?? '').trim();
+      const clientPhoneRaw = (customer?.telefono ?? "").trim();
       const clientPhoneNormalized =
         this.evolutionWhatsApp.normalizeWhatsAppNumber(clientPhoneRaw) ||
         this.evolutionWhatsApp.normalizeWhatsAppNumber(
-          (customer?.phoneNormalized ?? '').trim(),
+          (customer?.phoneNormalized ?? "").trim(),
         );
 
       if (this.isLikelyWhatsAppDestination(clientPhoneNormalized)) {
@@ -330,7 +384,7 @@ export class CotizacionesService {
     }
 
     throw new BadRequestException(
-      'El cliente no tiene teléfono válido para enviar la cotización. Abre el cliente, corrige el teléfono (con código de país) y vuelve a intentar.',
+      "El cliente no tiene teléfono válido para enviar la cotización. Abre el cliente, corrige el teléfono (con código de país) y vuelve a intentar.",
     );
   }
 
@@ -344,14 +398,19 @@ export class CotizacionesService {
       customerPhone: query.customerPhone?.trim() ?? null,
       take: Math.min(Math.max(query.take ?? 80, 1), 500),
     };
-    const hash = createHash('sha1').update(JSON.stringify(scope)).digest('hex');
+    const hash = createHash("sha1").update(JSON.stringify(scope)).digest("hex");
     return `quotes:list:${hash}`;
   }
 
-  private buildQuoteDetailCacheKey(user: { id: string; role: Role }, id: string) {
-    const hash = createHash('sha1')
-      .update(JSON.stringify({ userId: user.id, role: user.role, id: id.trim() }))
-      .digest('hex');
+  private buildQuoteDetailCacheKey(
+    user: { id: string; role: Role },
+    id: string,
+  ) {
+    const hash = createHash("sha1")
+      .update(
+        JSON.stringify({ userId: user.id, role: user.role, id: id.trim() }),
+      )
+      .digest("hex");
     return `quotes:detail:${hash}`;
   }
 
@@ -382,7 +441,10 @@ export class CotizacionesService {
     if (!input.customerPhoneNormalized) return null;
 
     const existing = await tx.client.findFirst({
-      where: { isDeleted: false, phoneNormalized: input.customerPhoneNormalized },
+      where: {
+        isDeleted: false,
+        phoneNormalized: input.customerPhoneNormalized,
+      },
       select: { id: true },
     });
     if (existing) return existing.id;
@@ -402,7 +464,10 @@ export class CotizacionesService {
     } catch (e: any) {
       // In case of race condition with unique constraint.
       const found = await tx.client.findFirst({
-        where: { isDeleted: false, phoneNormalized: input.customerPhoneNormalized },
+        where: {
+          isDeleted: false,
+          phoneNormalized: input.customerPhoneNormalized,
+        },
         select: { id: true },
       });
       if (found) return found.id;
@@ -410,7 +475,11 @@ export class CotizacionesService {
     }
   }
 
-  private async touchClientActivity(tx: Prisma.TransactionClient, clientId: string | null, at: Date) {
+  private async touchClientActivity(
+    tx: Prisma.TransactionClient,
+    clientId: string | null,
+    at: Date,
+  ) {
     if (!clientId) return;
     await tx.client.update({
       where: { id: clientId },
@@ -418,7 +487,10 @@ export class CotizacionesService {
     });
   }
 
-  async list(user: { id: string; role: Role }, query: { customerPhone?: string; take?: number }) {
+  async list(
+    user: { id: string; role: Role },
+    query: { customerPhone?: string; take?: number },
+  ) {
     const take = Math.min(Math.max(query.take ?? 80, 1), 500);
     const cacheKey = this.buildQuotesListCacheKey(user, query);
     const cached = await this.redis.get<{ items: any[] }>(cacheKey);
@@ -442,7 +514,7 @@ export class CotizacionesService {
     const items = await this.prisma.cotizacion.findMany({
       where,
       take,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       include: this.buildQuoteInclude(),
     });
 
@@ -465,7 +537,7 @@ export class CotizacionesService {
       include: this.buildQuoteInclude(),
     });
 
-    if (!item) throw new NotFoundException('Cotización no encontrada');
+    if (!item) throw new NotFoundException("Cotización no encontrada");
 
     await this.redis.set(cacheKey, item);
     return item;
@@ -473,21 +545,24 @@ export class CotizacionesService {
 
   async create(user: { id: string; role: Role }, dto: CreateCotizacionDto) {
     if (!dto.items?.length) {
-      throw new BadRequestException('Agrega al menos un producto al ticket');
+      throw new BadRequestException("Agrega al menos un producto al ticket");
     }
 
     const customerPhone = dto.customerPhone.trim();
     const customerName = dto.customerName.trim();
-    const note = (dto.note ?? '').trim();
+    const note = (dto.note ?? "").trim();
 
-    if (!customerPhone) throw new BadRequestException('Teléfono requerido');
-    if (!customerName) throw new BadRequestException('Nombre de cliente requerido');
+    if (!customerPhone) throw new BadRequestException("Teléfono requerido");
+    if (!customerName)
+      throw new BadRequestException("Nombre de cliente requerido");
 
     const customerPhoneNormalized = normalizePhone(customerPhone);
 
     const includeItbis = dto.includeItbis === true;
     const itbisRateRaw = dto.itbisRate ?? 0.18;
-    const itbisRate = new Prisma.Decimal(Math.max(0, Math.min(itbisRateRaw, 1)));
+    const itbisRate = new Prisma.Decimal(
+      Math.max(0, Math.min(itbisRateRaw, 1)),
+    );
 
     const normalized = await this.normalizeItems(dto.items);
 
@@ -503,93 +578,118 @@ export class CotizacionesService {
       }
     }
 
-    const itbisAmount = includeItbis ? subtotal.mul(itbisRate) : new Prisma.Decimal(0);
+    const itbisAmount = includeItbis
+      ? subtotal.mul(itbisRate)
+      : new Prisma.Decimal(0);
     const grossTotal = subtotal.plus(itbisAmount);
     const generalDiscountAmountRaw = dto.globalDiscountAmount ?? 0;
     const generalDiscountAmount = new Prisma.Decimal(
-      Math.max(0, Math.min(generalDiscountAmountRaw, this.toNumber(grossTotal))),
+      Math.max(
+        0,
+        Math.min(generalDiscountAmountRaw, this.toNumber(grossTotal)),
+      ),
     );
     const total = grossTotal.minus(generalDiscountAmount);
     const totalCost = hasUnknownCost ? null : subtotalCost;
     const totalProfit = hasUnknownCost ? null : total.minus(subtotalCost);
 
-    return this.prisma.$transaction(async (tx) => {
-      const customerId = await this.resolveCustomerIdByPhone(tx, {
-        userId: user.id,
-        customerId: dto.customerId,
-        customerName,
-        customerPhone,
-        customerPhoneNormalized,
-      });
-
-      const created = await tx.cotizacion.create({
-        data: {
-          createdByUserId: user.id,
-          customerId,
+    return this.prisma
+      .$transaction(async (tx) => {
+        const customerId = await this.resolveCustomerIdByPhone(tx, {
+          userId: user.id,
+          customerId: dto.customerId,
           customerName,
           customerPhone,
           customerPhoneNormalized,
-          note: note.length ? note : null,
-          includeItbis,
-          itbisRate,
-          globalDiscountAmount: generalDiscountAmount,
-          subtotal,
-          subtotalCost: totalCost,
-          itbisAmount,
-          totalCost,
-          total,
-          totalProfit,
-          items: {
-            create: normalized.map((item) => ({
-              productId: item.productId,
-              productNameSnapshot: item.productNameSnapshot,
-              productImageSnapshot: item.productImageSnapshot,
-              originalUnitPriceSnapshot: item.originalUnitPriceSnapshot,
-              qty: item.qty,
-              unitPrice: item.unitPrice,
-              costUnitSnapshot: item.costUnitSnapshot,
-              subtotalCost: item.subtotalCost,
-              lineTotal: item.lineTotal,
-              profit: item.profit,
-            })),
+        });
+
+        const created = await tx.cotizacion.create({
+          data: {
+            createdByUserId: user.id,
+            customerId,
+            customerName,
+            customerPhone,
+            customerPhoneNormalized,
+            note: note.length ? note : null,
+            includeItbis,
+            itbisRate,
+            globalDiscountAmount: generalDiscountAmount,
+            subtotal,
+            subtotalCost: totalCost,
+            itbisAmount,
+            totalCost,
+            total,
+            totalProfit,
+            items: {
+              create: normalized.map((item) => ({
+                productId: item.productId,
+                productNameSnapshot: item.productNameSnapshot,
+                productImageSnapshot: item.productImageSnapshot,
+                originalUnitPriceSnapshot: item.originalUnitPriceSnapshot,
+                qty: item.qty,
+                unitPrice: item.unitPrice,
+                costUnitSnapshot: item.costUnitSnapshot,
+                subtotalCost: item.subtotalCost,
+                lineTotal: item.lineTotal,
+                profit: item.profit,
+              })),
+            },
           },
-        },
-        include: this.buildQuoteInclude(),
+          include: this.buildQuoteInclude(),
+        });
+
+        await this.touchClientActivity(tx, customerId, created.createdAt);
+
+        return created;
+      })
+      .then(async (created) => {
+        await this.invalidateQuoteCache("cotizacion.create");
+        return created;
       });
-
-      await this.touchClientActivity(tx, customerId, created.createdAt);
-
-      return created;
-    }).then(async (created) => {
-      await this.invalidateQuoteCache('cotizacion.create');
-      return created;
-    });
   }
 
-  async update(user: { id: string; role: Role }, id: string, dto: UpdateCotizacionDto) {
+  async update(
+    user: { id: string; role: Role },
+    id: string,
+    dto: UpdateCotizacionDto,
+  ) {
     const current = await this.prisma.cotizacion.findUnique({ where: { id } });
-    if (!current) throw new NotFoundException('Cotización no encontrada');
+    if (!current) throw new NotFoundException("Cotización no encontrada");
 
     if (user.role !== Role.ADMIN && current.createdByUserId !== user.id) {
-      throw new ForbiddenException('No puedes editar esta cotización');
+      throw new ForbiddenException("No puedes editar esta cotización");
     }
 
     const includeItbis = dto.includeItbis ?? current.includeItbis;
     const itbisRateRaw = dto.itbisRate ?? this.toNumber(current.itbisRate);
-    const itbisRate = new Prisma.Decimal(Math.max(0, Math.min(itbisRateRaw, 1)));
+    const itbisRate = new Prisma.Decimal(
+      Math.max(0, Math.min(itbisRateRaw, 1)),
+    );
     const currentGeneralDiscountAmount = this.toNumber(
-      (current as { globalDiscountAmount?: Prisma.Decimal | number | string | null })
-        .globalDiscountAmount,
+      (
+        current as {
+          globalDiscountAmount?: Prisma.Decimal | number | string | null;
+        }
+      ).globalDiscountAmount,
     );
 
-    const nextItems = dto.items ? await this.normalizeItems(dto.items as CreateCotizacionItemDto[]) : null;
+    const nextItems = dto.items
+      ? await this.normalizeItems(dto.items as CreateCotizacionItemDto[])
+      : null;
 
     let subtotal = new Prisma.Decimal(current.subtotal);
-    let subtotalCost = current.subtotalCost == null ? null : new Prisma.Decimal(current.subtotalCost);
+    let subtotalCost =
+      current.subtotalCost == null
+        ? null
+        : new Prisma.Decimal(current.subtotalCost);
     let itbisAmount = new Prisma.Decimal(current.itbisAmount);
-    let totalCost = current.totalCost == null ? null : new Prisma.Decimal(current.totalCost);
+    let totalCost =
+      current.totalCost == null ? null : new Prisma.Decimal(current.totalCost);
     let total = new Prisma.Decimal(current.total);
-    let totalProfit = current.totalProfit == null ? null : new Prisma.Decimal(current.totalProfit);
+    let totalProfit =
+      current.totalProfit == null
+        ? null
+        : new Prisma.Decimal(current.totalProfit);
     let generalDiscountAmount = new Prisma.Decimal(
       Math.max(0, dto.globalDiscountAmount ?? currentGeneralDiscountAmount),
     );
@@ -606,10 +706,18 @@ export class CotizacionesService {
           subtotalCost = subtotalCost.plus(line.subtotalCost);
         }
       }
-      itbisAmount = includeItbis ? subtotal.mul(itbisRate) : new Prisma.Decimal(0);
+      itbisAmount = includeItbis
+        ? subtotal.mul(itbisRate)
+        : new Prisma.Decimal(0);
       const grossTotal = subtotal.plus(itbisAmount);
       generalDiscountAmount = new Prisma.Decimal(
-        Math.max(0, Math.min(this.toNumber(generalDiscountAmount), this.toNumber(grossTotal))),
+        Math.max(
+          0,
+          Math.min(
+            this.toNumber(generalDiscountAmount),
+            this.toNumber(grossTotal),
+          ),
+        ),
       );
       total = grossTotal.minus(generalDiscountAmount);
       totalCost = hasUnknownCost ? null : subtotalCost;
@@ -617,90 +725,162 @@ export class CotizacionesService {
     } else if (dto.globalDiscountAmount !== undefined) {
       const grossTotal = subtotal.plus(itbisAmount);
       generalDiscountAmount = new Prisma.Decimal(
-        Math.max(0, Math.min(dto.globalDiscountAmount, this.toNumber(grossTotal))),
+        Math.max(
+          0,
+          Math.min(dto.globalDiscountAmount, this.toNumber(grossTotal)),
+        ),
       );
       total = grossTotal.minus(generalDiscountAmount);
       totalProfit = totalCost == null ? null : total.minus(totalCost);
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      if (nextItems) {
-        await tx.cotizacionItem.deleteMany({ where: { cotizacionId: id } });
-      }
+    return this.prisma
+      .$transaction(async (tx) => {
+        if (nextItems) {
+          await tx.cotizacionItem.deleteMany({ where: { cotizacionId: id } });
+        }
 
-      const nextCustomerName = dto.customerName ? dto.customerName.trim() : current.customerName;
-      const nextCustomerPhone = dto.customerPhone ? dto.customerPhone.trim() : current.customerPhone;
-      const nextCustomerPhoneNormalized = normalizePhone(nextCustomerPhone);
+        const nextCustomerName = dto.customerName
+          ? dto.customerName.trim()
+          : current.customerName;
+        const nextCustomerPhone = dto.customerPhone
+          ? dto.customerPhone.trim()
+          : current.customerPhone;
+        const nextCustomerPhoneNormalized = normalizePhone(nextCustomerPhone);
 
-      const nextCustomerId = dto.customerId
-        ? dto.customerId
-        : dto.customerPhone
-          ? await this.resolveCustomerIdByPhone(tx, {
-              userId: user.id,
-              customerId: null,
-              customerName: nextCustomerName,
-              customerPhone: nextCustomerPhone,
-              customerPhoneNormalized: nextCustomerPhoneNormalized,
-            })
-          : current.customerId;
+        const nextCustomerId = dto.customerId
+          ? dto.customerId
+          : dto.customerPhone
+            ? await this.resolveCustomerIdByPhone(tx, {
+                userId: user.id,
+                customerId: null,
+                customerName: nextCustomerName,
+                customerPhone: nextCustomerPhone,
+                customerPhoneNormalized: nextCustomerPhoneNormalized,
+              })
+            : current.customerId;
 
-      const updated = await tx.cotizacion.update({
-        where: { id },
-        data: {
-          customerId: nextCustomerId,
-          customerName: nextCustomerName,
-          customerPhone: nextCustomerPhone,
-          customerPhoneNormalized: nextCustomerPhoneNormalized,
-          note: dto.note !== undefined ? (dto.note?.trim().length ? dto.note.trim() : null) : current.note,
-          includeItbis,
-          itbisRate,
-          globalDiscountAmount: generalDiscountAmount,
-          subtotal,
-          subtotalCost,
-          itbisAmount,
-          totalCost,
-          total,
-          totalProfit,
-          items: nextItems
-            ? {
-                create: nextItems.map((item) => ({
-                  productId: item.productId,
-                  productNameSnapshot: item.productNameSnapshot,
-                  productImageSnapshot: item.productImageSnapshot,
-                  originalUnitPriceSnapshot: item.originalUnitPriceSnapshot,
-                  qty: item.qty,
-                  unitPrice: item.unitPrice,
-                  costUnitSnapshot: item.costUnitSnapshot,
-                  subtotalCost: item.subtotalCost,
-                  lineTotal: item.lineTotal,
-                  profit: item.profit,
-                })),
-              }
-            : undefined,
-        },
-        include: this.buildQuoteInclude(),
+        const updated = await tx.cotizacion.update({
+          where: { id },
+          data: {
+            customerId: nextCustomerId,
+            customerName: nextCustomerName,
+            customerPhone: nextCustomerPhone,
+            customerPhoneNormalized: nextCustomerPhoneNormalized,
+            note:
+              dto.note !== undefined
+                ? dto.note?.trim().length
+                  ? dto.note.trim()
+                  : null
+                : current.note,
+            includeItbis,
+            itbisRate,
+            globalDiscountAmount: generalDiscountAmount,
+            subtotal,
+            subtotalCost,
+            itbisAmount,
+            totalCost,
+            total,
+            totalProfit,
+            items: nextItems
+              ? {
+                  create: nextItems.map((item) => ({
+                    productId: item.productId,
+                    productNameSnapshot: item.productNameSnapshot,
+                    productImageSnapshot: item.productImageSnapshot,
+                    originalUnitPriceSnapshot: item.originalUnitPriceSnapshot,
+                    qty: item.qty,
+                    unitPrice: item.unitPrice,
+                    costUnitSnapshot: item.costUnitSnapshot,
+                    subtotalCost: item.subtotalCost,
+                    lineTotal: item.lineTotal,
+                    profit: item.profit,
+                  })),
+                }
+              : undefined,
+          },
+          include: this.buildQuoteInclude(),
+        });
+
+        await this.touchClientActivity(
+          tx,
+          nextCustomerId ?? null,
+          updated.updatedAt,
+        );
+
+        return updated;
+      })
+      .then(async (updated) => {
+        await this.invalidateQuoteCache("cotizacion.update");
+        return updated;
       });
-
-      await this.touchClientActivity(tx, nextCustomerId ?? null, updated.updatedAt);
-
-      return updated;
-    }).then(async (updated) => {
-      await this.invalidateQuoteCache('cotizacion.update');
-      return updated;
-    });
   }
 
   async remove(user: { id: string; role: Role }, id: string) {
     const current = await this.prisma.cotizacion.findUnique({ where: { id } });
-    if (!current) throw new NotFoundException('Cotización no encontrada');
+    if (!current) throw new NotFoundException("Cotización no encontrada");
 
     if (user.role !== Role.ADMIN && current.createdByUserId !== user.id) {
-      throw new ForbiddenException('No puedes eliminar esta cotización');
+      throw new ForbiddenException("No puedes eliminar esta cotización");
     }
 
     await this.prisma.cotizacion.delete({ where: { id } });
-    await this.invalidateQuoteCache('cotizacion.remove');
+    await this.invalidateQuoteCache("cotizacion.remove");
     return { ok: true };
+  }
+
+  async createPdfShareLink(
+    user: { id: string; role: Role },
+    dto: CreateCotizacionPdfShareLinkDto,
+    requestBaseUrl?: string,
+  ) {
+    const quotationId = dto.quotationId.trim();
+    const quotation = await this.prisma.cotizacion.findUnique({
+      where: { id: quotationId },
+      select: {
+        id: true,
+        createdByUserId: true,
+        customerName: true,
+      },
+    });
+
+    if (!quotation) {
+      throw new NotFoundException("Cotización no encontrada.");
+    }
+
+    this.ensureQuoteAccessForSend(user, quotation);
+
+    const bytes = this.parsePdfBase64(dto.pdfBase64);
+    const fileName = this.sanitizePdfFileName(
+      dto.fileName ?? "",
+      `cotizacion_${quotationId.slice(0, 8)}.pdf`,
+    );
+    const uploadDir = this.resolveUploadDir();
+    const quoteDir = path.join(uploadDir, "cotizaciones", quotationId);
+    await mkdir(quoteDir, { recursive: true });
+    await writeFile(path.join(quoteDir, fileName), bytes);
+
+    const relativeUrl = `/uploads/cotizaciones/${encodeURIComponent(quotationId)}/${encodeURIComponent(fileName)}`;
+    const baseUrl = this.publicBaseUrl(requestBaseUrl);
+    if (!baseUrl) {
+      throw new BadRequestException(
+        "No se pudo construir el enlace público del PDF. Configura PUBLIC_BASE_URL o API_BASE_URL.",
+      );
+    }
+
+    const pdfUrl = `${baseUrl}${relativeUrl}`;
+    this.logger.log(
+      `Quote PDF public link created quotationId=${quotationId} userId=${user.id} url=${pdfUrl}`,
+    );
+
+    return {
+      ok: true,
+      quotationId,
+      fileName,
+      pdfUrl,
+      expiresIn: null,
+      createdAt: new Date().toISOString(),
+    };
   }
 
   async sendWhatsApp(
@@ -709,7 +889,7 @@ export class CotizacionesService {
   ) {
     const quotationId = dto.quotationId.trim();
     const destinationType = dto.destinationType;
-    const customMessage = (dto.messageText ?? '').trim();
+    const customMessage = (dto.messageText ?? "").trim();
     const quotation = await this.prisma.cotizacion.findUnique({
       where: { id: quotationId },
       select: {
@@ -722,7 +902,7 @@ export class CotizacionesService {
     });
 
     if (!quotation) {
-      throw new NotFoundException('Cotización no encontrada.');
+      throw new NotFoundException("Cotización no encontrada.");
     }
 
     this.ensureQuoteAccessForSend(user, quotation);
@@ -730,15 +910,15 @@ export class CotizacionesService {
     const senderInstance = await this.ensureConnectedUserInstance(user.id);
 
     const destinationPhones =
-      destinationType === 'admin'
+      destinationType === "admin"
         ? await this.resolveAdminDestinationPhones()
         : [await this.resolveClientDestination(quotation)];
 
     const bytes = this.parsePdfBase64(dto.pdfBase64);
-    const fileName = (dto.fileName ?? '').trim() || 'cotizacion.pdf';
+    const fileName = (dto.fileName ?? "").trim() || "cotizacion.pdf";
     const caption =
-      customMessage || destinationType === 'admin'
-        ? ''
+      customMessage || destinationType === "admin"
+        ? ""
         : await this.buildQuoteWhatsAppCaption(quotation.customerName);
 
     try {
@@ -763,7 +943,7 @@ export class CotizacionesService {
       }
     } catch (error) {
       this.logger.error(
-        `Quote PDF WhatsApp send failed quotationId=${quotationId} userId=${user.id} destinationType=${destinationType} destinationPhones=${destinationPhones.join(',')} instanceId=${senderInstance.id} instanceName=${senderInstance.instanceName} error=${
+        `Quote PDF WhatsApp send failed quotationId=${quotationId} userId=${user.id} destinationType=${destinationType} destinationPhones=${destinationPhones.join(",")} instanceId=${senderInstance.id} instanceName=${senderInstance.instanceName} error=${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -771,7 +951,7 @@ export class CotizacionesService {
     }
 
     this.logger.log(
-      `Quote PDF WhatsApp sent quotationId=${quotationId} userId=${user.id} destinationType=${destinationType} destinationPhones=${destinationPhones.join(',')} instanceId=${senderInstance.id} instanceName=${senderInstance.instanceName} success=true`,
+      `Quote PDF WhatsApp sent quotationId=${quotationId} userId=${user.id} destinationType=${destinationType} destinationPhones=${destinationPhones.join(",")} instanceId=${senderInstance.id} instanceName=${senderInstance.instanceName} success=true`,
     );
 
     return {
@@ -785,7 +965,9 @@ export class CotizacionesService {
 
   async purgeAllForDebug(user: { id: string; role: Role }) {
     if (user.role !== Role.ADMIN) {
-      throw new ForbiddenException('Solo un administrador puede limpiar cotizaciones.');
+      throw new ForbiddenException(
+        "Solo un administrador puede limpiar cotizaciones.",
+      );
     }
 
     const quotes = await this.prisma.cotizacion.findMany({
@@ -810,9 +992,9 @@ export class CotizacionesService {
       };
     });
 
-    await this.invalidateQuoteCache('cotizacion.debug_purge');
-    await this.redis.delByPattern('service-orders:list:*');
-    await this.redis.delByPattern('service-orders:detail:*');
+    await this.invalidateQuoteCache("cotizacion.debug_purge");
+    await this.redis.delByPattern("service-orders:list:*");
+    await this.redis.delByPattern("service-orders:detail:*");
 
     return { ok: true, ...result };
   }
@@ -821,13 +1003,20 @@ export class CotizacionesService {
     user: { id: string; role: Role },
     dto: AnalyzeCotizacionAiDto,
   ) {
-    const rules = await this.loadRelevantBusinessRules(user, dto.context, dto.instruction);
-    this.logDebug('analyze.context', dto.context);
-    this.logDebug('analyze.rules', rules.map((item) => ({ id: item.id, title: item.title })));
+    const rules = await this.loadRelevantBusinessRules(
+      user,
+      dto.context,
+      dto.instruction,
+    );
+    this.logDebug("analyze.context", dto.context);
+    this.logDebug(
+      "analyze.rules",
+      rules.map((item) => ({ id: item.id, title: item.title })),
+    );
 
     if (rules.length === 0) {
       return {
-        source: 'rules-only',
+        source: "rules-only",
         summary: CotizacionesService.noRuleMessage,
         warnings: [],
         relatedRules: [],
@@ -837,16 +1026,18 @@ export class CotizacionesService {
     const runtime = await this.getOpenAiRuntimeConfig();
     if (!runtime.apiKey) {
       return {
-        source: 'rules-only',
+        source: "rules-only",
         summary:
-          'Se cargaron reglas oficiales relacionadas, pero la IA avanzada no está configurada. Las validaciones locales deben seguir utilizándose.',
+          "Se cargaron reglas oficiales relacionadas, pero la IA avanzada no está configurada. Las validaciones locales deben seguir utilizándose.",
         warnings: [],
         relatedRules: rules.map((item) => this.toRuleReference(item)),
       };
     }
 
     const promptPayload = {
-      instruction: dto.instruction?.trim() || 'Revisa esta cotización con base en las reglas oficiales.',
+      instruction:
+        dto.instruction?.trim() ||
+        "Revisa esta cotización con base en las reglas oficiales.",
       context: dto.context,
       rules,
     };
@@ -859,37 +1050,39 @@ export class CotizacionesService {
       runtime,
       temperature: 0.1,
       systemPrompt:
-        'Eres el asistente interno de FULLTECH dentro del módulo de cotización. Solo puedes responder usando las reglas oficiales proporcionadas por el sistema. No inventes precios, no supongas condiciones, no uses conocimiento externo. Si una respuesta no está definida en las reglas disponibles, debes decir claramente que no encontraste una regla oficial. Tu función es ayudar al vendedor, validar cotizaciones y advertir sobre posibles inconsistencias sin bloquear el flujo de trabajo. Siempre que menciones una regla, intenta devolver el identificador o título de la regla relacionada. Responde únicamente JSON válido.',
-      userPrompt:
-        `${JSON.stringify(promptPayload)}\n\nDevuelve exactamente este JSON: {"summary":"string","warnings":[{"title":"string","description":"string","type":"info|warning|success","relatedRuleId":"string|null","relatedRuleTitle":"string|null","suggestedAction":"string|null"}],"relatedRuleIds":["string"]}. Si las reglas no cubren el caso, usa como summary exactamente: "${CotizacionesService.noRuleMessage}" y devuelve warnings vacíos.`,
+        "Eres el asistente interno de FULLTECH dentro del módulo de cotización. Solo puedes responder usando las reglas oficiales proporcionadas por el sistema. No inventes precios, no supongas condiciones, no uses conocimiento externo. Si una respuesta no está definida en las reglas disponibles, debes decir claramente que no encontraste una regla oficial. Tu función es ayudar al vendedor, validar cotizaciones y advertir sobre posibles inconsistencias sin bloquear el flujo de trabajo. Siempre que menciones una regla, intenta devolver el identificador o título de la regla relacionada. Responde únicamente JSON válido.",
+      userPrompt: `${JSON.stringify(promptPayload)}\n\nDevuelve exactamente este JSON: {"summary":"string","warnings":[{"title":"string","description":"string","type":"info|warning|success","relatedRuleId":"string|null","relatedRuleTitle":"string|null","suggestedAction":"string|null"}],"relatedRuleIds":["string"]}. Si las reglas no cubren el caso, usa como summary exactamente: "${CotizacionesService.noRuleMessage}" y devuelve warnings vacíos.`,
     });
 
     const relatedRules = this.pickRelatedRules(rules, parsed.relatedRuleIds);
     const warnings = this.normalizeAiWarnings(parsed.warnings, rules);
 
-    this.logDebug('analyze.warnings', warnings);
+    this.logDebug("analyze.warnings", warnings);
 
     return {
-      source: 'openai',
+      source: "openai",
       summary:
         this.normalizeOptionalString(parsed.summary) ??
         (warnings.length > 0
-            ? 'Se detectaron advertencias basadas en las reglas oficiales.'
-            : 'La cotización parece correcta según las reglas actuales.'),
+          ? "Se detectaron advertencias basadas en las reglas oficiales."
+          : "La cotización parece correcta según las reglas actuales."),
       warnings,
       relatedRules,
     };
   }
 
-  async chatAssistant(user: { id: string; role: Role }, dto: ChatCotizacionAiDto) {
+  async chatAssistant(
+    user: { id: string; role: Role },
+    dto: ChatCotizacionAiDto,
+  ) {
     const message = dto.message.trim();
     if (!message) {
-      throw new BadRequestException('El mensaje es obligatorio');
+      throw new BadRequestException("El mensaje es obligatorio");
     }
 
     if (this.isUnauthorizedDataRequest(message)) {
       return {
-        source: 'rules-only',
+        source: "rules-only",
         content: CotizacionesService.unauthorizedMessage,
         relatedRuleId: null,
         relatedRuleTitle: null,
@@ -897,13 +1090,20 @@ export class CotizacionesService {
       };
     }
 
-    const rules = await this.loadRelevantBusinessRules(user, dto.context, message);
-    this.logDebug('chat.context', dto.context);
-    this.logDebug('chat.rules', rules.map((item) => ({ id: item.id, title: item.title })));
+    const rules = await this.loadRelevantBusinessRules(
+      user,
+      dto.context,
+      message,
+    );
+    this.logDebug("chat.context", dto.context);
+    this.logDebug(
+      "chat.rules",
+      rules.map((item) => ({ id: item.id, title: item.title })),
+    );
 
     if (rules.length === 0) {
       return {
-        source: 'rules-only',
+        source: "rules-only",
         content: CotizacionesService.noRuleMessage,
         relatedRuleId: null,
         relatedRuleTitle: null,
@@ -926,24 +1126,34 @@ export class CotizacionesService {
       runtime,
       temperature: 0,
       systemPrompt:
-        'Eres el asistente interno de FULLTECH dentro del módulo de cotización. Debes responder usando solamente el conocimiento interno autorizado enviado en la solicitud: Manual Interno, guias de modulos, capacidades operativas del sistema y resúmenes de datos autorizados para el usuario actual. No inventes precios, no uses conocimiento externo, no completes huecos con supuestos, no reveles datos privados de otros usuarios ni datos sensibles no incluidos en el conocimiento enviado. Si una respuesta útil se apoya en conocimiento enviado, debes citar al menos una fuente. Si el usuario pide algo no cubierto por la base de conocimiento enviada, debes decirlo claramente. Si el usuario pregunta por como hacer algo en la app, puedes explicarlo solo con base en guias o capacidades enviadas. Si el usuario pide informacion de otra persona o no autorizada, debes negarte. Responde únicamente JSON válido.',
-      userPrompt:
-        `${JSON.stringify({ message, context: dto.context, rules })}\n\nDevuelve exactamente este JSON: {"content":"string","relatedRuleId":"string|null","relatedRuleTitle":"string|null","citations":[{"id":"string","title":"string"}],"unsupported":false}. Reglas estrictas: 1) si respondes algo util, citations no puede ir vacio; 2) relatedRuleId o relatedRuleTitle debe apuntar a una regla enviada; 3) no agregues nada que no pueda leerse o inferirse directamente de las reglas; 4) si la pregunta no esta cubierta, usa exactamente este texto en content: "${CotizacionesService.noRuleMessage}" y usa unsupported=true; 5) si el mensaje es ambiguo o solo social, usa exactamente este texto en content: "${CotizacionesService.rulesOnlyReminder}" y usa unsupported=true.`,
+        "Eres el asistente interno de FULLTECH dentro del módulo de cotización. Debes responder usando solamente el conocimiento interno autorizado enviado en la solicitud: Manual Interno, guias de modulos, capacidades operativas del sistema y resúmenes de datos autorizados para el usuario actual. No inventes precios, no uses conocimiento externo, no completes huecos con supuestos, no reveles datos privados de otros usuarios ni datos sensibles no incluidos en el conocimiento enviado. Si una respuesta útil se apoya en conocimiento enviado, debes citar al menos una fuente. Si el usuario pide algo no cubierto por la base de conocimiento enviada, debes decirlo claramente. Si el usuario pregunta por como hacer algo en la app, puedes explicarlo solo con base en guias o capacidades enviadas. Si el usuario pide informacion de otra persona o no autorizada, debes negarte. Responde únicamente JSON válido.",
+      userPrompt: `${JSON.stringify({ message, context: dto.context, rules })}\n\nDevuelve exactamente este JSON: {"content":"string","relatedRuleId":"string|null","relatedRuleTitle":"string|null","citations":[{"id":"string","title":"string"}],"unsupported":false}. Reglas estrictas: 1) si respondes algo util, citations no puede ir vacio; 2) relatedRuleId o relatedRuleTitle debe apuntar a una regla enviada; 3) no agregues nada que no pueda leerse o inferirse directamente de las reglas; 4) si la pregunta no esta cubierta, usa exactamente este texto en content: "${CotizacionesService.noRuleMessage}" y usa unsupported=true; 5) si el mensaje es ambiguo o solo social, usa exactamente este texto en content: "${CotizacionesService.rulesOnlyReminder}" y usa unsupported=true.`,
     });
 
-    const relatedRule = rules.find((item) => item.id === this.normalizeOptionalString(parsed.relatedRuleId));
+    const relatedRule = rules.find(
+      (item) => item.id === this.normalizeOptionalString(parsed.relatedRuleId),
+    );
     const citations = this.normalizeCitations(parsed.citations, rules);
-    const content = this.normalizeOptionalString(parsed.content) ?? CotizacionesService.noRuleMessage;
+    const content =
+      this.normalizeOptionalString(parsed.content) ??
+      CotizacionesService.noRuleMessage;
 
     const unsupported = parsed.unsupported === true;
-    const relatedRuleIdCandidate = relatedRule?.id ?? this.normalizeOptionalString(parsed.relatedRuleId);
-    const relatedRuleTitleCandidate = relatedRule?.title ?? this.normalizeOptionalString(parsed.relatedRuleTitle);
-    const relatedRuleId = this.isManualKnowledgeId(relatedRuleIdCandidate) ? relatedRuleIdCandidate : null;
-    const relatedRuleTitle = this.isManualKnowledgeId(relatedRuleIdCandidate) ? relatedRuleTitleCandidate : null;
+    const relatedRuleIdCandidate =
+      relatedRule?.id ?? this.normalizeOptionalString(parsed.relatedRuleId);
+    const relatedRuleTitleCandidate =
+      relatedRule?.title ??
+      this.normalizeOptionalString(parsed.relatedRuleTitle);
+    const relatedRuleId = this.isManualKnowledgeId(relatedRuleIdCandidate)
+      ? relatedRuleIdCandidate
+      : null;
+    const relatedRuleTitle = this.isManualKnowledgeId(relatedRuleIdCandidate)
+      ? relatedRuleTitleCandidate
+      : null;
 
     if (content === CotizacionesService.rulesOnlyReminder) {
       return {
-        source: 'rules-only',
+        source: "rules-only",
         content,
         relatedRuleId: null,
         relatedRuleTitle: null,
@@ -960,7 +1170,7 @@ export class CotizacionesService {
     }
 
     return {
-      source: 'openai',
+      source: "openai",
       content,
       relatedRuleId,
       relatedRuleTitle,
@@ -969,9 +1179,18 @@ export class CotizacionesService {
   }
 
   private async normalizeItems(items: CreateCotizacionItemDto[]) {
-    const productIds = Array.from(new Set(items.map((i) => i.productId).filter((id): id is string => Boolean(id))));
+    const productIds = Array.from(
+      new Set(
+        items.map((i) => i.productId).filter((id): id is string => Boolean(id)),
+      ),
+    );
 
-    let products: Array<{ id: string; nombre: string; imagen: string | null; costo: Prisma.Decimal }> = [];
+    let products: Array<{
+      id: string;
+      nombre: string;
+      imagen: string | null;
+      costo: Prisma.Decimal;
+    }> = [];
     if (productIds.length) {
       products = await this.prisma.product.findMany({
         where: { id: { in: productIds } },
@@ -985,8 +1204,12 @@ export class CotizacionesService {
       const qty = new Prisma.Decimal(item.qty);
       const unitPrice = new Prisma.Decimal(item.unitPrice);
 
-      if (qty.lte(0)) throw new BadRequestException(`Cantidad inválida en item #${index + 1}`);
-      if (unitPrice.lt(0)) throw new BadRequestException(`Precio inválido en item #${index + 1}`);
+      if (qty.lte(0))
+        throw new BadRequestException(
+          `Cantidad inválida en item #${index + 1}`,
+        );
+      if (unitPrice.lt(0))
+        throw new BadRequestException(`Precio inválido en item #${index + 1}`);
 
       const productId = item.productId ?? null;
       const product = productId ? productMap.get(productId) : null;
@@ -996,7 +1219,8 @@ export class CotizacionesService {
         throw new BadRequestException(`Nombre requerido en item #${index + 1}`);
       }
 
-      const productImageSnapshot = product?.imagen ?? item.productImageSnapshot ?? null;
+      const productImageSnapshot =
+        product?.imagen ?? item.productImageSnapshot ?? null;
       const originalUnitPriceSnapshot = product
         ? new Prisma.Decimal(item.originalUnitPriceSnapshot ?? item.unitPrice)
         : item.originalUnitPriceSnapshot != null
@@ -1007,9 +1231,11 @@ export class CotizacionesService {
         : item.costUnitSnapshot != null
           ? new Prisma.Decimal(item.costUnitSnapshot)
           : null;
-      const subtotalCost = costUnitSnapshot == null ? null : qty.mul(costUnitSnapshot);
+      const subtotalCost =
+        costUnitSnapshot == null ? null : qty.mul(costUnitSnapshot);
       const lineTotal = qty.mul(unitPrice);
-      const profit = subtotalCost == null ? null : lineTotal.minus(subtotalCost);
+      const profit =
+        subtotalCost == null ? null : lineTotal.minus(subtotalCost);
 
       return {
         productId: product?.id ?? productId,
@@ -1026,32 +1252,44 @@ export class CotizacionesService {
     });
   }
 
-  private toNumber(value: Prisma.Decimal | number | string | null | undefined): number {
+  private toNumber(
+    value: Prisma.Decimal | number | string | null | undefined,
+  ): number {
     if (value === null || value === undefined) return 0;
-    if (typeof value === 'number') return value;
+    if (typeof value === "number") return value;
     return Number(value);
   }
 
   private async resolveCompanyOwnerId(fallbackUserId: string) {
     const admin = await this.prisma.user.findFirst({
       where: { role: Role.ADMIN },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: "asc" },
       select: { id: true },
     });
     return admin?.id ?? fallbackUserId;
   }
 
   private async getOpenAiRuntimeConfig(): Promise<AiRuntimeConfig> {
-    const envKey = (this.config.get<string>('OPENAI_API_KEY') ?? process.env.OPENAI_API_KEY ?? '').trim();
-    const envModel = (this.config.get<string>('OPENAI_MODEL') ?? process.env.OPENAI_MODEL ?? '').trim();
+    const envKey = (
+      this.config.get<string>("OPENAI_API_KEY") ??
+      process.env.OPENAI_API_KEY ??
+      ""
+    ).trim();
+    const envModel = (
+      this.config.get<string>("OPENAI_MODEL") ??
+      process.env.OPENAI_MODEL ??
+      ""
+    ).trim();
 
-    let appConfig:
-      | { openAiApiKey: string | null; openAiModel: string | null; companyName: string | null }
-      | null = null;
+    let appConfig: {
+      openAiApiKey: string | null;
+      openAiModel: string | null;
+      companyName: string | null;
+    } | null = null;
 
     try {
       appConfig = await this.prisma.appConfig.findUnique({
-        where: { id: 'global' },
+        where: { id: "global" },
         select: { openAiApiKey: true, openAiModel: true, companyName: true },
       });
     } catch {
@@ -1059,23 +1297,27 @@ export class CotizacionesService {
     }
 
     return {
-      apiKey: envKey.length > 0 ? envKey : (appConfig?.openAiApiKey ?? '').trim(),
+      apiKey:
+        envKey.length > 0 ? envKey : (appConfig?.openAiApiKey ?? "").trim(),
       model:
         envModel.length > 0
           ? envModel
-          : ((appConfig?.openAiModel ?? '').trim() || 'gpt-4o-mini'),
-      companyName: (appConfig?.companyName ?? 'FULLTECH').trim() || 'FULLTECH',
+          : (appConfig?.openAiModel ?? "").trim() || "gpt-4o-mini",
+      companyName: (appConfig?.companyName ?? "FULLTECH").trim() || "FULLTECH",
     };
   }
 
   private getOpenAiModelCandidates(preferredModel: string) {
-    const autoCandidatesEnv = (process.env.OPENAI_MODEL_CANDIDATES ?? '').trim();
-    const autoCandidates = autoCandidatesEnv.length > 0
-      ? autoCandidatesEnv
-          .split(',')
-          .map((item) => item.trim())
-          .filter((item) => item.length > 0)
-      : ['gpt-5', 'gpt-4.1', 'gpt-4o', 'gpt-4o-mini'];
+    const autoCandidatesEnv = (
+      process.env.OPENAI_MODEL_CANDIDATES ?? ""
+    ).trim();
+    const autoCandidates =
+      autoCandidatesEnv.length > 0
+        ? autoCandidatesEnv
+            .split(",")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+        : ["gpt-5", "gpt-4.1", "gpt-4o", "gpt-4o-mini"];
 
     return [preferredModel, ...autoCandidates].filter(
       (value, index, list) => value.length > 0 && list.indexOf(value) === index,
@@ -1084,11 +1326,14 @@ export class CotizacionesService {
 
   private extractJsonObject(raw: string) {
     const trimmed = raw.trim();
-    const fenced = trimmed.startsWith('```')
-      ? trimmed.replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim()
+    const fenced = trimmed.startsWith("```")
+      ? trimmed
+          .replace(/^```(?:json)?\s*/i, "")
+          .replace(/```$/i, "")
+          .trim()
       : trimmed;
-    const firstBrace = fenced.indexOf('{');
-    const lastBrace = fenced.lastIndexOf('}');
+    const firstBrace = fenced.indexOf("{");
+    const lastBrace = fenced.lastIndexOf("}");
     if (firstBrace >= 0 && lastBrace > firstBrace) {
       return fenced.slice(firstBrace, lastBrace + 1);
     }
@@ -1110,24 +1355,30 @@ export class CotizacionesService {
 
     for (const candidate of modelCandidates) {
       try {
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${runtime.apiKey}`,
-            'Content-Type': 'application/json',
+        const response = await fetch(
+          "https://api.openai.com/v1/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${runtime.apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: candidate,
+              temperature,
+              messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userPrompt },
+              ],
+            }),
           },
-          body: JSON.stringify({
-            model: candidate,
-            temperature,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: userPrompt },
-            ],
-          }),
-        });
+        );
 
         if (!response.ok) {
-          this.logDebug('openai.http_error', { candidate, status: response.status });
+          this.logDebug("openai.http_error", {
+            candidate,
+            status: response.status,
+          });
           continue;
         }
 
@@ -1139,19 +1390,21 @@ export class CotizacionesService {
 
         return JSON.parse(this.extractJsonObject(content)) as T;
       } catch (error) {
-        this.logDebug('openai.parse_error', {
+        this.logDebug("openai.parse_error", {
           candidate,
           message: error instanceof Error ? error.message : `${error}`,
         });
       }
     }
 
-    throw new BadRequestException('No se pudo generar una respuesta válida desde OpenAI para cotizaciones.');
+    throw new BadRequestException(
+      "No se pudo generar una respuesta válida desde OpenAI para cotizaciones.",
+    );
   }
 
   private async loadRelevantBusinessRules(
     user: { id: string; role: Role },
-    context: AnalyzeCotizacionAiDto['context'],
+    context: AnalyzeCotizacionAiDto["context"],
     prompt?: string,
   ) {
     const ownerId = await this.resolveCompanyOwnerId(user.id);
@@ -1182,11 +1435,15 @@ export class CotizacionesService {
 
     const entries = await this.prisma.companyManualEntry.findMany({
       where,
-      orderBy: [{ sortOrder: 'asc' }, { updatedAt: 'desc' }, { title: 'asc' }],
+      orderBy: [{ sortOrder: "asc" }, { updatedAt: "desc" }, { title: "asc" }],
     });
 
     const staticKnowledge = this.buildStaticAppKnowledge();
-    const authorizedKnowledge = await this.buildAuthorizedDataKnowledge(user, prompt ?? '', context);
+    const authorizedKnowledge = await this.buildAuthorizedDataKnowledge(
+      user,
+      prompt ?? "",
+      context,
+    );
     const knowledgeEntries = [
       ...entries.map((entry) => this.toBusinessRuleRecord(entry)),
       ...staticKnowledge,
@@ -1195,11 +1452,11 @@ export class CotizacionesService {
 
     const desiredModuleKeys = new Set(
       [
-        (context.module ?? '').trim().toLowerCase(),
-        'cotizaciones',
-        'cotizacion',
-        'ventas',
-        'manual-interno',
+        (context.module ?? "").trim().toLowerCase(),
+        "cotizaciones",
+        "cotizacion",
+        "ventas",
+        "manual-interno",
       ].filter((item) => item.length > 0),
     );
 
@@ -1214,31 +1471,54 @@ export class CotizacionesService {
       context.notes,
       ...(context.components ?? []),
       ...(context.extraCharges ?? []),
-      ...(context.items ?? []).flatMap((item) => [item.productName, item.category, item.notes]),
+      ...(context.items ?? []).flatMap((item) => [
+        item.productName,
+        item.category,
+        item.notes,
+      ]),
     ]
-      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-      .join(' ')
+      .filter(
+        (item): item is string =>
+          typeof item === "string" && item.trim().length > 0,
+      )
+      .join(" ")
       .toLowerCase();
 
     const queryTokens = this.tokenize(queryText);
 
     const scored = knowledgeEntries
       .map((entry) => {
-        const moduleKey = (entry.module ?? '').trim().toLowerCase();
-        const text = [entry.title, entry.summary ?? '', entry.content, moduleKey]
-          .join(' ')
+        const moduleKey = (entry.module ?? "").trim().toLowerCase();
+        const text = [
+          entry.title,
+          entry.summary ?? "",
+          entry.content,
+          moduleKey,
+        ]
+          .join(" ")
           .toLowerCase();
         const textTokens = new Set(this.tokenize(text));
 
         let score = 0;
         if (!moduleKey) score += 10;
         if (desiredModuleKeys.has(moduleKey)) score += 6;
-        if (moduleKey === 'cotizaciones' || moduleKey === 'cotizacion') score += 4;
-        if (text.includes('precio') || text.includes('mínimo') || text.includes('minimo')) score += 2;
-        if (text.includes('garant')) score += 2;
-        if (text.includes('dvr') || text.includes('nvr') || text.includes('xvr')) score += 3;
-        if (text.includes('cámara') || text.includes('camara')) score += 3;
-        if (text.includes('instal')) score += 2;
+        if (moduleKey === "cotizaciones" || moduleKey === "cotizacion")
+          score += 4;
+        if (
+          text.includes("precio") ||
+          text.includes("mínimo") ||
+          text.includes("minimo")
+        )
+          score += 2;
+        if (text.includes("garant")) score += 2;
+        if (
+          text.includes("dvr") ||
+          text.includes("nvr") ||
+          text.includes("xvr")
+        )
+          score += 3;
+        if (text.includes("cámara") || text.includes("camara")) score += 3;
+        if (text.includes("instal")) score += 2;
         for (const token of queryTokens) {
           if (textTokens.has(token)) score += token.length >= 5 ? 2 : 1;
         }
@@ -1260,39 +1540,39 @@ export class CotizacionesService {
   private buildStaticAppKnowledge(): BusinessRuleRecord[] {
     return [
       this.createAppKnowledgeRecord(
-        'app-knowledge:cotizaciones',
-        'cotizaciones',
-        'guia-app',
-        'Uso del modulo de cotizaciones',
-        'En cotizaciones puedes buscar productos del catalogo, filtrar por categoria, agregar articulos al ticket, ajustar precios, activar ITBIS, seleccionar cliente, escribir observaciones y finalizar o guardar la cotizacion.',
+        "app-knowledge:cotizaciones",
+        "cotizaciones",
+        "guia-app",
+        "Uso del modulo de cotizaciones",
+        "En cotizaciones puedes buscar productos del catalogo, filtrar por categoria, agregar articulos al ticket, ajustar precios, activar ITBIS, seleccionar cliente, escribir observaciones y finalizar o guardar la cotizacion.",
       ),
       this.createAppKnowledgeRecord(
-        'app-knowledge:ventas',
-        'ventas',
-        'guia-app',
-        'Uso del modulo de ventas',
-        'En ventas puedes registrar ventas, consultar resúmenes, revisar historiales y trabajar con clientes autorizados dentro de tu alcance.',
+        "app-knowledge:ventas",
+        "ventas",
+        "guia-app",
+        "Uso del modulo de ventas",
+        "En ventas puedes registrar ventas, consultar resúmenes, revisar historiales y trabajar con clientes autorizados dentro de tu alcance.",
       ),
       this.createAppKnowledgeRecord(
-        'app-knowledge:clientes',
-        'clientes',
-        'guia-app',
-        'Uso del modulo de clientes',
-        'El modulo de clientes permite buscar, crear y consultar clientes. Los usuarios no administradores solo deben trabajar con informacion permitida por su alcance dentro del sistema.',
+        "app-knowledge:clientes",
+        "clientes",
+        "guia-app",
+        "Uso del modulo de clientes",
+        "El modulo de clientes permite buscar, crear y consultar clientes. Los usuarios no administradores solo deben trabajar con informacion permitida por su alcance dentro del sistema.",
       ),
       this.createAppKnowledgeRecord(
-        'app-knowledge:manual-interno',
-        'manual-interno',
-        'guia-app',
-        'Base de conocimiento del asistente',
-        'La base principal del asistente es el Manual Interno de la empresa, complementada por guias funcionales de modulos y resúmenes autorizados del sistema para el usuario actual.',
+        "app-knowledge:manual-interno",
+        "manual-interno",
+        "guia-app",
+        "Base de conocimiento del asistente",
+        "La base principal del asistente es el Manual Interno de la empresa, complementada por guias funcionales de modulos y resúmenes autorizados del sistema para el usuario actual.",
       ),
       this.createAppKnowledgeRecord(
-        'app-knowledge:seguridad',
-        'seguridad',
-        'politica-app',
-        'Politica de autorizacion del asistente',
-        'El asistente no debe revelar informacion privada de otros usuarios, credenciales, telefonos, cedulas, salarios ni datos no autorizados. Si el usuario pide algo fuera de su alcance, el asistente debe negarse.',
+        "app-knowledge:seguridad",
+        "seguridad",
+        "politica-app",
+        "Politica de autorizacion del asistente",
+        "El asistente no debe revelar informacion privada de otros usuarios, credenciales, telefonos, cedulas, salarios ni datos no autorizados. Si el usuario pide algo fuera de su alcance, el asistente debe negarse.",
       ),
     ];
   }
@@ -1300,26 +1580,37 @@ export class CotizacionesService {
   private async buildAuthorizedDataKnowledge(
     user: { id: string; role: Role },
     prompt: string,
-    context: AnalyzeCotizacionAiDto['context'],
+    context: AnalyzeCotizacionAiDto["context"],
   ): Promise<BusinessRuleRecord[]> {
-    const tokens = new Set(this.tokenize([prompt, context.module, context.screenName].filter(Boolean).join(' ')));
+    const tokens = new Set(
+      this.tokenize(
+        [prompt, context.module, context.screenName].filter(Boolean).join(" "),
+      ),
+    );
     const includeAll = tokens.size === 0;
-    const wantsSales = includeAll || this.hasAnyToken(tokens, ['venta', 'ventas', 'comision']);
-    const wantsClients = includeAll || this.hasAnyToken(tokens, ['cliente', 'clientes']);
-    const wantsQuotes = includeAll || this.hasAnyToken(tokens, ['cotizacion', 'cotizaciones', 'ticket']);
+    const wantsSales =
+      includeAll || this.hasAnyToken(tokens, ["venta", "ventas", "comision"]);
+    const wantsClients =
+      includeAll || this.hasAnyToken(tokens, ["cliente", "clientes"]);
+    const wantsQuotes =
+      includeAll ||
+      this.hasAnyToken(tokens, ["cotizacion", "cotizaciones", "ticket"]);
 
     const knowledge: BusinessRuleRecord[] = [];
 
     if (wantsSales) {
       const totalSales = await this.prisma.sale.count({
-        where: user.role === Role.ADMIN ? { isDeleted: false } : { userId: user.id, isDeleted: false },
+        where:
+          user.role === Role.ADMIN
+            ? { isDeleted: false }
+            : { userId: user.id, isDeleted: false },
       });
       knowledge.push(
         this.createAppKnowledgeRecord(
-          'app-data:sales-summary',
-          'ventas',
-          'dato-autorizado',
-          'Resumen autorizado de ventas',
+          "app-data:sales-summary",
+          "ventas",
+          "dato-autorizado",
+          "Resumen autorizado de ventas",
           user.role === Role.ADMIN
             ? `Actualmente hay ${totalSales} ventas activas registradas en el sistema.`
             : `Actualmente tienes ${totalSales} ventas activas registradas bajo tu usuario.`,
@@ -1329,14 +1620,17 @@ export class CotizacionesService {
 
     if (wantsClients) {
       const totalClients = await this.prisma.client.count({
-        where: user.role === Role.ADMIN ? { isDeleted: false } : { ownerId: user.id, isDeleted: false },
+        where:
+          user.role === Role.ADMIN
+            ? { isDeleted: false }
+            : { ownerId: user.id, isDeleted: false },
       });
       knowledge.push(
         this.createAppKnowledgeRecord(
-          'app-data:clients-summary',
-          'clientes',
-          'dato-autorizado',
-          'Resumen autorizado de clientes',
+          "app-data:clients-summary",
+          "clientes",
+          "dato-autorizado",
+          "Resumen autorizado de clientes",
           user.role === Role.ADMIN
             ? `Actualmente hay ${totalClients} clientes activos registrados en el sistema.`
             : `Actualmente tienes ${totalClients} clientes activos registrados bajo tu gestion.`,
@@ -1350,10 +1644,10 @@ export class CotizacionesService {
       });
       knowledge.push(
         this.createAppKnowledgeRecord(
-          'app-data:quotes-summary',
-          'cotizaciones',
-          'dato-autorizado',
-          'Resumen autorizado de cotizaciones',
+          "app-data:quotes-summary",
+          "cotizaciones",
+          "dato-autorizado",
+          "Resumen autorizado de cotizaciones",
           user.role === Role.ADMIN
             ? `Actualmente hay ${totalQuotes} cotizaciones registradas en el sistema.`
             : `Actualmente tienes ${totalQuotes} cotizaciones registradas bajo tu usuario.`,
@@ -1378,8 +1672,10 @@ export class CotizacionesService {
       title,
       content,
       summary: content,
-      keywords: this.tokenize(`${title} ${content} ${module} ${category}`).slice(0, 18),
-      severity: 'info',
+      keywords: this.tokenize(
+        `${title} ${content} ${module} ${category}`,
+      ).slice(0, 18),
+      severity: "info",
       active: true,
       createdAt: null,
       updatedAt: null,
@@ -1399,35 +1695,38 @@ export class CotizacionesService {
     const text = message.trim().toLowerCase();
     if (!text) return false;
     const asksSensitiveData = [
-      'password',
-      'contrasena',
-      'contraseña',
-      'cedula',
-      'telefono',
-      'correo',
-      'email',
-      'salario',
-      'nomina',
-      'ubicacion',
-      'location',
+      "password",
+      "contrasena",
+      "contraseña",
+      "cedula",
+      "telefono",
+      "correo",
+      "email",
+      "salario",
+      "nomina",
+      "ubicacion",
+      "location",
     ].some((token) => text.includes(token));
     const asksAboutOtherPerson = [
-      'otro usuario',
-      'otro vendedor',
-      'otro tecnico',
-      'otro empleado',
-      'de otro usuario',
-      'de otro vendedor',
-      'de otro tecnico',
-      'de otro empleado',
+      "otro usuario",
+      "otro vendedor",
+      "otro tecnico",
+      "otro empleado",
+      "de otro usuario",
+      "de otro vendedor",
+      "de otro tecnico",
+      "de otro empleado",
     ].some((token) => text.includes(token));
     return asksSensitiveData && asksAboutOtherPerson;
   }
 
   private isManualKnowledgeId(id?: string | null) {
-    const normalized = (id ?? '').trim().toLowerCase();
+    const normalized = (id ?? "").trim().toLowerCase();
     if (!normalized) return false;
-    return !normalized.startsWith('app-knowledge:') && !normalized.startsWith('app-data:');
+    return (
+      !normalized.startsWith("app-knowledge:") &&
+      !normalized.startsWith("app-data:")
+    );
   }
 
   private toBusinessRuleRecord(entry: {
@@ -1443,12 +1742,14 @@ export class CotizacionesService {
   }): BusinessRuleRecord {
     return {
       id: entry.id,
-      module: (entry.moduleKey ?? 'general').trim().toLowerCase() || 'general',
+      module: (entry.moduleKey ?? "general").trim().toLowerCase() || "general",
       category: this.mapRuleCategory(entry.kind),
       title: entry.title,
       content: entry.content,
       summary: entry.summary,
-      keywords: this.tokenize([entry.title, entry.summary ?? '', entry.content].join(' ')).slice(0, 18),
+      keywords: this.tokenize(
+        [entry.title, entry.summary ?? "", entry.content].join(" "),
+      ).slice(0, 18),
       severity: this.inferSeverity(entry.kind, entry.title, entry.content),
       active: entry.published,
       createdAt: entry.createdAt?.toISOString() ?? null,
@@ -1459,76 +1760,91 @@ export class CotizacionesService {
   private mapRuleCategory(kind: CompanyManualEntryKind) {
     switch (kind) {
       case CompanyManualEntryKind.PRICE_RULE:
-        return 'precios';
+        return "precios";
       case CompanyManualEntryKind.WARRANTY_POLICY:
-        return 'garantias';
+        return "garantias";
       case CompanyManualEntryKind.SERVICE_RULE:
-        return 'servicios';
+        return "servicios";
       case CompanyManualEntryKind.PRODUCT_SERVICE:
-        return 'productos';
+        return "productos";
       case CompanyManualEntryKind.MODULE_GUIDE:
-        return 'modulo';
+        return "modulo";
       case CompanyManualEntryKind.POLICY:
-        return 'politicas';
+        return "politicas";
       case CompanyManualEntryKind.GENERAL_RULE:
       case CompanyManualEntryKind.ROLE_RULE:
       case CompanyManualEntryKind.RESPONSIBILITY:
       default:
-        return 'general';
+        return "general";
     }
   }
 
-  private inferSeverity(kind: CompanyManualEntryKind, title: string, content: string): 'info' | 'warning' | 'critical' {
+  private inferSeverity(
+    kind: CompanyManualEntryKind,
+    title: string,
+    content: string,
+  ): "info" | "warning" | "critical" {
     const text = `${title} ${content}`.toLowerCase();
-    if (text.includes('prohib') || text.includes('no permitido') || text.includes('obligatorio')) {
-      return 'critical';
+    if (
+      text.includes("prohib") ||
+      text.includes("no permitido") ||
+      text.includes("obligatorio")
+    ) {
+      return "critical";
     }
     if (
       kind === CompanyManualEntryKind.PRICE_RULE ||
       kind === CompanyManualEntryKind.WARRANTY_POLICY ||
-      text.includes('mínimo') ||
-      text.includes('minimo')
+      text.includes("mínimo") ||
+      text.includes("minimo")
     ) {
-      return 'warning';
+      return "warning";
     }
-    return 'info';
+    return "info";
   }
 
   private tokenize(value: string) {
     return value
       .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
       .split(/[^a-z0-9]+/)
       .map((item) => item.trim())
       .filter((item) => item.length >= 3);
   }
 
   private normalizeOptionalString(value: unknown) {
-    if (typeof value !== 'string') return null;
+    if (typeof value !== "string") return null;
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
   }
 
   private pickRelatedRules(rules: BusinessRuleRecord[], rawIds: unknown) {
     const ids = Array.isArray(rawIds)
-      ? rawIds.map((item) => this.normalizeOptionalString(item)).filter((item): item is string => !!item)
+      ? rawIds
+          .map((item) => this.normalizeOptionalString(item))
+          .filter((item): item is string => !!item)
       : [];
     return rules
       .filter((item) => ids.includes(item.id))
       .map((item) => this.toRuleReference(item));
   }
 
-  private normalizeAiWarnings(rawWarnings: unknown, rules: BusinessRuleRecord[]) {
+  private normalizeAiWarnings(
+    rawWarnings: unknown,
+    rules: BusinessRuleRecord[],
+  ) {
     if (!Array.isArray(rawWarnings)) return [];
     return rawWarnings
       .map((item) => {
-        if (typeof item !== 'object' || item === null || Array.isArray(item)) return null;
+        if (typeof item !== "object" || item === null || Array.isArray(item))
+          return null;
         const row = item as Record<string, unknown>;
         const ruleId = this.normalizeOptionalString(row.relatedRuleId);
         const relatedRule = rules.find((rule) => rule.id === ruleId);
-        const typeRaw = this.normalizeOptionalString(row.type) ?? 'info';
-        const type = typeRaw === 'warning' || typeRaw === 'success' ? typeRaw : 'info';
+        const typeRaw = this.normalizeOptionalString(row.type) ?? "info";
+        const type =
+          typeRaw === "warning" || typeRaw === "success" ? typeRaw : "info";
         const title = this.normalizeOptionalString(row.title);
         const description = this.normalizeOptionalString(row.description);
         if (!title || !description) return null;
@@ -1538,18 +1854,23 @@ export class CotizacionesService {
           type,
           relatedRuleId: relatedRule?.id ?? ruleId,
           relatedRuleTitle:
-            relatedRule?.title ?? this.normalizeOptionalString(row.relatedRuleTitle),
+            relatedRule?.title ??
+            this.normalizeOptionalString(row.relatedRuleTitle),
           suggestedAction: this.normalizeOptionalString(row.suggestedAction),
         };
       })
       .filter((item): item is NonNullable<typeof item> => !!item);
   }
 
-  private normalizeCitations(rawCitations: unknown, rules: BusinessRuleRecord[]) {
+  private normalizeCitations(
+    rawCitations: unknown,
+    rules: BusinessRuleRecord[],
+  ) {
     if (!Array.isArray(rawCitations)) return [];
     return rawCitations
       .map((item) => {
-        if (typeof item !== 'object' || item === null || Array.isArray(item)) return null;
+        if (typeof item !== "object" || item === null || Array.isArray(item))
+          return null;
         const row = item as Record<string, unknown>;
         const id = this.normalizeOptionalString(row.id);
         const rule = rules.find((entry) => entry.id === id);
@@ -1572,7 +1893,10 @@ export class CotizacionesService {
     };
   }
 
-  private buildRuleOnlyChatFallback(message: string, rules: BusinessRuleRecord[]) {
+  private buildRuleOnlyChatFallback(
+    message: string,
+    rules: BusinessRuleRecord[],
+  ) {
     const normalizedMessage = message.trim().toLowerCase();
     const hasMeaningfulQuestion = this.tokenize(normalizedMessage).length > 0;
     const matchedRules = hasMeaningfulQuestion
@@ -1581,7 +1905,7 @@ export class CotizacionesService {
     const topRule = matchedRules[0] ?? rules[0];
     if (!topRule) {
       return {
-        source: 'rules-only',
+        source: "rules-only",
         content: CotizacionesService.noRuleMessage,
         relatedRuleId: null,
         relatedRuleTitle: null,
@@ -1593,21 +1917,29 @@ export class CotizacionesService {
     const citations = selectedRules.map((rule) => this.toRuleReference(rule));
     const summaryParts = selectedRules
       .map((rule, index) => {
-        const excerpt = this.buildExcerpt(rule.summary?.trim().length ? rule.summary : rule.content);
-        const prefix = index == 0 ? `Segun la regla oficial "${rule.title}"` : `Tambien aplica "${rule.title}"`;
+        const excerpt = this.buildExcerpt(
+          rule.summary?.trim().length ? rule.summary : rule.content,
+        );
+        const prefix =
+          index == 0
+            ? `Segun la regla oficial "${rule.title}"`
+            : `Tambien aplica "${rule.title}"`;
         return excerpt.length > 0 ? `${prefix}: ${excerpt}` : prefix;
       })
       .filter((item) => item.trim().length > 0);
 
-    const content = summaryParts.length > 0
-      ? summaryParts.join(' ')
-      : `Solo puedo responder con base en reglas oficiales. La regla mas cercana es "${topRule.title}".`;
+    const content =
+      summaryParts.length > 0
+        ? summaryParts.join(" ")
+        : `Solo puedo responder con base en reglas oficiales. La regla mas cercana es "${topRule.title}".`;
 
     return {
-      source: 'rules-only',
+      source: "rules-only",
       content,
       relatedRuleId: this.isManualKnowledgeId(topRule.id) ? topRule.id : null,
-      relatedRuleTitle: this.isManualKnowledgeId(topRule.id) ? topRule.title : null,
+      relatedRuleTitle: this.isManualKnowledgeId(topRule.id)
+        ? topRule.title
+        : null,
       citations,
     };
   }
@@ -1618,7 +1950,15 @@ export class CotizacionesService {
     return rules
       .map((rule) => {
         const ruleTokens = new Set(
-          this.tokenize([rule.title, rule.summary ?? '', rule.content, rule.module, rule.category].join(' ')),
+          this.tokenize(
+            [
+              rule.title,
+              rule.summary ?? "",
+              rule.content,
+              rule.module,
+              rule.category,
+            ].join(" "),
+          ),
         );
         let score = 0;
         for (const token of tokens) {
@@ -1626,7 +1966,7 @@ export class CotizacionesService {
             score += token.length >= 5 ? 2 : 1;
           }
         }
-        if (rule.severity === 'critical' || rule.severity === 'warning') {
+        if (rule.severity === "critical" || rule.severity === "warning") {
           score += 1;
         }
         return { rule, score };
@@ -1637,13 +1977,13 @@ export class CotizacionesService {
   }
 
   private buildExcerpt(content: string) {
-    const normalized = content.replace(/\s+/g, ' ').trim();
+    const normalized = content.replace(/\s+/g, " ").trim();
     if (normalized.length <= 220) return normalized;
     return `${normalized.slice(0, 217).trim()}...`;
   }
 
   private logDebug(label: string, payload: unknown) {
-    if (process.env.NODE_ENV === 'production' && process.env.AI_DEBUG !== '1') {
+    if (process.env.NODE_ENV === "production" && process.env.AI_DEBUG !== "1") {
       return;
     }
     this.logger.debug(`${label}: ${JSON.stringify(payload)}`);

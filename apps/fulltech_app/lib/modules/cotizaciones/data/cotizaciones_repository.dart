@@ -401,4 +401,35 @@ class CotizacionesRepository {
       );
     }
   }
+
+  Future<String> createPdfShareLink({
+    required String quotationId,
+    required List<int> pdfBytes,
+    String? fileName,
+  }) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        ApiRoutes.cotizacionPdfShareLink,
+        data: {
+          'quotationId': quotationId.trim(),
+          'pdfBase64': base64Encode(pdfBytes),
+          if (fileName != null && fileName.trim().isNotEmpty)
+            'fileName': fileName.trim(),
+        },
+      );
+      final pdfUrl = (response.data?['pdfUrl'] ?? '').toString().trim();
+      if (pdfUrl.isEmpty) {
+        throw ApiException('No se pudo generar el enlace del PDF');
+      }
+      return pdfUrl;
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(
+          e.response?.data,
+          'No se pudo generar el enlace del PDF',
+        ),
+        e.response?.statusCode,
+      );
+    }
+  }
 }

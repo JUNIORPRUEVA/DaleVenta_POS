@@ -13,6 +13,7 @@ import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/routing/routes.dart';
 import '../../core/utils/money_formatters.dart';
+import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../clientes/cliente_model.dart';
 import '../clientes/data/clientes_repository.dart';
@@ -423,6 +424,61 @@ class _CotizacionesHistorialScreenState
         );
   }
 
+  Future<void> _sendPdfToClient(CotizacionModel item, Uint8List bytes) {
+    return _openClientWhatsAppPdfLink(item, bytes);
+  }
+
+  Future<void> _openClientWhatsAppPdfLink(
+    CotizacionModel item,
+    Uint8List bytes,
+  ) async {
+    final phone = _normalizeWhatsAppLinkPhone(item.customerPhone);
+    if (phone.isEmpty) {
+      throw Exception(
+        'El cliente no tiene teléfono válido para abrir WhatsApp.',
+      );
+    }
+
+    final pdfUrl = await ref
+        .read(cotizacionesRepositoryProvider)
+        .createPdfShareLink(
+          quotationId: item.id,
+          pdfBytes: bytes,
+          fileName: buildCotizacionPdfFileName(item),
+        );
+
+    final uri = Uri.https('wa.me', '/$phone', {
+      'text': _buildClientWhatsAppLinkMessage(item, pdfUrl),
+    });
+
+    if (!mounted) return;
+    await safeOpenWhatsApp(
+      context,
+      uri,
+      copiedMessage: 'No se pudo abrir WhatsApp. Enlace de cotización copiado.',
+    );
+  }
+
+  String _normalizeWhatsAppLinkPhone(String? value) {
+    var digits = (value ?? '').replaceAll(RegExp(r'[^0-9]'), '').trim();
+    if (digits.length == 10 && digits.startsWith(RegExp(r'[268]'))) {
+      digits = '1$digits';
+    }
+    if (digits.length == 11 && digits.startsWith('1')) return digits;
+    if (digits.length >= 11 && digits.length <= 15) return digits;
+    return '';
+  }
+
+  String _buildClientWhatsAppLinkMessage(CotizacionModel item, String pdfUrl) {
+    final customerName = item.customerName.trim().isEmpty
+        ? 'cliente'
+        : item.customerName.trim();
+    return 'Hola $customerName, te compartimos tu cotización.\n'
+        'Cotización: ${item.id}\n'
+        'Total: ${_money(item.total)}\n'
+        'PDF: $pdfUrl';
+  }
+
   Future<void> _openPdfPreview(CotizacionModel item) async {
     final company = await _getCompanySettingsForPdf();
     final bytes = await buildCotizacionPdf(cotizacion: item, company: company);
@@ -486,8 +542,18 @@ class _CotizacionesHistorialScreenState
               if (!context.mounted) return;
               switch (action) {
                 case _QuotePdfShareAction.sharePdf:
-                case _QuotePdfShareAction.shareClient:
                   await shareCotizacionPdf(bytes: bytes, cotizacion: item);
+                  break;
+                case _QuotePdfShareAction.shareClient:
+                  await runBusy(() async {
+                    await _sendPdfToClient(
+                      item,
+                      bytes,
+                    ).timeout(const Duration(seconds: 25));
+                    showDialogNotification(
+                      'WhatsApp abierto con el enlace del PDF.',
+                    );
+                  });
                   break;
                 case _QuotePdfShareAction.save:
                   await downloadPdf();

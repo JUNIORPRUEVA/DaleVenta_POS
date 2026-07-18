@@ -321,10 +321,53 @@ export class EvolutionWhatsAppService {
     };
 
     const attempts: Array<{ label: string; init: RequestInit }> = [
-      // Prefer multipart first for better compatibility with Evolution media parsing.
-      // Keep attempts short to avoid flooding provider logs on known server bugs.
       {
-        label: 'multipart:full',
+        label: 'json:base64:fileName',
+        init: {
+          method: 'POST',
+          headers: jsonHeaders,
+          body: JSON.stringify({
+            number,
+            mediatype: 'document',
+            mimetype: 'application/pdf',
+            ...(caption ? { caption } : {}),
+            media: mediaBase64,
+            fileName,
+          }),
+        },
+      },
+      {
+        label: 'json:base64:filename',
+        init: {
+          method: 'POST',
+          headers: jsonHeaders,
+          body: JSON.stringify({
+            number,
+            mediatype: 'document',
+            mimetype: 'application/pdf',
+            ...(caption ? { caption } : {}),
+            media: mediaBase64,
+            filename: fileName,
+          }),
+        },
+      },
+      {
+        label: 'json:data-url:fileName',
+        init: {
+          method: 'POST',
+          headers: jsonHeaders,
+          body: JSON.stringify({
+            number,
+            mediatype: 'document',
+            mimetype: 'application/pdf',
+            ...(caption ? { caption } : {}),
+            media: `data:application/pdf;base64,${mediaBase64}`,
+            fileName,
+          }),
+        },
+      },
+      {
+        label: 'multipart:file',
         init: {
           method: 'POST',
           headers: { apikey: config.apiKey },
@@ -343,13 +386,13 @@ export class EvolutionWhatsAppService {
         },
       },
       {
-        label: 'flat:media+fileName',
+        label: 'json:document-alias',
         init: {
           method: 'POST',
           headers: jsonHeaders,
           body: JSON.stringify({
             number,
-            mediatype: 'document',
+            mediatype: 'documentMessage',
             mimetype: 'application/pdf',
             ...(caption ? { caption } : {}),
             media: mediaBase64,
@@ -375,13 +418,10 @@ export class EvolutionWhatsAppService {
       }
 
       lastFailure = result;
-      if (result.knownMediaBug) {
-        break;
-      }
 
       if (result.status >= 500) {
         serverErrors += 1;
-        if (serverErrors >= 2) {
+        if (serverErrors >= 4) {
           break;
         }
       }

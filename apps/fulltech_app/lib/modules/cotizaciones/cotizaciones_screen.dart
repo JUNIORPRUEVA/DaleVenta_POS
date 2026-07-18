@@ -22,6 +22,7 @@ import '../../core/realtime/catalog_realtime_service.dart';
 import '../../core/routing/app_route_observer.dart';
 import '../../core/routing/routes.dart';
 import '../../core/utils/money_formatters.dart';
+import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/fulltech_dialog.dart';
 import '../../core/widgets/fulltech_page_header.dart';
@@ -3631,10 +3632,65 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         );
   }
 
+  Future<void> enviarPdfCotizacionACliente({
+    required CotizacionModel cotizacion,
+    required Uint8List pdfBytes,
+    required BuildContext launchContext,
+  }) async {
+    final phone = _normalizeWhatsAppLinkPhone(cotizacion.customerPhone);
+    if (phone.isEmpty) {
+      throw ApiException(
+        'El cliente no tiene teléfono válido para abrir WhatsApp.',
+      );
+    }
+
+    final pdfUrl = await ref
+        .read(cotizacionesRepositoryProvider)
+        .createPdfShareLink(
+          quotationId: cotizacion.id,
+          pdfBytes: pdfBytes,
+          fileName: buildCotizacionPdfFileName(cotizacion),
+        );
+
+    final uri = Uri.https('wa.me', '/$phone', {
+      'text': _buildClientWhatsAppLinkMessage(cotizacion, pdfUrl),
+    });
+
+    if (!launchContext.mounted) return;
+    await safeOpenWhatsApp(
+      launchContext,
+      uri,
+      copiedMessage: 'No se pudo abrir WhatsApp. Enlace de cotización copiado.',
+    );
+  }
+
   String _buildAdminApprovalMessage(CotizacionModel cotizacion) {
     final sellerName = (cotizacion.createdByUserName ?? '').trim();
     final safeSellerName = sellerName.isEmpty ? 'El vendedor' : sellerName;
     return '$safeSellerName quiere que confirme esta cotización y que esté en orden.';
+  }
+
+  String _normalizeWhatsAppLinkPhone(String? value) {
+    var digits = (value ?? '').replaceAll(RegExp(r'[^0-9]'), '').trim();
+    if (digits.length == 10 && digits.startsWith(RegExp(r'[268]'))) {
+      digits = '1$digits';
+    }
+    if (digits.length == 11 && digits.startsWith('1')) return digits;
+    if (digits.length >= 11 && digits.length <= 15) return digits;
+    return '';
+  }
+
+  String _buildClientWhatsAppLinkMessage(
+    CotizacionModel cotizacion,
+    String pdfUrl,
+  ) {
+    final customerName = cotizacion.customerName.trim().isEmpty
+        ? 'cliente'
+        : cotizacion.customerName.trim();
+    return 'Hola $customerName, te compartimos tu cotización.\n'
+        'Cotización: ${cotizacion.id}\n'
+        'Total: ${_money(cotizacion.total)}\n'
+        'PDF: $pdfUrl';
   }
 
   Future<CompanySettings> _getCompanySettingsForPdf() async {
@@ -3793,11 +3849,44 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               if (!context.mounted) return;
               switch (action) {
                 case _QuotePdfShareAction.sharePdf:
-                case _QuotePdfShareAction.shareClient:
                   await shareCotizacionPdf(
                     bytes: bytes,
                     cotizacion: cotizacion,
                   );
+                  break;
+                case _QuotePdfShareAction.shareClient:
+                  try {
+                    showDialogNotification(
+                      'Preparando enlace PDF para WhatsApp...',
+                    );
+                    final persisted = await _ensurePersistedQuotationForSend(
+                      cotizacion,
+                    );
+                    if (!context.mounted) return;
+                    await enviarPdfCotizacionACliente(
+                      cotizacion: persisted,
+                      pdfBytes: bytes,
+                      launchContext: context,
+                    ).timeout(const Duration(seconds: 25));
+                    showDialogNotification(
+                      'WhatsApp abierto con el enlace del PDF.',
+                    );
+                  } on TimeoutException {
+                    showDialogNotification(
+                      'Tiempo de espera agotado preparando el enlace del PDF.',
+                      isError: true,
+                    );
+                  } on ApiException catch (e) {
+                    showDialogNotification(
+                      _formatWhatsAppSendError(e, toAdmin: false),
+                      isError: true,
+                    );
+                  } catch (e) {
+                    showDialogNotification(
+                      'No se pudo enviar el PDF al cliente: $e',
+                      isError: true,
+                    );
+                  }
                   break;
                 case _QuotePdfShareAction.save:
                   await downloadPdf();
