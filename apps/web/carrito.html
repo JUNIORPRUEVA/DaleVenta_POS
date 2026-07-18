@@ -1,19 +1,43 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Carrito | FULLTECH SRL</title>
-  <meta name="description" content="Carrito de compras FULLTECH SRL y pedido por WhatsApp.">
-  <link rel="icon" href="assets/logo.png"><link rel="stylesheet" href="styles.css">
+  <meta name="description" content="Carrito de compras FULLTECH SRL y solicitud de pedido por WhatsApp.">
+  <link rel="icon" href="assets/logo.png">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="topbar"><div class="topbar__inner"><span data-company="address"></span><span><a data-whatsapp-link>WhatsApp</a> · <a data-email-link>Correo</a></span></div></div>
-  <header class="site-header"><nav class="nav"><a class="brand" href="index.html"><img src="assets/logo.png" alt="Logo FULLTECH"><span>FULLTECH SRL</span></a><div class="nav__links"><a href="index.html">Inicio</a><a href="catalogo.html">Catalogo</a><a href="servicios.html">Servicios</a><a href="nosotros.html">Nosotros</a><a href="contacto.html">Contacto</a><a aria-current="page" class="cart-button" href="carrito.html">Carrito <span data-cart-count>0</span></a></div></nav></header>
-  <main class="section">
-    <h1 class="page-title">Carrito y confirmacion</h1>
-    <p class="lead">Envianos tu pedido por WhatsApp. Un asesor confirmara disponibilidad, garantia, entrega, instalacion y total antes de cualquier pago.</p>
-    <div class="cart-panel" data-cart></div>
-    <p><a class="button button--accent" data-whatsapp-order href="#">Enviar pedido por WhatsApp</a> <a class="button button--ghost" href="catalogo.html">Seguir comprando</a></p>
+  <header class="site-header"><nav class="nav"><a class="brand" href="index.html"><img src="assets/logo.png" alt="Logo FULLTECH"><span>FULLTECH SRL</span></a><div class="nav__links"><a href="index.html">Inicio</a><a href="tienda.html">Tienda</a><a href="servicios.html">Servicios</a><a href="nosotros.html">Nosotros</a><a href="contacto.html">Contacto</a><a aria-current="page" class="cart-button" href="carrito.html">Carrito <span data-cart-count>0</span></a></div></nav></header>
+  <main>
+    <section class="page-hero">
+      <div class="section page-hero__inner">
+        <p class="eyebrow">Confirmacion antes del pago</p>
+        <h1 class="page-title">Carrito y solicitud</h1>
+        <p class="lead">Envia tu pedido por WhatsApp. FULLTECH confirmara disponibilidad, garantia, entrega, instalacion y total final antes de cualquier cobro.</p>
+      </div>
+    </section>
+    <section class="section checkout-layout">
+      <div>
+        <div class="cart-panel" data-cart></div>
+        <div class="checkout-actions">
+          <a class="button button--accent" data-whatsapp-order href="#">Enviar pedido por WhatsApp</a>
+          <a class="button button--ghost" href="tienda.html">Seguir comprando</a>
+          <button class="button button--quiet" type="button" data-clear-cart>Vaciar carrito</button>
+        </div>
+      </div>
+      <aside class="shop-panel">
+        <h2>Detalles para el asesor</h2>
+        <label class="input-label">Notas del pedido<textarea data-order-notes rows="6" placeholder="Ej: necesito instalacion, direccion aproximada, horario preferido o cantidad adicional"></textarea></label>
+        <div class="secure-list">
+          <span>Confirmacion humana antes del pago</span>
+          <span>Garantia indicada por producto o servicio</span>
+          <span>Opciones de envio, recogida o instalacion</span>
+        </div>
+      </aside>
+    </section>
   </main>
   <footer class="footer"><div class="footer__inner"><div><strong>FULLTECH SRL</strong><p><span data-company="address"></span></p></div><div><strong>Compra segura</strong><a href="pagos.html">Pagos</a><a href="envios.html">Envios</a></div><div><strong>Soporte</strong><a href="contacto.html">Contacto</a><a href="garantia.html">Garantia</a></div><div><strong>Legal</strong><a href="devoluciones.html">Devoluciones</a><a href="privacidad.html">Privacidad</a></div></div></footer>
   <script src="env.js"></script><script type="module" src="app.js"></script>

@@ -2,6 +2,13 @@ import { FulltechStore as fallbackStore } from "./data.js";
 
 (async function () {
   let store = fallbackStore;
+  let storeSource = "fallback";
+  const state = {
+    category: "Todos",
+    query: "",
+    sort: "featured"
+  };
+
   try {
     const apiBase = (window.FULLTECH_API_BASE_URL || "").replace(/\/$/, "");
     const response = await fetch(`${apiBase}/website/public`, {
@@ -10,21 +17,32 @@ import { FulltechStore as fallbackStore } from "./data.js";
     if (response.ok) {
       const payload = await response.json();
       if (Array.isArray(payload.products) && payload.products.length > 0) {
+        const apiProducts = payload.products.map((product) => ({
+          id: String(product.id),
+          name: product.name,
+          category: product.category || "Sin categoria",
+          price: Number(product.price || 0),
+          warranty: product.warranty || "Garantia segun producto",
+          stock: product.stock == null ? null : Number(product.stock),
+          image: product.image || "assets/logo.png",
+          extraImages: Array.isArray(product.extraImages) ? product.extraImages : [],
+          description: product.description || "Producto disponible en FULLTECH.",
+          code: product.code || null,
+          badge: product.stock == null ? "Consultar" : Number(product.stock) > 0 ? "Disponible" : "Bajo pedido",
+          featured: product.featured === true
+        }));
         store = {
           ...fallbackStore,
-          company: { ...fallbackStore.company, ...(payload.company || {}) },
-          categories: payload.categories || fallbackStore.categories,
-          products: payload.products.map((product) => ({
-            id: product.id,
-            name: product.name,
-            category: product.category || "Sin categoría",
-            price: Number(product.price || 0),
-            warranty: product.stock == null ? "Consultar" : `${product.stock} disp.`,
-            image: product.image || "assets/logo.png",
-            description: product.description || "Producto disponible en FULLTECH.",
-            featured: product.featured === true
-          }))
+          company: {
+            ...fallbackStore.company,
+            ...(payload.company || {}),
+            updatedAt: payload.updatedAt || fallbackStore.company.updatedAt
+          },
+          categories: payload.categories || [...new Set(apiProducts.map((item) => item.category))],
+          products: apiProducts,
+          updatedAt: payload.updatedAt || fallbackStore.updatedAt
         };
+        storeSource = "api";
       }
     }
   } catch (_) {
@@ -37,6 +55,16 @@ import { FulltechStore as fallbackStore } from "./data.js";
     maximumFractionDigits: 0
   });
 
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;"
+    })[char]);
+  }
+
   function cart() {
     try {
       return JSON.parse(localStorage.getItem("fulltech-cart") || "{}");
@@ -48,10 +76,19 @@ import { FulltechStore as fallbackStore } from "./data.js";
   function saveCart(value) {
     localStorage.setItem("fulltech-cart", JSON.stringify(value));
     updateCartCount();
+    renderCartSummary();
+  }
+
+  function cartItems() {
+    return Object.values(cart());
+  }
+
+  function cartTotal() {
+    return cartItems().reduce((sum, item) => sum + Number(item.price || 0) * Number(item.qty || 0), 0);
   }
 
   function updateCartCount() {
-    const count = Object.values(cart()).reduce((sum, item) => sum + item.qty, 0);
+    const count = cartItems().reduce((sum, item) => sum + Number(item.qty || 0), 0);
     document.querySelectorAll("[data-cart-count]").forEach((node) => {
       node.textContent = String(count);
     });
@@ -68,37 +105,95 @@ import { FulltechStore as fallbackStore } from "./data.js";
       qty: (current[productId]?.qty || 0) + 1
     };
     saveCart(current);
-    const button = document.querySelector(`[data-add-to-cart="${productId}"]`);
+    renderCart();
+    const button = document.querySelector(`[data-add-to-cart="${CSS.escape(productId)}"]`);
     if (button) {
+      const previous = button.textContent;
       button.textContent = "Agregado";
+      button.classList.add("is-success");
       setTimeout(() => {
-        button.textContent = "Agregar al carrito";
+        button.textContent = previous || "Agregar";
+        button.classList.remove("is-success");
       }, 900);
     }
   }
 
-  function renderProducts(category) {
-    const target = document.querySelector("[data-products]");
-    if (!target) return;
-    const products = category && category !== "Todos"
-      ? store.products.filter((item) => item.category === category)
-      : store.products;
+  function filteredProducts() {
+    const query = state.query.trim().toLowerCase();
+    let products = [...store.products];
+    if (state.category !== "Todos") {
+      products = products.filter((item) => item.category === state.category);
+    }
+    if (query) {
+      products = products.filter((item) => {
+        const haystack = `${item.name} ${item.category} ${item.description} ${item.badge || ""}`.toLowerCase();
+        return haystack.includes(query);
+      });
+    }
+    if (state.sort === "price-asc") products.sort((a, b) => a.price - b.price);
+    if (state.sort === "price-desc") products.sort((a, b) => b.price - a.price);
+    if (state.sort === "name") products.sort((a, b) => a.name.localeCompare(b.name));
+    if (state.sort === "featured") products.sort((a, b) => Number(Boolean(b.featured)) - Number(Boolean(a.featured)));
+    return products;
+  }
 
-    target.innerHTML = products.map((product) => `
+  function productCard(product, mode = "button") {
+    const action = mode === "link"
+      ? '<a class="button" href="tienda.html">Ver tienda</a>'
+      : `<button class="button" type="button" data-add-to-cart="${escapeHtml(product.id)}">Agregar</button>`;
+    return `
       <article class="product-card">
-        <img class="product-card__image" src="${product.image}" alt="${product.name}" loading="lazy">
+        <div class="product-card__media">
+          <img class="product-card__image" src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}" loading="lazy">
+          ${product.badge ? `<span class="badge">${escapeHtml(product.badge)}</span>` : ""}
+        </div>
         <div class="product-card__body">
           <div class="product-card__meta">
-            <span>${product.category}</span>
-            <span>Garantia ${product.warranty}</span>
+            <span>${escapeHtml(product.category)}</span>
+            <span>${product.stock == null ? "Consultar stock" : `${escapeHtml(product.stock)} disp.`}</span>
           </div>
-          <h3>${product.name}</h3>
-          <p>${product.description}</p>
-          <div class="price">${money.format(product.price)}</div>
-          <button class="button" type="button" data-add-to-cart="${product.id}">Agregar al carrito</button>
+          <h3>${escapeHtml(product.name)}</h3>
+          ${product.code ? `<span class="sku">Codigo: ${escapeHtml(product.code)}</span>` : ""}
+          <p>${escapeHtml(product.description)}</p>
+          <div class="product-card__footer">
+            <div>
+              <span class="microcopy">Desde</span>
+              <div class="price">${money.format(product.price)}</div>
+            </div>
+            <div class="product-actions">
+              ${action}
+              <a class="button button--ghost" href="${buildProductWhatsApp(product)}">Consultar</a>
+            </div>
+          </div>
         </div>
       </article>
-    `).join("");
+    `;
+  }
+
+  function renderProducts() {
+    const target = document.querySelector("[data-products]");
+    if (!target) return;
+    const products = filteredProducts();
+    const countTarget = document.querySelector("[data-product-count]");
+    if (countTarget) countTarget.textContent = `${products.length} producto${products.length === 1 ? "" : "s"}`;
+    const sourceTarget = document.querySelector("[data-store-source]");
+    if (sourceTarget) {
+      sourceTarget.textContent = storeSource === "api"
+        ? "Productos sincronizados desde el punto de venta FULLTECH."
+        : "Modo demostracion: configura FULLTECH_API_BASE_URL para usar productos reales del punto de venta.";
+    }
+    if (!products.length) {
+      target.innerHTML = `
+        <div class="empty-state">
+          <h3>No encontramos productos con esos filtros</h3>
+          <p>Prueba otra categoria o escribenos por WhatsApp para buscar una solucion a medida.</p>
+          <a class="button button--accent" data-whatsapp-link>Consultar disponibilidad</a>
+        </div>
+      `;
+      fillCompanyData();
+      return;
+    }
+    target.innerHTML = products.map((product) => productCard(product)).join("");
   }
 
   function renderFilters() {
@@ -106,8 +201,8 @@ import { FulltechStore as fallbackStore } from "./data.js";
     if (!target) return;
     const categories = ["Todos", ...store.categories];
     target.innerHTML = categories.map((category, index) => `
-      <button class="filter ${index === 0 ? "is-active" : ""}" type="button" data-filter="${category}">
-        ${category}
+      <button class="filter ${index === 0 ? "is-active" : ""}" type="button" data-filter="${escapeHtml(category)}">
+        ${escapeHtml(category)}
       </button>
     `).join("");
   }
@@ -117,52 +212,86 @@ import { FulltechStore as fallbackStore } from "./data.js";
     if (!target) return;
     const featured = store.products.filter((product) => product.featured).slice(0, 3);
     const products = featured.length ? featured : store.products.slice(0, 3);
-    target.innerHTML = products.map((product) => `
-      <article class="product-card">
-        <img class="product-card__image" src="${product.image}" alt="${product.name}" loading="lazy">
-        <div class="product-card__body">
-          <div class="product-card__meta"><span>${product.category}</span><span>${product.warranty}</span></div>
-          <h3>${product.name}</h3>
-          <p>${product.description}</p>
-          <div class="price">${money.format(product.price)}</div>
-          <a class="button" href="catalogo.html">Ver catalogo</a>
-        </div>
-      </article>
-    `).join("");
+    target.innerHTML = products.map((product) => productCard(product, "link")).join("");
+  }
+
+  function renderCategoryHighlights() {
+    const target = document.querySelector("[data-category-highlights]");
+    if (!target) return;
+    target.innerHTML = store.categories.slice(0, 6).map((category) => {
+      const total = store.products.filter((item) => item.category === category).length;
+      return `
+        <a class="category-tile" href="tienda.html?categoria=${encodeURIComponent(category)}">
+          <span>${escapeHtml(category)}</span>
+          <strong>${total}</strong>
+        </a>
+      `;
+    }).join("");
+  }
+
+  function renderServices() {
+    const target = document.querySelector("[data-services]");
+    if (!target) return;
+    target.innerHTML = store.services.map((service) => `<li>${escapeHtml(service)}</li>`).join("");
   }
 
   function renderCart() {
     const target = document.querySelector("[data-cart]");
     if (!target) return;
-    const items = Object.values(cart());
+    const items = cartItems();
     if (items.length === 0) {
-      target.innerHTML = '<p class="lead">Tu carrito esta vacio. Agrega productos desde el catalogo para preparar tu pedido.</p>';
+      target.innerHTML = `
+        <div class="empty-state">
+          <h3>Tu carrito esta vacio</h3>
+          <p>Agrega productos desde la tienda para preparar una solicitud de compra o cotizacion.</p>
+          <a class="button button--accent" href="tienda.html">Explorar tienda</a>
+        </div>
+      `;
       return;
     }
-    const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
+    const total = cartTotal();
     target.innerHTML = `
       ${items.map((item) => `
         <div class="cart-line">
-          <strong>${item.name}<br><span class="muted">${money.format(item.price)} c/u</span></strong>
-          <div class="qty">
-            <button type="button" data-cart-dec="${item.id}">-</button>
-            <span>${item.qty}</span>
-            <button type="button" data-cart-inc="${item.id}">+</button>
+          <strong>${escapeHtml(item.name)}<br><span class="muted">${money.format(item.price)} c/u</span></strong>
+          <div class="qty" aria-label="Cantidad de ${escapeHtml(item.name)}">
+            <button type="button" data-cart-dec="${escapeHtml(item.id)}" aria-label="Restar">-</button>
+            <span>${escapeHtml(item.qty)}</span>
+            <button type="button" data-cart-inc="${escapeHtml(item.id)}" aria-label="Sumar">+</button>
           </div>
           <strong>${money.format(item.price * item.qty)}</strong>
         </div>
       `).join("")}
-      <h3>Total estimado: ${money.format(total)}</h3>
-      <p class="notice">Los precios pueden variar segun disponibilidad, instalacion requerida y alcance tecnico. FULLTECH confirmara el total antes de cobrar.</p>
+      <div class="cart-total">
+        <span>Total estimado</span>
+        <strong>${money.format(total)}</strong>
+      </div>
+      <p class="notice">El total se confirma antes de cobrar. Instalacion, envio, disponibilidad y garantia pueden ajustar la cotizacion final.</p>
     `;
   }
 
-  function buildWhatsAppOrder() {
-    const items = Object.values(cart());
-    const message = items.length
-      ? `Hola FULLTECH, quiero cotizar/comprar:%0A${items.map((item) => `- ${item.qty} x ${item.name} (${money.format(item.price)} c/u)`).join("%0A")}`
-      : "Hola FULLTECH, quiero informacion sobre productos y servicios.";
-    return `https://wa.me/${store.company.whatsapp}?text=${message}`;
+  function renderCartSummary() {
+    const target = document.querySelector("[data-cart-summary]");
+    if (!target) return;
+    const items = cartItems();
+    target.innerHTML = items.length
+      ? `<strong>${items.length}</strong><span>linea${items.length === 1 ? "" : "s"} en carrito</span><strong>${money.format(cartTotal())}</strong>`
+      : "<strong>0</strong><span>productos seleccionados</span><strong>RD$0</strong>";
+  }
+
+  function buildWhatsAppOrder(extraMessage = "") {
+    const items = cartItems();
+    const lines = items.length
+      ? items.map((item) => `- ${item.qty} x ${item.name} (${money.format(item.price)} c/u)`).join("\n")
+      : "Quiero informacion sobre productos y servicios.";
+    const totalLine = items.length ? `\nTotal estimado: ${money.format(cartTotal())}` : "";
+    const message = `Hola FULLTECH, necesito ayuda con esta solicitud:\n${lines}${totalLine}${extraMessage ? `\nNotas: ${extraMessage}` : ""}`;
+    return `https://wa.me/${store.company.whatsapp}?text=${encodeURIComponent(message)}`;
+  }
+
+  function buildProductWhatsApp(product) {
+    const message = `Hola FULLTECH, quiero informacion de este producto:\n${product.name}\nCategoria: ${product.category}\nPrecio estimado: ${money.format(product.price)}${product.code ? `\nCodigo: ${product.code}` : ""}`;
+    return `https://wa.me/${store.company.whatsapp}?text=${encodeURIComponent(message)}`;
   }
 
   function wireEvents() {
@@ -174,7 +303,8 @@ import { FulltechStore as fallbackStore } from "./data.js";
       if (filterButton) {
         document.querySelectorAll("[data-filter]").forEach((button) => button.classList.remove("is-active"));
         filterButton.classList.add("is-active");
-        renderProducts(filterButton.dataset.filter);
+        state.category = filterButton.dataset.filter;
+        renderProducts();
       }
 
       const inc = event.target.closest("[data-cart-inc]");
@@ -188,11 +318,32 @@ import { FulltechStore as fallbackStore } from "./data.js";
         saveCart(current);
         renderCart();
       }
+
+      const clear = event.target.closest("[data-clear-cart]");
+      if (clear) {
+        saveCart({});
+        renderCart();
+      }
+    });
+
+    document.querySelectorAll("[data-product-search]").forEach((input) => {
+      input.addEventListener("input", () => {
+        state.query = input.value;
+        renderProducts();
+      });
+    });
+
+    document.querySelectorAll("[data-product-sort]").forEach((select) => {
+      select.addEventListener("change", () => {
+        state.sort = select.value;
+        renderProducts();
+      });
     });
 
     document.querySelectorAll("[data-whatsapp-order]").forEach((link) => {
       link.addEventListener("click", () => {
-        link.href = buildWhatsAppOrder();
+        const notes = document.querySelector("[data-order-notes]")?.value || "";
+        link.href = buildWhatsAppOrder(notes);
       });
     });
   }
@@ -210,11 +361,31 @@ import { FulltechStore as fallbackStore } from "./data.js";
     });
   }
 
+  function hydrateQueryParams() {
+    const params = new URLSearchParams(window.location.search);
+    const category = params.get("categoria");
+    if (category && store.categories.includes(category)) {
+      state.category = category;
+      setTimeout(() => {
+        const button = document.querySelector(`[data-filter="${CSS.escape(category)}"]`);
+        if (button) {
+          document.querySelectorAll("[data-filter]").forEach((item) => item.classList.remove("is-active"));
+          button.classList.add("is-active");
+        }
+        renderProducts();
+      }, 0);
+    }
+  }
+
   fillCompanyData();
   renderFilters();
   renderProducts();
   renderFeaturedProducts();
+  renderCategoryHighlights();
+  renderServices();
   renderCart();
+  renderCartSummary();
   updateCartCount();
+  hydrateQueryParams();
   wireEvents();
 })();

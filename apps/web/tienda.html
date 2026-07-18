@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tienda online | FULLTECH SRL</title>
+  <meta name="description" content="Tienda online FULLTECH SRL conectada al punto de venta, con productos, precios, disponibilidad y pedidos por WhatsApp.">
+  <link rel="icon" href="assets/logo.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="topbar"><div class="topbar__inner"><span data-company="address"></span><span><a data-whatsapp-link>WhatsApp</a> · <a data-email-link>Correo</a></span></div></div>
+  <header class="site-header"><nav class="nav"><a class="brand" href="index.html"><img src="assets/logo.png" alt="Logo FULLTECH"><span>FULLTECH SRL</span></a><div class="nav__links"><a href="index.html">Inicio</a><a aria-current="page" href="tienda.html">Tienda</a><a href="servicios.html">Servicios</a><a href="nosotros.html">Nosotros</a><a href="contacto.html">Contacto</a><a class="cart-button" href="carrito.html">Carrito <span data-cart-count>0</span></a></div></nav></header>
+  <main>
+    <section class="shop-hero">
+      <div class="section shop-hero__inner">
+        <div>
+          <p class="eyebrow">Ecommerce FULLTECH</p>
+          <h1 class="page-title">Tienda online conectada al punto de venta</h1>
+          <p class="lead">Explora productos reales de FULLTECH, arma tu carrito y envia la solicitud por WhatsApp para confirmar disponibilidad, garantia, entrega o instalacion antes de pagar.</p>
+          <div class="hero__actions">
+            <a class="button button--accent" href="#productos">Ver productos</a>
+            <a class="button button--ghost" href="carrito.html">Revisar carrito</a>
+          </div>
+        </div>
+        <div class="commerce-summary">
+          <strong data-product-count>0 productos</strong>
+          <span data-store-source>Conectando con el punto de venta...</span>
+          <div class="cart-mini" data-cart-summary></div>
+        </div>
+      </div>
+    </section>
+    <section id="productos" class="section catalog-layout">
+      <aside class="shop-panel">
+        <h2>Comprar</h2>
+        <label class="input-label">Buscar producto<input data-product-search type="search" placeholder="Camara, router, POS, cable"></label>
+        <label class="input-label">Ordenar<select data-product-sort><option value="featured">Destacados primero</option><option value="price-asc">Precio menor a mayor</option><option value="price-desc">Precio mayor a menor</option><option value="name">Nombre A-Z</option></select></label>
+        <a class="button button--accent" href="carrito.html">Ir al carrito</a>
+        <a class="button button--ghost" data-whatsapp-link>Hablar con ventas</a>
+      </aside>
+      <div>
+        <div class="notice">La tienda usa los productos publicados por FULLTECH. El pago se realiza despues de confirmar stock, precio final, forma de entrega e instalacion cuando aplique.</div>
+        <div class="shop-toolbar">
+          <div class="filters" data-filters></div>
+          <strong data-product-count></strong>
+        </div>
+        <div class="grid grid--3" data-products></div>
+      </div>
+    </section>
+  </main>
+  <footer class="footer"><div class="footer__inner"><div><strong>FULLTECH SRL</strong><p><span data-company="address"></span><br>RNC: <span data-company="rnc"></span></p></div><div><strong>Tienda</strong><a href="tienda.html">Productos</a><a href="carrito.html">Carrito</a><a href="pagos.html">Pagos</a></div><div><strong>Politicas</strong><a href="envios.html">Envios</a><a href="devoluciones.html">Devoluciones</a><a href="garantia.html">Garantia</a></div><div><strong>Empresa</strong><a href="servicios.html">Servicios</a><a href="contacto.html">Contacto</a></div></div></footer>
+  <script src="env.js"></script><script type="module" src="app.js"></script>
+</body>
+</html>

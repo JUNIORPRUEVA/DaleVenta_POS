@@ -5,7 +5,7 @@ Sitio web publico y tienda online de FULLTECH SRL.
 Incluye paginas visibles para revision comercial:
 
 - Inicio
-- Catalogo
+- Tienda online
 - Servicios
 - Nosotros
 - Contacto
@@ -46,6 +46,10 @@ FULLTECH_API_BASE_URL=https://TU-DOMINIO-DE-API.com
 
 Si la API y la web se sirven bajo el mismo dominio, deja `FULLTECH_API_BASE_URL`
 vacia y la tienda consultara `/website/public` en el mismo host.
+
+La pagina `tienda.html` consume `/website/public`, que el backend arma desde el
+modulo de productos de FULLTECH. En produccion, configura `FULLTECH_API_BASE_URL`
+para apuntar al API que tiene los productos del punto de venta/inventario.
 
 Healthcheck:
 

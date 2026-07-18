@@ -1,10 +1,49 @@
 <!doctype html>
 <html lang="es">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Contacto | FULLTECH SRL</title><meta name="description" content="Contactar a FULLTECH SRL por WhatsApp, correo o formulario."><link rel="icon" href="assets/logo.png"><link rel="stylesheet" href="styles.css"></head>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contacto | FULLTECH SRL</title>
+  <meta name="description" content="Contactar a FULLTECH SRL por WhatsApp, correo o formulario para compras, soporte e instalaciones.">
+  <link rel="icon" href="assets/logo.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
 <body>
   <div class="topbar"><div class="topbar__inner"><span data-company="address"></span><span><a data-whatsapp-link>WhatsApp</a> · <a data-email-link>Correo</a></span></div></div>
-  <header class="site-header"><nav class="nav"><a class="brand" href="index.html"><img src="assets/logo.png" alt="Logo FULLTECH"><span>FULLTECH SRL</span></a><div class="nav__links"><a href="index.html">Inicio</a><a href="catalogo.html">Catalogo</a><a href="servicios.html">Servicios</a><a href="nosotros.html">Nosotros</a><a aria-current="page" href="contacto.html">Contacto</a><a class="cart-button" href="carrito.html">Carrito <span data-cart-count>0</span></a></div></nav></header>
-  <main class="section"><h1 class="page-title">Contacto</h1><p class="lead">Usa nuestros canales oficiales para cotizar, pedir soporte o consultar una compra.</p><div class="grid grid--2"><article class="card"><h3>Canales oficiales</h3><p>WhatsApp: <a data-whatsapp-link><span data-company="phone"></span></a><br>Correo: <a data-email-link><span data-company="email"></span></a><br>Direccion: <span data-company="address"></span><br>Horario: <span data-company="hours"></span></p><p><a class="button button--accent" data-whatsapp-link>Escribir por WhatsApp</a></p></article><form class="form card" action="mailto:ventas@fulltech.com.do" method="post" enctype="text/plain"><label>Nombre<input name="nombre" required></label><label>Telefono<input name="telefono" required></label><label>Servicio o producto<select name="interes"><option>Compra de producto</option><option>Instalacion</option><option>Soporte tecnico</option><option>Garantia</option></select></label><label>Mensaje<textarea name="mensaje" rows="5" required></textarea></label><button class="button" type="submit">Enviar solicitud</button></form></div></main>
-  <footer class="footer"><div class="footer__inner"><div><strong>FULLTECH SRL</strong><p><span data-company="address"></span></p></div><div><strong>Empresa</strong><a href="nosotros.html">Nosotros</a><a href="servicios.html">Servicios</a></div><div><strong>Tienda</strong><a href="catalogo.html">Catalogo</a><a href="carrito.html">Carrito</a></div><div><strong>Legal</strong><a href="privacidad.html">Privacidad</a><a href="devoluciones.html">Devoluciones</a></div></div></footer>
+  <header class="site-header"><nav class="nav"><a class="brand" href="index.html"><img src="assets/logo.png" alt="Logo FULLTECH"><span>FULLTECH SRL</span></a><div class="nav__links"><a href="index.html">Inicio</a><a href="tienda.html">Tienda</a><a href="servicios.html">Servicios</a><a href="nosotros.html">Nosotros</a><a aria-current="page" href="contacto.html">Contacto</a><a class="cart-button" href="carrito.html">Carrito <span data-cart-count>0</span></a></div></nav></header>
+  <main>
+    <section class="page-hero">
+      <div class="section page-hero__inner">
+        <p class="eyebrow">Atencion directa</p>
+        <h1 class="page-title">Contacto</h1>
+        <p class="lead">Cotiza productos, instalaciones, soporte tecnico o garantia con nuestros canales oficiales.</p>
+      </div>
+    </section>
+    <section class="section contact-layout">
+      <article class="contact-card">
+        <h2>Canales oficiales</h2>
+        <p>WhatsApp: <a data-whatsapp-link><span data-company="phone"></span></a><br>Correo: <a data-email-link><span data-company="email"></span></a><br>Direccion: <span data-company="address"></span><br>Horario: <span data-company="hours"></span></p>
+        <div class="contact-actions">
+          <a class="button button--accent" data-whatsapp-link>Escribir por WhatsApp</a>
+          <a class="button button--ghost" data-email-link>Enviar correo</a>
+        </div>
+        <div class="secure-list">
+          <span>Compras y cotizaciones</span>
+          <span>Instalacion y soporte</span>
+          <span>Garantias y seguimiento</span>
+        </div>
+      </article>
+      <form class="form card" action="mailto:ventas@fulltech.com.do" method="post" enctype="text/plain">
+        <h2>Solicitud rapida</h2>
+        <label>Nombre<input name="nombre" required autocomplete="name"></label>
+        <label>Telefono<input name="telefono" required autocomplete="tel"></label>
+        <label>Interes<select name="interes"><option>Compra de producto</option><option>Instalacion</option><option>Soporte tecnico</option><option>Garantia</option><option>Proyecto comercial</option></select></label>
+        <label>Mensaje<textarea name="mensaje" rows="5" required placeholder="Cuentanos que necesitas y en que zona estas."></textarea></label>
+        <button class="button" type="submit">Enviar solicitud</button>
+      </form>
+    </section>
+  </main>
+  <footer class="footer"><div class="footer__inner"><div><strong>FULLTECH SRL</strong><p><span data-company="address"></span></p></div><div><strong>Empresa</strong><a href="nosotros.html">Nosotros</a><a href="servicios.html">Servicios</a></div><div><strong>Tienda</strong><a href="tienda.html">Tienda</a><a href="carrito.html">Carrito</a></div><div><strong>Legal</strong><a href="privacidad.html">Privacidad</a><a href="devoluciones.html">Devoluciones</a></div></div></footer>
   <script src="env.js"></script><script type="module" src="app.js"></script>
-</body></html>
+</body>
+</html>

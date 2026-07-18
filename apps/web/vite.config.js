@@ -3,6 +3,7 @@ import { defineConfig } from "vite";
 
 const pages = [
   "index",
+  "tienda",
   "catalogo",
   "carrito",
   "servicios",
