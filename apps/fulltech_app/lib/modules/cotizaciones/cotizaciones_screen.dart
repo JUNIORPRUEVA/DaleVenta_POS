@@ -3687,7 +3687,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     final customerName = cotizacion.customerName.trim().isEmpty
         ? 'cliente'
         : cotizacion.customerName.trim();
-    return 'Hola $customerName, te compartimos tu cotización.\n'
+    return 'Hola $customerName, te compartimos tu cotización/factura en PDF.\n'
+        'Este documento corresponde a tu compra o solicitud en FULLTECH.\n'
+        'Puedes abrir el enlace para ver o descargar tu PDF.\n'
         'Cotización: ${cotizacion.id}\n'
         'Total: ${_money(cotizacion.total)}\n'
         'PDF: $pdfUrl';

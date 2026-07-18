@@ -1,11 +1,24 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, Role } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { CreateSaleDto, CreateSaleItemDto } from './dto/create-sale.dto';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { Prisma, Role } from "@prisma/client";
+import * as fs from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
+import * as path from "node:path";
+import { PrismaService } from "../prisma/prisma.service";
+import { CreateSaleDto, CreateSaleItemDto } from "./dto/create-sale.dto";
+import { CreateSalePdfShareLinkDto } from "./dto/create-sale-pdf-share-link.dto";
 
 @Injectable()
 export class SalesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   private saleInclude() {
     return {
@@ -25,32 +38,126 @@ export class SalesService {
       },
       items: true,
       creditPayments: {
-        orderBy: { paidAt: 'desc' },
+        orderBy: { paidAt: "desc" },
       },
     } satisfies Prisma.SaleInclude;
   }
 
   private isSchemaMismatch(error: unknown) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      return error.code === 'P2021' || error.code === 'P2022';
+      return error.code === "P2021" || error.code === "P2022";
     }
 
-    if (typeof error === 'object' && error !== null) {
+    if (typeof error === "object" && error !== null) {
       const value = error as { code?: unknown; message?: unknown };
-      const code = typeof value.code === 'string' ? value.code : '';
-      const message = typeof value.message === 'string' ? value.message : '';
+      const code = typeof value.code === "string" ? value.code : "";
+      const message = typeof value.message === "string" ? value.message : "";
       return (
-        code === 'P2021' ||
-        code === 'P2022' ||
-        message.includes('does not exist in the current database') ||
-        message.toLowerCase().includes('column')
+        code === "P2021" ||
+        code === "P2022" ||
+        message.includes("does not exist in the current database") ||
+        message.toLowerCase().includes("column")
       );
     }
 
     return false;
   }
 
-  async listMine(userId: string, from?: string, to?: string, customerId?: string, includeDeleted = false) {
+  private resolveUploadDir() {
+    const fromEnv = (this.config.get<string>("UPLOAD_DIR") ?? "").trim();
+    const volumeDir = "/uploads";
+    const volumeExists = fs.existsSync(volumeDir);
+
+    if (fromEnv) {
+      if ((fromEnv === "./uploads" || fromEnv === "uploads") && volumeExists) {
+        return volumeDir;
+      }
+      return fromEnv;
+    }
+
+    return volumeExists ? volumeDir : path.join(process.cwd(), "uploads");
+  }
+
+  private publicBaseUrl(requestBaseUrl?: string) {
+    const raw =
+      (this.config.get<string>("PUBLIC_BASE_URL") ?? "").trim() ||
+      (this.config.get<string>("API_BASE_URL") ?? "").trim() ||
+      (process.env.PUBLIC_BASE_URL ?? "").trim() ||
+      (process.env.API_BASE_URL ?? "").trim() ||
+      (requestBaseUrl ?? "").trim();
+
+    return raw.replace(/\/+$/, "");
+  }
+
+  private sanitizePdfFileName(value: string, fallback: string) {
+    const source = (value || fallback).trim() || fallback;
+    const base = path
+      .basename(source)
+      .replace(/[^a-zA-Z0-9._-]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    const withExt = base.toLowerCase().endsWith(".pdf") ? base : `${base}.pdf`;
+    return withExt || fallback;
+  }
+
+  private parsePdfBase64(value: string) {
+    const trimmed = (value ?? "").trim();
+    if (!trimmed) {
+      throw new BadRequestException("Debes enviar el PDF de la factura.");
+    }
+
+    const base64 = trimmed.startsWith("data:")
+      ? trimmed.slice(trimmed.indexOf(",") + 1)
+      : trimmed;
+
+    const bytes = Buffer.from(base64, "base64");
+    if (!bytes.length) {
+      throw new BadRequestException("El PDF de la factura llegó vacío.");
+    }
+
+    const maxPdfBytes = 8 * 1024 * 1024;
+    if (bytes.length > maxPdfBytes) {
+      throw new BadRequestException(
+        "El PDF de la factura supera el límite de 8 MB.",
+      );
+    }
+
+    return bytes;
+  }
+
+  async resolvePublicInvoicePdfDownload(saleId: string, fileName: string) {
+    const safeSaleId = (saleId ?? "").trim();
+    const safeFileName = this.sanitizePdfFileName(
+      fileName ?? "",
+      "factura.pdf",
+    );
+    if (!safeSaleId || safeSaleId.includes("/") || safeSaleId.includes("\\")) {
+      throw new NotFoundException("PDF de factura no encontrado.");
+    }
+
+    const absolutePath = path.join(
+      this.resolveUploadDir(),
+      "facturas",
+      safeSaleId,
+      safeFileName,
+    );
+
+    if (!fs.existsSync(absolutePath)) {
+      throw new NotFoundException("PDF de factura no encontrado.");
+    }
+
+    return {
+      absolutePath,
+      fileName: safeFileName,
+    };
+  }
+
+  async listMine(
+    userId: string,
+    from?: string,
+    to?: string,
+    customerId?: string,
+    includeDeleted = false,
+  ) {
     const normalizedCustomerId = customerId?.trim();
     const where: Prisma.SaleWhereInput = {
       userId,
@@ -62,7 +169,7 @@ export class SalesService {
     try {
       return await this.prisma.sale.findMany({
         where,
-        orderBy: { saleDate: 'desc' },
+        orderBy: { saleDate: "desc" },
         include: {
           customer: this.saleInclude().customer,
           user: this.saleInclude().user,
@@ -84,7 +191,9 @@ export class SalesService {
   ) {
     const normalizedCustomerId = customerId?.trim();
     const where: Prisma.SaleWhereInput = {
-      ...(user.role === Role.ADMIN || user.role === Role.ASISTENTE ? {} : { userId: user.id }),
+      ...(user.role === Role.ADMIN || user.role === Role.ASISTENTE
+        ? {}
+        : { userId: user.id }),
       ...(includeDeleted ? {} : { isDeleted: false }),
       ...(normalizedCustomerId ? { customerId: normalizedCustomerId } : {}),
       ...this.buildDateRange(from, to),
@@ -93,7 +202,7 @@ export class SalesService {
     try {
       return await this.prisma.sale.findMany({
         where,
-        orderBy: { saleDate: 'desc' },
+        orderBy: { saleDate: "desc" },
         include: this.saleInclude(),
       });
     } catch (error) {
@@ -102,11 +211,22 @@ export class SalesService {
     }
   }
 
-  async listByUser(userId: string, from?: string, to?: string, customerId?: string, includeDeleted = false) {
+  async listByUser(
+    userId: string,
+    from?: string,
+    to?: string,
+    customerId?: string,
+    includeDeleted = false,
+  ) {
     return this.listMine(userId, from, to, customerId, includeDeleted);
   }
 
-  async summaryMine(userId: string, from?: string, to?: string, customerId?: string) {
+  async summaryMine(
+    userId: string,
+    from?: string,
+    to?: string,
+    customerId?: string,
+  ) {
     const normalizedCustomerId = customerId?.trim();
     const where: Prisma.SaleWhereInput = {
       userId,
@@ -123,7 +243,12 @@ export class SalesService {
         commissionAmount: Prisma.Decimal | null;
       };
     } = {
-      _sum: { totalSold: null, totalCost: null, totalProfit: null, commissionAmount: null },
+      _sum: {
+        totalSold: null,
+        totalCost: null,
+        totalProfit: null,
+        commissionAmount: null,
+      },
     };
     let totalSales = 0;
 
@@ -173,7 +298,7 @@ export class SalesService {
 
     try {
       const groupedResult = await this.prisma.sale.groupBy({
-        by: ['userId'],
+        by: ["userId"],
         where,
         _sum: {
           totalSold: true,
@@ -191,7 +316,8 @@ export class SalesService {
     }
 
     const userIds = grouped.map((group) => group.userId);
-    let users: Array<{ id: string; email: string; nombreCompleto: string }> = [];
+    let users: Array<{ id: string; email: string; nombreCompleto: string }> =
+      [];
     if (userIds.length) {
       try {
         users = await this.prisma.user.findMany({
@@ -210,8 +336,8 @@ export class SalesService {
       const user = userMap.get(group.userId);
       return {
         userId: group.userId,
-        userName: user?.nombreCompleto ?? 'Usuario',
-        userEmail: user?.email ?? '',
+        userName: user?.nombreCompleto ?? "Usuario",
+        userEmail: user?.email ?? "",
         totalSales: group._count._all,
         totalSold: this.toNumber(group._sum.totalSold),
         totalProfit: this.toNumber(group._sum.totalProfit),
@@ -235,11 +361,11 @@ export class SalesService {
 
   async create(userId: string, dto: CreateSaleDto) {
     if (!dto.items.length) {
-      throw new BadRequestException('La venta requiere al menos 1 item');
+      throw new BadRequestException("La venta requiere al menos 1 item");
     }
 
     if (!dto.customerId?.trim()) {
-      throw new BadRequestException('Debes seleccionar un cliente');
+      throw new BadRequestException("Debes seleccionar un cliente");
     }
 
     try {
@@ -247,17 +373,27 @@ export class SalesService {
         where: { id: dto.customerId, isDeleted: false },
       });
       if (!customer) {
-        throw new BadRequestException('Cliente inválido');
+        throw new BadRequestException("Cliente inválido");
       }
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
     }
 
     const productIds = Array.from(
-      new Set(dto.items.map((item) => item.productId).filter((id): id is string => Boolean(id))),
+      new Set(
+        dto.items
+          .map((item) => item.productId)
+          .filter((id): id is string => Boolean(id)),
+      ),
     );
 
-    let products: Array<{ id: string; nombre: string; imagen: string | null; costo: Prisma.Decimal; stock: Prisma.Decimal }> = [];
+    let products: Array<{
+      id: string;
+      nombre: string;
+      imagen: string | null;
+      costo: Prisma.Decimal;
+      stock: Prisma.Decimal;
+    }> = [];
     if (productIds.length) {
       try {
         products = await this.prisma.product.findMany({
@@ -276,7 +412,9 @@ export class SalesService {
       }
     }
 
-    const productMap = new Map(products.map((product) => [product.id, product]));
+    const productMap = new Map(
+      products.map((product) => [product.id, product]),
+    );
 
     let normalizedItems = dto.items.map((item, index) =>
       this.normalizeItem(item, index, productMap),
@@ -308,9 +446,14 @@ export class SalesService {
         const isLast = index === normalizedItems.length - 1;
         const nextSubtotalSold = isLast
           ? remainingSold
-          : item.subtotalSold.div(totalSold).mul(expectedTotalSold).toDecimalPlaces(2);
+          : item.subtotalSold
+              .div(totalSold)
+              .mul(expectedTotalSold)
+              .toDecimalPlaces(2);
         remainingSold = remainingSold.minus(nextSubtotalSold);
-        const nextPriceSoldUnit = nextSubtotalSold.div(item.qty).toDecimalPlaces(6);
+        const nextPriceSoldUnit = nextSubtotalSold
+          .div(item.qty)
+          .toDecimalPlaces(6);
         return {
           ...item,
           priceSoldUnit: nextPriceSoldUnit,
@@ -338,35 +481,42 @@ export class SalesService {
       ? totalProfit.mul(commissionRate)
       : new Prisma.Decimal(0);
     const activeSession = await this.prisma.cashSession.findFirst({
-      where: { openedByUserId: userId, status: 'OPEN', closedAt: null },
-      orderBy: { openedAt: 'desc' },
+      where: { openedByUserId: userId, status: "OPEN", closedAt: null },
+      orderBy: { openedAt: "desc" },
     });
     if (!activeSession) {
-      throw new BadRequestException('Debes abrir caja antes de facturar.');
+      throw new BadRequestException("Debes abrir caja antes de facturar.");
     }
 
-    const paymentMethod = dto.paymentMethod ?? 'cash';
+    const paymentMethod = dto.paymentMethod ?? "cash";
     const paymentCashAmount = new Prisma.Decimal(
-      dto.paymentCashAmount ?? (paymentMethod === 'cash' ? totalSold.toNumber() : 0),
+      dto.paymentCashAmount ??
+        (paymentMethod === "cash" ? totalSold.toNumber() : 0),
     ).toDecimalPlaces(2);
     const paymentTransferAmount = new Prisma.Decimal(
-      dto.paymentTransferAmount ?? (paymentMethod === 'transfer' ? totalSold.toNumber() : 0),
+      dto.paymentTransferAmount ??
+        (paymentMethod === "transfer" ? totalSold.toNumber() : 0),
     ).toDecimalPlaces(2);
     const paidAmount = paymentCashAmount.plus(paymentTransferAmount);
     const requestedCreditAmount = new Prisma.Decimal(dto.creditAmount ?? 0);
     const computedCreditAmount = totalSold.minus(paidAmount);
     const creditAmount =
-      paymentMethod === 'credit'
+      paymentMethod === "credit"
         ? requestedCreditAmount.greaterThan(computedCreditAmount)
           ? requestedCreditAmount
           : computedCreditAmount
         : new Prisma.Decimal(0);
-    const creditBalance = paymentMethod === 'credit' ? creditAmount : new Prisma.Decimal(0);
-    if (paymentMethod !== 'credit' && paidAmount.lessThan(totalSold)) {
-      throw new BadRequestException('El monto pagado no cubre el total de la factura.');
+    const creditBalance =
+      paymentMethod === "credit" ? creditAmount : new Prisma.Decimal(0);
+    if (paymentMethod !== "credit" && paidAmount.lessThan(totalSold)) {
+      throw new BadRequestException(
+        "El monto pagado no cubre el total de la factura.",
+      );
     }
-    if (paymentMethod === 'credit' && paidAmount.greaterThan(totalSold)) {
-      throw new BadRequestException('El abono inicial no puede superar el total de la factura.');
+    if (paymentMethod === "credit" && paidAmount.greaterThan(totalSold)) {
+      throw new BadRequestException(
+        "El abono inicial no puede superar el total de la factura.",
+      );
     }
 
     try {
@@ -402,13 +552,17 @@ export class SalesService {
             creditAmount,
             creditPaidAmount: paidAmount,
             creditBalance,
-            kind: 'invoice',
-            status: paymentMethod === 'credit' && creditBalance.greaterThan(0) ? 'CREDIT' : 'PAID',
-            creditStatus: paymentMethod === 'credit'
-              ? creditBalance.greaterThan(0)
-                ? 'open'
-                : 'paid'
-              : 'none',
+            kind: "invoice",
+            status:
+              paymentMethod === "credit" && creditBalance.greaterThan(0)
+                ? "CREDIT"
+                : "PAID",
+            creditStatus:
+              paymentMethod === "credit"
+                ? creditBalance.greaterThan(0)
+                  ? "open"
+                  : "paid"
+                : "none",
             totalSold,
             totalCost,
             totalProfit,
@@ -449,8 +603,67 @@ export class SalesService {
       });
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
-      throw new BadRequestException('El módulo de ventas no está sincronizado con la base de datos.');
+      throw new BadRequestException(
+        "El módulo de ventas no está sincronizado con la base de datos.",
+      );
     }
+  }
+
+  async createInvoicePdfShareLink(
+    user: { id: string; role: Role },
+    dto: CreateSalePdfShareLinkDto,
+    requestBaseUrl?: string,
+  ) {
+    const saleId = dto.saleId.trim();
+    const sale = await this.prisma.sale.findUnique({
+      where: { id: saleId },
+      select: {
+        id: true,
+        userId: true,
+        isDeleted: true,
+      },
+    });
+
+    if (!sale || sale.isDeleted) {
+      throw new NotFoundException("Venta no encontrada.");
+    }
+
+    const canShare =
+      sale.userId === user.id ||
+      user.role === Role.ADMIN ||
+      user.role === Role.ASISTENTE;
+    if (!canShare) {
+      throw new ForbiddenException(
+        "No tienes permiso para compartir esta factura.",
+      );
+    }
+
+    const bytes = this.parsePdfBase64(dto.pdfBase64);
+    const fileName = this.sanitizePdfFileName(
+      dto.fileName ?? "",
+      `factura_${saleId.slice(0, 8)}.pdf`,
+    );
+    const uploadDir = this.resolveUploadDir();
+    const saleDir = path.join(uploadDir, "facturas", saleId);
+    await mkdir(saleDir, { recursive: true });
+    await writeFile(path.join(saleDir, fileName), bytes);
+
+    const relativeUrl = `/sales/public/invoice-pdf/${encodeURIComponent(saleId)}/${encodeURIComponent(fileName)}`;
+    const baseUrl = this.publicBaseUrl(requestBaseUrl);
+    if (!baseUrl) {
+      throw new BadRequestException(
+        "No se pudo construir el enlace público del PDF. Configura PUBLIC_BASE_URL o API_BASE_URL.",
+      );
+    }
+
+    return {
+      ok: true,
+      saleId,
+      fileName,
+      pdfUrl: `${baseUrl}${relativeUrl}`,
+      expiresIn: null,
+      createdAt: new Date().toISOString(),
+    };
   }
 
   async remove(requestUserId: string, saleId: string) {
@@ -459,14 +672,14 @@ export class SalesService {
       sale = await this.prisma.sale.findUnique({ where: { id: saleId } });
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
-      throw new NotFoundException('Venta no encontrada');
+      throw new NotFoundException("Venta no encontrada");
     }
     if (!sale || sale.isDeleted) {
-      throw new NotFoundException('Venta no encontrada');
+      throw new NotFoundException("Venta no encontrada");
     }
 
     if (sale.userId !== requestUserId) {
-      throw new ForbiddenException('No puedes eliminar esta venta');
+      throw new ForbiddenException("No puedes eliminar esta venta");
     }
 
     try {
@@ -480,7 +693,7 @@ export class SalesService {
       });
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
-      throw new NotFoundException('Venta no encontrada');
+      throw new NotFoundException("Venta no encontrada");
     }
 
     return { ok: true };
@@ -488,14 +701,14 @@ export class SalesService {
 
   async returnSale(requestUser: { id: string; role: Role }, saleId: string) {
     if (requestUser.role !== Role.ADMIN) {
-      throw new ForbiddenException('Solo un administrador puede devolver ventas');
+      throw new ForbiddenException(
+        "Solo un administrador puede devolver ventas",
+      );
     }
 
-    let sale:
-      | (Prisma.SaleGetPayload<{
-          include: { items: true };
-        }>)
-      | null = null;
+    let sale: Prisma.SaleGetPayload<{
+      include: { items: true };
+    }> | null = null;
 
     try {
       sale = await this.prisma.sale.findUnique({
@@ -504,11 +717,11 @@ export class SalesService {
       });
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
-      throw new NotFoundException('Venta no encontrada');
+      throw new NotFoundException("Venta no encontrada");
     }
 
     if (!sale || sale.isDeleted) {
-      throw new NotFoundException('Venta no encontrada');
+      throw new NotFoundException("Venta no encontrada");
     }
 
     try {
@@ -529,28 +742,30 @@ export class SalesService {
             deletedById: requestUser.id,
             note: sale!.note?.trim()
               ? `${sale!.note}\nDEVOLUCION: venta devuelta desde historial.`
-              : 'DEVOLUCION: venta devuelta desde historial.',
+              : "DEVOLUCION: venta devuelta desde historial.",
           },
           include: this.saleInclude(),
         });
       });
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
-      throw new NotFoundException('Venta no encontrada');
+      throw new NotFoundException("Venta no encontrada");
     }
   }
 
   async listCredits(user: { id: string; role: Role }, includePaid = false) {
     const where: Prisma.SaleWhereInput = {
       isDeleted: false,
-      creditStatus: includePaid ? { in: ['open', 'paid'] } : 'open',
-      ...(user.role === Role.ADMIN || user.role === Role.ASISTENTE ? {} : { userId: user.id }),
+      creditStatus: includePaid ? { in: ["open", "paid"] } : "open",
+      ...(user.role === Role.ADMIN || user.role === Role.ASISTENTE
+        ? {}
+        : { userId: user.id }),
     };
 
     try {
       return await this.prisma.sale.findMany({
         where,
-        orderBy: { saleDate: 'desc' },
+        orderBy: { saleDate: "desc" },
         include: this.saleInclude(),
       });
     } catch (error) {
@@ -568,29 +783,37 @@ export class SalesService {
       where: { id: saleId },
       include: { customer: true },
     });
-    if (!sale || sale.isDeleted || sale.creditStatus === 'none') {
-      throw new NotFoundException('Crédito no encontrado');
+    if (!sale || sale.isDeleted || sale.creditStatus === "none") {
+      throw new NotFoundException("Crédito no encontrado");
     }
-    if (sale.userId !== user.id && user.role !== Role.ADMIN && user.role !== Role.ASISTENTE) {
-      throw new ForbiddenException('No puedes modificar este crédito');
+    if (
+      sale.userId !== user.id &&
+      user.role !== Role.ADMIN &&
+      user.role !== Role.ASISTENTE
+    ) {
+      throw new ForbiddenException("No puedes modificar este crédito");
     }
 
     const activeSession = await this.prisma.cashSession.findFirst({
-      where: { openedByUserId: user.id, status: 'OPEN', closedAt: null },
-      orderBy: { openedAt: 'desc' },
+      where: { openedByUserId: user.id, status: "OPEN", closedAt: null },
+      orderBy: { openedAt: "desc" },
     });
     if (!activeSession) {
-      throw new BadRequestException('Debes abrir caja antes de registrar un abono.');
+      throw new BadRequestException(
+        "Debes abrir caja antes de registrar un abono.",
+      );
     }
 
     const cashAmount = new Prisma.Decimal(dto.cashAmount ?? 0);
     const transferAmount = new Prisma.Decimal(dto.transferAmount ?? 0);
     const amount = cashAmount.plus(transferAmount);
     if (amount.lte(0)) {
-      throw new BadRequestException('El abono debe ser mayor que cero.');
+      throw new BadRequestException("El abono debe ser mayor que cero.");
     }
     if (amount.greaterThan(sale.creditBalance)) {
-      throw new BadRequestException('El abono no puede superar el saldo pendiente.');
+      throw new BadRequestException(
+        "El abono no puede superar el saldo pendiente.",
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -607,16 +830,17 @@ export class SalesService {
       });
       const nextPaid = sale.creditPaidAmount.plus(amount);
       const nextBalance = sale.creditBalance.minus(amount);
-      const nextStatus = nextBalance.lte(0) ? 'paid' : 'open';
+      const nextStatus = nextBalance.lte(0) ? "paid" : "open";
       const updatedSale = await tx.sale.update({
         where: { id: saleId },
         data: {
           paymentCashAmount: sale.paymentCashAmount.plus(cashAmount),
-          paymentTransferAmount: sale.paymentTransferAmount.plus(transferAmount),
+          paymentTransferAmount:
+            sale.paymentTransferAmount.plus(transferAmount),
           creditPaidAmount: nextPaid,
           creditBalance: nextBalance,
           creditStatus: nextStatus,
-          status: nextStatus === 'paid' ? 'PAID' : 'CREDIT',
+          status: nextStatus === "paid" ? "PAID" : "CREDIT",
         },
         include: this.saleInclude(),
       });
@@ -625,8 +849,10 @@ export class SalesService {
   }
 
   async purgeAllForDebug(user: { id: string; role: string }) {
-    if (`${user.role}`.trim().toUpperCase() !== 'ADMIN') {
-      throw new ForbiddenException('Solo un administrador puede limpiar ventas.');
+    if (`${user.role}`.trim().toUpperCase() !== "ADMIN") {
+      throw new ForbiddenException(
+        "Solo un administrador puede limpiar ventas.",
+      );
     }
 
     const deleted = await this.prisma.sale.deleteMany();
@@ -639,7 +865,16 @@ export class SalesService {
   private normalizeItem(
     item: CreateSaleItemDto,
     index: number,
-    productMap: Map<string, { id: string; nombre: string; imagen: string | null; costo: Prisma.Decimal; stock: Prisma.Decimal }>,
+    productMap: Map<
+      string,
+      {
+        id: string;
+        nombre: string;
+        imagen: string | null;
+        costo: Prisma.Decimal;
+        stock: Prisma.Decimal;
+      }
+    >,
   ) {
     const qty = new Prisma.Decimal(item.qty);
     const priceSoldUnit = new Prisma.Decimal(item.priceSoldUnit);
@@ -655,7 +890,9 @@ export class SalesService {
     if (item.productId) {
       const product = productMap.get(item.productId);
       if (!product) {
-        throw new BadRequestException(`Producto inválido en item #${index + 1}`);
+        throw new BadRequestException(
+          `Producto inválido en item #${index + 1}`,
+        );
       }
 
       const costUnitSnapshot = new Prisma.Decimal(product.costo);
@@ -678,11 +915,15 @@ export class SalesService {
 
     const productName = item.productName?.trim();
     if (!productName) {
-      throw new BadRequestException(`Nombre requerido para item fuera de inventario #${index + 1}`);
+      throw new BadRequestException(
+        `Nombre requerido para item fuera de inventario #${index + 1}`,
+      );
     }
 
     if (item.costUnitSnapshot === undefined || item.costUnitSnapshot === null) {
-      throw new BadRequestException(`Costo unitario requerido en item fuera de inventario #${index + 1}`);
+      throw new BadRequestException(
+        `Costo unitario requerido en item fuera de inventario #${index + 1}`,
+      );
     }
 
     const costUnitSnapshot = new Prisma.Decimal(item.costUnitSnapshot);
@@ -707,19 +948,24 @@ export class SalesService {
     };
   }
 
-  private toNumber(value: Prisma.Decimal | number | string | null | undefined): number {
+  private toNumber(
+    value: Prisma.Decimal | number | string | null | undefined,
+  ): number {
     if (value === null || value === undefined) return 0;
-    if (typeof value === 'number') return value;
+    if (typeof value === "number") return value;
     return Number(value);
   }
 
-  private buildDateRange(from?: string, to?: string): { saleDate?: Prisma.DateTimeFilter } {
+  private buildDateRange(
+    from?: string,
+    to?: string,
+  ): { saleDate?: Prisma.DateTimeFilter } {
     const saleDate: Prisma.DateTimeFilter = {};
 
     if (from) {
       const fromDate = this.parseDateBoundary(from, true);
       if (Number.isNaN(fromDate.getTime())) {
-        throw new BadRequestException('Parámetro from inválido');
+        throw new BadRequestException("Parámetro from inválido");
       }
       saleDate.gte = fromDate;
     }
@@ -727,7 +973,7 @@ export class SalesService {
     if (to) {
       const toDate = this.parseDateBoundary(to, false);
       if (Number.isNaN(toDate.getTime())) {
-        throw new BadRequestException('Parámetro to inválido');
+        throw new BadRequestException("Parámetro to inválido");
       }
       saleDate.lt = toDate;
     }

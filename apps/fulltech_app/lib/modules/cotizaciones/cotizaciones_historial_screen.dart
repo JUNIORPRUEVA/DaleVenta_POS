@@ -473,7 +473,9 @@ class _CotizacionesHistorialScreenState
     final customerName = item.customerName.trim().isEmpty
         ? 'cliente'
         : item.customerName.trim();
-    return 'Hola $customerName, te compartimos tu cotización.\n'
+    return 'Hola $customerName, te compartimos tu cotización/factura en PDF.\n'
+        'Este documento corresponde a tu compra o solicitud en FULLTECH.\n'
+        'Puedes abrir el enlace para ver o descargar tu PDF.\n'
         'Cotización: ${item.id}\n'
         'Total: ${_money(item.total)}\n'
         'PDF: $pdfUrl';

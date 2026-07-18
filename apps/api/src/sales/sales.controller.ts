@@ -1,40 +1,68 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
-import { Role } from '@prisma/client';
-import { Request } from 'express';
-import { Roles } from '../auth/roles.decorator';
-import { RolesGuard } from '../auth/roles.guard';
-import { SalesService } from './sales.service';
-import { CreateSaleDto } from './dto/create-sale.dto';
-import { SalesRangeQueryDto } from './dto/sales-range-query.dto';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
+import { AuthGuard } from "@nestjs/passport";
+import { Role } from "@prisma/client";
+import { Request } from "express";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
+import { SalesService } from "./sales.service";
+import { CreateSaleDto } from "./dto/create-sale.dto";
+import { CreateSalePdfShareLinkDto } from "./dto/create-sale-pdf-share-link.dto";
+import { SalesRangeQueryDto } from "./dto/sales-range-query.dto";
 
-@UseGuards(AuthGuard('jwt'), RolesGuard)
-@Controller('sales')
+@UseGuards(AuthGuard("jwt"), RolesGuard)
+@Controller("sales")
 export class SalesController {
   constructor(private readonly sales: SalesService) {}
 
   @Get()
   listMine(@Req() req: Request, @Query() query: SalesRangeQueryDto) {
     const user = req.user as { id: string; role: string };
-    return this.sales.listMine(user.id, query.from, query.to, query.customerId, query.includeDeleted === 'true');
+    return this.sales.listMine(
+      user.id,
+      query.from,
+      query.to,
+      query.customerId,
+      query.includeDeleted === "true",
+    );
   }
 
-  @Get('invoices')
+  @Get("invoices")
   listInvoices(@Req() req: Request, @Query() query: SalesRangeQueryDto) {
     const user = req.user as { id: string; role: Role };
-    return this.sales.listInvoices(user, query.from, query.to, query.customerId, query.includeDeleted === 'true');
+    return this.sales.listInvoices(
+      user,
+      query.from,
+      query.to,
+      query.customerId,
+      query.includeDeleted === "true",
+    );
   }
 
-  @Get('credits')
-  listCredits(@Req() req: Request, @Query('includePaid') includePaid?: string) {
+  @Get("credits")
+  listCredits(@Req() req: Request, @Query("includePaid") includePaid?: string) {
     const user = req.user as { id: string; role: Role };
-    return this.sales.listCredits(user, includePaid === 'true');
+    return this.sales.listCredits(user, includePaid === "true");
   }
 
-  @Get('summary')
+  @Get("summary")
   summaryMine(@Req() req: Request, @Query() query: SalesRangeQueryDto) {
     const user = req.user as { id: string; role: string };
-    return this.sales.summaryMine(user.id, query.from, query.to, query.customerId);
+    return this.sales.summaryMine(
+      user.id,
+      query.from,
+      query.to,
+      query.customerId,
+    );
   }
 
   @Post()
@@ -43,31 +71,47 @@ export class SalesController {
     return this.sales.create(user.id, dto);
   }
 
-  @Delete('debug/purge')
+  @Post("pdf-share-link")
+  createPdfShareLink(
+    @Req() req: Request,
+    @Body() dto: CreateSalePdfShareLinkDto,
+  ) {
+    const user = req.user as { id: string; role: Role };
+    const forwardedProto = `${req.headers["x-forwarded-proto"] ?? ""}`
+      .split(",")[0]
+      .trim();
+    const proto = forwardedProto || req.protocol || "http";
+    const host = req.get("host") ?? "";
+    const requestBaseUrl = host ? `${proto}://${host}` : undefined;
+    return this.sales.createInvoicePdfShareLink(user, dto, requestBaseUrl);
+  }
+
+  @Delete("debug/purge")
   @Roles(Role.ADMIN)
   purgeAllForDebug(@Req() req: Request) {
     const user = req.user as { id: string; role: string };
     return this.sales.purgeAllForDebug(user);
   }
 
-  @Delete(':id')
-  remove(@Req() req: Request, @Param('id') id: string) {
+  @Delete(":id")
+  remove(@Req() req: Request, @Param("id") id: string) {
     const user = req.user as { id: string; role: string };
     return this.sales.remove(user.id, id);
   }
 
-  @Post(':id/credit-payments')
+  @Post(":id/credit-payments")
   addCreditPayment(
     @Req() req: Request,
-    @Param('id') id: string,
-    @Body() dto: { cashAmount?: number; transferAmount?: number; note?: string },
+    @Param("id") id: string,
+    @Body()
+    dto: { cashAmount?: number; transferAmount?: number; note?: string },
   ) {
     const user = req.user as { id: string; role: Role };
     return this.sales.addCreditPayment(user, id, dto);
   }
 
-  @Post(':id/return')
-  returnSale(@Req() req: Request, @Param('id') id: string) {
+  @Post(":id/return")
+  returnSale(@Req() req: Request, @Param("id") id: string) {
     const user = req.user as { id: string; role: Role };
     return this.sales.returnSale(user, id);
   }

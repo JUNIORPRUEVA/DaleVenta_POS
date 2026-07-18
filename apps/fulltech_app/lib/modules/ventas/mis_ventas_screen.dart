@@ -12,6 +12,7 @@ import '../../core/company/company_settings_repository.dart';
 import '../../core/debug/debug_admin_action.dart';
 import '../../core/routing/routes.dart';
 import '../../core/utils/money_formatters.dart';
+import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/pdf_action_menu.dart';
@@ -1013,6 +1014,75 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
     );
   }
 
+  String _normalizeWhatsAppLinkPhone(String? value) {
+    var digits = (value ?? '').replaceAll(RegExp(r'[^0-9]'), '').trim();
+    if (digits.length == 10 && digits.startsWith(RegExp(r'[268]'))) {
+      digits = '1$digits';
+    }
+    if (digits.length == 11 && digits.startsWith('1')) return digits;
+    if (digits.length >= 11 && digits.length <= 15) return digits;
+    return '';
+  }
+
+  String _buildClientInvoiceWhatsAppMessage(SaleModel sale, String pdfUrl) {
+    final customerName = (sale.customerName ?? '').trim().isEmpty
+        ? 'cliente'
+        : sale.customerName!.trim();
+    return 'Hola $customerName, te compartimos tu factura en PDF.\n'
+        'Este documento corresponde a tu compra en FULLTECH.\n'
+        'Puedes abrir el enlace para ver o descargar tu factura.\n'
+        'Factura: ${_shortSaleId(sale.id)}\n'
+        'Total: ${_money(sale.totalSold)}\n'
+        'PDF: $pdfUrl';
+  }
+
+  Future<void> _shareInvoicePdfWithClient({
+    required BuildContext launchContext,
+    required SaleModel sale,
+    required List<int> bytes,
+    required String filename,
+  }) async {
+    final phone = _normalizeWhatsAppLinkPhone(sale.customerPhone);
+    if (phone.isEmpty) {
+      showCashToast(
+        launchContext,
+        'El cliente no tiene teléfono válido para WhatsApp.',
+        isError: true,
+      );
+      return;
+    }
+
+    try {
+      final pdfUrl = await ref
+          .read(ventasRepositoryProvider)
+          .createInvoicePdfShareLink(
+            saleId: sale.id,
+            pdfBytes: bytes,
+            fileName: filename,
+          );
+
+      final uri = Uri.https('wa.me', '/$phone', {
+        'text': _buildClientInvoiceWhatsAppMessage(sale, pdfUrl),
+      });
+      if (!launchContext.mounted) return;
+      await safeOpenWhatsApp(
+        launchContext,
+        uri,
+        copiedMessage: 'No se pudo abrir WhatsApp. Enlace de factura copiado.',
+      );
+      if (launchContext.mounted) {
+        showCashToast(launchContext, 'WhatsApp abierto con la factura.');
+      }
+    } catch (e) {
+      if (!launchContext.mounted) return;
+      showCashToast(
+        launchContext,
+        'No se pudo preparar la factura para WhatsApp: $e',
+        isError: true,
+      );
+    }
+  }
+
   Future<void> _openSaleInvoicePdfPreview(
     BuildContext context,
     SaleModel sale,
@@ -1070,6 +1140,19 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                         bytes: pdfBytes,
                         fileName: fileName,
                         compact: isCompact,
+                      ),
+                      IconButton(
+                        tooltip: 'Enviar factura al cliente por WhatsApp',
+                        onPressed: () => _shareInvoicePdfWithClient(
+                          launchContext: dialogContext,
+                          sale: sale,
+                          bytes: pdfBytes,
+                          filename: fileName,
+                        ),
+                        icon: const Icon(
+                          Icons.chat_outlined,
+                          color: Color(0xFF0F7C92),
+                        ),
                       ),
                       const SizedBox(width: 6),
                       IconButton(
