@@ -128,10 +128,16 @@ img { max-width: 100%; display: block; }
   color: var(--white);
   background:
     linear-gradient(90deg, rgba(0, 43, 49, 0.92), rgba(0, 140, 149, 0.58)),
-    url("https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=1800&q=80") center/cover;
+    url("assets/security-systems.jpg") center/cover;
   min-height: 76vh;
   display: grid;
   align-items: center;
+}
+.home-hero {
+  background:
+    linear-gradient(90deg, rgba(0, 25, 31, 0.95) 0%, rgba(0, 63, 70, 0.84) 42%, rgba(0, 140, 149, 0.34) 100%),
+    url("assets/storefront.jpeg") center/cover;
+  min-height: 78vh;
 }
 .hero__inner {
   width: min(1180px, calc(100% - 32px));
@@ -220,6 +226,132 @@ img { max-width: 100%; display: block; }
 .trust-item {
   font-weight: 900;
   color: var(--brand-dark);
+}
+
+.company-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  gap: 34px;
+  align-items: center;
+}
+.company-intro__media {
+  min-height: 520px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  background: var(--soft);
+}
+.company-intro__media img {
+  width: 100%;
+  height: 100%;
+  min-height: 520px;
+  object-fit: cover;
+}
+.company-intro__content {
+  padding: 10px 0;
+}
+.info-list {
+  display: grid;
+  gap: 10px;
+  margin: 22px 0 0;
+}
+.info-list span {
+  display: grid;
+  gap: 2px;
+  padding: 14px 16px;
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  background: var(--white);
+  box-shadow: 0 10px 24px rgba(0, 63, 70, 0.06);
+  color: var(--muted);
+}
+.info-list strong {
+  color: var(--brand-dark);
+}
+
+.solutions-showcase {
+  max-width: none;
+  width: 100%;
+  padding-left: max(16px, calc((100% - 1180px) / 2));
+  padding-right: max(16px, calc((100% - 1180px) / 2));
+  background: #eef7f8;
+}
+.solution-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.solution-card {
+  position: relative;
+  min-height: 330px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--brand-dark);
+  color: var(--white);
+  box-shadow: 0 16px 34px rgba(0, 63, 70, 0.12);
+}
+.solution-card--wide {
+  grid-column: span 2;
+}
+.solution-card img {
+  width: 100%;
+  height: 100%;
+  min-height: 330px;
+  object-fit: cover;
+  opacity: 0.88;
+}
+.solution-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 25, 31, 0.02) 18%, rgba(0, 25, 31, 0.90) 100%);
+}
+.solution-card div {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 18px;
+  z-index: 1;
+}
+.solution-card span {
+  display: inline-flex;
+  margin-bottom: 8px;
+  color: #f7d45b;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.solution-card h3 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.16;
+}
+
+.location-band {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto 72px;
+  padding: 34px;
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 22px;
+  align-items: center;
+  background:
+    linear-gradient(90deg, rgba(0, 63, 70, 0.96), rgba(0, 140, 149, 0.78)),
+    url("assets/gate-motor-store.jpeg") center/cover;
+  color: var(--white);
+}
+.location-band h2 { margin-bottom: 8px; }
+.location-band p {
+  margin: 0;
+  max-width: 720px;
+  color: rgba(255, 255, 255, 0.88);
+}
+.location-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 .section { padding: 72px 0; }
@@ -679,8 +811,12 @@ img { max-width: 100%; display: block; }
   .contact-layout,
   .service-layout,
   .section--split,
+  .company-intro,
   .shop-hero__inner { grid-template-columns: 1fr; }
   .shop-panel { position: static; }
+  .solution-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .solution-card--wide { grid-column: span 2; }
+  .location-band { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {
@@ -719,11 +855,41 @@ img { max-width: 100%; display: block; }
   }
   .legal-nav { position: static; }
   .hero { min-height: 70vh; }
-  .hero__inner { padding: 62px 0 82px; }
+  .home-hero {
+    min-height: auto;
+    background:
+      linear-gradient(180deg, rgba(0, 25, 31, 0.78) 0%, rgba(0, 63, 70, 0.94) 58%, rgba(0, 63, 70, 0.98) 100%),
+      url("assets/storefront.jpeg") center top/cover;
+  }
+  .hero__inner { padding: 56px 0 72px; }
+  .hero h1 { font-size: 44px; }
+  .hero p { font-size: 17px; }
   .cart-line { grid-template-columns: 1fr; }
   .shop-toolbar { align-items: stretch; flex-direction: column; }
   .product-card__footer { align-items: stretch; flex-direction: column; }
   .product-actions { justify-content: stretch; }
   .product-actions .button { width: 100%; }
   .cart-mini { grid-template-columns: 1fr; }
+  .company-intro__media,
+  .company-intro__media img {
+    min-height: 280px;
+  }
+  .solution-grid,
+  .solution-card--wide {
+    grid-template-columns: 1fr;
+    grid-column: auto;
+  }
+  .solution-card,
+  .solution-card img {
+    min-height: 260px;
+  }
+  .location-band {
+    padding: 26px 18px;
+  }
+  .location-actions {
+    justify-content: stretch;
+  }
+  .location-actions .button {
+    width: 100%;
+  }
 }

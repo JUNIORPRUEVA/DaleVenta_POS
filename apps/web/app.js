@@ -1,6 +1,11 @@
 import { FulltechStore as fallbackStore } from "./data.js";
 
 (async function () {
+  const companyOverride = {
+    phone: "+1 829 477 0756",
+    whatsapp: "18294770756",
+    address: "Calle Beller #9, Higuey, La Altagracia, Republica Dominicana"
+  };
   let store = fallbackStore;
   let storeSource = "fallback";
   const state = {
@@ -36,6 +41,7 @@ import { FulltechStore as fallbackStore } from "./data.js";
           company: {
             ...fallbackStore.company,
             ...(payload.company || {}),
+            ...companyOverride,
             updatedAt: payload.updatedAt || fallbackStore.company.updatedAt
           },
           categories: payload.categories || [...new Set(apiProducts.map((item) => item.category))],
@@ -48,6 +54,13 @@ import { FulltechStore as fallbackStore } from "./data.js";
   } catch (_) {
     store = fallbackStore;
   }
+  store = {
+    ...store,
+    company: {
+      ...store.company,
+      ...companyOverride
+    }
+  };
 
   const money = new Intl.NumberFormat("es-DO", {
     style: "currency",

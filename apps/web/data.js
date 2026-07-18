@@ -3,10 +3,10 @@ export const FulltechStore = {
     name: "FULLTECH SRL",
     tradeName: "FULLTECH",
     rnc: "Pendiente de completar",
-    phone: "+1 809 000 0000",
-    whatsapp: "18090000000",
+    phone: "+1 829 477 0756",
+    whatsapp: "18294770756",
     email: "ventas@fulltech.com.do",
-    address: "Higuey, La Altagracia, Republica Dominicana",
+    address: "Calle Beller #9, Higuey, La Altagracia, Republica Dominicana",
     hours: "Lunes a sabado de 8:00 a.m. a 6:00 p.m.",
     updatedAt: "18 de julio de 2026"
   },
@@ -33,7 +33,7 @@ export const FulltechStore = {
       category: "Seguridad",
       price: 18500,
       warranty: "12 meses",
-      image: "https://images.unsplash.com/photo-1558002038-1055907df827?auto=format&fit=crop&w=900&q=80",
+      image: "assets/cctv-installation.jpg",
       description: "Solucion de videovigilancia para hogares y negocios con DVR, camaras, cableado base y configuracion remota.",
       badge: "Mas vendido",
       featured: true
@@ -55,7 +55,7 @@ export const FulltechStore = {
       category: "Punto de venta",
       price: 24900,
       warranty: "12 meses",
-      image: "https://images.unsplash.com/photo-1556742502-ec7c0e9f34b1?auto=format&fit=crop&w=900&q=80",
+      image: "assets/pos-system.jpeg",
       description: "Equipo POS con configuracion para facturacion, control de ventas, inventario y operacion comercial diaria.",
       badge: "Negocios",
       featured: true
@@ -76,7 +76,7 @@ export const FulltechStore = {
       category: "Automatizacion",
       price: 28500,
       warranty: "12 meses",
-      image: "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=900&q=80",
+      image: "assets/gate-motor.jpg",
       description: "Automatizacion de portones residenciales o comerciales con controles, sensores y puesta en marcha.",
       badge: "Instalacion"
     },
