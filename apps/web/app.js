@@ -309,6 +309,22 @@ import { FulltechStore as fallbackStore } from "./data.js";
 
   function wireEvents() {
     document.addEventListener("click", (event) => {
+      const navToggle = event.target.closest("[data-nav-toggle]");
+      const header = document.querySelector(".site-header");
+      if (navToggle && header) {
+        const isOpen = header.classList.toggle("is-open");
+        navToggle.setAttribute("aria-expanded", String(isOpen));
+        return;
+      }
+      if (header?.classList.contains("is-open") && !event.target.closest(".nav__links") && !event.target.closest("[data-nav-toggle]")) {
+        header.classList.remove("is-open");
+        document.querySelector("[data-nav-toggle]")?.setAttribute("aria-expanded", "false");
+      }
+      if (event.target.closest(".nav__links a")) {
+        header?.classList.remove("is-open");
+        document.querySelector("[data-nav-toggle]")?.setAttribute("aria-expanded", "false");
+      }
+
       const addButton = event.target.closest("[data-add-to-cart]");
       if (addButton) addToCart(addButton.dataset.addToCart);
 
