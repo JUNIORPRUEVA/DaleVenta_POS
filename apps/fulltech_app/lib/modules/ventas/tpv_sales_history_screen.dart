@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 
+import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/printing/unified_ticket_printer.dart';
@@ -13,6 +14,7 @@ import '../../core/routing/routes.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/fulltech_page_header.dart';
+import '../../core/widgets/pdf_action_menu.dart';
 import '../cash/cash_dialogs.dart';
 import 'data/ventas_repository.dart';
 import 'sales_models.dart';
@@ -229,6 +231,16 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   }
 
   Future<void> _returnSale(SaleModel sale) async {
+    final isAdmin = ref.read(authStateProvider).user?.appRole == AppRole.admin;
+    if (!isAdmin) {
+      showCashToast(
+        context,
+        'Acceso restringido: solo un administrador puede hacer devoluciones.',
+        isError: true,
+      );
+      return;
+    }
+
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -343,6 +355,12 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                           ),
                         ),
                       ),
+                      PdfActionMenu(
+                        bytes: bytes,
+                        fileName: filename,
+                        compact: compact,
+                      ),
+                      const SizedBox(width: 6),
                       IconButton(
                         tooltip: 'Cerrar',
                         onPressed: () => Navigator.of(dialogContext).pop(),
@@ -358,7 +376,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                     canChangeOrientation: false,
                     canDebug: false,
                     allowPrinting: true,
-                    allowSharing: true,
+                    allowSharing: false,
                     maxPageWidth: compact ? 640 : 900,
                     pdfFileName: filename,
                     build: (_) async => bytes,

@@ -85,12 +85,19 @@ Future<void> safeOpenWhatsApp(
 }) async {
   final digits = _extractWhatsAppDigits(uri);
   if (digits != null && digits.isNotEmpty) {
-    final appUri = Uri.parse('whatsapp://send?phone=$digits');
+    final text = (uri.queryParameters['text'] ?? '').trim();
+    final appUri = Uri(
+      scheme: 'whatsapp',
+      host: 'send',
+      queryParameters: {'phone': digits, if (text.isNotEmpty) 'text': text},
+    );
     if (await _tryOpenUri(appUri)) {
       return;
     }
 
-    final webUri = Uri.parse('https://wa.me/$digits');
+    final webUri = Uri.https('wa.me', '/$digits', {
+      if (text.isNotEmpty) 'text': text,
+    });
     if (await _tryOpenUri(webUri)) {
       return;
     }

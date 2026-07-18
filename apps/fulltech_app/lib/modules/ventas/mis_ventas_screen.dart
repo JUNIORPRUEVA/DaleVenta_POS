@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 
+import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/debug/debug_admin_action.dart';
@@ -13,6 +14,7 @@ import '../../core/routing/routes.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
+import '../../core/widgets/pdf_action_menu.dart';
 import '../cash/cash_dialogs.dart';
 import 'application/ventas_controller.dart';
 import 'data/ventas_repository.dart';
@@ -156,6 +158,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(ventasControllerProvider);
     final user = ref.watch(authStateProvider).user;
+    final isAdmin = user?.appRole == AppRole.admin;
     final isDesktop = _isDesktop(context);
 
     return Scaffold(
@@ -177,17 +180,19 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
             },
             icon: const Icon(Icons.refresh),
           ),
-          IconButton(
-            tooltip: 'Informe PDF de quincena',
-            onPressed: () async {
-              await _openPdfPreviewDialog(
-                context,
-                employeeName: user?.nombreCompleto ?? user?.email ?? 'Empleado',
-                state: state,
-              );
-            },
-            icon: const Icon(Icons.picture_as_pdf_outlined),
-          ),
+          if (isAdmin)
+            IconButton(
+              tooltip: 'Informe PDF de quincena',
+              onPressed: () async {
+                await _openPdfPreviewDialog(
+                  context,
+                  employeeName:
+                      user?.nombreCompleto ?? user?.email ?? 'Empleado',
+                  state: state,
+                );
+              },
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+            ),
         ],
       ),
       drawer: buildAdaptiveDrawer(context, currentUser: user),
@@ -886,6 +891,16 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
   }
 
   Future<void> _returnSale(BuildContext context, SaleModel sale) async {
+    final isAdmin = ref.read(authStateProvider).user?.appRole == AppRole.admin;
+    if (!isAdmin) {
+      showCashToast(
+        context,
+        'Acceso restringido: solo un administrador puede hacer devoluciones.',
+        isError: true,
+      );
+      return;
+    }
+
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1051,6 +1066,12 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                           ),
                         ),
                       ),
+                      PdfActionMenu(
+                        bytes: pdfBytes,
+                        fileName: fileName,
+                        compact: isCompact,
+                      ),
+                      const SizedBox(width: 6),
                       IconButton(
                         tooltip: 'Cerrar',
                         onPressed: () => Navigator.of(dialogContext).pop(),
@@ -1066,7 +1087,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                     canChangeOrientation: false,
                     canDebug: false,
                     allowPrinting: true,
-                    allowSharing: true,
+                    allowSharing: false,
                     maxPageWidth: isCompact ? 640 : 900,
                     pdfFileName: fileName,
                     build: (_) async => pdfBytes,

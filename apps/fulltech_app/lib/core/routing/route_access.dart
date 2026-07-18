@@ -24,6 +24,7 @@ class RouteAccess {
       case Routes.catalogo:
         return AppPermission.viewCatalog;
       case Routes.ventas:
+        return AppPermission.viewSalesReports;
       case Routes.ventasLista:
       case Routes.ventasCreditos:
       case Routes.caja:
@@ -132,7 +133,7 @@ class RouteAccess {
       return Routes.clientes;
     }
     if (hasPermission(role, AppPermission.viewSales)) {
-      return Routes.ventas;
+      return Routes.ventasLista;
     }
     if (hasPermission(role, AppPermission.viewCatalog)) {
       return Routes.catalogo;

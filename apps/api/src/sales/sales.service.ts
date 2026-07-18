@@ -487,6 +487,10 @@ export class SalesService {
   }
 
   async returnSale(requestUser: { id: string; role: Role }, saleId: string) {
+    if (requestUser.role !== Role.ADMIN) {
+      throw new ForbiddenException('Solo un administrador puede devolver ventas');
+    }
+
     let sale:
       | (Prisma.SaleGetPayload<{
           include: { items: true };
@@ -505,14 +509,6 @@ export class SalesService {
 
     if (!sale || sale.isDeleted) {
       throw new NotFoundException('Venta no encontrada');
-    }
-
-    const canReturn =
-      sale.userId === requestUser.id ||
-      requestUser.role === Role.ADMIN ||
-      requestUser.role === Role.ASISTENTE;
-    if (!canReturn) {
-      throw new ForbiddenException('No puedes devolver esta venta');
     }
 
     try {

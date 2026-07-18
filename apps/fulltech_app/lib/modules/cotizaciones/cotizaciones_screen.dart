@@ -25,6 +25,7 @@ import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/fulltech_dialog.dart';
 import '../../core/widgets/fulltech_page_header.dart';
+import '../../core/widgets/pdf_action_menu.dart';
 import '../../core/widgets/responsive_shell.dart';
 import '../../core/widgets/product_network_image.dart';
 import '../../features/catalogo/application/catalog_controller.dart';
@@ -58,6 +59,17 @@ enum _CheckoutPaymentMethod {
   credit('Crédito', Icons.credit_score_outlined);
 
   const _CheckoutPaymentMethod(this.label, this.icon);
+  final String label;
+  final IconData icon;
+}
+
+enum _QuotePdfShareAction {
+  sharePdf('Compartir PDF', Icons.picture_as_pdf_outlined),
+  shareClient('Compartir con cliente', Icons.person_outline),
+  save('Guardar en descargas', Icons.download_outlined),
+  admin('Enviar admin', Icons.verified_user_outlined);
+
+  const _QuotePdfShareAction(this.label, this.icon);
   final String label;
   final IconData icon;
 }
@@ -1981,6 +1993,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           ? ''
           : _formatAccountingInput(editingItem.unitPrice),
     );
+    final isAdmin = ref.read(authStateProvider).user?.appRole == AppRole.admin;
 
     final ok = await showDialog<bool>(
       context: context,
@@ -2154,18 +2167,20 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                               value: _money(total),
                             ),
                           ),
-                          Container(
-                            width: 1,
-                            height: 30,
-                            color: const Color(0xFFE2E8F0),
-                          ),
-                          Expanded(
-                            child: _ManualItemMetric(
-                              label: 'Utilidad',
-                              value: _money(profit),
-                              alignEnd: true,
+                          if (isAdmin) ...[
+                            Container(
+                              width: 1,
+                              height: 30,
+                              color: const Color(0xFFE2E8F0),
                             ),
-                          ),
+                            Expanded(
+                              child: _ManualItemMetric(
+                                label: 'Utilidad',
+                                value: _money(profit),
+                                alignEnd: true,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -3558,68 +3573,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
   }
 
-  Future<void> enviarPdfCotizacionACliente({
-    required CotizacionModel cotizacion,
-    required Uint8List pdfBytes,
-  }) async {
-    final customerPhone = (cotizacion.customerPhone ?? '').trim();
-    if (customerPhone.isEmpty) {
-      throw ApiException(
-        'El cliente no tiene teléfono válido para enviar la cotización.',
-        null,
-      );
-    }
-
-    final dateFmt = DateFormat('yyyyMMdd_HHmm');
-    final fileName =
-        'cotizacion_${dateFmt.format(cotizacion.createdAt)}_${cotizacion.id.substring(0, 6)}.pdf';
-
-    await ref
-        .read(cotizacionesRepositoryProvider)
-        .sendWhatsAppQuotation(
-          quotationId: cotizacion.id,
-          destinationType: 'client',
-          pdfBytes: pdfBytes,
-          fileName: fileName,
-          messageText: _buildCustomerDeliveryMessage(cotizacion: cotizacion),
-        );
-  }
-
-  String _buildCustomerDeliveryMessage({required CotizacionModel cotizacion}) {
-    final safeRecipient = cotizacion.customerName.trim().isEmpty
-        ? 'Hola'
-        : 'Hola ${cotizacion.customerName.trim()}';
-    final quoteCode = _buildQuotationCode(cotizacion.id);
-    final total = formatRdCurrencyAccounting(cotizacion.total);
-
-    return [
-      '$safeRecipient, te compartimos tu cotización en PDF.',
-      'Cotización: $quoteCode',
-      'Cliente: ${cotizacion.customerName}',
-      'Total: $total',
-    ].join('\n');
-  }
-
-  String _customerDeliveryButtonLabel(bool compact) {
-    return compact ? 'A cliente' : 'Enviar al cliente';
-  }
-
   String _tinyCustomerPhoneHint(CotizacionModel cotizacion) {
     final phone = (cotizacion.customerPhone ?? '').trim();
     if (phone.isEmpty) return '';
     return 'Cliente: $phone';
-  }
-
-  String _customerDeliverySuccessMessage() {
-    return 'Cotización enviada al cliente correctamente.';
-  }
-
-  String _customerDeliveryTimeoutMessage() {
-    return 'Tiempo de espera agotado enviando el PDF al cliente.';
-  }
-
-  String _customerDeliveryErrorPrefix() {
-    return 'No se pudo enviar el PDF al cliente';
   }
 
   String _formatWhatsAppSendError(ApiException error, {required bool toAdmin}) {
@@ -3693,17 +3650,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     }
   }
 
-  String _buildQuotationCode(String id) {
-    final normalized = id.replaceAll('-', '').trim().toUpperCase();
-    if (normalized.isEmpty) {
-      return 'COT-MANUAL';
-    }
-    final token = normalized.length > 8
-        ? normalized.substring(0, 8)
-        : normalized;
-    return 'COT-$token';
-  }
-
   bool _isUuid(String? value) {
     final v = (value ?? '').trim();
     if (v.isEmpty) return false;
@@ -3759,16 +3705,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     await showDialog<void>(
       context: context,
       builder: (context) {
-        var sendingWhatsApp = false;
         var sendingAdminApproval = false;
+        var downloadingPdf = false;
         String? dialogNotification;
         bool dialogNotificationIsError = false;
         final media = MediaQuery.sizeOf(context);
         final compact = media.width < 560;
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            final canSend = !sendingWhatsApp;
-            final canSendAdmin = !sendingAdminApproval;
+            final busy = sendingAdminApproval || downloadingPdf;
 
             void showDialogNotification(
               String message, {
@@ -3779,40 +3724,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 dialogNotification = message;
                 dialogNotificationIsError = isError;
               });
-            }
-
-            Future<void> sendWhatsApp() async {
-              setDialogState(() => sendingWhatsApp = true);
-              try {
-                showDialogNotification('Enviando cotización al cliente...');
-                final persisted = await _ensurePersistedQuotationForSend(
-                  cotizacion,
-                );
-                await enviarPdfCotizacionACliente(
-                  cotizacion: persisted,
-                  pdfBytes: bytes,
-                ).timeout(const Duration(seconds: 25));
-                showDialogNotification(_customerDeliverySuccessMessage());
-              } on TimeoutException {
-                showDialogNotification(
-                  _customerDeliveryTimeoutMessage(),
-                  isError: true,
-                );
-              } on ApiException catch (e) {
-                showDialogNotification(
-                  _formatWhatsAppSendError(e, toAdmin: false),
-                  isError: true,
-                );
-              } catch (e) {
-                showDialogNotification(
-                  '${_customerDeliveryErrorPrefix()}: $e',
-                  isError: true,
-                );
-              } finally {
-                if (context.mounted) {
-                  setDialogState(() => sendingWhatsApp = false);
-                }
-              }
             }
 
             Future<void> sendAdminApproval() async {
@@ -3853,6 +3764,50 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               }
             }
 
+            Future<void> downloadPdf() async {
+              setDialogState(() => downloadingPdf = true);
+              try {
+                final saved = await saveCotizacionPdfToDownloads(
+                  bytes: bytes,
+                  cotizacion: cotizacion,
+                );
+                showDialogNotification(
+                  saved
+                      ? 'Cotización descargada en la carpeta Descargas.'
+                      : 'No se pudo descargar la cotización.',
+                  isError: !saved,
+                );
+              } catch (e) {
+                showDialogNotification(
+                  'No se pudo descargar la cotización: $e',
+                  isError: true,
+                );
+              } finally {
+                if (context.mounted) {
+                  setDialogState(() => downloadingPdf = false);
+                }
+              }
+            }
+
+            Future<void> runShareAction(_QuotePdfShareAction action) async {
+              if (!context.mounted) return;
+              switch (action) {
+                case _QuotePdfShareAction.sharePdf:
+                case _QuotePdfShareAction.shareClient:
+                  await shareCotizacionPdf(
+                    bytes: bytes,
+                    cotizacion: cotizacion,
+                  );
+                  break;
+                case _QuotePdfShareAction.save:
+                  await downloadPdf();
+                  break;
+                case _QuotePdfShareAction.admin:
+                  await sendAdminApproval();
+                  break;
+              }
+            }
+
             return Dialog(
               backgroundColor: Colors.white,
               surfaceTintColor: Colors.white,
@@ -3882,47 +3837,61 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                   style: TextStyle(fontWeight: FontWeight.w700),
                                 ),
                               ),
-                              TextButton.icon(
-                                onPressed: canSend ? sendWhatsApp : null,
-                                icon: sendingWhatsApp
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Icon(Icons.chat_outlined),
-                                label: Text(
-                                  _customerDeliveryButtonLabel(compact),
+                              PopupMenuButton<_QuotePdfShareAction>(
+                                enabled: !busy,
+                                tooltip: 'Opciones para compartir',
+                                position: PopupMenuPosition.under,
+                                offset: const Offset(0, 8),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
-                              ),
-                              const SizedBox(width: 6),
-                              TextButton.icon(
-                                onPressed: canSendAdmin
-                                    ? sendAdminApproval
-                                    : null,
-                                icon: sendingAdminApproval
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Icon(Icons.verified_user_outlined),
-                                label: Text(
-                                  compact ? 'A admin' : 'Enviar a admin',
+                                onSelected: (action) =>
+                                    unawaited(runShareAction(action)),
+                                itemBuilder: (context) => [
+                                  for (final action
+                                      in _QuotePdfShareAction.values)
+                                    PopupMenuItem<_QuotePdfShareAction>(
+                                      value: action,
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            action.icon,
+                                            size: 18,
+                                            color: const Color(0xFF0F7C92),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Text(
+                                            action.label,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 8,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      if (downloadingPdf)
+                                        const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      else
+                                        const Icon(Icons.ios_share_outlined),
+                                      const SizedBox(width: 8),
+                                      const Text('Compartir'),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 6),
-                              TextButton.icon(
-                                onPressed: () => shareCotizacionPdf(
-                                  bytes: bytes,
-                                  cotizacion: cotizacion,
-                                ),
-                                icon: const Icon(Icons.download_outlined),
-                                label: const Text('Descargar'),
                               ),
                               IconButton(
                                 onPressed: () => Navigator.pop(context),
@@ -3999,8 +3968,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                           canChangePageFormat: false,
                           canChangeOrientation: false,
                           canDebug: false,
-                          allowPrinting: true,
-                          allowSharing: true,
+                          allowPrinting: false,
+                          allowSharing: false,
                           maxPageWidth: compact ? 700 : 980,
                           scrollViewDecoration: const BoxDecoration(
                             color: Colors.white,
@@ -4195,6 +4164,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                           ),
                         ),
                       ),
+                      PdfActionMenu(
+                        bytes: bytes,
+                        fileName: filename,
+                        compact: compact,
+                      ),
+                      const SizedBox(width: 6),
                       IconButton(
                         tooltip: 'Cerrar',
                         onPressed: () => Navigator.of(dialogContext).pop(),
@@ -4210,7 +4185,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     canChangeOrientation: false,
                     canDebug: false,
                     allowPrinting: true,
-                    allowSharing: true,
+                    allowSharing: false,
                     maxPageWidth: compact ? 640 : 900,
                     pdfFileName: filename,
                     build: (_) async => bytes,
@@ -5169,6 +5144,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                               money: _money,
                               parseAmount: _parseAccountingInput,
                               formatAmount: _formatAccountingInput,
+                              isAdmin: isAdmin,
                               onCancel: () => setState(() {
                                 _showDesktopManualItemForm = false;
                                 _desktopManualEditIndex = null;
@@ -7420,6 +7396,7 @@ class _DesktopManualItemPanel extends StatefulWidget {
     required this.money,
     required this.parseAmount,
     required this.formatAmount,
+    required this.isAdmin,
     required this.onCancel,
     required this.onSubmit,
   });
@@ -7428,6 +7405,7 @@ class _DesktopManualItemPanel extends StatefulWidget {
   final String Function(double value) money;
   final double? Function(String raw) parseAmount;
   final String Function(num value) formatAmount;
+  final bool isAdmin;
   final VoidCallback onCancel;
   final _ManualItemSubmit onSubmit;
 
@@ -7633,18 +7611,20 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
                       value: widget.money(_total),
                     ),
                   ),
-                  Container(
-                    width: 1,
-                    height: 30,
-                    color: const Color(0xFFE2E8F0),
-                  ),
-                  Expanded(
-                    child: _ManualItemMetric(
-                      label: 'Utilidad',
-                      value: widget.money(_profit),
-                      alignEnd: true,
+                  if (widget.isAdmin) ...[
+                    Container(
+                      width: 1,
+                      height: 30,
+                      color: const Color(0xFFE2E8F0),
                     ),
-                  ),
+                    Expanded(
+                      child: _ManualItemMetric(
+                        label: 'Utilidad',
+                        value: widget.money(_profit),
+                        alignEnd: true,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

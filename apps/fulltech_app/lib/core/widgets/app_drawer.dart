@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../modules/cash/cash_dialogs.dart';
 import '../../modules/cash/cash_providers.dart';
+import '../auth/app_permissions.dart';
 import '../auth/auth_provider.dart';
 import '../auth/app_role.dart';
 import '../models/user_model.dart';
@@ -82,16 +83,20 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
   @override
   Widget build(BuildContext context) {
     final currentUser = widget.currentUser;
-    final sections = buildAppNavigationSections(ref, currentUser);
-    final groups = _buildDrawerGroups(sections);
     final mediaQuery = MediaQuery.of(context);
     final isDesktop = mediaQuery.size.width >= kDesktopShellBreakpoint;
     final isCompactMobile = mediaQuery.size.width < 390;
-    final location = safeCurrentLocation(context);
     final role =
         currentUser?.appRole ??
         ref.watch(authStateProvider).user?.appRole ??
         AppRole.unknown;
+    final sections = buildAppNavigationSections(ref, currentUser);
+    final groups = _buildDrawerGroups(
+      sections,
+      includeMobileAdminShortcuts: !isDesktop,
+      role: role,
+    );
+    final location = safeCurrentLocation(context);
     final branding = resolveRoleBranding(role);
     final userDisplayName =
         currentUser?.nombreCompleto.trim().isNotEmpty == true
@@ -352,7 +357,11 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
   }
 }
 
-List<_DrawerMenuGroup> _buildDrawerGroups(List<AppNavigationSection> sections) {
+List<_DrawerMenuGroup> _buildDrawerGroups(
+  List<AppNavigationSection> sections, {
+  required bool includeMobileAdminShortcuts,
+  required AppRole role,
+}) {
   final itemsByRoute = <String, AppNavigationItem>{};
   for (final section in sections) {
     for (final item in section.items) {
@@ -420,6 +429,36 @@ List<_DrawerMenuGroup> _buildDrawerGroups(List<AppNavigationSection> sections) {
         ],
       ),
     );
+  }
+
+  if (includeMobileAdminShortcuts) {
+    final turnosItem =
+        pick(Routes.cajaTurnosHistorial) ??
+        (hasPermission(role, AppPermission.viewSales)
+            ? const AppNavigationItem(
+                icon: Icons.schedule_outlined,
+                title: 'Turnos',
+                route: Routes.cajaTurnosHistorial,
+              )
+            : null);
+    final equipoItem = pick(Routes.users);
+    final configuracionItem = pick(Routes.configuracion);
+    final mobileItems = <AppNavigationItem>[
+      if (turnosItem != null) turnosItem,
+      if (equipoItem != null) equipoItem,
+      if (configuracionItem != null) configuracionItem,
+    ];
+
+    if (mobileItems.isNotEmpty) {
+      groups.add(
+        _DrawerMenuGroup(
+          title: 'APK',
+          icon: Icons.phone_android_rounded,
+          items: mobileItems,
+          openOnHover: false,
+        ),
+      );
+    }
   }
 
   addGroup('Operaciones', Icons.work_outline_rounded, [

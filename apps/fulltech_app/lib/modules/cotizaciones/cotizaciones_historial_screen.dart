@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -19,6 +22,17 @@ import '../ventas/data/ventas_repository.dart';
 import 'cotizacion_models.dart';
 import 'data/cotizaciones_repository.dart';
 import 'utils/cotizacion_pdf_service.dart';
+
+enum _QuotePdfShareAction {
+  sharePdf('Compartir PDF', Icons.picture_as_pdf_outlined),
+  shareClient('Compartir con cliente', Icons.person_outline),
+  save('Guardar en descargas', Icons.download_outlined),
+  admin('Enviar admin', Icons.verified_user_outlined);
+
+  const _QuotePdfShareAction(this.label, this.icon);
+  final String label;
+  final IconData icon;
+}
 
 class _HistorialFilterState {
   const _HistorialFilterState({
@@ -391,6 +405,24 @@ class _CotizacionesHistorialScreenState
     }
   }
 
+  String _buildAdminApprovalMessage(CotizacionModel item) {
+    final sellerName = (item.createdByUserName ?? '').trim();
+    final safeSellerName = sellerName.isEmpty ? 'El vendedor' : sellerName;
+    return '$safeSellerName quiere que confirme esta cotización y que esté en orden.';
+  }
+
+  Future<void> _sendPdfToAdmin(CotizacionModel item, Uint8List bytes) {
+    return ref
+        .read(cotizacionesRepositoryProvider)
+        .sendWhatsAppQuotation(
+          quotationId: item.id,
+          destinationType: 'admin',
+          pdfBytes: bytes,
+          fileName: buildCotizacionPdfFileName(item),
+          messageText: _buildAdminApprovalMessage(item),
+        );
+  }
+
   Future<void> _openPdfPreview(CotizacionModel item) async {
     final company = await _getCompanySettingsForPdf();
     final bytes = await buildCotizacionPdf(cotizacion: item, company: company);
@@ -399,71 +431,224 @@ class _CotizacionesHistorialScreenState
     await showDialog<void>(
       context: context,
       builder: (context) {
+        var busy = false;
+        String? dialogNotification;
+        bool dialogNotificationIsError = false;
         final media = MediaQuery.sizeOf(context);
         final compact = media.width < 560;
-        return Dialog(
-          backgroundColor: Colors.white,
-          surfaceTintColor: Colors.white,
-          insetPadding: EdgeInsets.symmetric(
-            horizontal: compact ? 6 : 20,
-            vertical: compact ? 6 : 16,
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: SizedBox(
-            width: compact ? media.width - 12 : media.width * 0.94,
-            height: compact ? media.height * 0.96 : media.height * 0.92,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 8, 6),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.picture_as_pdf_outlined),
-                      const SizedBox(width: 8),
-                      const Expanded(
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            void showDialogNotification(
+              String message, {
+              bool isError = false,
+            }) {
+              if (!context.mounted) return;
+              setDialogState(() {
+                dialogNotification = message;
+                dialogNotificationIsError = isError;
+              });
+            }
+
+            Future<void> runBusy(Future<void> Function() action) async {
+              setDialogState(() => busy = true);
+              try {
+                await action();
+              } on TimeoutException {
+                showDialogNotification(
+                  'Tiempo de espera agotado. Intenta nuevamente.',
+                  isError: true,
+                );
+              } catch (e) {
+                showDialogNotification('$e', isError: true);
+              } finally {
+                if (context.mounted) {
+                  setDialogState(() => busy = false);
+                }
+              }
+            }
+
+            Future<void> downloadPdf() async {
+              await runBusy(() async {
+                final saved = await saveCotizacionPdfToDownloads(
+                  bytes: bytes,
+                  cotizacion: item,
+                );
+                showDialogNotification(
+                  saved
+                      ? 'Cotización descargada en la carpeta Descargas.'
+                      : 'No se pudo descargar la cotización.',
+                  isError: !saved,
+                );
+              });
+            }
+
+            Future<void> runShareAction(_QuotePdfShareAction action) async {
+              if (!context.mounted) return;
+              switch (action) {
+                case _QuotePdfShareAction.sharePdf:
+                case _QuotePdfShareAction.shareClient:
+                  await shareCotizacionPdf(bytes: bytes, cotizacion: item);
+                  break;
+                case _QuotePdfShareAction.save:
+                  await downloadPdf();
+                  break;
+                case _QuotePdfShareAction.admin:
+                  await runBusy(() async {
+                    await _sendPdfToAdmin(
+                      item,
+                      bytes,
+                    ).timeout(const Duration(seconds: 25));
+                    showDialogNotification(
+                      'Cotización enviada a administradores correctamente.',
+                    );
+                  });
+                  break;
+              }
+            }
+
+            return Dialog(
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.white,
+              insetPadding: EdgeInsets.symmetric(
+                horizontal: compact ? 6 : 20,
+                vertical: compact ? 6 : 16,
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: SizedBox(
+                width: compact ? media.width - 12 : media.width * 0.94,
+                height: compact ? media.height * 0.96 : media.height * 0.92,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 8, 6),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.picture_as_pdf_outlined),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'PDF de cotización',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          PopupMenuButton<_QuotePdfShareAction>(
+                            enabled: !busy,
+                            tooltip: 'Opciones para compartir',
+                            position: PopupMenuPosition.under,
+                            offset: const Offset(0, 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            onSelected: (action) =>
+                                unawaited(runShareAction(action)),
+                            itemBuilder: (context) => [
+                              for (final action in _QuotePdfShareAction.values)
+                                PopupMenuItem<_QuotePdfShareAction>(
+                                  value: action,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        action.icon,
+                                        size: 18,
+                                        color: const Color(0xFF0F7C92),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Text(
+                                        action.label,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
+                              ),
+                              child: Row(
+                                children: [
+                                  if (busy)
+                                    const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  else
+                                    const Icon(Icons.ios_share_outlined),
+                                  const SizedBox(width: 8),
+                                  const Text('Compartir'),
+                                ],
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    if (dialogNotification != null)
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: dialogNotificationIsError
+                              ? const Color(0xFFFFEBEE)
+                              : const Color(0xFFE8F5E9),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: dialogNotificationIsError
+                                ? const Color(0xFFE57373)
+                                : const Color(0xFF81C784),
+                          ),
+                        ),
                         child: Text(
-                          'PDF de cotización',
-                          style: TextStyle(fontWeight: FontWeight.w700),
+                          dialogNotification!,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: dialogNotificationIsError
+                                ? const Color(0xFFB71C1C)
+                                : const Color(0xFF1B5E20),
+                          ),
                         ),
                       ),
-                      TextButton.icon(
-                        onPressed: () =>
-                            shareCotizacionPdf(bytes: bytes, cotizacion: item),
-                        icon: const Icon(Icons.download_outlined),
-                        label: const Text('Descargar'),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-                Expanded(
-                  child: ColoredBox(
-                    color: Colors.white,
-                    child: PdfPreview(
-                      canChangePageFormat: false,
-                      canChangeOrientation: false,
-                      canDebug: false,
-                      allowPrinting: true,
-                      allowSharing: true,
-                      maxPageWidth: compact ? 700 : 980,
-                      scrollViewDecoration: const BoxDecoration(
+                    Expanded(
+                      child: ColoredBox(
                         color: Colors.white,
+                        child: PdfPreview(
+                          canChangePageFormat: false,
+                          canChangeOrientation: false,
+                          canDebug: false,
+                          allowPrinting: false,
+                          allowSharing: false,
+                          maxPageWidth: compact ? 700 : 980,
+                          scrollViewDecoration: const BoxDecoration(
+                            color: Colors.white,
+                          ),
+                          pdfPreviewPageDecoration: const BoxDecoration(
+                            color: Colors.white,
+                            boxShadow: <BoxShadow>[],
+                          ),
+                          build: (_) async => bytes,
+                        ),
                       ),
-                      pdfPreviewPageDecoration: const BoxDecoration(
-                        color: Colors.white,
-                        boxShadow: <BoxShadow>[],
-                      ),
-                      build: (_) async => bytes,
                     ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );

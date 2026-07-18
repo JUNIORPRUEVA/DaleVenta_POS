@@ -8,7 +8,16 @@ Future<bool> savePdfBytes({
   required String fileName,
 }) async {
   final downloads = await getDownloadsDirectory();
-  final baseDirectory = downloads ?? Directory.current;
+  final profileDownloads = Platform.environment['USERPROFILE'] == null
+      ? null
+      : Directory(
+          '${Platform.environment['USERPROFILE']}${Platform.pathSeparator}Downloads',
+        );
+  final baseDirectory =
+      downloads ??
+      (profileDownloads != null && await profileDownloads.exists()
+          ? profileDownloads
+          : Directory.current);
   if (!await baseDirectory.exists()) {
     await baseDirectory.create(recursive: true);
   }

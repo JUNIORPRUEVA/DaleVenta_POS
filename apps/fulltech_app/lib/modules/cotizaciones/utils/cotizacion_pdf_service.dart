@@ -12,14 +12,14 @@ import '../../../core/company/company_settings_model.dart';
 import '../cotizacion_models.dart';
 
 final PdfColor _pageBackground = PdfColors.white;
-final PdfColor _borderColor = PdfColor.fromHex('#C9D1DB');
-final PdfColor _panelBorder = PdfColor.fromHex('#DEE5EC');
-final PdfColor _softFill = PdfColor.fromHex('#F7F9FC');
-final PdfColor _softLine = PdfColor.fromHex('#E8EDF2');
-final PdfColor _headingBlack = PdfColors.black;
+final PdfColor _borderColor = PdfColor.fromHex('#E2E8F0');
+final PdfColor _panelBorder = PdfColor.fromHex('#D8E1EA');
+final PdfColor _softFill = PdfColor.fromHex('#F8FAFC');
+final PdfColor _softLine = PdfColor.fromHex('#E6ECF2');
+final PdfColor _headingBlack = PdfColor.fromHex('#111827');
 final PdfColor _textPrimary = PdfColor.fromHex('#1D2430');
 final PdfColor _textMuted = PdfColor.fromHex('#6C7685');
-final PdfColor _accentBlue = PdfColor.fromHex('#4361EE');
+final PdfColor _accentBlue = PdfColor.fromHex('#1957E6');
 
 Future<Uint8List> buildCotizacionPdf({
   required CotizacionModel cotizacion,
@@ -54,7 +54,7 @@ Future<Uint8List> buildCotizacionPdf({
       footer: (context) => _pageFooter(context.pageNumber, context.pagesCount),
       build: (_) => [
         _detailSection(cotizacion, money, qtyFmt),
-        pw.SizedBox(height: 12),
+        pw.SizedBox(height: _bottomAnchorGap(cotizacion.items.length)),
         _bottomSection(cotizacion, money),
       ],
     ),
@@ -84,17 +84,15 @@ pw.Widget _pageHeader({
     cotizacion.customerPhone,
     fallback: 'No registrado',
   );
-  final sellerName = _fallback(
-    cotizacion.createdByUserName,
-    fallback: 'Equipo comercial',
-  );
+  final issuedAt = cotizacion.createdAt;
+  final expiresAt = issuedAt.add(const Duration(days: 15));
   final taxText = cotizacion.includeItbis
       ? '${(cotizacion.itbisRate * 100).toStringAsFixed(0)}% ITBIS incluido'
       : null;
 
   return _panel(
     margin: const pw.EdgeInsets.only(bottom: 14),
-    padding: const pw.EdgeInsets.fromLTRB(14, 14, 14, 12),
+    padding: const pw.EdgeInsets.fromLTRB(0, 4, 0, 10),
     child: pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -136,32 +134,23 @@ pw.Widget _pageHeader({
               child: _quoteFactsPanel(
                 documentLabel: documentLabel,
                 quoteCode: quoteCode,
-                dateText: dateFmt.format(cotizacion.createdAt),
+                issuedText: dateFmt.format(issuedAt),
+                expiresText: dateFmt.format(expiresAt),
+                validityText: 'Válida por 15 días',
                 taxText: taxText,
               ),
             ),
           ],
         ),
-        pw.SizedBox(height: 12),
-        pw.Container(height: 1, color: _softLine),
-        pw.SizedBox(height: 8),
-        pw.Row(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Expanded(
-              child: _personInfoPanel(
-                primary: customerName,
-                secondary: customerPhone,
-              ),
-            ),
-            pw.SizedBox(width: 12),
-            pw.Expanded(
-              child: _personInfoPanel(
-                primary: sellerName,
-                secondary: 'Vendedor que le asistió',
-              ),
-            ),
-          ],
+        pw.SizedBox(height: 14),
+        pw.Container(height: 1.2, color: _softLine),
+        pw.SizedBox(height: 10),
+        pw.SizedBox(
+          width: 325,
+          child: _personInfoPanel(
+            primary: customerName,
+            secondary: customerPhone,
+          ),
         ),
         if (isContinuation) ...[
           pw.SizedBox(height: 8),
@@ -247,8 +236,8 @@ pw.Widget _detailSection(
     }
   }
 
-  return _panel(
-    padding: const pw.EdgeInsets.fromLTRB(12, 12, 12, 10),
+  return pw.Container(
+    padding: const pw.EdgeInsets.fromLTRB(0, 10, 0, 10),
     child: pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -263,13 +252,12 @@ pw.Widget _detailSection(
         pw.SizedBox(height: 8),
         pw.Container(
           decoration: pw.BoxDecoration(
-            border: pw.Border.all(color: _borderColor, width: 0.9),
-            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+            border: pw.Border.all(color: _panelBorder, width: 0.45),
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
           ),
           child: pw.Table(
             border: pw.TableBorder(
-              verticalInside: pw.BorderSide(color: _borderColor, width: 0.7),
-              horizontalInside: pw.BorderSide(color: _borderColor, width: 0.7),
+              horizontalInside: pw.BorderSide(color: _borderColor, width: 0.55),
             ),
             columnWidths: const {
               0: pw.FlexColumnWidth(5.45),
@@ -287,40 +275,53 @@ pw.Widget _detailSection(
 
 pw.Widget _bottomSection(CotizacionModel cotizacion, NumberFormat money) {
   final note = cotizacion.note.trim();
-
   return pw.Row(
     crossAxisAlignment: pw.CrossAxisAlignment.start,
     children: [
       pw.Expanded(
-        child: note.isEmpty
-            ? pw.SizedBox()
-            : _panel(
-                padding: const pw.EdgeInsets.fromLTRB(14, 14, 14, 14),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      'Observaciones',
-                      style: pw.TextStyle(
-                        fontSize: 11,
-                        fontWeight: pw.FontWeight.bold,
-                        color: _textPrimary,
-                      ),
-                    ),
-                    pw.SizedBox(height: 8),
-                    pw.Text(
-                      note,
-                      style: pw.TextStyle(
-                        fontSize: 9.5,
-                        color: _textPrimary,
-                        lineSpacing: 2,
-                      ),
-                    ),
-                  ],
+        child: _panel(
+          padding: const pw.EdgeInsets.fromLTRB(14, 14, 14, 14),
+          fillColor: _softFill,
+          showBorder: true,
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              if (note.isNotEmpty) ...[
+                pw.Text(
+                  'Notas',
+                  style: pw.TextStyle(
+                    fontSize: 11,
+                    fontWeight: pw.FontWeight.bold,
+                    color: _textPrimary,
+                  ),
+                ),
+                pw.SizedBox(height: 8),
+                pw.Text(
+                  note,
+                  style: pw.TextStyle(
+                    fontSize: 9.5,
+                    color: _textPrimary,
+                    lineSpacing: 2,
+                  ),
+                ),
+                pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 9),
+                  child: pw.Container(height: 1, color: _softLine),
+                ),
+              ],
+              pw.Text(
+                'Gracias por preferirnos.',
+                style: pw.TextStyle(
+                  fontSize: 9.3,
+                  color: _textMuted,
+                  fontStyle: pw.FontStyle.italic,
                 ),
               ),
+            ],
+          ),
+        ),
       ),
-      if (note.isNotEmpty) pw.SizedBox(width: 12),
+      pw.SizedBox(width: 14),
       pw.SizedBox(width: 228, child: _totalsPanel(cotizacion, money)),
     ],
   );
@@ -329,6 +330,8 @@ pw.Widget _bottomSection(CotizacionModel cotizacion, NumberFormat money) {
 pw.Widget _totalsPanel(CotizacionModel cotizacion, NumberFormat money) {
   return _panel(
     padding: const pw.EdgeInsets.fromLTRB(14, 14, 14, 14),
+    fillColor: _softFill,
+    showBorder: true,
     child: pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -362,9 +365,8 @@ pw.Widget _totalsPanel(CotizacionModel cotizacion, NumberFormat money) {
         pw.Container(
           padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           decoration: pw.BoxDecoration(
-            color: _softFill,
-            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
-            border: pw.Border.all(color: _panelBorder, width: 0.8),
+            color: PdfColors.white,
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
           ),
           child: pw.Row(
             children: [
@@ -413,7 +415,12 @@ Future<bool> saveCotizacionPdfToDownloads({
 }
 
 String buildCotizacionPdfFileName(CotizacionModel cotizacion) {
-  final customerToken = _fileNameToken(cotizacion.customerName);
+  final customerName = cotizacion.customerName.trim();
+  final hasRealCustomerName =
+      customerName.isNotEmpty &&
+      customerName.toLowerCase() != 'sin cliente' &&
+      customerName.toLowerCase() != 'consumidor final';
+  final customerToken = hasRealCustomerName ? _fileNameToken(customerName) : '';
   final quoteToken = _buildQuoteCode(cotizacion.id);
   final token = customerToken.isNotEmpty ? customerToken : quoteToken;
   return '$token.pdf';
@@ -468,18 +475,29 @@ String _fallback(String? value, {required String fallback}) {
 
 String _clean(String? value) => (value ?? '').trim();
 
+double _bottomAnchorGap(int itemCount) {
+  final gap = 176 - (itemCount * 14);
+  if (gap < 18) return 18;
+  if (gap > 132) return 132;
+  return gap.toDouble();
+}
+
 pw.Widget _panel({
   required pw.Widget child,
   pw.EdgeInsetsGeometry padding = const pw.EdgeInsets.all(12),
   pw.EdgeInsetsGeometry margin = pw.EdgeInsets.zero,
+  PdfColor fillColor = PdfColors.white,
+  bool showBorder = false,
 }) {
   return pw.Container(
     margin: margin,
     padding: padding,
     decoration: pw.BoxDecoration(
-      color: PdfColors.white,
-      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
-      border: pw.Border.all(color: _panelBorder, width: 0.8),
+      color: fillColor,
+      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
+      border: showBorder
+          ? pw.Border.all(color: _panelBorder, width: 0.45)
+          : null,
     ),
     child: child,
   );
@@ -492,11 +510,11 @@ pw.Widget _logoBox({
   return pw.Container(
     width: 62,
     height: 62,
-    padding: const pw.EdgeInsets.all(9),
+    padding: const pw.EdgeInsets.all(8),
     decoration: pw.BoxDecoration(
       color: _softFill,
-      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
-      border: pw.Border.all(color: _panelBorder, width: 0.8),
+      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
+      border: pw.Border.all(color: _panelBorder, width: 0.45),
     ),
     child: logoImage != null
         ? pw.Image(logoImage, fit: pw.BoxFit.contain)
@@ -523,15 +541,17 @@ pw.Widget _companyLine(String text) {
 pw.Widget _quoteFactsPanel({
   required String documentLabel,
   required String quoteCode,
-  required String dateText,
+  required String issuedText,
+  required String expiresText,
+  required String validityText,
   String? taxText,
 }) {
   return pw.Container(
     padding: const pw.EdgeInsets.fromLTRB(12, 10, 12, 10),
     decoration: pw.BoxDecoration(
       color: _softFill,
-      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(10)),
-      border: pw.Border.all(color: _panelBorder, width: 0.8),
+      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
+      border: pw.Border.all(color: _panelBorder, width: 0.45),
     ),
     child: pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -554,10 +574,9 @@ pw.Widget _quoteFactsPanel({
           ),
         ),
         pw.SizedBox(height: 6),
-        pw.Text(
-          dateText,
-          style: pw.TextStyle(fontSize: 8.7, color: _textPrimary),
-        ),
+        _factLine('Expedición', issuedText),
+        _factLine('Vencimiento', expiresText),
+        _factLine('Tiempo', validityText),
         if (taxText != null && taxText.trim().isNotEmpty) ...[
           pw.SizedBox(height: 5),
           pw.Text(taxText, style: pw.TextStyle(fontSize: 8, color: _textMuted)),
@@ -567,44 +586,23 @@ pw.Widget _quoteFactsPanel({
   );
 }
 
-pw.Widget _personInfoPanel({required String primary, String? secondary}) {
-  return pw.Container(
-    padding: const pw.EdgeInsets.fromLTRB(10, 9, 10, 9),
-    decoration: pw.BoxDecoration(
-      color: _softFill,
-      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(10)),
-      border: pw.Border.all(color: _panelBorder, width: 0.8),
-    ),
-    child: pw.Column(
+pw.Widget _factLine(String label, String value) {
+  return pw.Padding(
+    padding: const pw.EdgeInsets.only(top: 4),
+    child: pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Container(
-          width: double.infinity,
-          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: pw.BoxDecoration(
-            color: PdfColors.white,
-            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
-            border: pw.Border.all(color: _panelBorder, width: 0.7),
+        pw.SizedBox(
+          width: 58,
+          child: pw.Text(
+            label,
+            style: pw.TextStyle(fontSize: 7.6, color: _textMuted),
           ),
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text(
-                primary,
-                style: pw.TextStyle(
-                  fontSize: 8.9,
-                  color: _textPrimary,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              if (secondary != null && secondary.trim().isNotEmpty) ...[
-                pw.SizedBox(height: 4),
-                pw.Text(
-                  secondary.trim(),
-                  style: pw.TextStyle(fontSize: 8.1, color: _textMuted),
-                ),
-              ],
-            ],
+        ),
+        pw.Expanded(
+          child: pw.Text(
+            value,
+            style: pw.TextStyle(fontSize: 8.2, color: _textPrimary),
           ),
         ),
       ],
@@ -612,9 +610,56 @@ pw.Widget _personInfoPanel({required String primary, String? secondary}) {
   );
 }
 
+pw.Widget _personInfoPanel({required String primary, String? secondary}) {
+  final phone = (secondary ?? '').trim();
+  return pw.Container(
+    padding: const pw.EdgeInsets.fromLTRB(14, 11, 14, 11),
+    decoration: pw.BoxDecoration(
+      color: _softFill,
+      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
+      border: pw.Border.all(color: _panelBorder, width: 0.45),
+    ),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        _personLine('Nombre', primary, strong: true),
+        if (phone.isNotEmpty) ...[
+          pw.SizedBox(height: 6),
+          _personLine('Teléfono', phone),
+        ],
+      ],
+    ),
+  );
+}
+
+pw.Widget _personLine(String label, String value, {bool strong = false}) {
+  return pw.Row(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: [
+      pw.SizedBox(
+        width: 58,
+        child: pw.Text(
+          label,
+          style: pw.TextStyle(fontSize: 8.1, color: _textMuted),
+        ),
+      ),
+      pw.Expanded(
+        child: pw.Text(
+          value,
+          style: pw.TextStyle(
+            fontSize: 8.8,
+            color: strong ? _textPrimary : _textMuted,
+            fontWeight: strong ? pw.FontWeight.bold : pw.FontWeight.normal,
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
 pw.Widget _headerCell(String text, {pw.TextAlign align = pw.TextAlign.center}) {
   return pw.Container(
-    padding: const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+    padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
     alignment: align == pw.TextAlign.left
         ? pw.Alignment.centerLeft
         : align == pw.TextAlign.right
@@ -625,7 +670,7 @@ pw.Widget _headerCell(String text, {pw.TextAlign align = pw.TextAlign.center}) {
       textAlign: align,
       style: pw.TextStyle(
         color: PdfColors.white,
-        fontSize: 7.4,
+        fontSize: 7.6,
         fontWeight: pw.FontWeight.bold,
       ),
     ),
@@ -638,7 +683,7 @@ pw.Widget _bodyCell(
   bool bold = false,
 }) {
   return pw.Container(
-    padding: const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 6),
+    padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
     alignment: align == pw.TextAlign.center
         ? pw.Alignment.center
         : align == pw.TextAlign.right
@@ -648,7 +693,7 @@ pw.Widget _bodyCell(
       text,
       textAlign: align,
       style: pw.TextStyle(
-        fontSize: 8,
+        fontSize: 8.1,
         color: _textPrimary,
         fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
       ),

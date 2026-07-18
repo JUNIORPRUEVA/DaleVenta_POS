@@ -131,7 +131,7 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Inventario',
             route: Routes.catalogo,
           ),
-        if (can(AppPermission.viewSales))
+        if (can(AppPermission.viewSalesReports))
           const AppNavigationItem(
             icon: Icons.bar_chart_rounded,
             title: 'Reportes',

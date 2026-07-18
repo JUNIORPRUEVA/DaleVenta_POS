@@ -287,7 +287,7 @@ class _ClienteDetailScreenState extends ConsumerState<ClienteDetailScreen> {
     if (event.eventType == 'sale') {
       if (clienteId.isNotEmpty && !clienteId.startsWith('local_')) {
         final query = StringBuffer(
-          '${Routes.ventas}?customerId=${Uri.encodeQueryComponent(clienteId)}',
+          '${Routes.ventasLista}?customerId=${Uri.encodeQueryComponent(clienteId)}',
         );
         if (clienteNombre.isNotEmpty) {
           query.write(
@@ -297,7 +297,7 @@ class _ClienteDetailScreenState extends ConsumerState<ClienteDetailScreen> {
         context.go(query.toString());
         return;
       }
-      context.go(Routes.ventas);
+      context.go(Routes.ventasLista);
       return;
     }
     if (event.eventType == 'service' && event.eventId.trim().isNotEmpty) {
