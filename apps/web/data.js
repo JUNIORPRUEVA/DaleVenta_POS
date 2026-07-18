@@ -2,7 +2,7 @@ export const FulltechStore = {
   company: {
     name: "FULLTECH SRL",
     tradeName: "FULLTECH",
-    rnc: "Pendiente de completar",
+    rnc: "",
     phone: "+1 829 477 0756",
     whatsapp: "18294770756",
     email: "ventas@fulltech.com.do",

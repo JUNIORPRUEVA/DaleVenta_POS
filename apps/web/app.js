@@ -42,7 +42,7 @@ import { FulltechStore as fallbackStore } from "./data.js";
             ...fallbackStore.company,
             ...(payload.company || {}),
             ...companyOverride,
-            updatedAt: payload.updatedAt || fallbackStore.company.updatedAt
+            updatedAt: fallbackStore.company.updatedAt
           },
           categories: payload.categories || [...new Set(apiProducts.map((item) => item.category))],
           products: apiProducts,
@@ -307,22 +307,65 @@ import { FulltechStore as fallbackStore } from "./data.js";
     return `https://wa.me/${store.company.whatsapp}?text=${encodeURIComponent(message)}`;
   }
 
+  function closeDrawer() {
+    const header = document.querySelector(".site-header");
+    const toggle = document.querySelector("[data-nav-toggle]");
+    header?.classList.remove("is-open");
+    document.body.classList.remove("nav-open");
+    toggle?.setAttribute("aria-expanded", "false");
+  }
+
+  function openDrawer() {
+    const header = document.querySelector(".site-header");
+    const toggle = document.querySelector("[data-nav-toggle]");
+    const drawer = document.querySelector(".nav__links");
+    if (!header || !toggle || !drawer) return;
+    header.classList.add("is-open");
+    document.body.classList.add("nav-open");
+    toggle.setAttribute("aria-expanded", "true");
+    drawer.querySelector("a, button")?.focus?.();
+  }
+
+  function prepareDrawer() {
+    const drawer = document.querySelector(".nav__links");
+    const toggle = document.querySelector("[data-nav-toggle]");
+    if (!drawer || !toggle || drawer.querySelector(".drawer-head")) return;
+    const drawerId = "fulltech-mobile-nav";
+    drawer.id = drawerId;
+    toggle.setAttribute("aria-controls", drawerId);
+    drawer.insertAdjacentHTML("afterbegin", `
+      <div class="drawer-head">
+        <img src="assets/logo.png" alt="Logo FULLTECH">
+        <div><strong>FULLTECH SRL</strong><span>Soluciones tecnologicas y seguridad</span></div>
+        <button class="drawer-close" type="button" data-nav-close aria-label="Cerrar menu">x</button>
+      </div>
+    `);
+    drawer.insertAdjacentHTML("beforeend", `
+      <a class="drawer-cta" data-whatsapp-link>Cotizar por WhatsApp</a>
+      <div class="drawer-meta">829-477-0756<br>Higuey, La Altagracia</div>
+    `);
+    drawer.querySelectorAll("[data-whatsapp-link]").forEach((node) => {
+      node.href = `https://wa.me/${store.company.whatsapp}`;
+    });
+  }
+
   function wireEvents() {
+    prepareDrawer();
     document.addEventListener("click", (event) => {
       const navToggle = event.target.closest("[data-nav-toggle]");
-      const header = document.querySelector(".site-header");
-      if (navToggle && header) {
-        const isOpen = header.classList.toggle("is-open");
-        navToggle.setAttribute("aria-expanded", String(isOpen));
+      if (navToggle) {
+        const isOpen = document.querySelector(".site-header")?.classList.contains("is-open");
+        if (isOpen) closeDrawer();
+        else openDrawer();
         return;
       }
-      if (header?.classList.contains("is-open") && !event.target.closest(".nav__links") && !event.target.closest("[data-nav-toggle]")) {
-        header.classList.remove("is-open");
-        document.querySelector("[data-nav-toggle]")?.setAttribute("aria-expanded", "false");
+      if (event.target.closest("[data-nav-close]")) {
+        closeDrawer();
+        return;
       }
+      if (document.querySelector(".site-header")?.classList.contains("is-open") && !event.target.closest(".nav__links") && !event.target.closest("[data-nav-toggle]")) closeDrawer();
       if (event.target.closest(".nav__links a")) {
-        header?.classList.remove("is-open");
-        document.querySelector("[data-nav-toggle]")?.setAttribute("aria-expanded", "false");
+        closeDrawer();
       }
 
       const addButton = event.target.closest("[data-add-to-cart]");
@@ -374,6 +417,14 @@ import { FulltechStore as fallbackStore } from "./data.js";
         const notes = document.querySelector("[data-order-notes]")?.value || "";
         link.href = buildWhatsAppOrder(notes);
       });
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        const wasOpen = document.querySelector(".site-header")?.classList.contains("is-open");
+        closeDrawer();
+        if (wasOpen) document.querySelector("[data-nav-toggle]")?.focus?.();
+      }
     });
   }
 

@@ -14,17 +14,31 @@
   --shadow: 0 18px 46px rgba(0, 63, 70, 0.14);
 }
 
-* { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+*,
+*::before,
+*::after { box-sizing: border-box; }
+html {
+  scroll-behavior: smooth;
+  width: 100%;
+  max-width: 100%;
+}
 body {
   margin: 0;
   font-family: Arial, Helvetica, sans-serif;
   color: var(--ink);
   background: #f8fbfc;
   line-height: 1.5;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
+body.nav-open { overflow: hidden; }
 a { color: inherit; }
-img { max-width: 100%; display: block; }
+img,
+video,
+svg,
+canvas { max-width: 100%; height: auto; }
+img { display: block; }
 
 .topbar {
   background: linear-gradient(90deg, #071114, #003f46);
@@ -37,6 +51,7 @@ img { max-width: 100%; display: block; }
 .footer__inner {
   width: min(1180px, calc(100% - 32px));
   margin: 0 auto;
+  min-width: 0;
 }
 .topbar__inner {
   display: flex;
@@ -159,6 +174,11 @@ img { max-width: 100%; display: block; }
 }
 .menu-toggle strong {
   font-size: 13px;
+}
+.drawer-head,
+.drawer-cta,
+.drawer-meta {
+  display: none;
 }
 .button:hover { transform: translateY(-1px); box-shadow: 0 12px 22px rgba(0, 63, 70, 0.14); }
 .button--ghost {
@@ -962,6 +982,17 @@ img { max-width: 100%; display: block; }
   color: #f7d45b;
 }
 .footer small { color: #b7c2cb; }
+.footer-bottom {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 16px 0 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  color: #b7c2cb;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 13px;
+}
 
 @media (max-width: 980px) {
   .grid--3,
@@ -1054,7 +1085,7 @@ img { max-width: 100%; display: block; }
     opacity: 0;
     pointer-events: none;
     transition: opacity 180ms ease;
-    z-index: -1;
+    z-index: 12;
   }
   .site-header.is-open::after {
     opacity: 1;
@@ -1066,13 +1097,13 @@ img { max-width: 100%; display: block; }
     right: 0;
     bottom: 0;
     left: auto;
-    width: min(50vw, 320px);
-    min-width: 236px;
+    width: clamp(260px, 62vw, 340px);
+    max-width: calc(100% - 24px);
     display: grid;
     grid-template-columns: 1fr;
     gap: 8px;
     align-content: start;
-    padding: 86px 14px 18px;
+    padding: 14px;
     border: 0;
     border-radius: 0;
     background:
@@ -1083,6 +1114,42 @@ img { max-width: 100%; display: block; }
     transform: translateX(100%);
     transition: opacity 160ms ease, transform 160ms ease;
     z-index: 20;
+  }
+  .drawer-head {
+    display: grid;
+    grid-template-columns: 42px 1fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 4px 2px 14px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 8px;
+  }
+  .drawer-head img {
+    width: 42px;
+    height: 42px;
+    object-fit: contain;
+    border-radius: 8px;
+  }
+  .drawer-head strong {
+    color: var(--brand-dark);
+    line-height: 1.1;
+  }
+  .drawer-head span {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .drawer-close {
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--white);
+    color: var(--brand-dark);
+    font: inherit;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
   }
   .site-header.is-open .nav__links {
     opacity: 1;
@@ -1099,6 +1166,23 @@ img { max-width: 100%; display: block; }
     background: #f3f8f9;
     color: var(--brand-dark);
     font-size: 14px;
+  }
+  .drawer-cta {
+    display: flex !important;
+    margin-top: 8px;
+    background: #2463ff !important;
+    color: var(--white) !important;
+    justify-content: center !important;
+  }
+  .drawer-meta {
+    display: block;
+    margin-top: 10px;
+    padding: 12px;
+    border-radius: 8px;
+    background: var(--white);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
   }
   .cart-button {
     min-width: 0;
@@ -1122,6 +1206,16 @@ img { max-width: 100%; display: block; }
   .footer__inner {
     gap: 22px;
     padding: 34px 0;
+  }
+  .footer-bottom {
+    display: grid;
+    padding-bottom: 86px;
+  }
+  .whatsapp-float {
+    right: max(18px, env(safe-area-inset-right));
+    bottom: max(18px, env(safe-area-inset-bottom));
+    width: 56px;
+    height: 56px;
   }
   .footer-brand {
     grid-template-columns: 48px 1fr;
