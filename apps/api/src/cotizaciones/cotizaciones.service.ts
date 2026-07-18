@@ -153,6 +153,37 @@ export class CotizacionesService {
     return withExt || fallback;
   }
 
+  async resolvePublicPdfDownload(quotationId: string, fileName: string) {
+    const safeQuotationId = (quotationId ?? "").trim();
+    const safeFileName = this.sanitizePdfFileName(
+      fileName ?? "",
+      "cotizacion.pdf",
+    );
+    if (
+      !safeQuotationId ||
+      safeQuotationId.includes("/") ||
+      safeQuotationId.includes("\\")
+    ) {
+      throw new NotFoundException("PDF de cotización no encontrado.");
+    }
+
+    const absolutePath = path.join(
+      this.resolveUploadDir(),
+      "cotizaciones",
+      safeQuotationId,
+      safeFileName,
+    );
+
+    if (!fs.existsSync(absolutePath)) {
+      throw new NotFoundException("PDF de cotización no encontrado.");
+    }
+
+    return {
+      absolutePath,
+      fileName: safeFileName,
+    };
+  }
+
   private extractEvolutionHttpStatus(errorMessage: string) {
     const normalized = (errorMessage ?? "").toString();
     const matches = [
@@ -860,7 +891,7 @@ export class CotizacionesService {
     await mkdir(quoteDir, { recursive: true });
     await writeFile(path.join(quoteDir, fileName), bytes);
 
-    const relativeUrl = `/uploads/cotizaciones/${encodeURIComponent(quotationId)}/${encodeURIComponent(fileName)}`;
+    const relativeUrl = `/cotizaciones/public/pdf/${encodeURIComponent(quotationId)}/${encodeURIComponent(fileName)}`;
     const baseUrl = this.publicBaseUrl(requestBaseUrl);
     if (!baseUrl) {
       throw new BadRequestException(
