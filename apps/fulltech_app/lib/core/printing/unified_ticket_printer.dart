@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
 
+import '../auth/auth_provider.dart';
 import '../../features/settings/data/printer_settings_repository.dart';
 import '../../modules/ventas/sales_models.dart';
 import '../update/print_activity_tracker.dart';
@@ -124,8 +125,19 @@ class UnifiedTicketPrinter {
     int? copies,
     bool isCopy = false,
   }) {
+    final user = _ref.read(authStateProvider).user;
+    final authCashierName = (user?.nombreCompleto ?? '').trim().isNotEmpty
+        ? user!.nombreCompleto.trim()
+        : (user?.email ?? '').trim();
     return printTicket(
-      TicketData.fromSale(sale, items: items, isCopy: isCopy),
+      TicketData.fromSale(
+        sale,
+        items: items,
+        isCopy: isCopy,
+        cashierNameOverride: (sale.userName ?? '').trim().isNotEmpty
+            ? sale.userName
+            : authCashierName,
+      ),
       overrideCopies: copies,
     );
   }

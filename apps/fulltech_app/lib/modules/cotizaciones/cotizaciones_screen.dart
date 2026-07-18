@@ -20,7 +20,6 @@ import '../../core/models/product_model.dart';
 import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/realtime/catalog_realtime_service.dart';
 import '../../core/routing/app_route_observer.dart';
-import '../../core/routing/route_access.dart';
 import '../../core/routing/routes.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -37,6 +36,7 @@ import '../clientes/cliente_form_screen.dart';
 import '../service_orders/create_service_order_screen.dart';
 import '../service_orders/service_order_models.dart';
 import '../ventas/data/ventas_repository.dart';
+import '../ventas/application/ventas_controller.dart';
 import '../ventas/sales_credit_screen.dart';
 import '../ventas/sales_models.dart';
 import '../ventas/utils/sales_pdf_service.dart';
@@ -674,6 +674,47 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   String _money(double value) => formatRdCurrencyAccounting(value);
 
+  double _roundCurrency(double value) => double.parse(value.toStringAsFixed(2));
+
+  double _roundUnitPrice(double value) =>
+      double.parse(value.toStringAsFixed(6));
+
+  List<SaleDraftItem> _buildCheckoutSaleItems() {
+    final grossMultiplier = _includeItbis ? 1 + _itbisRate : 1.0;
+    final grossLines = _items
+        .map((item) => (item.total * grossMultiplier).clamp(0, double.infinity))
+        .toList(growable: false);
+    final grossBase = grossLines.fold<double>(0, (sum, value) => sum + value);
+    final targetTotal = _roundCurrency(_total.clamp(0, double.infinity));
+    var remainingTotal = targetTotal;
+
+    return [
+      for (var index = 0; index < _items.length; index++)
+        () {
+          final item = _items[index];
+          final isLast = index == _items.length - 1;
+          final lineTarget = grossBase <= 0
+              ? 0.0
+              : isLast
+              ? remainingTotal
+              : _roundCurrency(targetTotal * (grossLines[index] / grossBase));
+          remainingTotal = _roundCurrency(remainingTotal - lineTarget);
+          final priceSoldUnit = item.qty > 0
+              ? _roundUnitPrice(lineTarget / item.qty)
+              : 0.0;
+          return SaleDraftItem(
+            productId: item.isExternal ? null : item.productId,
+            name: item.nombre,
+            imageUrl: item.imageUrl,
+            isExternal: item.isExternal,
+            qty: item.qty,
+            priceSoldUnit: priceSoldUnit,
+            costUnitSnapshot: item.tracedCostUnit ?? 0,
+          );
+        }(),
+    ];
+  }
+
   String _newId() => DateTime.now().microsecondsSinceEpoch.toString();
 
   _DesktopTicketDraft _snapshotCurrentDesktopDraft({
@@ -1164,17 +1205,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     } catch (_) {
       // The provider may already be disposed while the app is closing.
     }
-  }
-
-  void _handleMobileBack() {
-    final navigator = Navigator.of(context);
-    if (navigator.canPop()) {
-      navigator.pop();
-      return;
-    }
-
-    final role = ref.read(authStateProvider).user?.appRole ?? AppRole.unknown;
-    context.go(RouteAccess.defaultHomeForRole(role));
   }
 
   Future<void> _openMobileTicketSheet() async {
@@ -4393,19 +4423,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     ].join('\n');
 
     try {
-      final saleItems = _items
-          .map(
-            (item) => SaleDraftItem(
-              productId: item.isExternal ? null : item.productId,
-              name: item.nombre,
-              imageUrl: item.imageUrl,
-              isExternal: item.isExternal,
-              qty: item.qty,
-              priceSoldUnit: item.unitPrice,
-              costUnitSnapshot: item.tracedCostUnit ?? 0,
-            ),
-          )
-          .toList();
+      final saleItems = _buildCheckoutSaleItems();
 
       final createdSale = await ref
           .read(ventasRepositoryProvider)
@@ -4423,6 +4441,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             paymentCashAmount: checkout?.cashAmount,
             paymentTransferAmount: checkout?.transferAmount,
             creditAmount: checkout?.creditAmount,
+            expectedTotalSold: _roundCurrency(_total),
             items: saleItems,
           );
 
@@ -4446,6 +4465,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       if (checkout?.method == _CheckoutPaymentMethod.credit) {
         ref.invalidate(salesCreditsProvider);
       }
+      ref.invalidate(ventasControllerProvider);
 
       if (!mounted) return;
 
@@ -4822,15 +4842,17 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
       child: Row(
         children: [
-          Material(
-            color: Colors.white.withValues(alpha: 0.58),
-            borderRadius: BorderRadius.circular(14),
-            child: InkWell(
-              onTap: _handleMobileBack,
+          Builder(
+            builder: (scaffoldContext) => Material(
+              color: Colors.white.withValues(alpha: 0.88),
               borderRadius: BorderRadius.circular(14),
-              child: const Padding(
-                padding: EdgeInsets.all(10),
-                child: Icon(Icons.arrow_back_rounded, size: 20),
+              child: InkWell(
+                onTap: () => Scaffold.of(scaffoldContext).openDrawer(),
+                borderRadius: BorderRadius.circular(14),
+                child: const Padding(
+                  padding: EdgeInsets.all(10),
+                  child: Icon(Icons.menu_rounded, size: 20),
+                ),
               ),
             ),
           ),
@@ -6029,6 +6051,8 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final media = MediaQuery.sizeOf(context);
+    final isMobile = media.width < 640;
     final isTransfer = _method == _CheckoutPaymentMethod.transfer;
     final isMixed = _method == _CheckoutPaymentMethod.mixed;
     final isCredit = _method == _CheckoutPaymentMethod.credit;
@@ -6048,20 +6072,28 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
       child: Focus(
         autofocus: true,
         child: Dialog(
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 24,
-            vertical: 20,
+          insetPadding: EdgeInsets.symmetric(
+            horizontal: isMobile ? 12 : 24,
+            vertical: isMobile ? 10 : 20,
           ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
+            constraints: BoxConstraints(
+              maxWidth: 760,
+              maxHeight: media.height - (isMobile ? 24 : 40),
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 18, 18, 16),
+                  padding: EdgeInsets.fromLTRB(
+                    isMobile ? 16 : 24,
+                    18,
+                    isMobile ? 10 : 18,
+                    16,
+                  ),
                   child: Row(
                     children: [
                       Container(
@@ -6106,169 +6138,275 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                   ),
                 ),
                 const Divider(height: 1, color: Color(0xFFE2E8F0)),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 18, 24, 18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFD6E3ED)),
-                        ),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                const Text(
-                                  'Total a pagar',
-                                  style: TextStyle(
-                                    color: Color(0xFF475569),
-                                    fontWeight: FontWeight.w900,
-                                  ),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.fromLTRB(
+                      isMobile ? 16 : 24,
+                      18,
+                      isMobile ? 16 : 24,
+                      18,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          padding: EdgeInsets.all(isMobile ? 14 : 18),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFD6E3ED)),
+                          ),
+                          child: Column(
+                            children: [
+                              isMobile
+                                  ? Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Total a pagar',
+                                          style: TextStyle(
+                                            color: Color(0xFF475569),
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          widget.money(widget.total),
+                                          style: const TextStyle(
+                                            fontSize: 28,
+                                            fontWeight: FontWeight.w900,
+                                            color: Color(0xFF0F172A),
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : Row(
+                                      children: [
+                                        const Text(
+                                          'Total a pagar',
+                                          style: TextStyle(
+                                            color: Color(0xFF475569),
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        Text(
+                                          widget.money(widget.total),
+                                          style: const TextStyle(
+                                            fontSize: 30,
+                                            fontWeight: FontWeight.w900,
+                                            color: Color(0xFF0F172A),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                              const Divider(
+                                height: 26,
+                                color: Color(0xFFE2E8F0),
+                              ),
+                              if (!isTransfer) ...[
+                                _PaymentAmountInput(
+                                  label: isMixed
+                                      ? 'Efectivo'
+                                      : isCredit
+                                      ? 'Efectivo abonado'
+                                      : 'Cliente paga con',
+                                  controller: _cashController,
+                                  enabled: true,
+                                  compact: isMobile,
                                 ),
-                                const Spacer(),
-                                Text(
-                                  widget.money(widget.total),
-                                  style: const TextStyle(
-                                    fontSize: 30,
-                                    fontWeight: FontWeight.w900,
-                                    color: Color(0xFF0F172A),
-                                  ),
-                                ),
+                                const SizedBox(height: 10),
                               ],
-                            ),
-                            const Divider(height: 26, color: Color(0xFFE2E8F0)),
-                            if (!isTransfer) ...[
-                              _PaymentAmountInput(
-                                label: isMixed
-                                    ? 'Efectivo'
-                                    : isCredit
-                                    ? 'Efectivo abonado'
-                                    : 'Cliente paga con',
-                                controller: _cashController,
-                                enabled: true,
-                              ),
-                              const SizedBox(height: 10),
-                            ],
-                            if (isMixed || isCredit) ...[
-                              _PaymentAmountInput(
-                                label: isCredit
-                                    ? 'Transferencia abonada'
-                                    : 'Transferencia',
-                                controller: _transferController,
-                                enabled: true,
-                              ),
-                              const SizedBox(height: 10),
-                            ] else if (isTransfer) ...[
+                              if (isMixed || isCredit) ...[
+                                _PaymentAmountInput(
+                                  label: isCredit
+                                      ? 'Transferencia abonada'
+                                      : 'Transferencia',
+                                  controller: _transferController,
+                                  enabled: true,
+                                  compact: isMobile,
+                                ),
+                                const SizedBox(height: 10),
+                              ] else if (isTransfer) ...[
+                                _ReadonlyPaymentLine(
+                                  icon: Icons.account_balance_outlined,
+                                  label: 'Transferencia',
+                                  value: widget.money(widget.total),
+                                ),
+                                const SizedBox(height: 10),
+                              ],
+                              if (isCredit) ...[
+                                _ReadonlyPaymentLine(
+                                  icon: Icons.credit_score_outlined,
+                                  label: 'Queda a crédito',
+                                  value: widget.money(_creditAmount),
+                                  strong: _creditAmount > 0,
+                                ),
+                                const SizedBox(height: 10),
+                              ],
                               _ReadonlyPaymentLine(
-                                icon: Icons.account_balance_outlined,
-                                label: 'Transferencia',
-                                value: widget.money(widget.total),
+                                icon: Icons.keyboard_return_rounded,
+                                label: 'Devuelta',
+                                value: widget.money(
+                                  isCredit ? 0 : _changeAmount,
+                                ),
+                                strong: !isCredit && _changeAmount > 0,
                               ),
-                              const SizedBox(height: 10),
                             ],
-                            if (isCredit) ...[
-                              _ReadonlyPaymentLine(
-                                icon: Icons.credit_score_outlined,
-                                label: 'Queda a crédito',
-                                value: widget.money(_creditAmount),
-                                strong: _creditAmount > 0,
-                              ),
-                              const SizedBox(height: 10),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        Text(
+                          'Método de pago',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            color: const Color(0xFF0F172A),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        if (isMobile)
+                          Column(
+                            children: [
+                              for (final method
+                                  in _CheckoutPaymentMethod.values) ...[
+                                _PaymentMethodTile(
+                                  method: method,
+                                  selected: _method == method,
+                                  onTap: () => _selectMethod(method),
+                                ),
+                                if (method !=
+                                    _CheckoutPaymentMethod.values.last)
+                                  const SizedBox(height: 8),
+                              ],
                             ],
-                            _ReadonlyPaymentLine(
-                              icon: Icons.keyboard_return_rounded,
-                              label: 'Devuelta',
-                              value: widget.money(isCredit ? 0 : _changeAmount),
-                              strong: !isCredit && _changeAmount > 0,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      Text(
-                        'Método de pago',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          color: const Color(0xFF0F172A),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          for (final method
-                              in _CheckoutPaymentMethod.values) ...[
-                            Expanded(
-                              child: _PaymentMethodTile(
-                                method: method,
-                                selected: _method == method,
-                                onTap: () => _selectMethod(method),
-                              ),
-                            ),
-                            if (method != _CheckoutPaymentMethod.values.last)
-                              const SizedBox(width: 10),
-                          ],
-                        ],
-                      ),
-                    ],
+                          )
+                        else
+                          Row(
+                            children: [
+                              for (final method
+                                  in _CheckoutPaymentMethod.values) ...[
+                                Expanded(
+                                  child: _PaymentMethodTile(
+                                    method: method,
+                                    selected: _method == method,
+                                    onTap: () => _selectMethod(method),
+                                  ),
+                                ),
+                                if (method !=
+                                    _CheckoutPaymentMethod.values.last)
+                                  const SizedBox(width: 10),
+                              ],
+                            ],
+                          ),
+                      ],
+                    ),
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.fromLTRB(24, 14, 24, 18),
+                  padding: EdgeInsets.fromLTRB(
+                    isMobile ? 16 : 24,
+                    14,
+                    isMobile ? 16 : 24,
+                    18,
+                  ),
                   decoration: const BoxDecoration(
                     color: Color(0xFFF8FBFD),
                     border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
                   ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _canConfirm
-                              ? 'Enter/F9 para cobrar · Esc para salir'
-                              : isCredit
-                              ? 'El abono no puede superar el total de la factura'
-                              : 'Monto recibido insuficiente para completar el cobro',
-                          style: TextStyle(
-                            color: _canConfirm
-                                ? const Color(0xFF64748B)
-                                : theme.colorScheme.error,
-                            fontWeight: FontWeight.w700,
-                          ),
+                  child: isMobile
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              _canConfirm
+                                  ? 'Listo para cobrar'
+                                  : isCredit
+                                  ? 'El abono no puede superar el total'
+                                  : 'Monto recibido insuficiente',
+                              style: TextStyle(
+                                color: _canConfirm
+                                    ? const Color(0xFF64748B)
+                                    : theme.colorScheme.error,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            FilledButton.icon(
+                              onPressed: _canConfirm ? _confirmCheckout : null,
+                              icon: const Icon(Icons.receipt_long_outlined),
+                              label: Text(
+                                _method == _CheckoutPaymentMethod.credit
+                                    ? 'Crear crédito'
+                                    : 'Cobrar y facturar',
+                              ),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF1957E6),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 15,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(9),
+                                ),
+                                textStyle: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              child: const Text('Cancelar'),
+                            ),
+                          ],
+                        )
+                      : Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _canConfirm
+                                    ? 'Enter/F9 para cobrar · Esc para salir'
+                                    : isCredit
+                                    ? 'El abono no puede superar el total de la factura'
+                                    : 'Monto recibido insuficiente para completar el cobro',
+                                style: TextStyle(
+                                  color: _canConfirm
+                                      ? const Color(0xFF64748B)
+                                      : theme.colorScheme.error,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              child: const Text('Cancelar'),
+                            ),
+                            const SizedBox(width: 10),
+                            FilledButton.icon(
+                              onPressed: _canConfirm ? _confirmCheckout : null,
+                              icon: const Icon(Icons.receipt_long_outlined),
+                              label: Text(
+                                _method == _CheckoutPaymentMethod.credit
+                                    ? 'Crear crédito'
+                                    : 'Cobrar y facturar',
+                              ),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF1957E6),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 22,
+                                  vertical: 16,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(9),
+                                ),
+                                textStyle: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('Cancelar'),
-                      ),
-                      const SizedBox(width: 10),
-                      FilledButton.icon(
-                        onPressed: _canConfirm ? _confirmCheckout : null,
-                        icon: const Icon(Icons.receipt_long_outlined),
-                        label: Text(
-                          _method == _CheckoutPaymentMethod.credit
-                              ? 'Crear crédito'
-                              : 'Cobrar y facturar',
-                        ),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF1957E6),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 22,
-                            vertical: 16,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(9),
-                          ),
-                          textStyle: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ],
             ),
@@ -6284,14 +6422,32 @@ class _PaymentAmountInput extends StatelessWidget {
     required this.label,
     required this.controller,
     required this.enabled,
+    this.compact = false,
   });
 
   final String label;
   final TextEditingController controller;
   final bool enabled;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    if (compact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 6),
+          SizedBox(height: 46, child: _amountField()),
+        ],
+      );
+    }
     return Row(
       children: [
         Expanded(
@@ -6303,42 +6459,39 @@ class _PaymentAmountInput extends StatelessWidget {
             ),
           ),
         ),
-        SizedBox(
-          width: 210,
-          height: 46,
-          child: TextField(
-            controller: controller,
-            enabled: enabled,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            textAlign: TextAlign.right,
-            style: const TextStyle(
-              color: Color(0xFF1957E6),
-              fontWeight: FontWeight.w900,
-            ),
-            decoration: InputDecoration(
-              prefixText: r'RD$  ',
-              filled: true,
-              fillColor: const Color(0xFFF8FBFD),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(9),
-                borderSide: const BorderSide(color: Color(0xFFC9D8EA)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(9),
-                borderSide: const BorderSide(color: Color(0xFFC9D8EA)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(9),
-                borderSide: const BorderSide(
-                  color: Color(0xFF1957E6),
-                  width: 1.4,
-                ),
-              ),
-            ),
-          ),
-        ),
+        SizedBox(width: 210, height: 46, child: _amountField()),
       ],
+    );
+  }
+
+  Widget _amountField() {
+    return TextField(
+      controller: controller,
+      enabled: enabled,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      textAlign: TextAlign.right,
+      style: const TextStyle(
+        color: Color(0xFF1957E6),
+        fontWeight: FontWeight.w900,
+      ),
+      decoration: InputDecoration(
+        prefixText: r'RD$  ',
+        filled: true,
+        fillColor: const Color(0xFFF8FBFD),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(9),
+          borderSide: const BorderSide(color: Color(0xFFC9D8EA)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(9),
+          borderSide: const BorderSide(color: Color(0xFFC9D8EA)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(9),
+          borderSide: const BorderSide(color: Color(0xFF1957E6), width: 1.4),
+        ),
+      ),
     );
   }
 }

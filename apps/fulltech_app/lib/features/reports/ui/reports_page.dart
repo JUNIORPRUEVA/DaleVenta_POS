@@ -295,120 +295,136 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     return Scaffold(
       drawer: buildAdaptiveDrawer(context, currentUser: user),
       backgroundColor: _pageBg,
-      body: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _ReportsTopBar(
-              selectedPeriod: _selectedPeriod,
-              customLabel: _selectedPeriod == DateRangePeriod.custom
-                  ? '${_date.format(_range.start)} - ${_date.format(_range.end)}'
-                  : null,
-              loading: _loading,
-              onPeriodChanged: _changePeriod,
-              onReload: _loadData,
-            ),
-            const SizedBox(height: 12),
-            if (_loading)
-              const Expanded(child: Center(child: CircularProgressIndicator()))
-            else if (_error != null)
-              Expanded(child: Center(child: Text(_error!)))
-            else
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final wide = constraints.maxWidth >= 1120;
-                    return RefreshIndicator(
-                      onRefresh: _loadData,
-                      child: ListView(
-                        children: [
-                          _HeroReportsPanel(
-                            wide: wide,
-                            kpis: _kpis,
-                            salesSeries: _salesSeries,
-                            paymentMethods: _paymentMethods,
-                            periodLabel:
-                                '${_date.format(_range.start)} - ${_date.format(_range.end)}',
-                          ),
-                          const SizedBox(height: 12),
-                          _AdvancedKpiCards(kpis: _kpis),
-                          const SizedBox(height: 12),
-                          wide
-                              ? Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      flex: 3,
-                                      child: _PremiumCard(
-                                        title: 'Utilidad',
-                                        child: SizedBox(
-                                          height: 260,
-                                          child: ProfitLineChart(
-                                            data: _profitSeries,
+      body: LayoutBuilder(
+        builder: (context, pageConstraints) {
+          final mobile = pageConstraints.maxWidth < 640;
+          return Padding(
+            padding: EdgeInsets.all(mobile ? 8 : 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ReportsTopBar(
+                  selectedPeriod: _selectedPeriod,
+                  customLabel: _selectedPeriod == DateRangePeriod.custom
+                      ? '${_date.format(_range.start)} - ${_date.format(_range.end)}'
+                      : null,
+                  loading: _loading,
+                  onPeriodChanged: _changePeriod,
+                  onReload: _loadData,
+                ),
+                const SizedBox(height: 12),
+                if (_loading)
+                  const Expanded(
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_error != null)
+                  Expanded(child: Center(child: Text(_error!)))
+                else
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final wide = constraints.maxWidth >= 1120;
+                        return RefreshIndicator(
+                          onRefresh: _loadData,
+                          child: ListView(
+                            padding: EdgeInsets.only(bottom: mobile ? 18 : 0),
+                            children: [
+                              _HeroReportsPanel(
+                                wide: wide,
+                                kpis: _kpis,
+                                salesSeries: _salesSeries,
+                                paymentMethods: _paymentMethods,
+                                periodLabel:
+                                    '${_date.format(_range.start)} - ${_date.format(_range.end)}',
+                              ),
+                              const SizedBox(height: 12),
+                              _AdvancedKpiCards(kpis: _kpis),
+                              const SizedBox(height: 12),
+                              wide
+                                  ? Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                          flex: 3,
+                                          child: _PremiumCard(
+                                            title: 'Utilidad',
+                                            child: SizedBox(
+                                              height: 260,
+                                              child: ProfitLineChart(
+                                                data: _profitSeries,
+                                              ),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      flex: 2,
-                                      child: _ComparativeStatsCard(
-                                        rows: _comparisons,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : Column(
-                                  children: [
-                                    _PremiumCard(
-                                      title: 'Utilidad',
-                                      child: SizedBox(
-                                        height: 230,
-                                        child: ProfitLineChart(
-                                          data: _profitSeries,
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          flex: 2,
+                                          child: _ComparativeStatsCard(
+                                            rows: _comparisons,
+                                          ),
                                         ),
-                                      ),
+                                      ],
+                                    )
+                                  : Column(
+                                      children: [
+                                        _PremiumCard(
+                                          title: 'Utilidad',
+                                          child: SizedBox(
+                                            height: 230,
+                                            child: ProfitLineChart(
+                                              data: _profitSeries,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        _ComparativeStatsCard(
+                                          rows: _comparisons,
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(height: 12),
-                                    _ComparativeStatsCard(rows: _comparisons),
-                                  ],
-                                ),
-                          const SizedBox(height: 12),
-                          wide
-                              ? Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      child: TopProductsTable(
-                                        products: _topProducts,
-                                      ),
+                              const SizedBox(height: 12),
+                              wide
+                                  ? Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                          child: TopProductsTable(
+                                            products: _topProducts,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: TopClientsTable(
+                                            clients: _topClients,
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : Column(
+                                      children: [
+                                        TopProductsTable(
+                                          products: _topProducts,
+                                        ),
+                                        const SizedBox(height: 12),
+                                        TopClientsTable(clients: _topClients),
+                                      ],
                                     ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: TopClientsTable(
-                                        clients: _topClients,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : Column(
-                                  children: [
-                                    TopProductsTable(products: _topProducts),
-                                    const SizedBox(height: 12),
-                                    TopClientsTable(clients: _topClients),
-                                  ],
-                                ),
-                          const SizedBox(height: 12),
-                          _RecentSalesTable(sales: _sales.take(12).toList()),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-          ],
-        ),
+                              const SizedBox(height: 12),
+                              _RecentSalesTable(
+                                sales: _sales.take(12).toList(),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -467,49 +483,97 @@ class _ReportsTopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final mobile = MediaQuery.sizeOf(context).width < 640;
     return _Surface(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      padding: EdgeInsets.fromLTRB(12, 10, 12, mobile ? 12 : 10),
       radius: 14,
       child: Column(
         children: [
-          Row(
-            children: [
-              Builder(
-                builder: (context) => IconButton(
-                  tooltip: 'Menú',
-                  onPressed: () => Scaffold.of(context).openDrawer(),
-                  icon: const Icon(Icons.menu_rounded),
+          if (mobile)
+            Column(
+              children: [
+                Row(
+                  children: [
+                    Builder(
+                      builder: (context) => IconButton(
+                        tooltip: 'Menú',
+                        onPressed: () => Scaffold.of(context).openDrawer(),
+                        icon: const Icon(Icons.menu_rounded),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.all(9),
+                      decoration: BoxDecoration(
+                        color: scheme.primary.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: scheme.primary.withValues(alpha: 0.18),
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.bar_chart_rounded,
+                        color: scheme.primary,
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Reportes',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 20,
+                        ),
+                      ),
+                    ),
+                    IconButton.outlined(
+                      tooltip: 'Recargar',
+                      onPressed: loading ? null : onReload,
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                    ),
+                  ],
                 ),
-              ),
-              Container(
-                padding: const EdgeInsets.all(9),
-                decoration: BoxDecoration(
-                  color: scheme.primary.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: scheme.primary.withValues(alpha: 0.18),
+              ],
+            )
+          else
+            Row(
+              children: [
+                Builder(
+                  builder: (context) => IconButton(
+                    tooltip: 'Menú',
+                    onPressed: () => Scaffold.of(context).openDrawer(),
+                    icon: const Icon(Icons.menu_rounded),
                   ),
                 ),
-                child: Icon(
-                  Icons.bar_chart_rounded,
-                  color: scheme.primary,
-                  size: 18,
+                Container(
+                  padding: const EdgeInsets.all(9),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: scheme.primary.withValues(alpha: 0.18),
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.bar_chart_rounded,
+                    color: scheme.primary,
+                    size: 18,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Text(
-                  'Reportes',
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Reportes',
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
+                  ),
                 ),
-              ),
-              OutlinedButton.icon(
-                onPressed: loading ? null : onReload,
-                icon: const Icon(Icons.refresh_rounded, size: 16),
-                label: const Text('Recargar'),
-              ),
-            ],
-          ),
+                OutlinedButton.icon(
+                  onPressed: loading ? null : onReload,
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Recargar'),
+                ),
+              ],
+            ),
           const SizedBox(height: 10),
           DateRangeSelector(
             selectedPeriod: selectedPeriod,
@@ -536,25 +600,29 @@ class DateRangeSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 640;
     return _Surface(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       radius: 12,
       shadow: false,
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: [
-          _chip(context, 'Hoy', DateRangePeriod.today),
-          _chip(context, 'Semana', DateRangePeriod.week),
-          _chip(context, '15 días', DateRangePeriod.biweekly),
-          _chip(context, 'Mes', DateRangePeriod.month),
-          _chip(context, 'Año', DateRangePeriod.year),
-          _chip(
-            context,
-            customLabel == null ? 'Personalizado' : customLabel!,
-            DateRangePeriod.custom,
-          ),
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: mobile ? Axis.horizontal : Axis.vertical,
+        child: Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            _chip(context, 'Hoy', DateRangePeriod.today),
+            _chip(context, 'Semana', DateRangePeriod.week),
+            _chip(context, '15 días', DateRangePeriod.biweekly),
+            _chip(context, 'Mes', DateRangePeriod.month),
+            _chip(context, 'Año', DateRangePeriod.year),
+            _chip(
+              context,
+              customLabel == null ? 'Personalizado' : customLabel!,
+              DateRangePeriod.custom,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -603,6 +671,7 @@ class _HeroReportsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 640;
     final salesPanel = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -621,9 +690,12 @@ class _HeroReportsPanel extends StatelessWidget {
           child: Text(
             formatRdCurrencyAccounting(kpis.totalSales),
             style: TextStyle(
-              fontSize: wide ? 42 : 34,
+              fontSize: wide
+                  ? 42
+                  : mobile
+                  ? 28
+                  : 34,
               fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
               color: _textPrimary,
             ),
           ),
@@ -632,7 +704,11 @@ class _HeroReportsPanel extends StatelessWidget {
         _Pill(text: periodLabel),
         const SizedBox(height: 16),
         SizedBox(
-          height: wide ? 290 : 240,
+          height: wide
+              ? 290
+              : mobile
+              ? 190
+              : 240,
           child: SalesBarChart(data: salesSeries, barColor: _primaryBlue),
         ),
       ],
@@ -664,7 +740,7 @@ class _HeroReportsPanel extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         SizedBox(
-          height: 250,
+          height: mobile ? 230 : 250,
           child: PaymentMethodPieChart(data: paymentMethods),
         ),
         const SizedBox(height: 12),
@@ -688,7 +764,7 @@ class _HeroReportsPanel extends StatelessWidget {
     );
 
     return _Surface(
-      padding: const EdgeInsets.all(22),
+      padding: EdgeInsets.all(mobile ? 14 : 22),
       radius: 12,
       gradient: const LinearGradient(
         colors: [Color(0xFFF8FBFF), Color(0xFFEDF4FF), Color(0xFFF6FBFF)],
@@ -788,41 +864,48 @@ class PaymentMethodPieChart extends StatelessWidget {
   Widget build(BuildContext context) {
     if (data.isEmpty) return const _EmptyChart();
     final total = data.fold<double>(0, (sum, item) => sum + item.amount);
-    return Row(
-      children: [
-        Expanded(
-          flex: 3,
-          child: CustomPaint(
-            painter: _PieChartPainter(data: data),
-            child: Center(
-              child: Text(
-                formatRdCurrencyAccounting(total),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final mobile = constraints.maxWidth < 360;
+        final chart = CustomPaint(
+          painter: _PieChartPainter(data: data),
+          child: Center(
+            child: Text(
+              formatRdCurrencyAccounting(total),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
             ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          flex: 2,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+        );
+        final legend = Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (var i = 0; i < data.length; i++)
+              _LegendRow(
+                color: _chartColors[i % _chartColors.length],
+                label: data[i].method,
+                value:
+                    '${total == 0 ? 0 : ((data[i].amount / total) * 100).toStringAsFixed(0)}% · ${data[i].count}',
+              ),
+          ],
+        );
+        if (mobile) {
+          return Column(
             children: [
-              for (var i = 0; i < data.length; i++)
-                _LegendRow(
-                  color: _chartColors[i % _chartColors.length],
-                  label: data[i].method,
-                  value:
-                      '${total == 0 ? 0 : ((data[i].amount / total) * 100).toStringAsFixed(0)}% · ${data[i].count}',
-                ),
+              SizedBox(height: 150, child: chart),
+              const SizedBox(height: 8),
+              legend,
             ],
-          ),
-        ),
-      ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(flex: 3, child: chart),
+            const SizedBox(width: 12),
+            Expanded(flex: 2, child: legend),
+          ],
+        );
+      },
     );
   }
 }
@@ -924,18 +1007,25 @@ class _RecentSalesTable extends StatelessWidget {
                     ),
                     title: Text(
                       sale.customerName ?? 'Cliente General',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
                     subtitle: Text(
                       sale.saleDate == null
                           ? sale.id
                           : date.format(sale.saleDate!),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    trailing: Text(
-                      formatRdCurrencyAccounting(sale.totalSold),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        color: _primaryBlue,
+                    trailing: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        formatRdCurrencyAccounting(sale.totalSold),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: _primaryBlue,
+                        ),
                       ),
                     ),
                   ),
@@ -990,8 +1080,9 @@ class _PremiumCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 640;
     return _Surface(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(mobile ? 12 : 16),
       radius: 14,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1023,11 +1114,12 @@ class _KpiCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 640;
     return SizedBox(
-      width: 260,
+      width: mobile ? double.infinity : 260,
       child: _Surface(
-        padding: const EdgeInsets.all(18),
-        radius: 18,
+        padding: EdgeInsets.all(mobile ? 14 : 18),
+        radius: 14,
         child: Row(
           children: [
             Container(
@@ -1087,8 +1179,9 @@ class _SummaryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 640;
     return Container(
-      width: 145,
+      width: mobile ? double.infinity : 145,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
@@ -1123,7 +1216,9 @@ class _HeroMiniInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 640;
     return Container(
+      width: mobile ? double.infinity : null,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.76),
@@ -1137,7 +1232,12 @@ class _HeroMiniInfo extends StatelessWidget {
             label,
             style: const TextStyle(color: _textSecondary, fontSize: 11),
           ),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w900)),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
         ],
       ),
     );
@@ -1223,41 +1323,99 @@ class _RankingRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 640;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 28,
-            child: Text(
-              '#$rank',
-              style: const TextStyle(
-                color: _primaryBlue,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Column(
+      child: mobile
+          ? Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+                SizedBox(
+                  width: 28,
+                  child: Text(
+                    '#$rank',
+                    style: const TextStyle(
+                      color: _primaryBlue,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                 ),
-                Text(
-                  subtitle,
-                  style: const TextStyle(color: _textSecondary, fontSize: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          color: _textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        trailing,
+                        style: const TextStyle(
+                          color: _primaryBlue,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                SizedBox(
+                  width: 28,
+                  child: Text(
+                    '#$rank',
+                    style: const TextStyle(
+                      color: _primaryBlue,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          color: _textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      trailing,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-          Text(trailing, style: const TextStyle(fontWeight: FontWeight.w900)),
-        ],
-      ),
     );
   }
 }
@@ -1293,76 +1451,79 @@ class _ComparisonRow extends StatelessWidget {
         : ((data.currentValue - data.previousValue) / data.previousValue) * 100;
     final positive = change >= 0;
     final color = positive ? _teal : _error;
+    final mobile = MediaQuery.sizeOf(context).width < 640;
+
+    final trend = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            positive ? Icons.trending_up : Icons.trending_down,
+            size: 14,
+            color: color,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '${positive ? '+' : ''}${change.toStringAsFixed(1)}%',
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(mobile ? 12 : 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _borderSoft),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: _primaryBlue.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(data.icon, color: _primaryBlue, size: 22),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
+      child: mobile
+          ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
+                    Container(
+                      padding: const EdgeInsets.all(9),
+                      decoration: BoxDecoration(
+                        color: _primaryBlue.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(data.icon, color: _primaryBlue, size: 20),
+                    ),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         data.currentLabel,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            positive ? Icons.trending_up : Icons.trending_down,
-                            size: 14,
-                            color: color,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${positive ? '+' : ''}${change.toStringAsFixed(1)}%',
-                            style: TextStyle(
-                              color: color,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    trend,
                   ],
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  formatRdCurrencyAccounting(data.currentValue),
-                  style: const TextStyle(
-                    fontSize: 21,
-                    fontWeight: FontWeight.w900,
-                    color: _primaryBlue,
+                const SizedBox(height: 10),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    formatRdCurrencyAccounting(data.currentValue),
+                    style: const TextStyle(
+                      fontSize: 21,
+                      fontWeight: FontWeight.w900,
+                      color: _primaryBlue,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -1375,10 +1536,59 @@ class _ComparisonRow extends StatelessWidget {
                   ),
                 ),
               ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: _primaryBlue.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(data.icon, color: _primaryBlue, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              data.currentLabel,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          trend,
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        formatRdCurrencyAccounting(data.currentValue),
+                        style: const TextStyle(
+                          fontSize: 21,
+                          fontWeight: FontWeight.w900,
+                          color: _primaryBlue,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${data.currentCount} ventas | ${data.previousLabel}: ${formatRdCurrencyAccounting(data.previousValue)} (${data.previousCount} ventas)',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: _textSecondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 }

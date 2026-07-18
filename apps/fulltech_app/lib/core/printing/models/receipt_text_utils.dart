@@ -1,5 +1,9 @@
+import 'package:intl/intl.dart';
+
 class ReceiptTextUtils {
-  static String money(double value) => 'RD\$ ${value.toStringAsFixed(2)}';
+  static final NumberFormat _moneyFormat = NumberFormat('#,##0.00', 'en_US');
+
+  static String money(double value) => 'RD\$ ${_moneyFormat.format(value)}';
 
   static String qty(double value) {
     if (value == value.truncateToDouble()) return value.toStringAsFixed(0);

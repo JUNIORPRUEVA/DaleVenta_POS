@@ -57,6 +57,12 @@ export class CreateSaleDto {
   @Min(0)
   creditAmount?: number;
 
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  expectedTotalSold?: number;
+
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })

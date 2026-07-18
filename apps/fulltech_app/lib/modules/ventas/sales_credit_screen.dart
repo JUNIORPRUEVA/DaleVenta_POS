@@ -104,46 +104,94 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
         .toList(growable: false);
     final selected = _selectedCredit(rows);
 
-    return Row(
-      children: [
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(18),
+    final mobile = MediaQuery.sizeOf(context).width < 820;
+
+    return Padding(
+      padding: EdgeInsets.all(mobile ? 10 : 18),
+      child: Row(
+        children: [
+          Expanded(
             child: Column(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: _CreditStat(
-                        label: 'Créditos abiertos',
-                        value: open.length.toString(),
-                        icon: Icons.credit_score_outlined,
+                mobile
+                    ? Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _CreditStat(
+                                  label: 'Abiertos',
+                                  value: open.length.toString(),
+                                  icon: Icons.credit_score_outlined,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton.filledTonal(
+                                tooltip: 'Actualizar',
+                                onPressed: () =>
+                                    ref.invalidate(salesCreditsProvider),
+                                icon: const Icon(Icons.refresh_rounded),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _CreditStat(
+                                  label: 'Pendiente',
+                                  value: formatRdCurrencyAccounting(
+                                    totalPending,
+                                  ),
+                                  icon: Icons.account_balance_wallet_outlined,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _CreditStat(
+                                  label: 'Abonado',
+                                  value: formatRdCurrencyAccounting(totalPaid),
+                                  icon: Icons.payments_outlined,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          Expanded(
+                            child: _CreditStat(
+                              label: 'Créditos abiertos',
+                              value: open.length.toString(),
+                              icon: Icons.credit_score_outlined,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _CreditStat(
+                              label: 'Total pendiente',
+                              value: formatRdCurrencyAccounting(totalPending),
+                              icon: Icons.account_balance_wallet_outlined,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _CreditStat(
+                              label: 'Abonado',
+                              value: formatRdCurrencyAccounting(totalPaid),
+                              icon: Icons.payments_outlined,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          IconButton.filledTonal(
+                            tooltip: 'Actualizar',
+                            onPressed: () =>
+                                ref.invalidate(salesCreditsProvider),
+                            icon: const Icon(Icons.refresh_rounded),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _CreditStat(
-                        label: 'Total pendiente',
-                        value: formatRdCurrencyAccounting(totalPending),
-                        icon: Icons.account_balance_wallet_outlined,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _CreditStat(
-                        label: 'Abonado',
-                        value: formatRdCurrencyAccounting(totalPaid),
-                        icon: Icons.payments_outlined,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    IconButton.filledTonal(
-                      tooltip: 'Actualizar',
-                      onPressed: () => ref.invalidate(salesCreditsProvider),
-                      icon: const Icon(Icons.refresh_rounded),
-                    ),
-                  ],
-                ),
                 const SizedBox(height: 14),
                 _CreditSearchBar(controller: _searchController),
                 const SizedBox(height: 14),
@@ -162,9 +210,14 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                             final sale = filtered[index];
                             return _CreditCard(
                               sale: sale,
-                              selected: sale.id == _selectedCreditId,
-                              onTap: () =>
-                                  setState(() => _selectedCreditId = sale.id),
+                              selected: !mobile && sale.id == _selectedCreditId,
+                              onTap: () {
+                                if (mobile) {
+                                  _openMobileCreditDetail(sale);
+                                } else {
+                                  setState(() => _selectedCreditId = sale.id);
+                                }
+                              },
                               onPayment: () => _openPaymentDialog(sale),
                               onPdf: () => _openCreditPdfPreview(sale),
                             );
@@ -174,20 +227,49 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
               ],
             ),
           ),
-        ),
-        if (selected != null)
-          _CreditDetailPanel(
-            sale: selected,
-            onClose: () => setState(() => _selectedCreditId = null),
-            onPayment: () => _openPaymentDialog(selected),
-            onSettle: selected.creditBalance <= 0.009
-                ? null
-                : () => _openPaymentDialog(selected, settle: true),
-            onPrint: () => _printCreditPdf(selected),
-            onSharePdf: () => _openCreditPdfPreview(selected),
-            onWhatsApp: () => _sendCreditWhatsApp(selected),
+          if (!mobile && selected != null)
+            _CreditDetailPanel(
+              sale: selected,
+              onClose: () => setState(() => _selectedCreditId = null),
+              onPayment: () => _openPaymentDialog(selected),
+              onSettle: selected.creditBalance <= 0.009
+                  ? null
+                  : () => _openPaymentDialog(selected, settle: true),
+              onPrint: () => _printCreditPdf(selected),
+              onSharePdf: () => _openCreditPdfPreview(selected),
+              onWhatsApp: () => _sendCreditWhatsApp(selected),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openMobileCreditDetail(SaleModel sale) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+            child: SizedBox(
+              height: MediaQuery.sizeOf(sheetContext).height * 0.88,
+              child: _CreditDetailPanel(
+                sale: sale,
+                onClose: () => Navigator.of(sheetContext).pop(),
+                onPayment: () => _openPaymentDialog(sale),
+                onSettle: sale.creditBalance <= 0.009
+                    ? null
+                    : () => _openPaymentDialog(sale, settle: true),
+                onPrint: () => _printCreditPdf(sale),
+                onSharePdf: () => _openCreditPdfPreview(sale),
+                onWhatsApp: () => _sendCreditWhatsApp(sale),
+              ),
+            ),
           ),
-      ],
+        );
+      },
     );
   }
 
@@ -489,8 +571,12 @@ class _CreditPaymentDialogState extends State<_CreditPaymentDialog> {
   @override
   Widget build(BuildContext context) {
     final title = widget.settle ? 'Saldar crédito' : 'Registrar abono';
+    final mobile = MediaQuery.sizeOf(context).width < 520;
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: mobile ? 12 : 24,
+        vertical: mobile ? 16 : 24,
+      ),
       backgroundColor: Colors.transparent,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 470),
@@ -498,7 +584,12 @@ class _CreditPaymentDialogState extends State<_CreditPaymentDialog> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(26, 22, 26, 22),
+            padding: EdgeInsets.fromLTRB(
+              mobile ? 16 : 26,
+              mobile ? 18 : 22,
+              mobile ? 16 : 26,
+              mobile ? 18 : 22,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -533,24 +624,40 @@ class _CreditPaymentDialogState extends State<_CreditPaymentDialog> {
                   ],
                 ),
                 const SizedBox(height: 18),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _CreditInput(
+                if (mobile)
+                  Column(
+                    children: [
+                      _CreditInput(
                         label: 'Efectivo',
                         controller: _cashCtrl,
                         autofocus: true,
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _CreditInput(
+                      const SizedBox(height: 10),
+                      _CreditInput(
                         label: 'Transferencia',
                         controller: _transferCtrl,
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _CreditInput(
+                          label: 'Efectivo',
+                          controller: _cashCtrl,
+                          autofocus: true,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _CreditInput(
+                          label: 'Transferencia',
+                          controller: _transferCtrl,
+                        ),
+                      ),
+                    ],
+                  ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: _noteCtrl,
@@ -580,23 +687,39 @@ class _CreditPaymentDialogState extends State<_CreditPaymentDialog> {
                   ),
                 ],
                 const SizedBox(height: 22),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('Cancelar'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton(
+                if (mobile)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      FilledButton(
                         onPressed: _submit,
                         child: Text(widget.settle ? 'Saldar' : 'Guardar'),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(height: 8),
+                      OutlinedButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Cancelar'),
+                      ),
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Cancelar'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: _submit,
+                          child: Text(widget.settle ? 'Saldar' : 'Guardar'),
+                        ),
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),
@@ -676,8 +799,9 @@ class _CreditStat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 520;
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(mobile ? 12 : 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
@@ -685,8 +809,8 @@ class _CreditStat extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icon, color: const Color(0xFF1957E6)),
-          const SizedBox(width: 10),
+          Icon(icon, color: const Color(0xFF1957E6), size: mobile ? 20 : 24),
+          SizedBox(width: mobile ? 8 : 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -695,9 +819,11 @@ class _CreditStat extends StatelessWidget {
                 Text(
                   value,
                   style: const TextStyle(
-                    fontSize: 18,
+                    fontSize: 17,
                     fontWeight: FontWeight.w900,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -725,6 +851,7 @@ class _CreditCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 620;
     final date = sale.saleDate == null
         ? 'Sin fecha'
         : DateFormat('dd/MM/yyyy HH:mm').format(sale.saleDate!.toLocal());
@@ -747,65 +874,123 @@ class _CreditCard extends StatelessWidget {
               width: selected ? 1.4 : 1,
             ),
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
+          child: mobile
+              ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      sale.customerName ?? 'Sin cliente',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 16,
-                      ),
+                    _CreditCardInfo(
+                      sale: sale,
+                      date: date,
+                      shortId: shortId,
+                      paid: paid,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Crédito: $date · Factura $shortId',
-                      style: const TextStyle(color: Color(0xFF52657A)),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
+                    const SizedBox(height: 12),
+                    Row(
                       children: [
-                        _AmountChip(
-                          label: 'Total',
-                          value: formatRdCurrencyAccounting(sale.totalSold),
-                        ),
-                        _AmountChip(
-                          label: 'Pagado',
-                          value: formatRdCurrencyAccounting(
-                            sale.creditPaidAmount,
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: onPdf,
+                            icon: const Icon(
+                              Icons.picture_as_pdf_outlined,
+                              size: 18,
+                            ),
+                            label: const Text('PDF'),
                           ),
                         ),
-                        _AmountChip(
-                          label: paid ? 'Saldado' : 'Debe',
-                          value: formatRdCurrencyAccounting(sale.creditBalance),
-                          danger: !paid,
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: paid ? null : onPayment,
+                            icon: const Icon(Icons.payments_outlined, size: 18),
+                            label: const Text('Abonar'),
+                          ),
                         ),
                       ],
                     ),
                   ],
+                )
+              : Row(
+                  children: [
+                    Expanded(
+                      child: _CreditCardInfo(
+                        sale: sale,
+                        date: date,
+                        shortId: shortId,
+                        paid: paid,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    OutlinedButton.icon(
+                      onPressed: onPdf,
+                      icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                      label: const Text('PDF'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      onPressed: paid ? null : onPayment,
+                      icon: const Icon(Icons.payments_outlined, size: 18),
+                      label: const Text('Abonar'),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: onPdf,
-                icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                label: const Text('PDF'),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: paid ? null : onPayment,
-                icon: const Icon(Icons.payments_outlined, size: 18),
-                label: const Text('Abonar'),
-              ),
-            ],
-          ),
         ),
       ),
+    );
+  }
+}
+
+class _CreditCardInfo extends StatelessWidget {
+  const _CreditCardInfo({
+    required this.sale,
+    required this.date,
+    required this.shortId,
+    required this.paid,
+  });
+
+  final SaleModel sale;
+  final String date;
+  final String shortId;
+  final bool paid;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          sale.customerName ?? 'Sin cliente',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Crédito: $date · Factura $shortId',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: Color(0xFF52657A)),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            _AmountChip(
+              label: 'Total',
+              value: formatRdCurrencyAccounting(sale.totalSold),
+            ),
+            _AmountChip(
+              label: 'Pagado',
+              value: formatRdCurrencyAccounting(sale.creditPaidAmount),
+            ),
+            _AmountChip(
+              label: paid ? 'Saldado' : 'Debe',
+              value: formatRdCurrencyAccounting(sale.creditBalance),
+              danger: !paid,
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -835,12 +1020,18 @@ class _CreditDetailPanel extends StatelessWidget {
         ? 'Sin fecha'
         : DateFormat('dd/MM/yyyy HH:mm').format(sale.saleDate!.toLocal());
     final paid = sale.creditBalance <= 0.009;
+    final mobile = MediaQuery.sizeOf(context).width < 620;
     return Container(
-      width: 460,
+      width: mobile ? double.infinity : 460,
       height: double.infinity,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(left: BorderSide(color: Color(0xFFD3E0E7))),
+        border: mobile
+            ? null
+            : const Border(left: BorderSide(color: Color(0xFFD3E0E7))),
+        borderRadius: mobile
+            ? const BorderRadius.vertical(top: Radius.circular(16))
+            : BorderRadius.zero,
       ),
       child: Column(
         children: [

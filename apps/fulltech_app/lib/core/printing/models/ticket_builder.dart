@@ -275,19 +275,30 @@ class TicketBuilder {
     double fontSize,
   ) {
     final rows = <({String label, String value})>[
-      (label: 'No.', value: data.ticketNumber),
-      (label: 'Fecha', value: _dateTime(data.dateTime)),
+      (label: 'FACTURA', value: data.ticketNumber),
+      (label: 'FECHA', value: _rdDate(data.dateTime)),
+      (label: 'HORA', value: _rdTime12h(data.dateTime)),
       if ((data.cashierName ?? '').trim().isNotEmpty)
-        (label: 'Cajero', value: data.cashierName!.trim()),
+        (label: 'CAJERO', value: data.cashierName!.trim()),
       if (data.client != null && data.client!.name.trim().isNotEmpty)
-        (label: 'Cliente', value: data.client!.name.trim()),
+        (label: 'CLIENTE', value: data.client!.name.trim()),
       if (data.client != null && data.client!.document.trim().isNotEmpty)
-        (label: 'Doc.', value: data.client!.document.trim()),
+        (label: 'DOC.', value: data.client!.document.trim()),
     ];
-    return pw.Column(
-      children: rows
-          .map((row) => _pair(row.label, row.value, fonts.regular, fontSize))
-          .toList(growable: false),
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 3),
+      child: pw.Column(
+        children: rows
+            .map(
+              (row) => _pair(
+                row.label,
+                row.value,
+                row.label == 'FACTURA' ? fonts.bold : fonts.regular,
+                row.label == 'FACTURA' ? fontSize + 0.4 : fontSize,
+              ),
+            )
+            .toList(growable: false),
+      ),
     );
   }
 
@@ -299,26 +310,40 @@ class TicketBuilder {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.stretch,
       children: [
-        _pair(
-          layout.paperWidthMm == 58 ? 'CANT  DESCRIPCION' : 'CANT  PRODUCTO',
-          'IMPORTE',
-          fonts.bold,
-          fontSize,
+        pw.Container(height: 0.7, color: PdfColors.grey700),
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(vertical: 3),
+          child: _pair(
+            layout.paperWidthMm == 58 ? 'CANT  DESCRIPCION' : 'CANT  PRODUCTO',
+            'IMPORTE',
+            fonts.bold,
+            fontSize + 0.25,
+          ),
         ),
-        pw.SizedBox(height: 2),
-        ...data.items.expand((item) {
+        pw.Container(height: 0.7, color: PdfColors.grey700),
+        pw.SizedBox(height: 5),
+        ...data.items.toList().asMap().entries.expand((entry) {
+          final index = entry.key + 1;
+          final item = entry.value;
           final qtyPrice =
               '${ReceiptTextUtils.qty(item.qty)} x ${ReceiptTextUtils.money(item.unitPrice)}';
           return [
-            pw.Text(
-              item.name.trim(),
-              style: pw.TextStyle(font: fonts.regular, fontSize: fontSize),
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(bottom: 1.5),
+              child: pw.Text(
+                '$index. ${item.name.trim()}',
+                style: pw.TextStyle(
+                  font: fonts.bold,
+                  fontSize: fontSize + 0.25,
+                  height: 1.08,
+                ),
+              ),
             ),
             _pair(
               qtyPrice,
               ReceiptTextUtils.money(item.total),
-              fonts.regular,
-              fontSize,
+              fonts.bold,
+              fontSize + 0.2,
             ),
             if (layout.showDiscounts && item.discount > 0)
               _pair(
@@ -327,7 +352,12 @@ class TicketBuilder {
                 fonts.regular,
                 fontSize,
               ),
-            pw.SizedBox(height: 2),
+            if (index < data.items.length)
+              pw.Container(
+                height: 0.3,
+                margin: const pw.EdgeInsets.symmetric(vertical: 4),
+                color: PdfColors.grey300,
+              ),
           ];
         }),
       ],
@@ -342,21 +372,21 @@ class TicketBuilder {
     return pw.Column(
       children: [
         if (layout.showSubtotalItbisTotal) ...[
-          _pair(
-            'Subtotal',
+          _totalPair(
+            'SUBTOTAL',
             ReceiptTextUtils.money(data.resolvedSubtotal),
             fonts.regular,
             fontSize,
           ),
           if (layout.showDiscounts && data.discount > 0)
-            _pair(
-              'Descuento',
+            _totalPair(
+              'DESCUENTO',
               '-${ReceiptTextUtils.money(data.discount)}',
               fonts.regular,
               fontSize,
             ),
           if (layout.showItbis && data.itbis > 0)
-            _pair(
+            _totalPair(
               'ITBIS',
               ReceiptTextUtils.money(data.itbis),
               fonts.regular,
@@ -364,17 +394,23 @@ class TicketBuilder {
             ),
         ],
         pw.Container(
-          margin: const pw.EdgeInsets.only(top: 4),
-          padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 5),
-          decoration: pw.BoxDecoration(
-            border: pw.Border.all(width: 1.1, color: PdfColors.grey900),
-          ),
-          child: _pair(
+          height: 1.0,
+          margin: const pw.EdgeInsets.only(top: 5, bottom: 4),
+          color: PdfColors.grey900,
+        ),
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(vertical: 2),
+          child: _totalPair(
             'TOTAL',
             ReceiptTextUtils.money(data.total),
             fonts.bold,
-            fontSize + 2,
+            fontSize + 1.7,
           ),
+        ),
+        pw.Container(
+          height: 0.7,
+          margin: const pw.EdgeInsets.only(top: 3),
+          color: PdfColors.grey700,
         ),
         if (layout.showPaymentMethod &&
             (data.paymentMethod ?? '').trim().isNotEmpty)
@@ -408,6 +444,34 @@ class TicketBuilder {
             right,
             textAlign: pw.TextAlign.right,
             style: pw.TextStyle(font: font, fontSize: fontSize),
+          ),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget _totalPair(
+    String left,
+    String right,
+    pw.Font font,
+    double fontSize,
+  ) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 2),
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Expanded(
+            child: pw.Text(
+              left,
+              style: pw.TextStyle(font: font, fontSize: fontSize, height: 1.05),
+            ),
+          ),
+          pw.SizedBox(width: 8),
+          pw.Text(
+            right,
+            textAlign: pw.TextAlign.right,
+            style: pw.TextStyle(font: font, fontSize: fontSize, height: 1.05),
           ),
         ],
       ),
@@ -529,10 +593,22 @@ class TicketBuilder {
     }.contains(value);
   }
 
-  String _dateTime(DateTime value) {
+  DateTime _dominicanTime(DateTime value) {
+    return value.toUtc().subtract(const Duration(hours: 4));
+  }
+
+  String _rdDate(DateTime value) {
+    final rd = _dominicanTime(value);
     String two(int n) => n.toString().padLeft(2, '0');
-    return '${two(value.day)}/${two(value.month)}/${value.year} '
-        '${two(value.hour)}:${two(value.minute)}';
+    return '${two(rd.day)}/${two(rd.month)}/${rd.year}';
+  }
+
+  String _rdTime12h(DateTime value) {
+    final rd = _dominicanTime(value);
+    final hour12 = rd.hour == 0 ? 12 : (rd.hour > 12 ? rd.hour - 12 : rd.hour);
+    final minute = rd.minute.toString().padLeft(2, '0');
+    final suffix = rd.hour >= 12 ? 'PM' : 'AM';
+    return '$hour12:$minute $suffix';
   }
 
   List<String> buildDebugRuler() {

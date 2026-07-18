@@ -16,6 +16,7 @@ import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/product_network_image.dart';
 import '../../core/widgets/fulltech_dialog.dart';
 import '../clientes/cliente_model.dart';
+import 'application/ventas_controller.dart';
 import 'data/ventas_repository.dart';
 import 'sales_models.dart';
 
@@ -1418,6 +1419,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       }
 
       if (!mounted) return;
+      ref.invalidate(ventasControllerProvider);
       setState(() {
         _cart = [];
         _selectedClient = null;

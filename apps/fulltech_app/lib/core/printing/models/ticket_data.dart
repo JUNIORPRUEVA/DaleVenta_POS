@@ -71,8 +71,10 @@ class TicketData {
     List<SaleItemModel>? items,
     bool isCopy = false,
     String? paymentMethod,
+    String? cashierNameOverride,
   }) {
     final List<SaleItemModel> saleItems = items ?? sale.items;
+    final cashierName = (cashierNameOverride ?? sale.userName ?? '').trim();
     return TicketData(
       ticketNumber: _invoiceNumber(sale.id),
       dateTime: sale.saleDate ?? DateTime.now(),
@@ -93,7 +95,7 @@ class TicketData {
         (sum, item) => sum + item.subtotalSold,
       ),
       client: ClientInfo(name: sale.customerName ?? 'Consumidor Final'),
-      cashierName: sale.userName ?? sale.userId,
+      cashierName: cashierName.isEmpty ? 'Cajero' : cashierName,
       note: sale.note,
       type: sale.isDeleted ? TicketType.refund : TicketType.sale,
       isCopy: isCopy,

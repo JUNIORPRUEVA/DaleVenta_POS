@@ -321,6 +321,7 @@ class VentasRepository {
     double? paymentCashAmount,
     double? paymentTransferAmount,
     double? creditAmount,
+    double? expectedTotalSold,
     required List<SaleDraftItem> items,
   }) async {
     if (items.isEmpty) {
@@ -342,6 +343,7 @@ class VentasRepository {
           if (paymentTransferAmount != null)
             'paymentTransferAmount': paymentTransferAmount,
           if (creditAmount != null) 'creditAmount': creditAmount,
+          if (expectedTotalSold != null) 'expectedTotalSold': expectedTotalSold,
           'items': items.map((item) => item.toPayload()).toList(),
         },
       );

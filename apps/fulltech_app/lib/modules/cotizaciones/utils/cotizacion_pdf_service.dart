@@ -7,6 +7,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../../core/utils/pdf_file_actions.dart';
 import '../../../core/company/company_settings_model.dart';
 import '../cotizacion_models.dart';
 
@@ -397,10 +398,34 @@ Future<void> shareCotizacionPdf({
   required Uint8List bytes,
   required CotizacionModel cotizacion,
 }) async {
-  final dateFmt = DateFormat('yyyyMMdd_HHmm');
-  final filename =
-      'cotizacion_${dateFmt.format(cotizacion.createdAt)}_${_buildFileToken(cotizacion.id, length: 6, fallback: 'manual')}.pdf';
+  final filename = buildCotizacionPdfFileName(cotizacion);
   await Printing.sharePdf(bytes: bytes, filename: filename);
+}
+
+Future<bool> saveCotizacionPdfToDownloads({
+  required Uint8List bytes,
+  required CotizacionModel cotizacion,
+}) {
+  return savePdfBytes(
+    bytes: bytes,
+    fileName: buildCotizacionPdfFileName(cotizacion),
+  );
+}
+
+String buildCotizacionPdfFileName(CotizacionModel cotizacion) {
+  final customerToken = _fileNameToken(cotizacion.customerName);
+  final quoteToken = _buildQuoteCode(cotizacion.id);
+  final token = customerToken.isNotEmpty ? customerToken : quoteToken;
+  return '$token.pdf';
+}
+
+String _fileNameToken(String value) {
+  return value
+      .trim()
+      .replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .replaceAll(RegExp(r'_+'), '_')
+      .trim();
 }
 
 Future<pw.MemoryImage?> _resolveCompanyLogo(CompanySettings? company) async {

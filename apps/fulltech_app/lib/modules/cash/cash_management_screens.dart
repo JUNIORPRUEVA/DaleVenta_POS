@@ -310,6 +310,7 @@ class _CashMovementsHistoryScreenState
   Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).user;
     final history = ref.watch(cashMovementHistoryProvider);
+    final isMobile = MediaQuery.sizeOf(context).width < 700;
 
     return CallbackShortcuts(
       bindings: {
@@ -324,131 +325,133 @@ class _CashMovementsHistoryScreenState
           appBar: FullTechPageHeader(
             title: 'Movimiento de efectivo',
             actions: [
-              TextButton.icon(
-                onPressed: () => _register('IN'),
-                icon: const Icon(Icons.add_circle_outline_rounded),
-                label: const Text('Registrar ingreso'),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: () => _register('OUT'),
-                icon: const Icon(Icons.remove_circle_outline_rounded),
-                label: const Text('Registrar salida'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: _danger,
-                  foregroundColor: Colors.white,
+              if (isMobile) ...[
+                IconButton.filledTonal(
+                  tooltip: 'Registrar ingreso',
+                  onPressed: () => _register('IN'),
+                  icon: const Icon(Icons.add_circle_outline_rounded),
                 ),
-              ),
-              const SizedBox(width: 8),
+                const SizedBox(width: 6),
+                IconButton.filled(
+                  tooltip: 'Registrar salida',
+                  onPressed: () => _register('OUT'),
+                  icon: const Icon(Icons.remove_circle_outline_rounded),
+                  style: IconButton.styleFrom(
+                    backgroundColor: _danger,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ] else ...[
+                TextButton.icon(
+                  onPressed: () => _register('IN'),
+                  icon: const Icon(Icons.add_circle_outline_rounded),
+                  label: const Text('Registrar ingreso'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: () => _register('OUT'),
+                  icon: const Icon(Icons.remove_circle_outline_rounded),
+                  label: const Text('Registrar salida'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _danger,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+              const SizedBox(width: 6),
               IconButton.filledTonal(
                 tooltip: 'Actualizar',
                 onPressed: () => ref.invalidate(cashMovementHistoryProvider),
                 icon: const Icon(Icons.refresh_rounded),
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: isMobile ? 6 : 10),
               const CashTurnMenuButton(),
-              const SizedBox(width: 10),
+              SizedBox(width: isMobile ? 6 : 10),
             ],
           ),
           body: Padding(
-            padding: const EdgeInsets.all(18),
+            padding: EdgeInsets.all(isMobile ? 10 : 18),
             child: _CashCard(
               child: Column(
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _CashSearchField(
+                  if (isMobile)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _CashSearchField(
                           controller: _searchController,
-                          hint: 'Buscar por usuario, motivo, monto o turno...',
+                          hint: 'Buscar movimientos...',
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      SegmentedButton<_MovementTypeFilter>(
-                        segments: const [
-                          ButtonSegment(
-                            value: _MovementTypeFilter.all,
-                            label: Text('Todos'),
-                          ),
-                          ButtonSegment(
-                            value: _MovementTypeFilter.inOnly,
-                            label: Text('Entradas'),
-                          ),
-                          ButtonSegment(
-                            value: _MovementTypeFilter.outOnly,
-                            label: Text('Salidas'),
-                          ),
-                        ],
-                        selected: {_type},
-                        onSelectionChanged: (value) =>
-                            setState(() => _type = value.first),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      SegmentedButton<_MovementDateFilter>(
-                        segments: const [
-                          ButtonSegment(
-                            value: _MovementDateFilter.today,
-                            label: Text('Hoy'),
-                          ),
-                          ButtonSegment(
-                            value: _MovementDateFilter.yesterday,
-                            label: Text('Ayer'),
-                          ),
-                          ButtonSegment(
-                            value: _MovementDateFilter.week,
-                            label: Text('Semana'),
-                          ),
-                          ButtonSegment(
-                            value: _MovementDateFilter.month,
-                            label: Text('Mes'),
-                          ),
-                          ButtonSegment(
-                            value: _MovementDateFilter.specific,
-                            label: Text('Fecha'),
-                          ),
-                          ButtonSegment(
-                            value: _MovementDateFilter.all,
-                            label: Text('Todo'),
-                          ),
-                        ],
-                        selected: {_date},
-                        onSelectionChanged: (value) {
-                          final next = value.first;
-                          if (next == _MovementDateFilter.specific) {
-                            _pickSpecificDate();
-                            return;
-                          }
-                          setState(() => _date = next);
-                        },
-                      ),
-                      if (_date == _MovementDateFilter.specific) ...[
-                        const SizedBox(width: 10),
-                        OutlinedButton.icon(
-                          onPressed: _pickSpecificDate,
-                          icon: const Icon(Icons.event_rounded, size: 18),
-                          label: Text(
-                            _specificDate == null
-                                ? 'Elegir fecha'
-                                : DateFormat(
-                                    'dd/MM/yyyy',
-                                    'es_DO',
-                                  ).format(_specificDate!),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: _cashText,
-                            minimumSize: const Size(132, 40),
-                            side: const BorderSide(color: _cashLine),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+                        const SizedBox(height: 10),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: _MovementTypeSelector(
+                            selected: _type,
+                            onChanged: (value) => setState(() => _type = value),
                           ),
                         ),
                       ],
-                    ],
+                    )
+                  else
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _CashSearchField(
+                            controller: _searchController,
+                            hint:
+                                'Buscar por usuario, motivo, monto o turno...',
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        _MovementTypeSelector(
+                          selected: _type,
+                          onChanged: (value) => setState(() => _type = value),
+                        ),
+                      ],
+                    ),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _MovementDateSelector(
+                            selected: _date,
+                            onChanged: (next) {
+                              if (next == _MovementDateFilter.specific) {
+                                _pickSpecificDate();
+                                return;
+                              }
+                              setState(() => _date = next);
+                            },
+                          ),
+                          if (_date == _MovementDateFilter.specific) ...[
+                            const SizedBox(width: 10),
+                            OutlinedButton.icon(
+                              onPressed: _pickSpecificDate,
+                              icon: const Icon(Icons.event_rounded, size: 18),
+                              label: Text(
+                                _specificDate == null
+                                    ? 'Elegir fecha'
+                                    : DateFormat(
+                                        'dd/MM/yyyy',
+                                        'es_DO',
+                                      ).format(_specificDate!),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: _cashText,
+                                minimumSize: Size(isMobile ? 118 : 132, 40),
+                                side: const BorderSide(color: _cashLine),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 14),
                   Expanded(
@@ -470,44 +473,11 @@ class _CashMovementsHistoryScreenState
                             .fold<double>(0, (sum, row) => sum + row.amount);
                         return Column(
                           children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _StatCard(
-                                    icon: Icons.receipt_long_outlined,
-                                    label: 'Movimientos',
-                                    value: visible.length.toString(),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: _StatCard(
-                                    icon: Icons.add_circle_outline_rounded,
-                                    label: 'Entradas',
-                                    value: formatRdCurrencyAccounting(entries),
-                                    valueColor: _cashBlue,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: _StatCard(
-                                    icon: Icons.remove_circle_outline_rounded,
-                                    label: 'Salidas',
-                                    value: formatRdCurrencyAccounting(exits),
-                                    valueColor: _danger,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: _StatCard(
-                                    icon: Icons.account_balance_wallet_outlined,
-                                    label: 'Balance',
-                                    value: formatRdCurrencyAccounting(
-                                      entries - exits,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            _MovementStatsGrid(
+                              isMobile: isMobile,
+                              entries: entries,
+                              exits: exits,
+                              count: visible.length,
                             ),
                             const SizedBox(height: 14),
                             Expanded(
@@ -519,6 +489,9 @@ class _CashMovementsHistoryScreenState
                                           'No hay entradas ni salidas en el rango seleccionado.',
                                     )
                                   : ListView.separated(
+                                      padding: EdgeInsets.only(
+                                        bottom: isMobile ? 8 : 0,
+                                      ),
                                       itemCount: visible.length,
                                       separatorBuilder: (_, __) =>
                                           const SizedBox(height: 8),
@@ -537,6 +510,130 @@ class _CashMovementsHistoryScreenState
           ),
         ),
       ),
+    );
+  }
+}
+
+class _MovementTypeSelector extends StatelessWidget {
+  const _MovementTypeSelector({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final _MovementTypeFilter selected;
+  final ValueChanged<_MovementTypeFilter> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<_MovementTypeFilter>(
+      segments: const [
+        ButtonSegment(value: _MovementTypeFilter.all, label: Text('Todos')),
+        ButtonSegment(
+          value: _MovementTypeFilter.inOnly,
+          label: Text('Entradas'),
+        ),
+        ButtonSegment(
+          value: _MovementTypeFilter.outOnly,
+          label: Text('Salidas'),
+        ),
+      ],
+      selected: {selected},
+      onSelectionChanged: (value) => onChanged(value.first),
+    );
+  }
+}
+
+class _MovementDateSelector extends StatelessWidget {
+  const _MovementDateSelector({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final _MovementDateFilter selected;
+  final ValueChanged<_MovementDateFilter> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<_MovementDateFilter>(
+      segments: const [
+        ButtonSegment(value: _MovementDateFilter.today, label: Text('Hoy')),
+        ButtonSegment(
+          value: _MovementDateFilter.yesterday,
+          label: Text('Ayer'),
+        ),
+        ButtonSegment(value: _MovementDateFilter.week, label: Text('Semana')),
+        ButtonSegment(value: _MovementDateFilter.month, label: Text('Mes')),
+        ButtonSegment(
+          value: _MovementDateFilter.specific,
+          label: Text('Fecha'),
+        ),
+        ButtonSegment(value: _MovementDateFilter.all, label: Text('Todo')),
+      ],
+      selected: {selected},
+      onSelectionChanged: (value) => onChanged(value.first),
+    );
+  }
+}
+
+class _MovementStatsGrid extends StatelessWidget {
+  const _MovementStatsGrid({
+    required this.isMobile,
+    required this.entries,
+    required this.exits,
+    required this.count,
+  });
+
+  final bool isMobile;
+  final double entries;
+  final double exits;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final cards = [
+      _StatCard(
+        icon: Icons.receipt_long_outlined,
+        label: 'Movimientos',
+        value: count.toString(),
+      ),
+      _StatCard(
+        icon: Icons.add_circle_outline_rounded,
+        label: 'Entradas',
+        value: formatRdCurrencyAccounting(entries),
+        valueColor: _cashBlue,
+      ),
+      _StatCard(
+        icon: Icons.remove_circle_outline_rounded,
+        label: 'Salidas',
+        value: formatRdCurrencyAccounting(exits),
+        valueColor: _danger,
+      ),
+      _StatCard(
+        icon: Icons.account_balance_wallet_outlined,
+        label: 'Balance',
+        value: formatRdCurrencyAccounting(entries - exits),
+      ),
+    ];
+
+    if (!isMobile) {
+      return Row(
+        children: [
+          for (var i = 0; i < cards.length; i++) ...[
+            if (i > 0) const SizedBox(width: 10),
+            Expanded(child: cards[i]),
+          ],
+        ],
+      );
+    }
+
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisSpacing: 8,
+      mainAxisSpacing: 8,
+      childAspectRatio: 2.55,
+      children: cards,
     );
   }
 }
@@ -1063,6 +1160,7 @@ class _CashMovementRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final isIn = row.isIn;
     final color = isIn ? _cashBlue : _danger;
+    final isMobile = MediaQuery.sizeOf(context).width < 700;
     final date = DateFormat(
       'dd/MM/yyyy HH:mm',
       'es_DO',
@@ -1070,91 +1168,174 @@ class _CashMovementRow extends StatelessWidget {
     final label = isIn ? 'Ingreso' : 'Salida';
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(isMobile ? 10 : 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(13),
         border: Border.all(color: _cashLine),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              isIn
-                  ? Icons.add_circle_outline_rounded
-                  : Icons.remove_circle_outline_rounded,
-              color: color,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 2,
-            child: Column(
+      child: isMobile
+          ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  row.reason.trim().isEmpty ? label : row.reason.trim(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w900),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _MovementIcon(isIn: isIn, color: color),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _MovementText(row: row, label: label),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          formatRdCurrencyAccounting(row.amount),
+                          style: TextStyle(
+                            color: color,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  '${row.userName ?? 'Usuario'} · Turno ${row.businessDate ?? 'actual'}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: _cashMuted,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    _MovementTypePill(label: label, color: color),
+                    Text(
+                      date,
+                      style: const TextStyle(
+                        color: _cashMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                _MovementIcon(isIn: isIn, color: color),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: _MovementText(row: row, label: label),
+                ),
+                Expanded(
+                  child: Text(
+                    date,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _cashMuted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                _MovementTypePill(label: label, color: color),
+                const SizedBox(width: 16),
+                SizedBox(
+                  width: 140,
+                  child: Text(
+                    formatRdCurrencyAccounting(row.amount),
+                    textAlign: TextAlign.right,
+                    style: TextStyle(color: color, fontWeight: FontWeight.w900),
                   ),
                 ),
               ],
             ),
+    );
+  }
+}
+
+class _MovementIcon extends StatelessWidget {
+  const _MovementIcon({required this.isIn, required this.color});
+
+  final bool isIn;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(
+        isIn
+            ? Icons.add_circle_outline_rounded
+            : Icons.remove_circle_outline_rounded,
+        color: color,
+      ),
+    );
+  }
+}
+
+class _MovementText extends StatelessWidget {
+  const _MovementText({required this.row, required this.label});
+
+  final CashMovementModel row;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          row.reason.trim().isEmpty ? label : row.reason.trim(),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          '${row.userName ?? 'Usuario'} · Turno ${row.businessDate ?? 'actual'}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: _cashMuted,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
           ),
-          Expanded(
-            child: Text(
-              date,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: _cashMuted,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 12,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          SizedBox(
-            width: 140,
-            child: Text(
-              formatRdCurrencyAccounting(row.amount),
-              textAlign: TextAlign.right,
-              style: TextStyle(color: color, fontWeight: FontWeight.w900),
-            ),
-          ),
-        ],
+        ),
+      ],
+    );
+  }
+}
+
+class _MovementTypePill extends StatelessWidget {
+  const _MovementTypePill({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
+        ),
       ),
     );
   }

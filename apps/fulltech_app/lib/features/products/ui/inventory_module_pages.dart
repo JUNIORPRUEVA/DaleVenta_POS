@@ -843,6 +843,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     final user = ref.watch(authStateProvider).user;
     final state = ref.watch(catalogControllerProvider);
     final products = state.items;
+    final isMobile = MediaQuery.sizeOf(context).width < 640;
     final tab = GoRouterState.of(context).uri.queryParameters['tab'];
     final initialTabIndex = switch (tab) {
       'inventory' => 1,
@@ -860,11 +861,18 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
         appBar: FullTechPageHeader(
           title: 'Inventario',
           actions: [
-            FilledButton.icon(
-              onPressed: () => _openProductEditor(),
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('Nuevo producto'),
-            ),
+            if (isMobile)
+              IconButton.filled(
+                tooltip: 'Nuevo producto',
+                onPressed: () => _openProductEditor(),
+                icon: const Icon(Icons.add_rounded, size: 18),
+              )
+            else
+              FilledButton.icon(
+                onPressed: () => _openProductEditor(),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Nuevo producto'),
+              ),
             IconButton(
               tooltip: 'Actualizar',
               onPressed: state.refreshing ? null : _refresh,
@@ -878,17 +886,20 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
             ),
             const SizedBox(width: 8),
           ],
-          bottom: const TabBar(
+          bottom: TabBar(
             isScrollable: true,
             labelColor: _primaryBlue,
             unselectedLabelColor: _textSecondary,
             indicatorColor: _primaryBlue,
             indicatorWeight: 3,
-            labelStyle: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+            labelStyle: TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: isMobile ? 12 : 13,
+            ),
             tabs: [
               Tab(icon: Icon(Icons.table_rows_outlined), text: 'Catálogo'),
               Tab(icon: Icon(Icons.dashboard_outlined), text: 'Inventario'),
-              Tab(icon: Icon(Icons.tune_outlined), text: 'Ajuste Stock'),
+              Tab(icon: Icon(Icons.tune_outlined), text: 'Stock'),
               Tab(icon: Icon(Icons.category_outlined), text: 'Categorías'),
             ],
           ),
@@ -972,9 +983,9 @@ EdgeInsets productsResponsivePagePadding(
   double bottom = 18,
 }) {
   final width = constraints.maxWidth;
-  final fraction = width >= 1200 ? 0.96 : (width >= 760 ? 0.94 : 0.95);
+  final fraction = width >= 1200 ? 0.96 : (width >= 760 ? 0.94 : 0.98);
   final contentWidth = (width * fraction).clamp(0.0, 1400.0);
-  final horizontal = ((width - contentWidth) / 2).clamp(10.0, 28.0);
+  final horizontal = ((width - contentWidth) / 2).clamp(8.0, 28.0);
   return EdgeInsets.fromLTRB(horizontal, top, horizontal, bottom);
 }
 
@@ -1197,15 +1208,16 @@ class _CatalogToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 640;
     return ProductsSurface(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(mobile ? 10 : 12),
       child: Wrap(
         spacing: 10,
         runSpacing: 10,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           SizedBox(
-            width: 360,
+            width: mobile ? double.infinity : 360,
             child: TextField(
               controller: controller,
               onChanged: onSearchChanged,
@@ -1220,18 +1232,22 @@ class _CatalogToolbar extends StatelessWidget {
             ),
           ),
           DropdownButtonHideUnderline(
-            child: DropdownButton<String?>(
-              value: selectedCategory,
-              hint: const Text('Todas las categorías'),
-              items: [
-                const DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text('Todas las categorías'),
-                ),
-                for (final category in categories)
-                  DropdownMenuItem(value: category, child: Text(category)),
-              ],
-              onChanged: onCategoryChanged,
+            child: SizedBox(
+              width: mobile ? double.infinity : null,
+              child: DropdownButton<String?>(
+                value: selectedCategory,
+                isExpanded: mobile,
+                hint: const Text('Todas las categorías'),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Todas las categorías'),
+                  ),
+                  for (final category in categories)
+                    DropdownMenuItem(value: category, child: Text(category)),
+                ],
+                onChanged: onCategoryChanged,
+              ),
             ),
           ),
           FilterChip(
@@ -1249,21 +1265,43 @@ class _CatalogToolbar extends StatelessWidget {
             icon: const Icon(Icons.cleaning_services_outlined, size: 17),
             label: const Text('Limpiar'),
           ),
-          OutlinedButton.icon(
-            onPressed: onImport,
-            icon: const Icon(Icons.upload_file_rounded, size: 17),
-            label: const Text('Importar'),
-          ),
-          OutlinedButton.icon(
-            onPressed: onExport,
-            icon: const Icon(Icons.download_rounded, size: 17),
-            label: const Text('Exportar'),
-          ),
-          FilledButton.icon(
-            onPressed: onCreate,
-            icon: const Icon(Icons.add_rounded, size: 17),
-            label: const Text('Nuevo producto'),
-          ),
+          if (mobile)
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onImport,
+                    icon: const Icon(Icons.upload_file_rounded, size: 17),
+                    label: const Text('Importar'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onExport,
+                    icon: const Icon(Icons.download_rounded, size: 17),
+                    label: const Text('Exportar'),
+                  ),
+                ),
+              ],
+            )
+          else ...[
+            OutlinedButton.icon(
+              onPressed: onImport,
+              icon: const Icon(Icons.upload_file_rounded, size: 17),
+              label: const Text('Importar'),
+            ),
+            OutlinedButton.icon(
+              onPressed: onExport,
+              icon: const Icon(Icons.download_rounded, size: 17),
+              label: const Text('Exportar'),
+            ),
+            FilledButton.icon(
+              onPressed: onCreate,
+              icon: const Icon(Icons.add_rounded, size: 17),
+              label: const Text('Nuevo producto'),
+            ),
+          ],
           if (selectedCount > 0)
             Chip(
               backgroundColor: _lightBlueHover,
@@ -1404,7 +1442,9 @@ class _CompactCatalogList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 640;
     return ProductsSurface(
+      padding: EdgeInsets.all(mobile ? 8 : 16),
       child: Column(
         children: [
           for (final product in products)
@@ -2675,8 +2715,11 @@ class KpiCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final mobile = width < 640;
+    final cardWidth = mobile ? double.infinity : 214.0;
     return SizedBox(
-      width: 214,
+      width: cardWidth,
       height: 118,
       child: ProductsSurface(
         padding: const EdgeInsets.all(14),
@@ -2759,6 +2802,8 @@ class CompactProductCard extends StatelessWidget {
         ? Colors.orange
         : _primaryBlue;
 
+    final mobile = MediaQuery.sizeOf(context).width < 640;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: DecoratedBox(
@@ -2767,79 +2812,164 @@ class CompactProductCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: selected ? _primaryBlue : _borderSoft),
         ),
-        child: IntrinsicHeight(
-          child: Row(
-            children: [
-              Container(width: 3, color: statusColor),
-              Checkbox(
-                value: selected,
-                onChanged: (v) => onSelected(v ?? false),
-              ),
-              ProductThumbnail(product: product, size: 42),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
+        child: Padding(
+          padding: EdgeInsets.all(mobile ? 8 : 0),
+          child: mobile
+              ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      product.codigo?.trim().isNotEmpty == true
-                          ? product.codigo!.trim()
-                          : product.categoriaLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: _textSecondary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                      ),
+                    Row(
+                      children: [
+                        Container(width: 3, height: 58, color: statusColor),
+                        Checkbox(
+                          value: selected,
+                          onChanged: (v) => onSelected(v ?? false),
+                        ),
+                        ProductThumbnail(product: product, size: 44),
+                        const SizedBox(width: 10),
+                        Expanded(child: _CompactProductInfo(product: product)),
+                      ],
                     ),
-                    Text(
-                      product.nombre,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _CompactMetric(
+                          label: 'Stock',
+                          value: _stockText(product.stock),
+                        ),
+                        _CompactMetric(
+                          label: 'Valor',
+                          value: formatRdCurrencyAccounting(
+                            _stockOf(product) * product.precio,
+                          ),
+                        ),
+                        _CompactMetric(
+                          label: 'Margen',
+                          value: '${_marginOf(product).toStringAsFixed(0)}%',
+                        ),
+                      ],
                     ),
-                    Text(
-                      product.categoriaLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: _textSecondary,
-                        fontSize: 12,
-                      ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        if (onEdit != null)
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: onEdit,
+                              icon: const Icon(Icons.edit_outlined, size: 16),
+                              label: const Text('Editar'),
+                            ),
+                          ),
+                        if (onStock != null) ...[
+                          if (onEdit != null) const SizedBox(width: 8),
+                          Expanded(
+                            child: FilledButton.tonalIcon(
+                              onPressed: onStock,
+                              icon: const Icon(Icons.tune_outlined, size: 16),
+                              label: const Text('Stock'),
+                            ),
+                          ),
+                        ],
+                        if (onDelete != null) ...[
+                          const SizedBox(width: 8),
+                          IconButton.outlined(
+                            tooltip: 'Eliminar',
+                            onPressed: onDelete,
+                            icon: const Icon(Icons.delete_outline),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
+                )
+              : IntrinsicHeight(
+                  child: Row(
+                    children: [
+                      Container(width: 3, color: statusColor),
+                      Checkbox(
+                        value: selected,
+                        onChanged: (v) => onSelected(v ?? false),
+                      ),
+                      ProductThumbnail(product: product, size: 42),
+                      const SizedBox(width: 10),
+                      Expanded(child: _CompactProductInfo(product: product)),
+                      _CompactMetric(
+                        label: 'Stock',
+                        value: _stockText(product.stock),
+                      ),
+                      _CompactMetric(
+                        label: 'Valor',
+                        value: formatRdCurrencyAccounting(
+                          _stockOf(product) * product.precio,
+                        ),
+                      ),
+                      _CompactMetric(
+                        label: 'Margen',
+                        value: '${_marginOf(product).toStringAsFixed(0)}%',
+                      ),
+                      if (onEdit != null)
+                        IconButton(
+                          tooltip: 'Editar',
+                          onPressed: onEdit,
+                          icon: const Icon(Icons.edit_outlined),
+                        ),
+                      if (onStock != null)
+                        TextButton(
+                          onPressed: onStock,
+                          child: const Text('Stock'),
+                        ),
+                      if (onDelete != null)
+                        IconButton(
+                          onPressed: onDelete,
+                          icon: const Icon(Icons.delete_outline),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-              _CompactMetric(label: 'Stock', value: _stockText(product.stock)),
-              _CompactMetric(
-                label: 'Valor',
-                value: formatRdCurrencyAccounting(
-                  _stockOf(product) * product.precio,
-                ),
-              ),
-              _CompactMetric(
-                label: 'Margen',
-                value: '${_marginOf(product).toStringAsFixed(0)}%',
-              ),
-              if (onEdit != null)
-                IconButton(
-                  tooltip: 'Editar',
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-              if (onStock != null)
-                TextButton(onPressed: onStock, child: const Text('Stock')),
-              if (onDelete != null)
-                IconButton(
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete_outline),
-                ),
-            ],
-          ),
         ),
       ),
+    );
+  }
+}
+
+class _CompactProductInfo extends StatelessWidget {
+  const _CompactProductInfo({required this.product});
+
+  final ProductModel product;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          product.codigo?.trim().isNotEmpty == true
+              ? product.codigo!.trim()
+              : product.categoriaLabel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: _textSecondary,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        Text(
+          product.nombre,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w900),
+        ),
+        Text(
+          product.categoriaLabel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: _textSecondary, fontSize: 12),
+        ),
+      ],
     );
   }
 }

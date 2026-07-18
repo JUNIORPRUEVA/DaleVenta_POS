@@ -160,7 +160,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
 
     return Scaffold(
       appBar: CustomAppBar(
-        title: 'Lista de ventas y devoluciones',
+        title: isDesktop ? 'Lista de ventas y devoluciones' : 'Ventas',
         showLogo: false,
         showDepartmentLabel: false,
         actions: [
@@ -195,7 +195,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
       bottomNavigationBar: isDesktop
           ? null
           : SafeArea(
-              minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              minimum: const EdgeInsets.fromLTRB(12, 8, 12, 10),
               child: Row(
                 children: [
                   Expanded(
@@ -563,7 +563,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         return Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -737,7 +737,14 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 2),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w800)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
         ],
       ),
     );
@@ -755,11 +762,17 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
     showDialog<void>(
       context: context,
       builder: (context) {
+        final media = MediaQuery.sizeOf(context);
+        final compact = media.width < 560;
         final saleDate = sale.saleDate ?? DateTime.now();
         return AlertDialog(
+          insetPadding: EdgeInsets.symmetric(
+            horizontal: compact ? 12 : 24,
+            vertical: compact ? 16 : 24,
+          ),
           title: const Text('Detalle de venta'),
           content: SizedBox(
-            width: 420,
+            width: compact ? media.width - 48 : 420,
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -824,6 +837,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                           ),
                           Text(
                             _money(item.subtotalSold),
+                            textAlign: TextAlign.right,
                             style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
@@ -848,6 +862,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                       const Spacer(),
                       Text(
                         _money(sale.totalSold),
+                        textAlign: TextAlign.right,
                         style: const TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 14,
@@ -1282,53 +1297,20 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                                   const Divider(height: 1),
                               itemBuilder: (context, index) {
                                 final sale = items[index];
-                                return ListTile(
-                                  onTap: () =>
+                                return _SalesLedgerMobileRow(
+                                  sale: sale,
+                                  money: _money,
+                                  date: _date,
+                                  statusLabel: _saleStatusLabel,
+                                  statusColor: (sale) =>
+                                      _saleStatusColor(context, sale),
+                                  onView: (sale) =>
                                       _showDetailsDialog(context, sale),
-                                  title: Text(
-                                    '${_date(sale.saleDate ?? DateTime.now())} · ${sale.customerName ?? 'Sin cliente'}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  subtitle: Text(
-                                    '${_saleStatusLabel(sale)} · Vendido ${_money(sale.totalSold)}',
-                                  ),
-                                  trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        tooltip: 'Ver detalle',
-                                        onPressed: () =>
-                                            _showDetailsDialog(context, sale),
-                                        icon: const Icon(
-                                          Icons.visibility_outlined,
-                                        ),
-                                      ),
-                                      IconButton(
-                                        tooltip: 'Ver PDF',
-                                        onPressed: () =>
-                                            _openSaleInvoicePdfPreview(
-                                              context,
-                                              sale,
-                                            ),
-                                        icon: const Icon(
-                                          Icons.picture_as_pdf_outlined,
-                                        ),
-                                        color: const Color(0xFFE11D48),
-                                      ),
-                                      IconButton(
-                                        tooltip: sale.isDeleted
-                                            ? 'Venta ya devuelta'
-                                            : 'Devolver venta',
-                                        onPressed: sale.isDeleted
-                                            ? null
-                                            : () => _returnSale(context, sale),
-                                        icon: const Icon(
-                                          Icons.assignment_return_outlined,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                  onPdf: (sale) =>
+                                      _openSaleInvoicePdfPreview(context, sale),
+                                  onReturn: (sale) =>
+                                      _returnSale(context, sale),
+                                  dense: true,
                                 );
                               },
                             ),
@@ -1437,8 +1419,9 @@ class _SalesLedgerCard extends StatelessWidget {
           else if (compact)
             Expanded(
               child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
                 itemCount: visible.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   final sale = visible[index];
                   return _SalesLedgerMobileRow(
@@ -1574,6 +1557,7 @@ class _SalesLedgerMobileRow extends StatelessWidget {
     required this.onView,
     required this.onPdf,
     required this.onReturn,
+    this.dense = false,
   });
 
   final SaleModel sale;
@@ -1584,44 +1568,112 @@ class _SalesLedgerMobileRow extends StatelessWidget {
   final ValueChanged<SaleModel> onView;
   final ValueChanged<SaleModel> onPdf;
   final ValueChanged<SaleModel> onReturn;
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      onTap: () => onView(sale),
-      title: Text(
-        '${_shortSaleId(sale.id)} · ${sale.customerName ?? 'Sin cliente'}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontWeight: FontWeight.w800),
-      ),
-      subtitle: Text(
-        '${date(sale.saleDate ?? DateTime.now())} · ${statusLabel(sale)}',
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            money(sale.totalSold),
-            style: const TextStyle(fontWeight: FontWeight.w900),
+    final theme = Theme.of(context);
+    final status = statusLabel(sale);
+    final statusClr = statusColor(sale);
+    return Material(
+      color: theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: () => onView(sale),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: EdgeInsets.all(dense ? 10 : 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.colorScheme.outlineVariant),
           ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'view') onView(sale);
-              if (value == 'pdf') onPdf(sale);
-              if (value == 'return' && !sale.isDeleted) onReturn(sale);
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(value: 'view', child: Text('Ver detalle')),
-              const PopupMenuItem(value: 'pdf', child: Text('Ver PDF')),
-              PopupMenuItem(
-                value: 'return',
-                enabled: !sale.isDeleted,
-                child: Text(sale.isDeleted ? 'Ya devuelta' : 'Devolver'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      sale.customerName ?? 'Sin cliente',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        money(sale.totalSold),
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    _shortSaleId(sale.id),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    date(sale.saleDate ?? DateTime.now()),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  _SalesStatusPill(label: status, color: statusClr),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => onView(sale),
+                      icon: const Icon(Icons.visibility_outlined, size: 17),
+                      label: const Text('Ver'),
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => onPdf(sale),
+                      icon: const Icon(Icons.picture_as_pdf_outlined, size: 17),
+                      label: const Text('PDF'),
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.outlined(
+                    tooltip: sale.isDeleted ? 'Venta ya devuelta' : 'Devolver',
+                    onPressed: sale.isDeleted ? null : () => onReturn(sale),
+                    icon: const Icon(Icons.assignment_return_outlined),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }

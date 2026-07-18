@@ -376,6 +376,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).user;
     final visibleSales = _visibleSales;
+    final isMobile = MediaQuery.sizeOf(context).width < 760;
     final selected =
         _selected != null && visibleSales.any((s) => s.id == _selected!.id)
         ? _selected
@@ -388,20 +389,29 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
       drawer: buildAdaptiveDrawer(context, currentUser: user),
       appBar: FullTechPageHeader(
         title: 'Facturacion',
-        actions: [
-          _MetricBadge(
-            icon: Icons.receipt_long_outlined,
-            label: 'Facturas',
-            value: '$_activeCount',
-          ),
-          const SizedBox(width: 8),
-          _MetricBadge(
-            icon: Icons.payments_outlined,
-            label: 'Total vendido',
-            value: formatRdCurrencyAccounting(_activeTotal),
-          ),
-          const SizedBox(width: 12),
-        ],
+        actions: isMobile
+            ? [
+                IconButton(
+                  tooltip: 'Filtros',
+                  onPressed: _openFilterPanel,
+                  icon: const Icon(Icons.filter_alt_outlined),
+                ),
+                const SizedBox(width: 8),
+              ]
+            : [
+                _MetricBadge(
+                  icon: Icons.receipt_long_outlined,
+                  label: 'Facturas',
+                  value: '$_activeCount',
+                ),
+                const SizedBox(width: 8),
+                _MetricBadge(
+                  icon: Icons.payments_outlined,
+                  label: 'Total vendido',
+                  value: formatRdCurrencyAccounting(_activeTotal),
+                ),
+                const SizedBox(width: 12),
+              ],
       ),
       body: Column(
         children: [
@@ -418,51 +428,102 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
           ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 10, 24, 16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    flex: 62,
-                    child: _InvoiceListCard(
+              padding: EdgeInsets.fromLTRB(
+                isMobile ? 10 : 24,
+                10,
+                isMobile ? 10 : 24,
+                isMobile ? 10 : 16,
+              ),
+              child: isMobile
+                  ? _InvoiceListCard(
                       loading: _loading,
                       error: _error,
                       sales: visibleSales,
-                      selectedId: selected?.id,
+                      selectedId: null,
                       statusText: _filterLabel(_filter),
                       dateFmt: _dateFmt,
                       invoiceNumber: _invoiceNumber,
                       onReload: _load,
-                      onSelect: (sale) => setState(() => _selected = sale),
+                      onSelect: _openMobileDetail,
                       onPdf: _sharePdf,
                       onPrint: _printInvoice,
                       onReturn: _returnSale,
-                    ),
-                  ),
-                  const SizedBox(width: 18),
-                  Expanded(
-                    flex: 32,
-                    child: selected == null
-                        ? const _EmptyDetail()
-                        : _InvoiceDetailPanel(
-                            sale: selected,
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          flex: 62,
+                          child: _InvoiceListCard(
+                            loading: _loading,
+                            error: _error,
+                            sales: visibleSales,
+                            selectedId: selected?.id,
+                            statusText: _filterLabel(_filter),
                             dateFmt: _dateFmt,
                             invoiceNumber: _invoiceNumber,
-                            qty: _qty,
-                            onClose: () => setState(() => _selected = null),
-                            onReturn: selected.isDeleted
-                                ? null
-                                : () => _returnSale(selected),
-                            onPdf: () => _sharePdf(selected),
-                            onPrint: () => _printInvoice(selected),
+                            onReload: _load,
+                            onSelect: (sale) =>
+                                setState(() => _selected = sale),
+                            onPdf: _sharePdf,
+                            onPrint: _printInvoice,
+                            onReturn: _returnSale,
                           ),
-                  ),
-                ],
-              ),
+                        ),
+                        const SizedBox(width: 18),
+                        Expanded(
+                          flex: 32,
+                          child: selected == null
+                              ? const _EmptyDetail()
+                              : _InvoiceDetailPanel(
+                                  sale: selected,
+                                  dateFmt: _dateFmt,
+                                  invoiceNumber: _invoiceNumber,
+                                  qty: _qty,
+                                  onClose: () =>
+                                      setState(() => _selected = null),
+                                  onReturn: selected.isDeleted
+                                      ? null
+                                      : () => _returnSale(selected),
+                                  onPdf: () => _sharePdf(selected),
+                                  onPrint: () => _printInvoice(selected),
+                                ),
+                        ),
+                      ],
+                    ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _openMobileDetail(SaleModel sale) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final height = MediaQuery.sizeOf(sheetContext).height * 0.88;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+            child: SizedBox(
+              height: height,
+              child: _InvoiceDetailPanel(
+                sale: sale,
+                dateFmt: _dateFmt,
+                invoiceNumber: _invoiceNumber,
+                qty: _qty,
+                onClose: () => Navigator.of(sheetContext).pop(),
+                onReturn: sale.isDeleted ? null : () => _returnSale(sale),
+                onPdf: () => _sharePdf(sale),
+                onPrint: () => _printInvoice(sale),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -492,120 +553,174 @@ class _Toolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 760;
+    final searchField = SizedBox(
+      height: 42,
+      child: TextField(
+        controller: controller,
+        decoration: InputDecoration(
+          prefixIcon: const Icon(Icons.search_rounded),
+          hintText: 'Buscar por codigo, cliente o total...',
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: Color(0xFFC9DAE6)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: Color(0xFF1957E6), width: 1.3),
+          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      ),
+    );
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 10),
+      padding: EdgeInsets.fromLTRB(mobile ? 10 : 24, 12, mobile ? 10 : 24, 10),
       decoration: const BoxDecoration(
         color: Color(0xFFF4F8FB),
         border: Border(bottom: BorderSide(color: Color(0xFFD8E5EE))),
       ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 44,
-            height: 42,
-            child: OutlinedButton(
-              onPressed: onBack,
-              style: OutlinedButton.styleFrom(
-                padding: EdgeInsets.zero,
-                foregroundColor: const Color(0xFF0E5261),
-                side: const BorderSide(color: Color(0xFFBFD3E0)),
-                backgroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
+      child: mobile
+          ? Column(
+              children: [
+                Row(
+                  children: [
+                    _ToolbarBackButton(onBack: onBack),
+                    const SizedBox(width: 8),
+                    Expanded(child: searchField),
+                    const SizedBox(width: 8),
+                    IconButton.filled(
+                      tooltip: 'Filtros',
+                      onPressed: onOpenFilters,
+                      icon: const Icon(Icons.filter_alt_outlined),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${DateFormat('dd/MM/yyyy').format(fromDate)} - ${DateFormat('dd/MM/yyyy').format(toDate)}',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF52667C),
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: onClearFilters,
+                      icon: const Icon(Icons.filter_alt_off_rounded, size: 18),
+                      label: const Text('Limpiar'),
+                    ),
+                  ],
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                _ToolbarBackButton(onBack: onBack),
+                const SizedBox(width: 10),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 720),
+                  child: searchField,
+                ),
+                const SizedBox(width: 10),
+                InkWell(
+                  onTap: onOpenFilters,
                   borderRadius: BorderRadius.circular(9),
-                ),
-              ),
-              child: const Icon(Icons.arrow_back_rounded),
-            ),
-          ),
-          const SizedBox(width: 10),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: SizedBox(
-              height: 42,
-              child: TextField(
-                controller: controller,
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  hintText: 'Buscar por codigo, cliente o total...',
-                  filled: true,
-                  fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFFC9DAE6)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(
-                      color: Color(0xFF1957E6),
-                      width: 1.3,
+                  child: Container(
+                    height: 42,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1957E6),
+                      borderRadius: BorderRadius.circular(9),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(
+                            0xFF1957E6,
+                          ).withValues(alpha: 0.18),
+                          blurRadius: 14,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.filter_alt_outlined,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _filterButtonLabel(
+                            filter,
+                            paymentFilter,
+                            cashierFilter,
+                          ),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
                 ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          InkWell(
-            onTap: onOpenFilters,
-            borderRadius: BorderRadius.circular(9),
-            child: Container(
-              height: 42,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1957E6),
-                borderRadius: BorderRadius.circular(9),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF1957E6).withValues(alpha: 0.18),
-                    blurRadius: 14,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.filter_alt_outlined, color: Colors.white),
-                  const SizedBox(width: 8),
-                  Text(
-                    _filterButtonLabel(filter, paymentFilter, cashierFilter),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
+                const SizedBox(width: 10),
+                OutlinedButton.icon(
+                  onPressed: onClearFilters,
+                  icon: const Icon(Icons.filter_alt_off_rounded, size: 18),
+                  label: const Text('Limpiar'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF334155),
+                    backgroundColor: Colors.white,
+                    side: const BorderSide(color: Color(0xFFC9DAE6)),
+                    minimumSize: const Size(116, 42),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(9),
                     ),
                   ),
-                ],
-              ),
+                ),
+                const Spacer(),
+                Text(
+                  '${DateFormat('dd/MM/yyyy').format(fromDate)} - ${DateFormat('dd/MM/yyyy').format(toDate)}',
+                  style: const TextStyle(
+                    color: Color(0xFF52667C),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(width: 10),
-          OutlinedButton.icon(
-            onPressed: onClearFilters,
-            icon: const Icon(Icons.filter_alt_off_rounded, size: 18),
-            label: const Text('Limpiar'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF334155),
-              backgroundColor: Colors.white,
-              side: const BorderSide(color: Color(0xFFC9DAE6)),
-              minimumSize: const Size(116, 42),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(9),
-              ),
-            ),
-          ),
-          const Spacer(),
-          Text(
-            '${DateFormat('dd/MM/yyyy').format(fromDate)} - ${DateFormat('dd/MM/yyyy').format(toDate)}',
-            style: const TextStyle(
-              color: Color(0xFF52667C),
-              fontWeight: FontWeight.w800,
-              fontSize: 12,
-            ),
-          ),
-        ],
+    );
+  }
+}
+
+class _ToolbarBackButton extends StatelessWidget {
+  const _ToolbarBackButton({required this.onBack});
+
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 44,
+      height: 42,
+      child: OutlinedButton(
+        onPressed: onBack,
+        style: OutlinedButton.styleFrom(
+          padding: EdgeInsets.zero,
+          foregroundColor: const Color(0xFF0E5261),
+          side: const BorderSide(color: Color(0xFFBFD3E0)),
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+        ),
+        child: const Icon(Icons.arrow_back_rounded),
       ),
     );
   }
@@ -1154,91 +1269,208 @@ class _InvoiceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = !sale.isDeleted;
+    final mobile = MediaQuery.sizeOf(context).width < 760;
     return InkWell(
       onTap: onTap,
       child: Container(
         color: selected ? const Color(0xFFF0F6FF) : Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 18,
-              child: Column(
+        padding: EdgeInsets.symmetric(
+          horizontal: mobile ? 12 : 18,
+          vertical: mobile ? 12 : 11,
+        ),
+        child: mobile
+            ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Factura ${invoiceNumber(sale)}',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Factura ${invoiceNumber(sale)}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              sale.customerName ?? 'Consumidor Final',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xFF334155),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            formatRdCurrencyAccounting(sale.totalSold),
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    sale.userName ?? sale.userId,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Color(0xFF64748B)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        dateFmt.format(sale.saleDate ?? DateTime.now()),
+                        style: const TextStyle(color: Color(0xFF64748B)),
+                      ),
+                      _StatusPill(active: active),
+                      Text(
+                        sale.userName ?? sale.userId,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: onTap,
+                          icon: const Icon(Icons.visibility_outlined, size: 17),
+                          label: const Text('Ver'),
+                          style: OutlinedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: onPdf,
+                          icon: const Icon(
+                            Icons.picture_as_pdf_outlined,
+                            size: 17,
+                          ),
+                          label: const Text('PDF'),
+                          style: OutlinedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.outlined(
+                        tooltip: 'Imprimir',
+                        onPressed: onPrint,
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.print_outlined, size: 19),
+                      ),
+                      const SizedBox(width: 6),
+                      IconButton.outlined(
+                        tooltip: active ? 'Devolver' : 'Factura devuelta',
+                        onPressed: onReturn,
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(
+                          Icons.assignment_return_outlined,
+                          size: 19,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              )
+            : Row(
+                children: [
+                  Expanded(
+                    flex: 18,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Factura ${invoiceNumber(sale)}',
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          sale.userName ?? sale.userId,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    flex: 18,
+                    child: Text(
+                      sale.customerName ?? 'Consumidor Final',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Expanded(
+                    flex: 14,
+                    child: Text(
+                      dateFmt.format(sale.saleDate ?? DateTime.now()),
+                      style: const TextStyle(color: Color(0xFF64748B)),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 10,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: _StatusPill(active: active),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 12,
+                    child: Text(
+                      formatRdCurrencyAccounting(sale.totalSold),
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  IconButton(
+                    tooltip: 'Ver detalle',
+                    onPressed: onTap,
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.visibility_outlined, size: 19),
+                  ),
+                  IconButton(
+                    tooltip: 'Imprimir',
+                    onPressed: onPrint,
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.print_outlined, size: 19),
+                  ),
+                  IconButton(
+                    tooltip: 'PDF',
+                    onPressed: onPdf,
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.picture_as_pdf_outlined, size: 19),
+                    color: const Color(0xFFE11D48),
+                  ),
+                  IconButton(
+                    tooltip: active ? 'Devolver' : 'Factura devuelta',
+                    onPressed: onReturn,
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(
+                      Icons.assignment_return_outlined,
+                      size: 19,
+                    ),
+                    color: const Color(0xFFEA580C),
                   ),
                 ],
               ),
-            ),
-            Expanded(
-              flex: 18,
-              child: Text(
-                sale.customerName ?? 'Consumidor Final',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Expanded(
-              flex: 14,
-              child: Text(
-                dateFmt.format(sale.saleDate ?? DateTime.now()),
-                style: const TextStyle(color: Color(0xFF64748B)),
-              ),
-            ),
-            Expanded(
-              flex: 10,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: _StatusPill(active: active),
-              ),
-            ),
-            Expanded(
-              flex: 12,
-              child: Text(
-                formatRdCurrencyAccounting(sale.totalSold),
-                textAlign: TextAlign.right,
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ),
-            const SizedBox(width: 10),
-            IconButton(
-              tooltip: 'Ver detalle',
-              onPressed: onTap,
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.visibility_outlined, size: 19),
-            ),
-            IconButton(
-              tooltip: 'Imprimir',
-              onPressed: onPrint,
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.print_outlined, size: 19),
-            ),
-            IconButton(
-              tooltip: 'PDF',
-              onPressed: onPdf,
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.picture_as_pdf_outlined, size: 19),
-              color: const Color(0xFFE11D48),
-            ),
-            IconButton(
-              tooltip: active ? 'Devolver' : 'Factura devuelta',
-              onPressed: onReturn,
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.assignment_return_outlined, size: 19),
-              color: const Color(0xFFEA580C),
-            ),
-          ],
-        ),
       ),
     );
   }

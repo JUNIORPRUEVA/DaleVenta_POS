@@ -278,7 +278,7 @@ export class SalesService {
 
     const productMap = new Map(products.map((product) => [product.id, product]));
 
-    const normalizedItems = dto.items.map((item, index) =>
+    let normalizedItems = dto.items.map((item, index) =>
       this.normalizeItem(item, index, productMap),
     );
 
@@ -291,6 +291,47 @@ export class SalesService {
       totalCost = totalCost.plus(item.subtotalCost);
       totalProfit = totalProfit.plus(item.profit);
     }
+
+    const expectedTotalSold =
+      dto.expectedTotalSold === undefined || dto.expectedTotalSold === null
+        ? null
+        : new Prisma.Decimal(dto.expectedTotalSold).toDecimalPlaces(2);
+
+    if (
+      expectedTotalSold &&
+      expectedTotalSold.greaterThanOrEqualTo(0) &&
+      totalSold.greaterThan(0) &&
+      totalSold.minus(expectedTotalSold).abs().greaterThan(0.009)
+    ) {
+      let remainingSold = expectedTotalSold;
+      normalizedItems = normalizedItems.map((item, index) => {
+        const isLast = index === normalizedItems.length - 1;
+        const nextSubtotalSold = isLast
+          ? remainingSold
+          : item.subtotalSold.div(totalSold).mul(expectedTotalSold).toDecimalPlaces(2);
+        remainingSold = remainingSold.minus(nextSubtotalSold);
+        const nextPriceSoldUnit = nextSubtotalSold.div(item.qty).toDecimalPlaces(6);
+        return {
+          ...item,
+          priceSoldUnit: nextPriceSoldUnit,
+          subtotalSold: nextSubtotalSold,
+          profit: nextSubtotalSold.minus(item.subtotalCost),
+        };
+      });
+
+      totalSold = new Prisma.Decimal(0);
+      totalCost = new Prisma.Decimal(0);
+      totalProfit = new Prisma.Decimal(0);
+      for (const item of normalizedItems) {
+        totalSold = totalSold.plus(item.subtotalSold);
+        totalCost = totalCost.plus(item.subtotalCost);
+        totalProfit = totalProfit.plus(item.profit);
+      }
+    }
+
+    totalSold = totalSold.toDecimalPlaces(2);
+    totalCost = totalCost.toDecimalPlaces(2);
+    totalProfit = totalSold.minus(totalCost).toDecimalPlaces(2);
 
     const commissionRate = new Prisma.Decimal(0.1);
     const commissionAmount = totalProfit.greaterThan(0)
@@ -307,10 +348,10 @@ export class SalesService {
     const paymentMethod = dto.paymentMethod ?? 'cash';
     const paymentCashAmount = new Prisma.Decimal(
       dto.paymentCashAmount ?? (paymentMethod === 'cash' ? totalSold.toNumber() : 0),
-    );
+    ).toDecimalPlaces(2);
     const paymentTransferAmount = new Prisma.Decimal(
       dto.paymentTransferAmount ?? (paymentMethod === 'transfer' ? totalSold.toNumber() : 0),
-    );
+    ).toDecimalPlaces(2);
     const paidAmount = paymentCashAmount.plus(paymentTransferAmount);
     const requestedCreditAmount = new Prisma.Decimal(dto.creditAmount ?? 0);
     const computedCreditAmount = totalSold.minus(paidAmount);
@@ -701,7 +742,7 @@ export class SalesService {
   private parseDateBoundary(value: string, isStart: boolean): Date {
     const trimmed = value.trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-      const date = new Date(`${trimmed}T00:00:00.000Z`);
+      const date = new Date(`${trimmed}T00:00:00.000-04:00`);
       if (isStart) return date;
       return new Date(date.getTime() + 24 * 60 * 60 * 1000);
     }

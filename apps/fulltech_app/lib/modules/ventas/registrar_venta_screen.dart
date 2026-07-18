@@ -16,6 +16,7 @@ import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/product_network_image.dart';
 import '../../core/widgets/fulltech_dialog.dart';
 import '../clientes/cliente_model.dart';
+import 'application/ventas_controller.dart';
 import 'data/ventas_repository.dart';
 import 'sales_models.dart';
 
@@ -513,7 +514,11 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                       available,
                     );
 
-                    final panelRatio = isWide ? 0.42 : 0.50;
+                    final panelRatio = isWide
+                        ? 0.42
+                        : screenHeight < 720
+                        ? 0.58
+                        : 0.54;
                     final panelHeight = contentHeight * panelRatio;
                     final productHeight = contentHeight - panelHeight;
 
@@ -572,15 +577,19 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           child: LayoutBuilder(
             builder: (context, constraints) {
               final width = constraints.maxWidth;
-              final crossAxisCount = width < 360
+              final crossAxisCount = width < 340
                   ? 2
-                  : width < 520
+                  : width < 560
                   ? 3
                   : width < 900
                   ? 4
                   : 5;
               final compactCard = width < 900;
-              final aspectRatio = compactCard ? 1.05 : 1.08;
+              final aspectRatio = width < 380
+                  ? 0.92
+                  : compactCard
+                  ? 1.0
+                  : 1.08;
 
               return GridView.builder(
                 padding: const EdgeInsets.all(8),
@@ -672,7 +681,11 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.w700,
-                                    fontSize: compactCard ? 10 : 11,
+                                    fontSize: width < 380
+                                        ? 9.5
+                                        : compactCard
+                                        ? 10
+                                        : 11,
                                   ),
                                 ),
                                 const SizedBox(height: 2),
@@ -693,7 +706,11 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                     softWrap: false,
                                     style: TextStyle(
                                       color: Colors.white,
-                                      fontSize: compactCard ? 8.5 : 9.5,
+                                      fontSize: width < 380
+                                          ? 8
+                                          : compactCard
+                                          ? 8.5
+                                          : 9.5,
                                       fontWeight: FontWeight.w600,
                                       letterSpacing: 0.2,
                                     ),
@@ -706,7 +723,11 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     color: Colors.white,
-                                    fontSize: compactCard ? 9 : 10,
+                                    fontSize: width < 380
+                                        ? 8.5
+                                        : compactCard
+                                        ? 9
+                                        : 10,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -752,7 +773,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           child: LayoutBuilder(
             builder: (context, constraints) {
               final availableHeight = constraints.maxHeight;
-              final compactVertical = availableHeight < 320;
+              final compactVertical = availableHeight < 340;
+              final stackActions = constraints.maxWidth < 380;
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -874,61 +896,41 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                   ),
                   SizedBox(height: compactVertical ? 4 : 6),
                   // ── Botones de acción (cliente + nota) ──
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.tonalIcon(
+                  if (stackActions)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _CartClientButton(
+                          hasClient: hasClient,
+                          clientName: _selectedClient?.nombre,
                           onPressed: _openClientPickerDialog,
-                          icon: const Icon(
-                            Icons.person_search_outlined,
-                            size: 16,
-                          ),
-                          label: Text(
-                            hasClient
-                                ? _selectedClient!.nombre
-                                : 'Seleccionar cliente',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                          style: FilledButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 6,
-                            ),
-                            textStyle: const TextStyle(fontSize: 11),
-                          ),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: OutlinedButton.icon(
+                        const SizedBox(height: 6),
+                        _CartNoteButton(
+                          hasNote: _noteCtrl.text.trim().isNotEmpty,
                           onPressed: _openNoteDialog,
-                          icon: const Icon(
-                            Icons.sticky_note_2_outlined,
-                            size: 16,
-                          ),
-                          label: Text(
-                            _noteCtrl.text.trim().isEmpty
-                                ? 'Nota'
-                                : 'Editar nota',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 6,
-                            ),
-                            textStyle: const TextStyle(fontSize: 11),
+                        ),
+                      ],
+                    )
+                  else
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _CartClientButton(
+                            hasClient: hasClient,
+                            clientName: _selectedClient?.nombre,
+                            onPressed: _openClientPickerDialog,
                           ),
                         ),
-                      ),
-                    ],
-                  ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: _CartNoteButton(
+                            hasNote: _noteCtrl.text.trim().isNotEmpty,
+                            onPressed: _openNoteDialog,
+                          ),
+                        ),
+                      ],
+                    ),
                   if (_noteCtrl.text.trim().isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
@@ -1418,6 +1420,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       }
 
       if (!mounted) return;
+      ref.invalidate(ventasControllerProvider);
       setState(() {
         _cart = [];
         _selectedClient = null;
@@ -1436,6 +1439,63 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+}
+
+class _CartClientButton extends StatelessWidget {
+  const _CartClientButton({
+    required this.hasClient,
+    required this.clientName,
+    required this.onPressed,
+  });
+
+  final bool hasClient;
+  final String? clientName;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.tonalIcon(
+      onPressed: onPressed,
+      icon: const Icon(Icons.person_search_outlined, size: 16),
+      label: Text(
+        hasClient ? (clientName ?? 'Cliente') : 'Seleccionar cliente',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 11),
+      ),
+      style: FilledButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        textStyle: const TextStyle(fontSize: 11),
+      ),
+    );
+  }
+}
+
+class _CartNoteButton extends StatelessWidget {
+  const _CartNoteButton({required this.hasNote, required this.onPressed});
+
+  final bool hasNote;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: const Icon(Icons.sticky_note_2_outlined, size: 16),
+      label: Text(
+        hasNote ? 'Editar nota' : 'Nota',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 11),
+      ),
+      style: OutlinedButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        textStyle: const TextStyle(fontSize: 11),
+      ),
+    );
   }
 }
 
