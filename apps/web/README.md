@@ -38,6 +38,12 @@ Usa el repositorio completo como build context y este Dockerfile:
 apps/web/Dockerfile
 ```
 
+Puerto interno esperado por el servicio `fulltechwed` de EasyPanel:
+
+```text
+3000
+```
+
 Variable recomendada:
 
 ```text
