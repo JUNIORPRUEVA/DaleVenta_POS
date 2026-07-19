@@ -13,7 +13,7 @@ RUN npm run web:build
 
 FROM nginx:1.27-alpine AS runtime
 
-ENV FULLTECH_API_BASE_URL=""
+ENV FULLTECH_API_BASE_URL="https://fulltech-tienda-fulltechapppwa.gcdndd.easypanel.host"
 
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY apps/web/docker-entrypoint.sh /docker-entrypoint.d/40-fulltech-web-env.sh

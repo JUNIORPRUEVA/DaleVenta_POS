@@ -13,9 +13,10 @@ import { FulltechStore as fallbackStore } from "./data.js";
     query: "",
     sort: "featured"
   };
+  const defaultApiBase = "https://fulltech-tienda-fulltechapppwa.gcdndd.easypanel.host";
 
   try {
-    const apiBase = (window.FULLTECH_API_BASE_URL || "").replace(/\/$/, "");
+    const apiBase = (window.FULLTECH_API_BASE_URL || defaultApiBase).replace(/\/$/, "");
     const response = await fetch(`${apiBase}/website/public`, {
       headers: { Accept: "application/json" }
     });
