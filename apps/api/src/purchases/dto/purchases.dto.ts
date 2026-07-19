@@ -1,6 +1,7 @@
 import { Type } from "class-transformer";
 import {
   ArrayMinSize,
+  IsBase64,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -10,6 +11,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  MaxLength,
   Min,
   ValidateNested,
 } from "class-validator";
@@ -93,3 +95,15 @@ export class ReceivePurchaseOrderDto {
   items!: ReceivePurchaseOrderItemDto[];
 }
 
+export class CreatePurchaseOrderPdfShareLinkDto {
+  @IsUUID()
+  purchaseOrderId!: string;
+
+  @IsBase64()
+  pdfBase64!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(180)
+  fileName?: string;
+}

@@ -24,12 +24,14 @@ class PdfActionMenu extends StatelessWidget {
     required this.fileName,
     this.compact = false,
     this.onShareWithClient,
+    this.shareClientLabel = 'Compartir con cliente',
   });
 
   final Uint8List bytes;
   final String fileName;
   final bool compact;
   final Future<void> Function(BuildContext context)? onShareWithClient;
+  final String shareClientLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -52,7 +54,9 @@ class PdfActionMenu extends StatelessWidget {
                   Icon(action.icon, size: 18, color: const Color(0xFF0F7C92)),
                   const SizedBox(width: 10),
                   Text(
-                    action.label,
+                    action == PdfDocumentAction.shareClient
+                        ? shareClientLabel
+                        : action.label,
                     style: const TextStyle(
                       fontWeight: FontWeight.w800,
                       color: Color(0xFF1D2430),

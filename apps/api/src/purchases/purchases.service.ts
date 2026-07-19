@@ -1,7 +1,12 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { Prisma, PurchaseOrderStatus, Role } from "@prisma/client";
+import * as fs from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
+import * as path from "node:path";
 import { PrismaService } from "../prisma/prisma.service";
 import {
+  CreatePurchaseOrderPdfShareLinkDto,
   CreatePurchaseOrderDto,
   PurchaseOrderItemDto,
   ReceivePurchaseOrderDto,
@@ -12,7 +17,10 @@ type RequestUser = { id: string; role: Role };
 
 @Injectable()
 export class PurchasesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   private includeOrder() {
     return {
@@ -351,6 +359,55 @@ export class PurchasesService {
     });
   }
 
+  async createPdfShareLink(
+    user: RequestUser,
+    dto: CreatePurchaseOrderPdfShareLinkDto,
+    requestBaseUrl?: string,
+  ) {
+    const purchaseOrderId = dto.purchaseOrderId.trim();
+    await this.getOrder(user, purchaseOrderId);
+
+    const bytes = this.parsePdfBase64(dto.pdfBase64);
+    const fileName = this.sanitizePdfFileName(
+      dto.fileName ?? "",
+      `orden_compra_${purchaseOrderId.slice(0, 8)}.pdf`,
+    );
+    const orderDir = path.join(this.resolveUploadDir(), "compras", purchaseOrderId);
+    await mkdir(orderDir, { recursive: true });
+    await writeFile(path.join(orderDir, fileName), bytes);
+
+    const baseUrl = this.publicBaseUrl(requestBaseUrl);
+    if (!baseUrl) {
+      throw new BadRequestException(
+        "No se pudo construir el enlace público del PDF. Configura PUBLIC_BASE_URL o API_BASE_URL.",
+      );
+    }
+
+    return {
+      ok: true,
+      purchaseOrderId,
+      fileName,
+      pdfUrl: `${baseUrl}/purchases/public/pdf/${encodeURIComponent(purchaseOrderId)}/${encodeURIComponent(fileName)}`,
+      expiresIn: null,
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  async resolvePublicPdfDownload(purchaseOrderId: string, fileName: string) {
+    const safeOrderId = (purchaseOrderId ?? "").trim();
+    const safeFileName = this.sanitizePdfFileName(fileName ?? "", "orden_compra.pdf");
+    if (!safeOrderId || safeOrderId.includes("/") || safeOrderId.includes("\\")) {
+      throw new NotFoundException("PDF de orden de compra no encontrado.");
+    }
+
+    const absolutePath = path.join(this.resolveUploadDir(), "compras", safeOrderId, safeFileName);
+    if (!fs.existsSync(absolutePath)) {
+      throw new NotFoundException("PDF de orden de compra no encontrado.");
+    }
+
+    return { absolutePath, fileName: safeFileName };
+  }
+
   private async normalizeItems(items: PurchaseOrderItemDto[]) {
     const productIds = [...new Set(items.map((item) => item.productId).filter((id): id is string => Boolean(id)))];
     const products = productIds.length
@@ -536,5 +593,47 @@ export class PurchasesService {
   private num(value: Prisma.Decimal | number | string | null | undefined) {
     if (value === null || value === undefined) return 0;
     return Number(value);
+  }
+
+  private parsePdfBase64(value: string) {
+    const trimmed = (value ?? "").trim();
+    if (!trimmed) throw new BadRequestException("Debes enviar el PDF de la orden de compra.");
+    const base64 = trimmed.startsWith("data:") ? trimmed.slice(trimmed.indexOf(",") + 1) : trimmed;
+    const bytes = Buffer.from(base64, "base64");
+    if (!bytes.length) throw new BadRequestException("El PDF de la orden de compra llegó vacío.");
+    const maxPdfBytes = 8 * 1024 * 1024;
+    if (bytes.length > maxPdfBytes) {
+      const sizeMb = (bytes.length / (1024 * 1024)).toFixed(2);
+      throw new BadRequestException(`El PDF de la orden de compra pesa ${sizeMb} MB y supera el límite de 8 MB.`);
+    }
+    return bytes;
+  }
+
+  private resolveUploadDir() {
+    const fromEnv = (this.config.get<string>("UPLOAD_DIR") ?? "").trim();
+    const volumeDir = "/uploads";
+    const volumeExists = fs.existsSync(volumeDir);
+    if (fromEnv) {
+      if ((fromEnv === "./uploads" || fromEnv === "uploads") && volumeExists) return volumeDir;
+      return fromEnv;
+    }
+    return volumeExists ? volumeDir : path.join(process.cwd(), "uploads");
+  }
+
+  private publicBaseUrl(requestBaseUrl?: string) {
+    const raw =
+      (this.config.get<string>("PUBLIC_BASE_URL") ?? "").trim() ||
+      (this.config.get<string>("API_BASE_URL") ?? "").trim() ||
+      (process.env.PUBLIC_BASE_URL ?? "").trim() ||
+      (process.env.API_BASE_URL ?? "").trim() ||
+      (requestBaseUrl ?? "").trim();
+    return raw.replace(/\/+$/, "");
+  }
+
+  private sanitizePdfFileName(value: string, fallback: string) {
+    const source = (value || fallback).trim() || fallback;
+    const base = path.basename(source).replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "");
+    const withExt = base.toLowerCase().endsWith(".pdf") ? base : `${base}.pdf`;
+    return withExt || fallback;
   }
 }

@@ -8,11 +8,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
+import '../../core/errors/api_exception.dart';
 import '../../core/models/product_model.dart';
 import '../../core/routing/routes.dart';
 import '../../core/utils/money_formatters.dart';
+import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
+import '../../core/widgets/pdf_action_menu.dart';
 import '../../core/widgets/product_network_image.dart';
 import '../../features/catalogo/data/catalog_repository.dart';
 import 'data/purchases_repository.dart';
@@ -50,6 +53,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   List<PurchaseDraftItem> _cart = const [];
   String? _selectedCategory;
   String? _selectedSupplierId;
+  String? _selectedOrderDetailId;
+  String? _selectedSupplierDetailId;
   String _statusFilter = '';
 
   @override
@@ -265,7 +270,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     return Row(
       children: [
         Expanded(child: productGrid),
-        SizedBox(width: size.width >= 1280 ? 460 : 420, child: cart),
+        SizedBox(width: (size.width * .38).clamp(520.0, 720.0), child: cart),
       ],
     );
   }
@@ -454,6 +459,16 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                           overflow: TextOverflow.ellipsis,
                         ),
                       );
+                      final preview = OutlinedButton.icon(
+                        onPressed: _cart.isEmpty || _saving
+                            ? null
+                            : _openDraftPdfPreview,
+                        icon: const Icon(Icons.picture_as_pdf_outlined),
+                        label: const Text(
+                          'PDF',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
                       final generate = FilledButton.icon(
                         onPressed: _cart.isEmpty || _saving
                             ? null
@@ -477,6 +492,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                           children: [
                             draft,
                             const SizedBox(height: 8),
+                            preview,
+                            const SizedBox(height: 8),
                             generate,
                           ],
                         );
@@ -484,6 +501,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                       return Row(
                         children: [
                           Expanded(child: draft),
+                          const SizedBox(width: 8),
+                          Expanded(child: preview),
                           const SizedBox(width: 8),
                           Expanded(child: generate),
                         ],
@@ -503,6 +522,14 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     final visible = _orders
         .where((o) => _statusFilter.isEmpty || o.status == _statusFilter)
         .toList();
+    final isWide = MediaQuery.sizeOf(context).width >= 980;
+    PurchaseOrderModel? selected;
+    for (final order in visible) {
+      if (order.id == _selectedOrderDetailId) {
+        selected = order;
+        break;
+      }
+    }
     return Column(
       children: [
         Padding(
@@ -542,18 +569,69 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         Expanded(
           child: visible.isEmpty
               ? const Center(child: Text('No hay órdenes de compra.'))
-              : ListView.separated(
-                  itemCount: visible.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) => _orderTile(visible[index]),
+              : Row(
+                  children: [
+                    Expanded(
+                      child: ListView.separated(
+                        itemCount: visible.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) => _orderTile(
+                          visible[index],
+                          selected: visible[index].id == _selectedOrderDetailId,
+                          showInlineDetail: isWide,
+                        ),
+                      ),
+                    ),
+                    if (isWide)
+                      Builder(
+                        builder: (context) {
+                          final selectedOrder = selected;
+                          return SizedBox(
+                            width: (MediaQuery.sizeOf(context).width * .38)
+                                .clamp(500.0, 680.0),
+                            child: _OrderDetailPanel(
+                              order: selectedOrder,
+                              money: _money,
+                              qty: _qty,
+                              onPdf: selectedOrder == null
+                                  ? null
+                                  : () => _openOrderPdfPreview(selectedOrder),
+                              onSend: selectedOrder == null
+                                  ? null
+                                  : () =>
+                                        _sendOrderPdfToSupplier(selectedOrder),
+                              onReceive: selectedOrder == null
+                                  ? null
+                                  : () => _receive(selectedOrder),
+                              onDuplicate: selectedOrder == null
+                                  ? null
+                                  : () => _orderAction(
+                                      () => ref
+                                          .read(purchasesRepositoryProvider)
+                                          .duplicate(selectedOrder.id),
+                                      'Orden duplicada.',
+                                    ),
+                            ),
+                          );
+                        },
+                      ),
+                  ],
                 ),
         ),
       ],
     );
   }
 
-  Widget _orderTile(PurchaseOrderModel order) {
+  Widget _orderTile(
+    PurchaseOrderModel order, {
+    bool selected = false,
+    bool showInlineDetail = false,
+  }) {
     return ListTile(
+      selected: selected,
+      selectedTileColor: Theme.of(
+        context,
+      ).colorScheme.primaryContainer.withValues(alpha: .35),
       title: Text(
         '${order.orderNumber} · ${order.supplier?.commercialName ?? 'Sin suplidor'}',
         style: const TextStyle(fontWeight: FontWeight.w800),
@@ -571,7 +649,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
           IconButton(
             tooltip: 'PDF',
             icon: const Icon(Icons.picture_as_pdf_outlined),
-            onPressed: () => _sharePdf(order),
+            onPressed: () => _openOrderPdfPreview(order),
           ),
           IconButton(
             tooltip: 'Aprobar',
@@ -588,12 +666,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
             tooltip: 'Enviada',
             icon: const Icon(Icons.send_outlined),
             onPressed: ['APPROVED', 'DRAFT'].contains(order.status)
-                ? () => _orderAction(
-                    () => ref
-                        .read(purchasesRepositoryProvider)
-                        .markSent(order.id),
-                    'Orden enviada al suplidor.',
-                  )
+                ? () => _sendOrderPdfToSupplier(order)
                 : null,
           ),
           IconButton(
@@ -618,11 +691,25 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
           ),
         ],
       ),
-      onTap: () => _showOrderDetail(order),
+      onTap: () {
+        if (showInlineDetail) {
+          setState(() => _selectedOrderDetailId = order.id);
+        } else {
+          _showOrderDetail(order);
+        }
+      },
     );
   }
 
   Widget _suppliersTab() {
+    final isWide = MediaQuery.sizeOf(context).width >= 980;
+    SupplierModel? selected;
+    for (final supplier in _suppliers) {
+      if (supplier.id == _selectedSupplierDetailId) {
+        selected = supplier;
+        break;
+      }
+    }
     return Column(
       children: [
         Padding(
@@ -648,47 +735,83 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         Expanded(
           child: _suppliers.isEmpty
               ? const Center(child: Text('No hay suplidores.'))
-              : ListView.separated(
-                  itemCount: _suppliers.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final s = _suppliers[index];
-                    return ListTile(
-                      leading: Icon(
-                        s.isActive
-                            ? Icons.storefront_outlined
-                            : Icons.block_outlined,
+              : Row(
+                  children: [
+                    Expanded(
+                      child: ListView.separated(
+                        itemCount: _suppliers.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final s = _suppliers[index];
+                          return ListTile(
+                            selected: s.id == _selectedSupplierDetailId,
+                            selectedTileColor: Theme.of(context)
+                                .colorScheme
+                                .primaryContainer
+                                .withValues(alpha: .35),
+                            leading: Icon(
+                              s.isActive
+                                  ? Icons.storefront_outlined
+                                  : Icons.block_outlined,
+                            ),
+                            title: Text(
+                              s.commercialName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            subtitle: Text(
+                              [
+                                s.contactName,
+                                s.phone,
+                                s.whatsapp,
+                                s.email,
+                              ].where((e) => (e ?? '').isNotEmpty).join(' · '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: Text(
+                              _money(s.totalPurchased),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            onTap: () {
+                              if (isWide) {
+                                setState(
+                                  () => _selectedSupplierDetailId = s.id,
+                                );
+                              } else {
+                                _supplierDialog(supplier: s);
+                              }
+                            },
+                          );
+                        },
                       ),
-                      title: Text(
-                        s.commercialName,
-                        style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    if (isWide)
+                      Builder(
+                        builder: (context) {
+                          final selectedSupplier = selected;
+                          return SizedBox(
+                            width: (MediaQuery.sizeOf(context).width * .35)
+                                .clamp(460.0, 640.0),
+                            child: _SupplierDetailPanel(
+                              supplier: selectedSupplier,
+                              money: _money,
+                              onEdit: selectedSupplier == null
+                                  ? null
+                                  : () => _supplierDialog(
+                                      supplier: selectedSupplier,
+                                    ),
+                              onDeactivate: selectedSupplier == null
+                                  ? null
+                                  : () => _deactivateSupplier(selectedSupplier),
+                            ),
+                          );
+                        },
                       ),
-                      subtitle: Text(
-                        [
-                          s.contactName,
-                          s.phone,
-                          s.whatsapp,
-                          s.email,
-                        ].where((e) => (e ?? '').isNotEmpty).join(' · '),
-                      ),
-                      trailing: Wrap(
-                        spacing: 4,
-                        children: [
-                          Text(_money(s.totalPurchased)),
-                          IconButton(
-                            icon: const Icon(Icons.edit_outlined),
-                            onPressed: () => _supplierDialog(supplier: s),
-                            tooltip: 'Editar',
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => _deactivateSupplier(s),
-                            tooltip: 'Desactivar',
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+                  ],
                 ),
         ),
       ],
@@ -918,32 +1041,11 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     if (_cart.isEmpty) return _snack('Agrega al menos un producto.');
     setState(() => _saving = true);
     try {
-      final order = await ref
-          .read(purchasesRepositoryProvider)
-          .createOrder(
-            supplierId: _selectedSupplierId,
-            items: _cart,
-            discount: _discount,
-            shippingCost: _shipping,
-            additionalCost: _additional,
-            tax: _tax,
-            notes: _notesCtrl.text.trim(),
-            supplierInstructions: _instructionsCtrl.text.trim(),
-          );
+      final order = await _persistCurrentOrder(clearDraft: true);
       if (!draft && order.supplier == null) {
         _snack('Orden guardada. Selecciona un suplidor antes de aprobar.');
       }
-      if (!draft) await _sharePdf(order);
-      _restoringDraft = true;
-      setState(() {
-        _orders = [order, ..._orders];
-        _cart = const [];
-        _notesCtrl.clear();
-        _instructionsCtrl.clear();
-      });
-      _restoringDraft = false;
-      _draftSaveTimer?.cancel();
-      await _clearDraft();
+      if (!draft) await _openOrderPdfPreview(order);
       _snack('Orden guardada correctamente.');
     } catch (e) {
       _snack(
@@ -952,6 +1054,37 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<PurchaseOrderModel> _persistCurrentOrder({
+    required bool clearDraft,
+  }) async {
+    final order = await ref
+        .read(purchasesRepositoryProvider)
+        .createOrder(
+          supplierId: _selectedSupplierId,
+          items: _cart,
+          discount: _discount,
+          shippingCost: _shipping,
+          additionalCost: _additional,
+          tax: _tax,
+          notes: _notesCtrl.text.trim(),
+          supplierInstructions: _instructionsCtrl.text.trim(),
+        );
+    if (!mounted) return order;
+    setState(() => _orders = [order, ..._orders]);
+    if (clearDraft) {
+      _restoringDraft = true;
+      setState(() {
+        _cart = const [];
+        _notesCtrl.clear();
+        _instructionsCtrl.clear();
+      });
+      _restoringDraft = false;
+      _draftSaveTimer?.cancel();
+      await _clearDraft();
+    }
+    return order;
   }
 
   Future<void> _orderAction(
@@ -1003,17 +1136,323 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     );
   }
 
-  Future<void> _sharePdf(PurchaseOrderModel order) async {
+  Future<void> _openDraftPdfPreview() async {
+    if (_cart.isEmpty) {
+      _snack('Agrega al menos un producto para generar PDF.');
+      return;
+    }
+    await _openOrderPdfPreview(
+      _buildDraftOrderForPdf(),
+      persistBeforeShare: true,
+    );
+  }
+
+  PurchaseOrderModel _buildDraftOrderForPdf() {
+    SupplierModel? supplier;
+    for (final item in _suppliers) {
+      if (item.id == _selectedSupplierId) {
+        supplier = item;
+        break;
+      }
+    }
+    return PurchaseOrderModel(
+      id: '',
+      orderNumber: 'BORRADOR',
+      supplier: supplier,
+      status: 'DRAFT',
+      orderDate: DateTime.now(),
+      subtotal: _subtotal,
+      discount: _discount,
+      shippingCost: _shipping,
+      additionalCost: _additional,
+      tax: _tax,
+      total: _total,
+      notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+      supplierInstructions: _instructionsCtrl.text.trim().isEmpty
+          ? null
+          : _instructionsCtrl.text.trim(),
+      items: [
+        for (var i = 0; i < _cart.length; i++)
+          PurchaseOrderItemModel(
+            id: 'draft_$i',
+            productName: _cart[i].productName,
+            productCode: _cart[i].productCode,
+            image: _cart[i].image,
+            quantity: _cart[i].quantity,
+            receivedQuantity: 0,
+            pendingQuantity: _cart[i].quantity,
+            unitCost: _cart[i].unitCost,
+            subtotal: _cart[i].subtotal,
+            notes: _cart[i].notes,
+          ),
+      ],
+    );
+  }
+
+  Future<void> _openOrderPdfPreview(
+    PurchaseOrderModel order, {
+    bool persistBeforeShare = false,
+  }) async {
     final company = await ref.read(companySettingsProvider.future);
     final bytes = await buildPurchaseOrderPdf(order: order, company: company);
+    final fileName = _purchaseOrderPdfFileName(order);
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        var busy = false;
+        String? notice;
+        bool noticeIsError = false;
+        final media = MediaQuery.sizeOf(dialogContext);
+        final compact = media.width < 560;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            void showNotice(String message, {bool isError = false}) {
+              setDialogState(() {
+                notice = message;
+                noticeIsError = isError;
+              });
+            }
+
+            Future<void> shareWithSupplier(BuildContext launchContext) async {
+              setDialogState(() => busy = true);
+              try {
+                showNotice('Preparando enlace PDF para el suplidor...');
+                final persisted = persistBeforeShare
+                    ? await _persistCurrentOrder(clearDraft: true)
+                    : order;
+                final shareBytes = persistBeforeShare
+                    ? await buildPurchaseOrderPdf(
+                        order: persisted,
+                        company: company,
+                      )
+                    : bytes;
+                if (!launchContext.mounted) return;
+                await _sharePurchaseOrderLinkWithSupplier(
+                  order: persisted,
+                  pdfBytes: shareBytes,
+                  launchContext: launchContext,
+                ).timeout(const Duration(seconds: 25));
+                showNotice('WhatsApp abierto con el enlace de la orden.');
+                await _orderAction(
+                  () => ref
+                      .read(purchasesRepositoryProvider)
+                      .markSent(persisted.id),
+                  'Orden marcada como enviada.',
+                );
+              } on TimeoutException {
+                showNotice(
+                  'Tiempo de espera agotado preparando el enlace PDF.',
+                  isError: true,
+                );
+              } catch (e) {
+                showNotice(
+                  'No se pudo enviar la orden al suplidor: $e',
+                  isError: true,
+                );
+              } finally {
+                if (context.mounted) setDialogState(() => busy = false);
+              }
+            }
+
+            return Dialog(
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.white,
+              insetPadding: EdgeInsets.symmetric(
+                horizontal: compact ? 6 : 20,
+                vertical: compact ? 6 : 16,
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: SizedBox(
+                width: compact ? media.width - 12 : media.width * .94,
+                height: compact ? media.height * .96 : media.height * .92,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 8, 6),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.picture_as_pdf_outlined),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'PDF orden de compra · ${order.orderNumber}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          if (busy)
+                            const Padding(
+                              padding: EdgeInsets.only(right: 10),
+                              child: SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            ),
+                          PdfActionMenu(
+                            bytes: bytes,
+                            fileName: fileName,
+                            compact: compact,
+                            shareClientLabel: 'Compartir con suplidor',
+                            onShareWithClient: busy ? null : shareWithSupplier,
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    if (notice != null)
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: noticeIsError
+                              ? const Color(0xFFFFEBEE)
+                              : const Color(0xFFE8F5E9),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: noticeIsError
+                                ? const Color(0xFFE57373)
+                                : const Color(0xFF81C784),
+                          ),
+                        ),
+                        child: Text(
+                          notice!,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: noticeIsError
+                                ? const Color(0xFFB71C1C)
+                                : const Color(0xFF1B5E20),
+                          ),
+                        ),
+                      ),
+                    Expanded(
+                      child: ColoredBox(
+                        color: Colors.white,
+                        child: PdfPreview(
+                          canChangePageFormat: false,
+                          canChangeOrientation: false,
+                          canDebug: false,
+                          allowPrinting: false,
+                          allowSharing: false,
+                          maxPageWidth: compact ? 700 : 980,
+                          scrollViewDecoration: const BoxDecoration(
+                            color: Colors.white,
+                          ),
+                          pdfPreviewPageDecoration: const BoxDecoration(
+                            color: Colors.white,
+                            boxShadow: <BoxShadow>[],
+                          ),
+                          build: (_) async => bytes,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _sendOrderPdfToSupplier(PurchaseOrderModel order) async {
+    try {
+      final company = await ref.read(companySettingsProvider.future);
+      final bytes = await buildPurchaseOrderPdf(order: order, company: company);
+      if (!mounted) return;
+      await _sharePurchaseOrderLinkWithSupplier(
+        order: order,
+        pdfBytes: bytes,
+        launchContext: context,
+      ).timeout(const Duration(seconds: 25));
+      await _orderAction(
+        () => ref.read(purchasesRepositoryProvider).markSent(order.id),
+        'Orden enviada al suplidor.',
+      );
+    } on TimeoutException {
+      _snack('Tiempo de espera agotado preparando el enlace PDF.');
+    } catch (e) {
+      _snack('No se pudo enviar la orden al suplidor: $e');
+    }
+  }
+
+  Future<void> _sharePurchaseOrderLinkWithSupplier({
+    required PurchaseOrderModel order,
+    required List<int> pdfBytes,
+    required BuildContext launchContext,
+  }) async {
+    final phone = _normalizeWhatsAppLinkPhone(
+      order.supplier?.whatsapp ?? order.supplier?.phone,
+    );
+    if (phone.isEmpty) {
+      throw ApiException('El suplidor no tiene teléfono o WhatsApp válido.');
+    }
+    final pdfUrl = await ref
+        .read(purchasesRepositoryProvider)
+        .createPdfShareLink(
+          purchaseOrderId: order.id,
+          pdfBytes: pdfBytes,
+          fileName: _purchaseOrderPdfFileName(order),
+        );
+    final uri = Uri.https('wa.me', '/$phone', {
+      'text': _buildSupplierWhatsAppMessage(order, pdfUrl),
+    });
+    if (!launchContext.mounted) return;
+    await safeOpenWhatsApp(
+      launchContext,
+      uri,
+      copiedMessage: 'No se pudo abrir WhatsApp. Enlace de orden copiado.',
+    );
+  }
+
+  String _purchaseOrderPdfFileName(PurchaseOrderModel order) {
     final supplier = (order.supplier?.commercialName ?? 'Suplidor').replaceAll(
       RegExp(r'[^A-Za-z0-9_-]+'),
       '_',
     );
-    await Printing.sharePdf(
-      bytes: bytes,
-      filename: 'Orden_Compra_${order.orderNumber}_$supplier.pdf',
+    final number = order.orderNumber.replaceAll(
+      RegExp(r'[^A-Za-z0-9_-]+'),
+      '_',
     );
+    return 'Orden_Compra_${number}_$supplier.pdf';
+  }
+
+  String _normalizeWhatsAppLinkPhone(String? value) {
+    var digits = (value ?? '').replaceAll(RegExp(r'[^0-9]'), '').trim();
+    if (digits.length == 10 && digits.startsWith(RegExp(r'[268]'))) {
+      digits = '1$digits';
+    }
+    if (digits.length == 11 && digits.startsWith('1')) return digits;
+    if (digits.length >= 11 && digits.length <= 15) return digits;
+    return '';
+  }
+
+  String _buildSupplierWhatsAppMessage(
+    PurchaseOrderModel order,
+    String pdfUrl,
+  ) {
+    final supplierName = (order.supplier?.commercialName ?? '').trim().isEmpty
+        ? 'suplidor'
+        : order.supplier!.commercialName.trim();
+    return 'Hola $supplierName, te compartimos una orden de compra en PDF.\n'
+        'Puedes abrir el enlace para ver o descargar la orden.\n'
+        'Orden: ${order.orderNumber}\n'
+        'Total: ${_money(order.total)}\n'
+        'PDF: $pdfUrl';
   }
 
   Future<void> _supplierDialog({SupplierModel? supplier}) async {
@@ -1288,6 +1727,318 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_draftStorageKey);
     } catch (_) {}
+  }
+}
+
+class _OrderDetailPanel extends StatelessWidget {
+  const _OrderDetailPanel({
+    required this.order,
+    required this.money,
+    required this.qty,
+    required this.onPdf,
+    required this.onSend,
+    required this.onReceive,
+    required this.onDuplicate,
+  });
+
+  final PurchaseOrderModel? order;
+  final String Function(double) money;
+  final String Function(num) qty;
+  final VoidCallback? onPdf;
+  final VoidCallback? onSend;
+  final VoidCallback? onReceive;
+  final VoidCallback? onDuplicate;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final selected = order;
+    return Container(
+      height: double.infinity,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+          left: BorderSide(color: theme.dividerColor.withValues(alpha: .45)),
+        ),
+      ),
+      child: selected == null
+          ? const Center(
+              child: Text('Selecciona una orden para ver el detalle'),
+            )
+          : SafeArea(
+              left: false,
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.receipt_long_outlined,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            selected.orderNumber,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        _MiniChip(label: selected.status),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      selected.supplier?.commercialName ?? 'Sin suplidor',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: onPdf,
+                          icon: const Icon(Icons.picture_as_pdf_outlined),
+                          label: const Text('PDF'),
+                        ),
+                        FilledButton.icon(
+                          onPressed: onSend,
+                          icon: const Icon(Icons.send_outlined),
+                          label: const Text('Enviar'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: onReceive,
+                          icon: const Icon(Icons.inventory_outlined),
+                          label: const Text('Recibir'),
+                        ),
+                        IconButton.filledTonal(
+                          onPressed: onDuplicate,
+                          tooltip: 'Duplicar',
+                          icon: const Icon(Icons.copy_outlined),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _TotalsPanel(
+                      units: qty(
+                        selected.items.fold<num>(
+                          0,
+                          (sum, item) => sum + item.quantity,
+                        ),
+                      ),
+                      products: '${selected.items.length}',
+                      subtotal: money(selected.subtotal),
+                      total: money(selected.total),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: ListView.separated(
+                        itemCount: selected.items.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 6),
+                        itemBuilder: (context, index) {
+                          final item = selected.items[index];
+                          return Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerHighest
+                                  .withValues(alpha: .45),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        item.productName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${qty(item.quantity)} x ${money(item.unitCost)}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.textTheme.bodySmall,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Text(
+                                  money(item.subtotal),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    if ((selected.notes ?? '').trim().isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        selected.notes!,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+class _SupplierDetailPanel extends StatelessWidget {
+  const _SupplierDetailPanel({
+    required this.supplier,
+    required this.money,
+    required this.onEdit,
+    required this.onDeactivate,
+  });
+
+  final SupplierModel? supplier;
+  final String Function(double) money;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDeactivate;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final selected = supplier;
+    return Container(
+      height: double.infinity,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+          left: BorderSide(color: theme.dividerColor.withValues(alpha: .45)),
+        ),
+      ),
+      child: selected == null
+          ? const Center(
+              child: Text('Selecciona un suplidor para ver el detalle'),
+            )
+          : SafeArea(
+              left: false,
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.storefront_outlined,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            selected.commercialName,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        _MiniChip(
+                          label: selected.isActive ? 'Activo' : 'Inactivo',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _SupplierInfoLine(
+                      icon: Icons.person_outline,
+                      label: selected.contactName ?? 'Sin contacto',
+                    ),
+                    _SupplierInfoLine(
+                      icon: Icons.phone_outlined,
+                      label: selected.phone ?? 'Sin teléfono',
+                    ),
+                    _SupplierInfoLine(
+                      icon: Icons.chat_outlined,
+                      label: selected.whatsapp ?? 'Sin WhatsApp',
+                    ),
+                    _SupplierInfoLine(
+                      icon: Icons.mail_outline,
+                      label: selected.email ?? 'Sin correo',
+                    ),
+                    _SupplierInfoLine(
+                      icon: Icons.location_on_outlined,
+                      label: selected.address ?? 'Sin dirección',
+                    ),
+                    const SizedBox(height: 12),
+                    _TotalsPanel(
+                      units: '${selected.ordersCount}',
+                      products: 'compras',
+                      subtotal: money(selected.totalPurchased),
+                      total: money(selected.totalPurchased),
+                    ),
+                    const Spacer(),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: onEdit,
+                            icon: const Icon(Icons.edit_outlined),
+                            label: const Text('Editar'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: onDeactivate,
+                            icon: const Icon(Icons.delete_outline),
+                            label: const Text('Desactivar'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+class _SupplierInfoLine extends StatelessWidget {
+  const _SupplierInfoLine({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      ),
+    );
   }
 }
 

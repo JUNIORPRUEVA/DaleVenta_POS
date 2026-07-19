@@ -188,6 +188,7 @@ class ApiRoutes {
   static String purchaseOrderDuplicate(String id) => '/purchases/orders/$id/duplicate';
   static String purchaseOrderReceive(String id) => '/purchases/orders/$id/receive';
   static const purchaseRecommendations = '/purchases/recommendations';
+  static const purchasePdfShareLink = '/purchases/pdf-share-link';
 
   static const cashState = '/cash/state';
   static const cashOpenSession = '/cash/sessions/open';

@@ -5,6 +5,7 @@ import { Request } from "express";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import {
+  CreatePurchaseOrderPdfShareLinkDto,
   CreatePurchaseOrderDto,
   ReceivePurchaseOrderDto,
   UpdatePurchaseOrderDto,
@@ -108,5 +109,15 @@ export class PurchasesController {
   @Get("recommendations")
   recommendations() {
     return this.purchases.recommendations();
+  }
+
+  @Post("pdf-share-link")
+  @Roles(Role.ADMIN, Role.ASISTENTE, Role.VENDEDOR)
+  createPdfShareLink(@Req() req: Request, @Body() dto: CreatePurchaseOrderPdfShareLinkDto) {
+    const forwardedProto = `${req.headers["x-forwarded-proto"] ?? ""}`.split(",")[0].trim();
+    const proto = forwardedProto || req.protocol || "http";
+    const host = req.get("host") ?? "";
+    const requestBaseUrl = host ? `${proto}://${host}` : undefined;
+    return this.purchases.createPdfShareLink(req.user as RequestUser, dto, requestBaseUrl);
   }
 }
