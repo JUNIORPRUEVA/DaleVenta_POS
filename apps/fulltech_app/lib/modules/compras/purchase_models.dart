@@ -59,45 +59,53 @@ class SupplierModel {
   final double totalPurchased;
 
   factory SupplierModel.fromJson(Map<String, dynamic> json) => SupplierModel(
-        id: _str(json['id']) ?? '',
-        commercialName: _str(json['commercialName'] ?? json['commercial_name']) ?? '',
-        legalName: _str(json['legalName'] ?? json['legal_name']),
-        taxId: _str(json['taxId'] ?? json['tax_id']),
-        contactName: _str(json['contactName'] ?? json['contact_name']),
-        phone: _str(json['phone']),
-        whatsapp: _str(json['whatsapp']),
-        email: _str(json['email']),
-        address: _str(json['address']),
-        city: _str(json['city']),
-        country: _str(json['country']),
-        website: _str(json['website']),
-        paymentTerms: _str(json['paymentTerms'] ?? json['payment_terms']),
-        estimatedDeliveryDays: (json['estimatedDeliveryDays'] ?? json['estimated_delivery_days']) as int?,
-        notes: _str(json['notes']),
-        logo: _str(json['logo']),
-        isActive: json['isActive'] is bool ? json['isActive'] as bool : true,
-        ordersCount: (json['ordersCount'] as num?)?.toInt() ?? 0,
-        totalPurchased: _num(json['totalPurchased']),
-      );
+    id: _str(json['id']) ?? '',
+    commercialName:
+        _str(json['commercialName'] ?? json['commercial_name']) ?? '',
+    legalName: _str(json['legalName'] ?? json['legal_name']),
+    taxId: _str(json['taxId'] ?? json['tax_id']),
+    contactName: _str(json['contactName'] ?? json['contact_name']),
+    phone: _str(json['phone']),
+    whatsapp: _str(json['whatsapp']),
+    email: _str(json['email']),
+    address: _str(json['address']),
+    city: _str(json['city']),
+    country: _str(json['country']),
+    website: _str(json['website']),
+    paymentTerms: _str(json['paymentTerms'] ?? json['payment_terms']),
+    estimatedDeliveryDays:
+        (json['estimatedDeliveryDays'] ?? json['estimated_delivery_days'])
+            as int?,
+    notes: _str(json['notes']),
+    logo: _str(json['logo']),
+    isActive: json['isActive'] is bool ? json['isActive'] as bool : true,
+    ordersCount: (json['ordersCount'] as num?)?.toInt() ?? 0,
+    totalPurchased: _num(json['totalPurchased']),
+  );
+
+  String? _clean(String? value) {
+    final text = value?.trim();
+    return text == null || text.isEmpty ? null : text;
+  }
 
   Map<String, dynamic> toPayload() => {
-        'commercialName': commercialName,
-        'legalName': legalName,
-        'taxId': taxId,
-        'contactName': contactName,
-        'phone': phone,
-        'whatsapp': whatsapp,
-        'email': email,
-        'address': address,
-        'city': city,
-        'country': country,
-        'website': website,
-        'paymentTerms': paymentTerms,
-        'estimatedDeliveryDays': estimatedDeliveryDays,
-        'notes': notes,
-        'logo': logo,
-        'isActive': isActive,
-      }..removeWhere((_, value) => value == null);
+    'commercialName': commercialName.trim(),
+    'legalName': _clean(legalName),
+    'taxId': _clean(taxId),
+    'contactName': _clean(contactName),
+    'phone': _clean(phone),
+    'whatsapp': _clean(whatsapp),
+    'email': _clean(email),
+    'address': _clean(address),
+    'city': _clean(city),
+    'country': _clean(country),
+    'website': _clean(website),
+    'paymentTerms': _clean(paymentTerms),
+    'estimatedDeliveryDays': estimatedDeliveryDays,
+    'notes': _clean(notes),
+    'logo': _clean(logo),
+    'isActive': isActive,
+  }..removeWhere((_, value) => value == null);
 }
 
 class PurchaseDraftItem {
@@ -135,34 +143,63 @@ class PurchaseDraftItem {
     String? supplierId,
     String? notes,
     bool? createInventoryProductOnReceipt,
-  }) =>
-      PurchaseDraftItem(
-        product: product,
-        productId: productId,
-        productName: productName,
-        productCode: productCode,
-        description: description,
-        image: image,
-        quantity: quantity ?? this.quantity,
-        unitCost: unitCost ?? this.unitCost,
-        supplierId: supplierId ?? this.supplierId,
-        notes: notes ?? this.notes,
-        createInventoryProductOnReceipt:
-            createInventoryProductOnReceipt ?? this.createInventoryProductOnReceipt,
-      );
+  }) => PurchaseDraftItem(
+    product: product,
+    productId: productId,
+    productName: productName,
+    productCode: productCode,
+    description: description,
+    image: image,
+    quantity: quantity ?? this.quantity,
+    unitCost: unitCost ?? this.unitCost,
+    supplierId: supplierId ?? this.supplierId,
+    notes: notes ?? this.notes,
+    createInventoryProductOnReceipt:
+        createInventoryProductOnReceipt ?? this.createInventoryProductOnReceipt,
+  );
 
   Map<String, dynamic> toPayload() => {
-        'productId': productId,
-        'productName': productName,
-        'productCode': productCode,
-        'description': description,
-        'image': image,
-        'quantity': quantity,
-        'unitCost': unitCost,
-        'supplierId': supplierId,
-        'notes': notes,
-        'createInventoryProductOnReceipt': createInventoryProductOnReceipt,
-      }..removeWhere((_, value) => value == null);
+    'productId': productId,
+    'productName': productName,
+    'productCode': productCode,
+    'description': description,
+    'image': image,
+    'quantity': quantity,
+    'unitCost': unitCost,
+    'supplierId': supplierId,
+    'notes': notes,
+    'createInventoryProductOnReceipt': createInventoryProductOnReceipt,
+  }..removeWhere((_, value) => value == null);
+
+  factory PurchaseDraftItem.fromDraftJson(Map<String, dynamic> json) =>
+      PurchaseDraftItem(
+        productId: _str(json['productId']),
+        productName: _str(json['productName']) ?? '',
+        productCode: _str(json['productCode']),
+        description: _str(json['description']),
+        image: _str(json['image']),
+        quantity: _num(json['quantity']).clamp(.0001, double.infinity),
+        unitCost: _num(json['unitCost']).clamp(0, double.infinity),
+        supplierId: _str(json['supplierId']),
+        notes: _str(json['notes']),
+        createInventoryProductOnReceipt:
+            json['createInventoryProductOnReceipt'] is bool
+            ? json['createInventoryProductOnReceipt'] as bool
+            : false,
+      );
+
+  Map<String, dynamic> toDraftJson() => {
+    'productId': productId,
+    'productName': productName,
+    'productCode': productCode,
+    'description': description,
+    'image': image,
+    'quantity': quantity,
+    'unitCost': unitCost,
+    'supplierId': supplierId,
+    'notes': notes,
+    'createInventoryProductOnReceipt': createInventoryProductOnReceipt,
+  }..removeWhere((_, value) => value == null);
 }
 
 class PurchaseOrderItemModel {
@@ -190,19 +227,26 @@ class PurchaseOrderItemModel {
   final double subtotal;
   final String? notes;
 
-  factory PurchaseOrderItemModel.fromJson(Map<String, dynamic> json) =>
-      PurchaseOrderItemModel(
-        id: _str(json['id']) ?? '',
-        productName: _str(json['productNameSnapshot'] ?? json['product_name_snapshot']) ?? '',
-        productCode: _str(json['productCodeSnapshot'] ?? json['product_code_snapshot']),
-        image: _str(json['imageSnapshot'] ?? json['image_snapshot']),
-        quantity: _num(json['quantity']),
-        receivedQuantity: _num(json['receivedQuantity'] ?? json['received_quantity']),
-        pendingQuantity: _num(json['pendingQuantity'] ?? json['pending_quantity']),
-        unitCost: _num(json['unitCost'] ?? json['unit_cost']),
-        subtotal: _num(json['subtotal']),
-        notes: _str(json['notes']),
-      );
+  factory PurchaseOrderItemModel.fromJson(
+    Map<String, dynamic> json,
+  ) => PurchaseOrderItemModel(
+    id: _str(json['id']) ?? '',
+    productName:
+        _str(json['productNameSnapshot'] ?? json['product_name_snapshot']) ??
+        '',
+    productCode: _str(
+      json['productCodeSnapshot'] ?? json['product_code_snapshot'],
+    ),
+    image: _str(json['imageSnapshot'] ?? json['image_snapshot']),
+    quantity: _num(json['quantity']),
+    receivedQuantity: _num(
+      json['receivedQuantity'] ?? json['received_quantity'],
+    ),
+    pendingQuantity: _num(json['pendingQuantity'] ?? json['pending_quantity']),
+    unitCost: _num(json['unitCost'] ?? json['unit_cost']),
+    subtotal: _num(json['subtotal']),
+    notes: _str(json['notes']),
+  );
 }
 
 class PurchaseOrderModel {
@@ -247,11 +291,15 @@ class PurchaseOrderModel {
         id: _str(json['id']) ?? '',
         orderNumber: _str(json['orderNumber'] ?? json['order_number']) ?? '',
         supplier: json['supplier'] is Map
-            ? SupplierModel.fromJson(Map<String, dynamic>.from(json['supplier'] as Map))
+            ? SupplierModel.fromJson(
+                Map<String, dynamic>.from(json['supplier'] as Map),
+              )
             : null,
         status: _str(json['status']) ?? 'DRAFT',
         orderDate: _date(json['orderDate'] ?? json['order_date']),
-        expectedDeliveryDate: _date(json['expectedDeliveryDate'] ?? json['expected_delivery_date']),
+        expectedDeliveryDate: _date(
+          json['expectedDeliveryDate'] ?? json['expected_delivery_date'],
+        ),
         subtotal: _num(json['subtotal']),
         discount: _num(json['discount']),
         shippingCost: _num(json['shippingCost'] ?? json['shipping_cost']),
@@ -259,11 +307,19 @@ class PurchaseOrderModel {
         tax: _num(json['tax']),
         total: _num(json['total']),
         notes: _str(json['notes']),
-        supplierInstructions: _str(json['supplierInstructions'] ?? json['supplier_instructions']),
-        createdByName: json['createdBy'] is Map ? _str((json['createdBy'] as Map)['nombreCompleto']) : null,
+        supplierInstructions: _str(
+          json['supplierInstructions'] ?? json['supplier_instructions'],
+        ),
+        createdByName: json['createdBy'] is Map
+            ? _str((json['createdBy'] as Map)['nombreCompleto'])
+            : null,
         items: ((json['items'] as List?) ?? const [])
             .whereType<Map>()
-            .map((row) => PurchaseOrderItemModel.fromJson(Map<String, dynamic>.from(row)))
+            .map(
+              (row) => PurchaseOrderItemModel.fromJson(
+                Map<String, dynamic>.from(row),
+              ),
+            )
             .toList(),
       );
 }
@@ -287,7 +343,9 @@ class PurchaseRecommendationModel {
 
   factory PurchaseRecommendationModel.fromJson(Map<String, dynamic> json) =>
       PurchaseRecommendationModel(
-        product: ProductModel.fromJson(Map<String, dynamic>.from(json['product'] as Map)),
+        product: ProductModel.fromJson(
+          Map<String, dynamic>.from(json['product'] as Map),
+        ),
         stock: _num(json['stock']),
         minStock: _num(json['minStock']),
         alreadyOrdered: _num(json['alreadyOrdered']),
@@ -295,4 +353,3 @@ class PurchaseRecommendationModel {
         reason: _str(json['reason']) ?? 'Compra recomendada',
       );
 }
-

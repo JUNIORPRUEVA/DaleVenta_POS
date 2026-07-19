@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
@@ -26,6 +28,8 @@ class ComprasScreen extends ConsumerStatefulWidget {
 
 class _ComprasScreenState extends ConsumerState<ComprasScreen>
     with SingleTickerProviderStateMixin {
+  static const _draftStorageKey = 'purchase_order_draft_v1';
+
   late final TabController _tabs;
   final _searchCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
@@ -37,6 +41,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
 
   bool _loading = true;
   bool _saving = false;
+  Timer? _draftSaveTimer;
+  bool _restoringDraft = false;
   List<ProductModel> _products = const [];
   List<SupplierModel> _suppliers = const [];
   List<PurchaseOrderModel> _orders = const [];
@@ -50,11 +56,22 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   void initState() {
     super.initState();
     _tabs = TabController(length: 4, vsync: this);
+    for (final ctrl in [
+      _notesCtrl,
+      _instructionsCtrl,
+      _discountCtrl,
+      _shippingCtrl,
+      _additionalCtrl,
+      _taxCtrl,
+    ]) {
+      ctrl.addListener(_scheduleDraftSave);
+    }
     unawaited(_load());
   }
 
   @override
   void dispose() {
+    _draftSaveTimer?.cancel();
     _tabs.dispose();
     _searchCtrl.dispose();
     _notesCtrl.dispose();
@@ -110,6 +127,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         _recommendations = results[3] as List<PurchaseRecommendationModel>;
         _loading = false;
       });
+      await _restoreDraft();
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
@@ -164,7 +182,6 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   Widget _newPurchaseTab() {
     final size = MediaQuery.sizeOf(context);
     final isWide = size.width >= 1024;
-    final isTablet = size.width >= 720;
     final productGrid = Column(
       children: [
         Padding(
@@ -233,7 +250,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                   product: _visibleProducts[index],
                   money: _money,
                   qty: _qty,
-                  onTap: () => _openProductDialog(_visibleProducts[index]),
+                  onTap: () => _quickAddProduct(_visibleProducts[index]),
                 ),
               );
             },
@@ -243,18 +260,11 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     );
     final cart = _cartPanel();
     if (!isWide) return productGrid;
-    return Center(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: isTablet ? 1280 : double.infinity,
-        ),
-        child: Row(
-          children: [
-            Expanded(child: productGrid),
-            SizedBox(width: size.width >= 1280 ? 460 : 420, child: cart),
-          ],
-        ),
-      ),
+    return Row(
+      children: [
+        Expanded(child: productGrid),
+        SizedBox(width: size.width >= 1280 ? 460 : 420, child: cart),
+      ],
     );
   }
 
@@ -333,8 +343,10 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                           ),
                         ),
                     ],
-                    onChanged: (value) =>
-                        setState(() => _selectedSupplierId = value),
+                    onChanged: (value) => setState(() {
+                      _selectedSupplierId = value;
+                      _scheduleDraftSave();
+                    }),
                   ),
                   const SizedBox(height: 10),
                   Expanded(
@@ -351,9 +363,10 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                               money: _money,
                               qty: _qty,
                               onEdit: () => _editCartItem(index),
-                              onDelete: () => setState(
-                                () => _cart = [..._cart]..removeAt(index),
-                              ),
+                              onDelete: () => setState(() {
+                                _cart = [..._cart]..removeAt(index);
+                                _scheduleDraftSave();
+                              }),
                             ),
                           ),
                   ),
@@ -716,8 +729,10 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
             trailing: FilledButton.tonalIcon(
               onPressed: r.suggestedQuantity <= 0
                   ? null
-                  : () =>
-                        _addProduct(r.product, initialQty: r.suggestedQuantity),
+                  : () => _quickAddProduct(
+                      r.product,
+                      initialQty: r.suggestedQuantity,
+                    ),
               icon: const Icon(Icons.add_shopping_cart_outlined),
               label: const Text('Agregar'),
             ),
@@ -727,93 +742,34 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     );
   }
 
-  Future<void> _openProductDialog(ProductModel product) => _addProduct(product);
-
-  Future<void> _addProduct(
-    ProductModel product, {
-    double initialQty = 1,
-  }) async {
-    final qty = TextEditingController(text: _qty(initialQty));
-    final cost = TextEditingController(text: product.costo.toStringAsFixed(2));
-    final notes = TextEditingController();
-    String? supplierId = _selectedSupplierId;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(product.nombre),
-          content: SizedBox(
-            width: 360,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: qty,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Cantidad a comprar',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: cost,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Precio de compra unitario',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String?>(
-                  initialValue: supplierId,
-                  decoration: const InputDecoration(labelText: 'Suplidor'),
-                  items: [
-                    const DropdownMenuItem(
-                      value: null,
-                      child: Text('Sin suplidor'),
-                    ),
-                    for (final s in _suppliers)
-                      DropdownMenuItem(
-                        value: s.id,
-                        child: Text(s.commercialName),
-                      ),
-                  ],
-                  onChanged: (v) => setDialogState(() => supplierId = v),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: notes,
-                  decoration: const InputDecoration(labelText: 'Observación'),
-                ),
-              ],
-            ),
+  void _quickAddProduct(ProductModel product, {double initialQty = 1}) {
+    final idx = _cart.indexWhere((item) => item.productId == product.id);
+    setState(() {
+      if (idx >= 0) {
+        final next = [..._cart];
+        next[idx] = next[idx].copyWith(
+          quantity: next[idx].quantity + initialQty,
+          supplierId: next[idx].supplierId ?? _selectedSupplierId,
+        );
+        _cart = next;
+      } else {
+        _cart = [
+          ..._cart,
+          PurchaseDraftItem(
+            product: product,
+            productId: product.id,
+            productName: product.nombre,
+            productCode: product.codigo,
+            description: product.descripcion,
+            image: product.displayFotoUrl,
+            quantity: initialQty.clamp(.0001, double.infinity).toDouble(),
+            unitCost: product.costo.clamp(0, double.infinity).toDouble(),
+            supplierId: _selectedSupplierId,
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Agregar'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (ok != true) return;
-    final item = PurchaseDraftItem(
-      product: product,
-      productId: product.id,
-      productName: product.nombre,
-      productCode: product.codigo,
-      description: product.descripcion,
-      image: product.displayFotoUrl,
-      quantity: _parseAmount(qty.text).clamp(.0001, double.infinity).toDouble(),
-      unitCost: _parseAmount(cost.text).clamp(0, double.infinity).toDouble(),
-      supplierId: supplierId,
-      notes: notes.text.trim().isEmpty ? null : notes.text.trim(),
-    );
-    setState(() => _cart = [..._cart, item]);
+        ];
+      }
+      _scheduleDraftSave();
+    });
   }
 
   Future<void> _openExternalProductDialog() async {
@@ -887,8 +843,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       ),
     );
     if (ok != true || name.text.trim().isEmpty) return;
-    setState(
-      () => _cart = [
+    setState(() {
+      _cart = [
         ..._cart,
         PurchaseDraftItem(
           productName: name.text.trim(),
@@ -904,8 +860,9 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
           supplierId: _selectedSupplierId,
           createInventoryProductOnReceipt: createOnReceipt,
         ),
-      ],
-    );
+      ];
+      _scheduleDraftSave();
+    });
   }
 
   Future<void> _editCartItem(int index) async {
@@ -951,6 +908,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         unitCost: _parseAmount(cost.text),
       );
       _cart = next;
+      _scheduleDraftSave();
     });
   }
 
@@ -974,12 +932,16 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         _snack('Orden guardada. Selecciona un suplidor antes de aprobar.');
       }
       if (!draft) await _sharePdf(order);
+      _restoringDraft = true;
       setState(() {
         _orders = [order, ..._orders];
         _cart = const [];
         _notesCtrl.clear();
         _instructionsCtrl.clear();
       });
+      _restoringDraft = false;
+      _draftSaveTimer?.cancel();
+      await _clearDraft();
       _snack('Orden guardada correctamente.');
     } catch (e) {
       _snack(
@@ -1114,6 +1076,10 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       ),
     );
     if (ok != true) return;
+    if (name.text.trim().isEmpty) {
+      _snack('Escribe el nombre comercial del suplidor.');
+      return;
+    }
     try {
       final saved = await ref
           .read(purchasesRepositoryProvider)
@@ -1128,10 +1094,11 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
               address: address.text.trim(),
             ),
           );
-      setState(
-        () =>
-            _suppliers = [saved, ..._suppliers.where((s) => s.id != saved.id)],
-      );
+      setState(() {
+        _suppliers = [saved, ..._suppliers.where((s) => s.id != saved.id)];
+        _selectedSupplierId ??= saved.id;
+        _scheduleDraftSave();
+      });
       _snack('Suplidor guardado.');
     } catch (e) {
       _snack('$e');
@@ -1241,6 +1208,85 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(2);
   double _parseAmount(String value) =>
       double.tryParse(value.trim().replaceAll(',', '.')) ?? 0;
+
+  void _scheduleDraftSave() {
+    if (_restoringDraft) return;
+    _draftSaveTimer?.cancel();
+    _draftSaveTimer = Timer(const Duration(milliseconds: 350), () {
+      unawaited(_saveDraft());
+    });
+  }
+
+  Future<void> _saveDraft() async {
+    if (_cart.isEmpty) {
+      await _clearDraft();
+      return;
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _draftStorageKey,
+        jsonEncode({
+          'supplierId': _selectedSupplierId,
+          'notes': _notesCtrl.text,
+          'instructions': _instructionsCtrl.text,
+          'discount': _discountCtrl.text,
+          'shipping': _shippingCtrl.text,
+          'additional': _additionalCtrl.text,
+          'tax': _taxCtrl.text,
+          'items': _cart.map((item) => item.toDraftJson()).toList(),
+        }),
+      );
+    } catch (_) {
+      // El borrador local no debe bloquear la operacion principal.
+    }
+  }
+
+  Future<void> _restoreDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_draftStorageKey);
+      if (raw == null || raw.trim().isEmpty) return;
+      final data = jsonDecode(raw);
+      if (data is! Map) return;
+      final items = ((data['items'] as List?) ?? const [])
+          .whereType<Map>()
+          .map(
+            (row) =>
+                PurchaseDraftItem.fromDraftJson(Map<String, dynamic>.from(row)),
+          )
+          .where((item) => item.productName.trim().isNotEmpty)
+          .toList();
+      if (!mounted) return;
+      _restoringDraft = true;
+      setState(() {
+        final supplierId = data['supplierId'];
+        _selectedSupplierId =
+            supplierId is String &&
+                _suppliers.any((supplier) => supplier.id == supplierId)
+            ? supplierId
+            : null;
+        _notesCtrl.text = '${data['notes'] ?? ''}';
+        _instructionsCtrl.text = '${data['instructions'] ?? ''}';
+        _discountCtrl.text = '${data['discount'] ?? '0'}';
+        _shippingCtrl.text = '${data['shipping'] ?? '0'}';
+        _additionalCtrl.text = '${data['additional'] ?? '0'}';
+        _taxCtrl.text = '${data['tax'] ?? '0'}';
+        _cart = items;
+      });
+    } catch (_) {
+      await _clearDraft();
+    } finally {
+      _restoringDraft = false;
+    }
+  }
+
+  Future<void> _clearDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_draftStorageKey);
+    } catch (_) {}
+  }
 }
 
 class _PurchaseToolbar extends StatelessWidget {
