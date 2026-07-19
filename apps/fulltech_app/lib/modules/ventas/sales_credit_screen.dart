@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:typed_data';
-
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -9,11 +9,14 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../core/auth/auth_provider.dart';
+import '../../core/company/company_settings_model.dart';
+import '../../core/company/company_settings_repository.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/fulltech_page_header.dart';
+import '../../core/widgets/pdf_action_menu.dart';
 import '../cash/cash_dialogs.dart';
 import '../cash/cash_turn_menu_button.dart';
 import 'data/ventas_repository.dart';
@@ -314,62 +317,195 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
   }
 
   Future<Uint8List> _buildCreditPdf(SaleModel sale) async {
+    final company =
+        await ref.read(companySettingsRepositoryProvider).getCachedSettings() ??
+        CompanySettings.empty();
+    final logoImage = await _resolveCreditLogo(company);
     final doc = pw.Document();
     final date = sale.saleDate == null
         ? 'Sin fecha'
-        : DateFormat('dd/MM/yyyy HH:mm').format(sale.saleDate!.toLocal());
+        : DateFormat(
+            'dd/MM/yyyy h:mm a',
+            'es_DO',
+          ).format(sale.saleDate!.toLocal());
     final shortId = _shortId(sale);
+    final companyName = _fallback(company.companyName, 'FULLTECH, SRL');
+    final customerName = _fallback(sale.customerName, 'Cliente');
+    final customerPhone = _fallback(sale.customerPhone, 'No registrado');
+    final status = sale.creditBalance <= 0.009 ? 'Saldado' : 'Pendiente';
 
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.letter,
-        margin: const pw.EdgeInsets.all(28),
-        build: (context) => [
-          pw.Text(
-            'Estado de credito',
-            style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
+        pageTheme: pw.PageTheme(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.fromLTRB(26, 24, 26, 22),
+          buildBackground: (_) => pw.FullPage(
+            ignoreMargins: true,
+            child: pw.Container(color: const PdfColor.fromInt(0xFFF8FAFC)),
           ),
-          pw.SizedBox(height: 10),
-          pw.Text('Cliente: ${sale.customerName ?? 'Sin cliente'}'),
-          if ((sale.customerPhone ?? '').trim().isNotEmpty)
-            pw.Text('Telefono: ${sale.customerPhone}'),
-          pw.Text('Factura: $shortId'),
-          pw.Text('Fecha: $date'),
-          pw.SizedBox(height: 16),
-          _pdfAmountRow('Total factura', sale.totalSold),
-          _pdfAmountRow('Pagado', sale.creditPaidAmount),
-          _pdfAmountRow('Pendiente', sale.creditBalance),
+        ),
+        build: (context) => [
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Expanded(
+                child: pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    _creditLogoBox(companyName, logoImage),
+                    pw.SizedBox(width: 12),
+                    pw.Expanded(
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            companyName,
+                            style: pw.TextStyle(
+                              fontSize: 17,
+                              fontWeight: pw.FontWeight.bold,
+                              color: const PdfColor.fromInt(0xFF111827),
+                            ),
+                          ),
+                          if (company.rnc.trim().isNotEmpty)
+                            _mutedText('RNC: ${company.rnc.trim()}'),
+                          if (company.phone.trim().isNotEmpty)
+                            _mutedText('Tel: ${company.phone.trim()}'),
+                          if (company.address.trim().isNotEmpty)
+                            _mutedText(company.address.trim()),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(width: 16),
+              pw.Container(
+                width: 220,
+                padding: const pw.EdgeInsets.all(12),
+                decoration: _creditPanelDecoration(),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'ESTADO DE CREDITO',
+                      style: pw.TextStyle(
+                        fontSize: 8.5,
+                        fontWeight: pw.FontWeight.bold,
+                        color: const PdfColor.fromInt(0xFF2563EB),
+                      ),
+                    ),
+                    pw.SizedBox(height: 5),
+                    pw.Text(
+                      'CRE-$shortId',
+                      style: pw.TextStyle(
+                        fontSize: 14,
+                        fontWeight: pw.FontWeight.bold,
+                        color: const PdfColor.fromInt(0xFF111827),
+                      ),
+                    ),
+                    pw.SizedBox(height: 9),
+                    _factLine('Emision', date),
+                    _factLine('Estado', status),
+                  ],
+                ),
+              ),
+            ],
+          ),
           pw.SizedBox(height: 18),
+          pw.Container(height: 1, color: const PdfColor.fromInt(0xFFD8E1EA)),
+          pw.SizedBox(height: 12),
+          pw.Container(
+            width: 340,
+            padding: const pw.EdgeInsets.fromLTRB(14, 12, 14, 12),
+            decoration: _creditPanelDecoration(),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                _factLine('Nombre', customerName, strong: true),
+                pw.SizedBox(height: 7),
+                _factLine('Telefono', customerPhone),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 16),
           pw.Text(
-            'Productos',
-            style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            'Detalle del credito',
+            style: pw.TextStyle(
+              fontSize: 10.5,
+              fontWeight: pw.FontWeight.bold,
+              color: const PdfColor.fromInt(0xFF111827),
+            ),
           ),
           pw.SizedBox(height: 8),
-          pw.TableHelper.fromTextArray(
-            headers: const ['Producto', 'Cant.', 'Precio', 'Total'],
-            data: sale.items
-                .map(
-                  (item) => [
-                    item.productNameSnapshot,
-                    item.qty.toStringAsFixed(item.qty % 1 == 0 ? 0 : 2),
-                    formatRdCurrencyAccounting(item.priceSoldUnit),
-                    formatRdCurrencyAccounting(item.subtotalSold),
+          _creditItemsTable(sale),
+          pw.SizedBox(height: 22),
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Expanded(
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.all(14),
+                  decoration: _creditPanelDecoration(),
+                  child: pw.Text(
+                    'Gracias por preferirnos. Este documento resume el saldo pendiente del cliente y los abonos aplicados a la factura indicada.',
+                    style: pw.TextStyle(
+                      fontSize: 9,
+                      color: const PdfColor.fromInt(0xFF64748B),
+                      fontStyle: pw.FontStyle.italic,
+                    ),
+                  ),
+                ),
+              ),
+              pw.SizedBox(width: 14),
+              pw.Container(
+                width: 230,
+                padding: const pw.EdgeInsets.all(14),
+                decoration: _creditPanelDecoration(),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'Totales',
+                      style: pw.TextStyle(
+                        fontSize: 11,
+                        fontWeight: pw.FontWeight.bold,
+                        color: const PdfColor.fromInt(0xFF111827),
+                      ),
+                    ),
+                    pw.SizedBox(height: 10),
+                    _pdfAmountRow('Total factura', sale.totalSold),
+                    _pdfAmountRow('Pagado', sale.creditPaidAmount),
+                    _pdfAmountRow(
+                      'Pendiente',
+                      sale.creditBalance,
+                      strong: true,
+                    ),
                   ],
-                )
-                .toList(),
+                ),
+              ),
+            ],
           ),
           pw.SizedBox(height: 22),
           pw.Text(
             'Carta de compromiso',
-            style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            style: pw.TextStyle(
+              fontSize: 10.5,
+              fontWeight: pw.FontWeight.bold,
+              color: const PdfColor.fromInt(0xFF111827),
+            ),
           ),
           pw.SizedBox(height: 8),
           pw.Text(
             'Por medio de la presente se deja constancia de que el cliente '
-            '${sale.customerName ?? ''} mantiene un saldo pendiente de '
+            '$customerName mantiene un saldo pendiente de '
             '${formatRdCurrencyAccounting(sale.creditBalance)} correspondiente '
             'a la factura indicada. Los abonos realizados seran aplicados al '
             'saldo hasta completar la deuda.',
+            style: const pw.TextStyle(
+              fontSize: 9.5,
+              lineSpacing: 2,
+              color: PdfColor.fromInt(0xFF334155),
+            ),
           ),
         ],
       ),
@@ -377,14 +513,199 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
     return doc.save();
   }
 
-  pw.Widget _pdfAmountRow(String label, double amount) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.only(bottom: 4),
-      child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        children: [pw.Text(label), pw.Text(formatRdCurrencyAccounting(amount))],
+  pw.Widget _creditItemsTable(SaleModel sale) {
+    final rows = <pw.TableRow>[
+      pw.TableRow(
+        decoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF111827)),
+        children: [
+          _tableCell('Descripcion', header: true, align: pw.TextAlign.left),
+          _tableCell('Cant.', header: true),
+          _tableCell('Unitario', header: true, align: pw.TextAlign.right),
+          _tableCell('Importe', header: true, align: pw.TextAlign.right),
+        ],
+      ),
+      for (final item in sale.items)
+        pw.TableRow(
+          children: [
+            _tableCell(
+              item.productNameSnapshot.trim().isEmpty
+                  ? 'Producto sin descripcion'
+                  : item.productNameSnapshot.trim(),
+              align: pw.TextAlign.left,
+              strong: true,
+            ),
+            _tableCell(item.qty.toStringAsFixed(item.qty % 1 == 0 ? 0 : 2)),
+            _tableCell(
+              formatRdCurrencyAccounting(item.priceSoldUnit),
+              align: pw.TextAlign.right,
+            ),
+            _tableCell(
+              formatRdCurrencyAccounting(item.subtotalSold),
+              align: pw.TextAlign.right,
+            ),
+          ],
+        ),
+    ];
+    return pw.Container(
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(
+          color: const PdfColor.fromInt(0xFFD8E1EA),
+          width: 0.45,
+        ),
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+      ),
+      child: pw.Table(
+        border: const pw.TableBorder(
+          horizontalInside: pw.BorderSide(
+            color: PdfColor.fromInt(0xFFE5EAF0),
+            width: 0.55,
+          ),
+        ),
+        columnWidths: const {
+          0: pw.FlexColumnWidth(5.4),
+          1: pw.FlexColumnWidth(0.75),
+          2: pw.FlexColumnWidth(1.65),
+          3: pw.FlexColumnWidth(1.7),
+        },
+        children: rows,
       ),
     );
+  }
+
+  pw.Widget _tableCell(
+    String value, {
+    bool header = false,
+    bool strong = false,
+    pw.TextAlign align = pw.TextAlign.center,
+  }) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+      child: pw.Text(
+        value,
+        textAlign: align,
+        style: pw.TextStyle(
+          fontSize: header ? 8 : 8.4,
+          fontWeight: header || strong ? pw.FontWeight.bold : null,
+          color: header ? PdfColors.white : const PdfColor.fromInt(0xFF334155),
+        ),
+      ),
+    );
+  }
+
+  pw.Widget _pdfAmountRow(String label, double amount, {bool strong = false}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 7),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(label, style: const pw.TextStyle(fontSize: 9)),
+          pw.Text(
+            formatRdCurrencyAccounting(amount),
+            style: pw.TextStyle(
+              fontSize: strong ? 11 : 9,
+              fontWeight: strong ? pw.FontWeight.bold : null,
+              color: strong
+                  ? const PdfColor.fromInt(0xFF2563EB)
+                  : const PdfColor.fromInt(0xFF111827),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget _factLine(String label, String value, {bool strong = false}) {
+    return pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.SizedBox(
+          width: 64,
+          child: pw.Text(
+            label,
+            style: const pw.TextStyle(
+              fontSize: 8.4,
+              color: PdfColor.fromInt(0xFF64748B),
+            ),
+          ),
+        ),
+        pw.Expanded(
+          child: pw.Text(
+            value,
+            style: pw.TextStyle(
+              fontSize: 8.7,
+              fontWeight: strong ? pw.FontWeight.bold : null,
+              color: const PdfColor.fromInt(0xFF334155),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  pw.Widget _mutedText(String value) => pw.Padding(
+    padding: const pw.EdgeInsets.only(top: 2),
+    child: pw.Text(
+      value,
+      style: const pw.TextStyle(
+        fontSize: 8.5,
+        color: PdfColor.fromInt(0xFF64748B),
+      ),
+    ),
+  );
+
+  pw.BoxDecoration _creditPanelDecoration() {
+    return pw.BoxDecoration(
+      color: const PdfColor.fromInt(0xFFF8FAFC),
+      border: pw.Border.all(
+        color: const PdfColor.fromInt(0xFFD8E1EA),
+        width: 0.6,
+      ),
+      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+    );
+  }
+
+  pw.Widget _creditLogoBox(String companyName, pw.MemoryImage? logoImage) {
+    return pw.Container(
+      width: 58,
+      height: 58,
+      padding: const pw.EdgeInsets.all(6),
+      decoration: _creditPanelDecoration(),
+      child: logoImage != null
+          ? pw.Image(logoImage, fit: pw.BoxFit.contain)
+          : pw.Center(
+              child: pw.Text(
+                companyName.isEmpty ? 'FT' : companyName.characters.first,
+                style: pw.TextStyle(
+                  fontSize: 18,
+                  fontWeight: pw.FontWeight.bold,
+                  color: const PdfColor.fromInt(0xFF2563EB),
+                ),
+              ),
+            ),
+    );
+  }
+
+  Future<pw.MemoryImage?> _resolveCreditLogo(CompanySettings company) async {
+    final raw = (company.logoBase64 ?? '').trim();
+    if (raw.isNotEmpty) {
+      try {
+        final base64Value = raw.startsWith('data:')
+            ? raw.substring(raw.indexOf(',') + 1)
+            : raw;
+        return pw.MemoryImage(base64Decode(base64Value));
+      } catch (_) {}
+    }
+    try {
+      final asset = await rootBundle.load('assets/image/logo.png');
+      return pw.MemoryImage(asset.buffer.asUint8List());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _fallback(String? value, String fallback) {
+    final cleaned = (value ?? '').trim();
+    return cleaned.isEmpty ? fallback : cleaned;
   }
 
   Future<void> _printCreditPdf(SaleModel sale) async {
@@ -437,6 +758,19 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                           ),
                         ),
                       ),
+                      PdfActionMenu(
+                        bytes: bytes,
+                        fileName: filename,
+                        compact: compact,
+                        onShareWithClient: (menuContext) =>
+                            _shareCreditPdfWithClient(
+                              launchContext: menuContext,
+                              sale: sale,
+                              bytes: bytes,
+                              filename: filename,
+                            ),
+                      ),
+                      const SizedBox(width: 6),
                       IconButton(
                         tooltip: 'Cerrar',
                         onPressed: () => Navigator.of(dialogContext).pop(),
@@ -452,7 +786,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                     canChangeOrientation: false,
                     canDebug: false,
                     allowPrinting: true,
-                    allowSharing: true,
+                    allowSharing: false,
                     maxPageWidth: compact ? 640 : 900,
                     pdfFileName: filename,
                     build: (_) async => bytes,
@@ -467,38 +801,68 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
   }
 
   Future<void> _sendCreditWhatsApp(SaleModel sale) async {
-    final phone = _normalizeWhatsAppPhone(sale.customerPhone);
-    final message =
-        'Hola ${sale.customerName ?? ''}, le compartimos el estado de su '
-        'credito. Factura ${_shortId(sale)}. Pendiente: '
-        '${formatRdCurrencyAccounting(sale.creditBalance)}.';
-    if (phone == null) {
+    final bytes = await _buildCreditPdf(sale);
+    if (!mounted) return;
+    await _shareCreditPdfWithClient(
+      launchContext: context,
+      sale: sale,
+      bytes: bytes,
+      filename: 'credito_${_shortId(sale)}.pdf',
+    );
+  }
+
+  Future<void> _shareCreditPdfWithClient({
+    required BuildContext launchContext,
+    required SaleModel sale,
+    required List<int> bytes,
+    required String filename,
+  }) async {
+    try {
+      final pdfUrl = await ref
+          .read(ventasRepositoryProvider)
+          .createInvoicePdfShareLink(
+            saleId: sale.id,
+            pdfBytes: bytes,
+            fileName: filename,
+          );
+      final uri = Uri(
+        scheme: 'whatsapp',
+        host: 'send',
+        queryParameters: {'text': _buildCreditWhatsAppMessage(sale, pdfUrl)},
+      );
+      if (!launchContext.mounted) return;
+      await safeOpenWhatsApp(
+        launchContext,
+        uri,
+        copiedMessage: 'No se pudo abrir WhatsApp. Enlace de crédito copiado.',
+      );
+      if (launchContext.mounted) {
+        showCashToast(launchContext, 'WhatsApp abierto con el crédito.');
+      }
+    } catch (e) {
+      if (!launchContext.mounted) return;
       showCashToast(
-        context,
-        'Este cliente no tiene teléfono registrado para WhatsApp',
+        launchContext,
+        'No se pudo preparar el crédito para WhatsApp: $e',
         isError: true,
       );
-      return;
     }
-    final uri = Uri.parse(
-      'https://wa.me/$phone?text=${Uri.encodeComponent(message)}',
-    );
-    await safeOpenWhatsApp(
-      context,
-      uri,
-      copiedMessage: 'No se pudo abrir WhatsApp. Enlace copiado.',
-    );
+  }
+
+  String _buildCreditWhatsAppMessage(SaleModel sale, String pdfUrl) {
+    final customerName = (sale.customerName ?? '').trim().isEmpty
+        ? 'cliente'
+        : sale.customerName!.trim();
+    return 'Hola $customerName, te compartimos tu estado de crédito en PDF.\n'
+        'Este documento corresponde al saldo pendiente de tu compra en FULLTECH.\n'
+        'Puedes abrir el enlace para ver o descargar tu PDF.\n'
+        'Crédito: CRE-${_shortId(sale)}\n'
+        'Pendiente: ${formatRdCurrencyAccounting(sale.creditBalance)}\n'
+        'PDF: $pdfUrl';
   }
 
   String _shortId(SaleModel sale) =>
       sale.id.length <= 8 ? sale.id : sale.id.substring(0, 8);
-
-  String? _normalizeWhatsAppPhone(String? raw) {
-    final digits = (raw ?? '').replaceAll(RegExp(r'\D'), '');
-    if (digits.isEmpty) return null;
-    if (digits.length == 10) return '1$digits';
-    return digits;
-  }
 }
 
 class _CreditPaymentDraft {

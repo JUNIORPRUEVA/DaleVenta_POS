@@ -90,6 +90,7 @@ class AppNavigator {
 
     if (path == Routes.poncheHistorial) return Routes.ponche;
     if (path == Routes.registrarVenta) return Routes.ventas;
+    if (path == Routes.compras) return Routes.cotizaciones;
     if (path == Routes.serviceOrderCreate) return Routes.serviceOrders;
     if (path == Routes.cotizacionesHistorial) return Routes.cotizaciones;
     if (path == Routes.clienteNuevo) return Routes.clientes;

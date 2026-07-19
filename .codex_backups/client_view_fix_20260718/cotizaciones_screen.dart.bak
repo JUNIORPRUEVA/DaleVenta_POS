@@ -2872,8 +2872,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     bool loading = true;
     bool dialogOpen = true;
     bool initialLoadQueued = false;
-    bool openingClient = false;
-    String? openingClientId;
     String? error;
     var ownerFilter = _ClientOwnerFilter.all;
     var ageFilter = _ClientAgeFilter.all;
@@ -3155,84 +3153,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 );
               }
 
-              Future<void> openClientDetail(ClienteModel client) async {
-                final clientId = client.id.trim();
-                final clientName = client.nombre.trim();
-                final startedAt = DateTime.now();
-
-                if (openingClient) {
-                  debugPrint(
-                    '[CLIENT_DETAIL] Ignored duplicate open while processing clientId=$openingClientId',
-                  );
-                  return;
-                }
-
-                if (clientId.isEmpty || client.isDeleted) {
-                  debugPrint(
-                    '[CLIENT_DETAIL] Invalid client. id="$clientId" deleted=${client.isDeleted} name="$clientName"',
-                  );
-                  if (screenContext.mounted) {
-                    ScaffoldMessenger.maybeOf(screenContext)?.showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'No se pudo abrir la información del cliente.',
-                        ),
-                      ),
-                    );
-                  }
-                  return;
-                }
-
-                setStateDialog(() {
-                  openingClient = true;
-                  openingClientId = clientId;
+              void openClientDetail(ClienteModel client) {
+                Navigator.pop(context);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted || !screenContext.mounted) return;
+                  screenContext.go(Routes.clienteDetail(client.id));
                 });
-
-                debugPrint(
-                  '[CLIENT_DETAIL] Opening clientId=$clientId name="$clientName"',
-                );
-
-                try {
-                  searchDebounce?.cancel();
-                  debugPrint('[CLIENT_DETAIL] Closing client panel');
-
-                  final navigator = Navigator.of(context);
-                  dialogOpen = false;
-                  await navigator.maybePop();
-
-                  if (!mounted || !screenContext.mounted) return;
-
-                  final route = Routes.clienteDetail(clientId);
-                  debugPrint('[CLIENT_DETAIL] Navigating route=$route');
-                  await screenContext.push(route);
-
-                  final elapsedMs = DateTime.now()
-                      .difference(startedAt)
-                      .inMilliseconds;
-                  debugPrint(
-                    '[CLIENT_DETAIL] Completed clientId=$clientId elapsedMs=$elapsedMs',
-                  );
-                } catch (error, stackTrace) {
-                  debugPrint(
-                    '[CLIENT_DETAIL] Error opening clientId=$clientId: $error',
-                  );
-                  debugPrintStack(stackTrace: stackTrace);
-                  if (!mounted || !screenContext.mounted) return;
-                  ScaffoldMessenger.maybeOf(screenContext)?.showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'No se pudo abrir la información del cliente. Inténtalo nuevamente.',
-                      ),
-                    ),
-                  );
-
-                  if (dialogOpen) {
-                    setStateDialog(() {
-                      openingClient = false;
-                      openingClientId = null;
-                    });
-                  }
-                }
               }
 
               if (!initialLoadQueued &&
@@ -3385,26 +3311,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                     });
                                     Navigator.pop(context);
                                   },
-                                  trailing: openingClientId == client.id
-                                      ? const SizedBox(
-                                          width: 22,
-                                          height: 22,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2.4,
-                                          ),
-                                        )
-                                      : TextButton.icon(
-                                          onPressed: openingClient
-                                              ? null
-                                              : () => unawaited(
-                                                  openClientDetail(client),
-                                                ),
-                                          icon: const Icon(
-                                            Icons.open_in_new_rounded,
-                                            size: 16,
-                                          ),
-                                          label: const Text('Ver'),
-                                        ),
+                                  trailing: TextButton.icon(
+                                    onPressed: () => openClientDetail(client),
+                                    icon: const Icon(
+                                      Icons.open_in_new_rounded,
+                                      size: 16,
+                                    ),
+                                    label: const Text('Ver'),
+                                  ),
                                 );
                               },
                             ),
@@ -3452,25 +3366,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                     });
                                     Navigator.pop(context);
                                   },
-                                  trailing: openingClientId == client.id
-                                      ? const SizedBox(
-                                          width: 22,
-                                          height: 22,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2.4,
-                                          ),
-                                        )
-                                      : IconButton(
-                                          tooltip: 'Ver cliente',
-                                          onPressed: openingClient
-                                              ? null
-                                              : () => unawaited(
-                                                  openClientDetail(client),
-                                                ),
-                                          icon: const Icon(
-                                            Icons.open_in_new_rounded,
-                                          ),
-                                        ),
+                                  trailing: IconButton(
+                                    tooltip: 'Ver cliente',
+                                    onPressed: () => openClientDetail(client),
+                                    icon: const Icon(Icons.open_in_new_rounded),
+                                  ),
                                 );
                               },
                             ),

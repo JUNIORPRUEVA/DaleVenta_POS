@@ -32,6 +32,7 @@ import '../../modules/publicidad/publicidad_hub_screen.dart';
 import '../../modules/publicidad/publicidad_campanas_screen_v2.dart';
 import '../../modules/publicidad/publicidad_placeholder_screens.dart';
 import '../../modules/publicidad/publicidad_screen.dart';
+import '../../modules/red_tecnica/red_tecnica_screen.dart';
 import '../../features/media_gallery/presentation/galeria_publicidad_screen.dart';
 import '../../modules/nomina/mis_pagos_screen.dart';
 import '../../modules/configuracion/configuracion_screen.dart';
@@ -53,6 +54,7 @@ import '../../modules/sitio_web/sitio_web_screen.dart';
 import '../../modules/ventas/tpv_sales_history_screen.dart';
 import '../../modules/ventas/registrar_venta_screen.dart';
 import '../../modules/ventas/sales_credit_screen.dart';
+import '../../modules/compras/compras_screen.dart';
 import '../ai_assistant/presentation/ai_screen.dart';
 import '../auth/auth_provider.dart';
 import '../auth/app_permissions.dart';
@@ -122,6 +124,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: Routes.login,
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: Routes.redTecnicaPublicForm,
+        builder: (context, state) => const RedTecnicaPublicFormScreen(),
       ),
       GoRoute(
         path: Routes.register,
@@ -231,6 +237,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: Routes.ventasCreditos,
             builder: (context, state) => const SalesCreditScreen(),
+          ),
+          GoRoute(
+            path: Routes.compras,
+            builder: (context, state) => const ComprasScreen(),
           ),
           GoRoute(
             path: Routes.caja,
@@ -376,6 +386,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const SitioWebScreen(),
           ),
           GoRoute(
+            path: Routes.redTecnica,
+            builder: (context, state) => const RedTecnicaScreen(),
+          ),
+          GoRoute(
             path: Routes.amonestaciones,
             builder: (context, state) => const AmonestacionesScreen(),
           ),
@@ -420,9 +434,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       final path = state.uri.path;
       final isAuthRoute = path == Routes.login;
       final isSplashRoute = path == Routes.splash;
+      final isPublicRoute = path == Routes.redTecnicaPublicForm;
 
       String defaultAuthedRoute() {
         return RouteAccess.defaultHomeForRole(role);
+      }
+
+      if (isPublicRoute) {
+        return null;
       }
 
       if (!auth.initialized || auth.restoringSession) {

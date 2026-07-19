@@ -310,16 +310,6 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     return buildSaleInvoicePdf(sale: sale, company: company);
   }
 
-  String _normalizeWhatsAppLinkPhone(String? value) {
-    var digits = (value ?? '').replaceAll(RegExp(r'[^0-9]'), '').trim();
-    if (digits.length == 10 && digits.startsWith(RegExp(r'[268]'))) {
-      digits = '1$digits';
-    }
-    if (digits.length == 11 && digits.startsWith('1')) return digits;
-    if (digits.length >= 11 && digits.length <= 15) return digits;
-    return '';
-  }
-
   String _buildClientInvoiceWhatsAppMessage(SaleModel sale, String pdfUrl) {
     final customerName = (sale.customerName ?? '').trim().isEmpty
         ? 'cliente'
@@ -338,16 +328,6 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     required List<int> bytes,
     required String filename,
   }) async {
-    final phone = _normalizeWhatsAppLinkPhone(sale.customerPhone);
-    if (phone.isEmpty) {
-      showCashToast(
-        launchContext,
-        'El cliente no tiene teléfono válido para WhatsApp.',
-        isError: true,
-      );
-      return;
-    }
-
     try {
       final pdfUrl = await ref
           .read(ventasRepositoryProvider)
@@ -357,9 +337,13 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
             fileName: filename,
           );
 
-      final uri = Uri.https('wa.me', '/$phone', {
-        'text': _buildClientInvoiceWhatsAppMessage(sale, pdfUrl),
-      });
+      final uri = Uri(
+        scheme: 'whatsapp',
+        host: 'send',
+        queryParameters: {
+          'text': _buildClientInvoiceWhatsAppMessage(sale, pdfUrl),
+        },
+      );
       if (!launchContext.mounted) return;
       await safeOpenWhatsApp(
         launchContext,
@@ -429,19 +413,13 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                         bytes: bytes,
                         fileName: filename,
                         compact: compact,
-                      ),
-                      IconButton(
-                        tooltip: 'Enviar factura al cliente por WhatsApp',
-                        onPressed: () => _shareInvoicePdfWithClient(
-                          launchContext: dialogContext,
-                          sale: sale,
-                          bytes: bytes,
-                          filename: filename,
-                        ),
-                        icon: const Icon(
-                          Icons.chat_outlined,
-                          color: Color(0xFF0F7C92),
-                        ),
+                        onShareWithClient: (menuContext) =>
+                            _shareInvoicePdfWithClient(
+                              launchContext: menuContext,
+                              sale: sale,
+                              bytes: bytes,
+                              filename: filename,
+                            ),
                       ),
                       const SizedBox(width: 6),
                       IconButton(

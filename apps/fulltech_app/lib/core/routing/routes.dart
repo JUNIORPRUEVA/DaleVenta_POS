@@ -19,6 +19,7 @@ class Routes {
   static const ventas = '/ventas';
   static const ventasLista = '/ventas/lista';
   static const ventasCreditos = '/ventas/creditos';
+  static const compras = '/ventas/compras';
   static const caja = '/caja';
   static const cajaRegistrarIngreso = '/caja/registrar-ingreso';
   static const cajaRegistrarSalida = '/caja/registrar-salida';
@@ -59,6 +60,8 @@ class Routes {
   static const whatsappCrm = '/whatsapp-crm';
   static const crmComercial = '/crm-comercial';
   static const sitioWeb = '/sitio-web';
+  static const redTecnica = '/red-tecnica';
+  static const redTecnicaPublicForm = '/red-tecnica/formulario';
 
   // Amonestaciones
   static const amonestaciones = '/amonestaciones';

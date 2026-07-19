@@ -34,6 +34,7 @@ import { CrmCommercialModule } from './crm-commercial/crm-commercial.module';
 import { CashModule } from './cash/cash.module';
 import { ReportsModule } from './reports/reports.module';
 import { WebsiteModule } from './website/website.module';
+import { TechnicalNetworkModule } from './technical-network/technical-network.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { WebsiteModule } from './website/website.module';
     CashModule,
     ReportsModule,
     WebsiteModule,
+    TechnicalNetworkModule,
   ]
 })
 export class AppModule {}

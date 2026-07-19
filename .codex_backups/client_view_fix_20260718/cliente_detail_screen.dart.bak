@@ -551,10 +551,6 @@ class _ClienteDetailScreenState extends ConsumerState<ClienteDetailScreen> {
         profileClient?.longitude ??
         _cliente?.longitude ??
         fallbackLocation.longitude;
-    final hasLocationDetail =
-        normalizeClientLocationUrl(displayLocationUrl).isNotEmpty ||
-        displayLatitude != null ||
-        displayLongitude != null;
     final displayNote = (profileClient?.notas ?? '').trim();
     final lastActivityAt =
         metrics?.lastActivityAt ?? profileClient?.lastActivityAt;
@@ -598,9 +594,6 @@ class _ClienteDetailScreenState extends ConsumerState<ClienteDetailScreen> {
             .toList(growable: false);
 
     return Scaffold(
-      backgroundColor: Theme.of(
-        context,
-      ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
       body: SafeArea(
         bottom: false,
         child: _loading
@@ -611,122 +604,79 @@ class _ClienteDetailScreenState extends ConsumerState<ClienteDetailScreen> {
                 onRefresh: _load,
                 child: ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 34),
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 28),
                   children: [
-                    Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1040),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _ElegantSectionCard(
-                              padding: const EdgeInsets.fromLTRB(
-                                16,
-                                14,
-                                14,
-                                14,
-                              ),
-                              child: _CompactDetailHeader(
-                                name: displayName.isEmpty
-                                    ? 'Cliente'
-                                    : displayName,
-                                phone: displayPhone,
-                                deleted:
-                                    profileClient?.isDeleted ??
-                                    _cliente?.isDeleted ??
-                                    false,
-                                deleting: _deleting,
-                                onBack: () => AppNavigator.goBack(
-                                  context,
-                                  fallbackRoute: Routes.clientes,
-                                ),
-                                onActionSelected: (action) {
-                                  switch (action) {
-                                    case _ClienteHeaderAction.edit:
-                                      if (resolvedClientId.isNotEmpty &&
-                                          !_deleting) {
-                                        context.push(
-                                          Routes.clienteEdit(resolvedClientId),
-                                        );
-                                      }
-                                      break;
-                                    case _ClienteHeaderAction.delete:
-                                      if (_cliente != null && !_deleting) {
-                                        _deleteClient();
-                                      }
-                                      break;
-                                  }
-                                },
-                              ),
-                            ),
-                            if (_refreshing) ...[
-                              const SizedBox(height: 10),
-                              const LinearProgressIndicator(),
-                            ],
-                            const SizedBox(height: 14),
-                            _MetricGrid(items: _buildMetricItems(profile)),
-                            const SizedBox(height: 14),
-                            _ElegantSectionCard(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const _SectionLabel(
-                                    title: 'Datos importantes del cliente',
-                                  ),
-                                  const SizedBox(height: 14),
-                                  _SimpleDetailList(rows: importantInfo),
-                                  if (displayNote.isNotEmpty) ...[
-                                    const SizedBox(height: 14),
-                                    const Divider(height: 1),
-                                    const SizedBox(height: 14),
-                                    _InlineNoteCard(note: displayNote),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            if (hasLocationDetail) ...[
-                              const SizedBox(height: 14),
-                              _ElegantSectionCard(
-                                child: _LocationDetailCard(
-                                  locationUrl: displayLocationUrl,
-                                  latitude: displayLatitude,
-                                  longitude: displayLongitude,
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 14),
-                            _ElegantSectionCard(
-                              child: _TimelineSection(
-                                title: 'Ultimos movimientos',
-                                emptyLabel:
-                                    'No hay ventas, cotizaciones o servicios registrados para este cliente.',
-                                children: recentTimeline
-                                    .map(
-                                      (event) => _TimelineEventCard(
-                                        icon: _timelineIcon(event.eventType),
-                                        title: event.title,
-                                        summary: _timelineSummary(event),
-                                        date: _formatDate(event.at),
-                                        amount: event.amount == null
-                                            ? null
-                                            : _formatMoney(event.amount),
-                                        statusLabel: _timelineStatusLabel(
-                                          event,
-                                        ),
-                                        statusColor: _timelineStatusColor(
-                                          context,
-                                          event,
-                                        ),
-                                        enabled: _canOpenEvent(event),
-                                        onTap: () => _openEvent(event),
-                                      ),
-                                    )
-                                    .toList(growable: false),
-                              ),
-                            ),
-                          ],
-                        ),
+                    _CompactDetailHeader(
+                      name: displayName.isEmpty ? 'Cliente' : displayName,
+                      phone: displayPhone,
+                      deleted:
+                          profileClient?.isDeleted ??
+                          _cliente?.isDeleted ??
+                          false,
+                      deleting: _deleting,
+                      onBack: () => AppNavigator.goBack(
+                        context,
+                        fallbackRoute: Routes.clientes,
                       ),
+                      onActionSelected: (action) {
+                        switch (action) {
+                          case _ClienteHeaderAction.edit:
+                            if (resolvedClientId.isNotEmpty && !_deleting) {
+                              context.push(
+                                Routes.clienteEdit(resolvedClientId),
+                              );
+                            }
+                            break;
+                          case _ClienteHeaderAction.delete:
+                            if (_cliente != null && !_deleting) {
+                              _deleteClient();
+                            }
+                            break;
+                        }
+                      },
+                    ),
+                    if (_refreshing) ...[
+                      const SizedBox(height: 8),
+                      const LinearProgressIndicator(),
+                    ],
+                    const SizedBox(height: 18),
+                    _MetricGrid(items: _buildMetricItems(profile)),
+                    const SizedBox(height: 22),
+                    const _SectionLabel(title: 'Datos importantes del cliente'),
+                    const SizedBox(height: 10),
+                    _SimpleDetailList(rows: importantInfo),
+                    if (displayNote.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      _InlineNoteCard(note: displayNote),
+                    ],
+                    const SizedBox(height: 22),
+                    _LocationDetailCard(
+                      locationUrl: displayLocationUrl,
+                      latitude: displayLatitude,
+                      longitude: displayLongitude,
+                    ),
+                    const SizedBox(height: 22),
+                    _TimelineSection(
+                      title: 'Ultimos movimientos',
+                      emptyLabel:
+                          'No hay ventas, cotizaciones o servicios registrados para este cliente.',
+                      children: recentTimeline
+                          .map(
+                            (event) => _TimelineEventCard(
+                              icon: _timelineIcon(event.eventType),
+                              title: event.title,
+                              summary: _timelineSummary(event),
+                              date: _formatDate(event.at),
+                              amount: event.amount == null
+                                  ? null
+                                  : _formatMoney(event.amount),
+                              statusLabel: _timelineStatusLabel(event),
+                              statusColor: _timelineStatusColor(context, event),
+                              enabled: _canOpenEvent(event),
+                              onTap: () => _openEvent(event),
+                            ),
+                          )
+                          .toList(growable: false),
                     ),
                   ],
                 ),
@@ -737,38 +687,6 @@ class _ClienteDetailScreenState extends ConsumerState<ClienteDetailScreen> {
 }
 
 enum _ClienteHeaderAction { edit, delete }
-
-class _ElegantSectionCard extends StatelessWidget {
-  const _ElegantSectionCard({
-    required this.child,
-    this.padding = const EdgeInsets.all(18),
-  });
-
-  final Widget child;
-  final EdgeInsetsGeometry padding;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.34),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.shadow.withValues(alpha: 0.055),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: Padding(padding: padding, child: child),
-    );
-  }
-}
 
 class _CompactDetailHeader extends StatelessWidget {
   const _CompactDetailHeader({

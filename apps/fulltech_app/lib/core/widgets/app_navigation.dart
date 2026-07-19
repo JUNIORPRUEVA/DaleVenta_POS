@@ -119,6 +119,12 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Créditos',
             route: Routes.ventasCreditos,
           ),
+        if (can(AppPermission.viewPurchases))
+          const AppNavigationItem(
+            icon: Icons.shopping_cart_checkout_outlined,
+            title: 'Compras',
+            route: Routes.compras,
+          ),
         if (can(AppPermission.viewPunch))
           const AppNavigationItem(
             icon: Icons.access_time_rounded,
@@ -160,6 +166,12 @@ List<AppNavigationSection> buildAppNavigationSections(
             icon: Icons.language_rounded,
             title: 'Sitio web',
             route: Routes.sitioWeb,
+          ),
+        if (can(AppPermission.viewTechnicalNetwork))
+          const AppNavigationItem(
+            icon: Icons.handyman_outlined,
+            title: 'Red Técnica',
+            route: Routes.redTecnica,
           ),
       ],
     ),
@@ -305,6 +317,7 @@ String resolveNavigationTitle(
   if (path == Routes.serviceOrderCreate) return 'Crear orden';
   if (path == Routes.cotizacionesHistorial) return 'Cotizaciones';
   if (path == Routes.ventasLista) return 'Lista de ventas';
+  if (path == Routes.compras) return 'Compras';
   if (path == Routes.caja) return 'Movimiento caja';
   if (path == Routes.cajaMovimientos) return 'Historial de efectivo';
   if (path == Routes.cajaRegistrarGasto) return 'Registrar gasto';
@@ -326,6 +339,8 @@ String resolveNavigationTitle(
   if (path == Routes.whatsappCrm) return 'CRM WhatsApp';
   if (path == Routes.crmComercial) return 'CRM Comercial';
   if (path == Routes.sitioWeb) return 'Sitio web';
+  if (path == Routes.redTecnica) return 'Red Técnica';
+  if (path == Routes.redTecnicaPublicForm) return 'Formulario Red Técnica';
   if (path == Routes.amonestaciones) return 'Amonestaciones';
   if (path == Routes.misAmonestacionesPendientes) {
     return 'Mis pendientes de firma';
@@ -356,6 +371,7 @@ bool desktopShellShouldShowOwnAppBar(String location) {
     Routes.clientes,
     Routes.ventas,
     Routes.ventasLista,
+    Routes.compras,
     Routes.caja,
     Routes.serviceOrders,
     Routes.serviceOrderCommissions,
@@ -370,6 +386,7 @@ bool desktopShellShouldShowOwnAppBar(String location) {
     Routes.administracion,
     Routes.publicidad,
     Routes.sitioWeb,
+    Routes.redTecnica,
     Routes.users,
     Routes.profile,
   ];

@@ -176,6 +176,19 @@ class ApiRoutes {
   static String saleDetail(String id) => '/sales/$id';
   static String saleReturn(String id) => '/sales/$id/return';
   static String saleCreditPayments(String id) => '/sales/$id/credit-payments';
+
+  // Compras
+  static const purchaseSuppliers = '/purchases/suppliers';
+  static String purchaseSupplier(String id) => '/purchases/suppliers/$id';
+  static const purchaseOrders = '/purchases/orders';
+  static String purchaseOrder(String id) => '/purchases/orders/$id';
+  static String purchaseOrderApprove(String id) => '/purchases/orders/$id/approve';
+  static String purchaseOrderSend(String id) => '/purchases/orders/$id/send';
+  static String purchaseOrderCancel(String id) => '/purchases/orders/$id/cancel';
+  static String purchaseOrderDuplicate(String id) => '/purchases/orders/$id/duplicate';
+  static String purchaseOrderReceive(String id) => '/purchases/orders/$id/receive';
+  static const purchaseRecommendations = '/purchases/recommendations';
+
   static const cashState = '/cash/state';
   static const cashOpenSession = '/cash/sessions/open';
   static const cashCloseSession = '/cash/sessions/close';

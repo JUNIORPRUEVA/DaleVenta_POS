@@ -25,6 +25,8 @@ class RouteAccess {
         return AppPermission.viewCatalog;
       case Routes.ventas:
         return AppPermission.viewSalesReports;
+      case Routes.compras:
+        return AppPermission.viewPurchases;
       case Routes.ventasLista:
       case Routes.ventasCreditos:
       case Routes.caja:
@@ -82,6 +84,10 @@ class RouteAccess {
         return AppPermission.viewCrmComercial;
       case Routes.sitioWeb:
         return AppPermission.manageWebsite;
+      case Routes.redTecnica:
+        return AppPermission.viewTechnicalNetwork;
+      case Routes.redTecnicaPublicForm:
+        return null;
       case Routes.amonestaciones:
         return AppPermission.viewWarnings;
       case Routes.misAmonestacionesPendientes:
@@ -118,6 +124,10 @@ class RouteAccess {
     }
     if (path.startsWith('${Routes.sitioWeb}/')) {
       return AppPermission.manageWebsite;
+    }
+    if (path.startsWith('${Routes.redTecnica}/') &&
+        path != Routes.redTecnicaPublicForm) {
+      return AppPermission.viewTechnicalNetwork;
     }
     return null;
   }

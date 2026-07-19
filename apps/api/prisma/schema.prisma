@@ -15,6 +15,18 @@ enum Role {
   TECNICO
 }
 
+enum PurchaseOrderStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SENT
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+
+  @@map("purchase_order_status")
+}
+
 enum PunchType {
   ENTRADA_LABOR
   SALIDA_LABOR
@@ -608,6 +620,9 @@ model User {
   sales                                    Sale[]
   saleCreditPayments                       SaleCreditPayment[]
   deletedSales                             Sale[]                            @relation("SaleDeletedBy")
+  purchaseOrdersCreated                    PurchaseOrder[]                   @relation("PurchaseOrderCreatedBy")
+  purchaseOrdersApproved                   PurchaseOrder[]                   @relation("PurchaseOrderApprovedBy")
+  purchaseReceiptsReceived                 PurchaseReceipt[]                 @relation("PurchaseReceiptReceivedBy")
   createdServices                          Service[]                         @relation("ServiceCreatedBy")
   assignedServices                         ServiceAssignment[]
   technicianServices                       Service[]                         @relation("ServiceTechnician")
@@ -1519,6 +1534,163 @@ model Product {
 
   saleItems       SaleItem[]
   cotizacionItems CotizacionItem[]
+  purchaseOrderItems PurchaseOrderItem[]
+}
+
+model Supplier {
+  id                    String    @id @default(uuid()) @db.Uuid
+  businessId            String?   @map("business_id") @db.Uuid
+  commercialName        String    @map("commercial_name")
+  legalName             String?   @map("legal_name")
+  taxId                 String?   @map("tax_id")
+  contactName           String?   @map("contact_name")
+  phone                 String?
+  whatsapp              String?
+  email                 String?
+  address               String?   @db.Text
+  city                  String?
+  country               String?
+  website               String?
+  paymentTerms          String?   @map("payment_terms") @db.Text
+  estimatedDeliveryDays Int?      @map("estimated_delivery_days")
+  notes                 String?   @db.Text
+  logo                  String?   @db.Text
+  isActive              Boolean   @default(true) @map("is_active")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  deletedAt             DateTime? @map("deleted_at")
+
+  purchaseOrders PurchaseOrder[]
+  purchaseItems  PurchaseOrderItem[]
+
+  @@index([businessId])
+  @@index([commercialName])
+  @@index([isActive])
+  @@map("suppliers")
+}
+
+model PurchaseOrderSequence {
+  scope     String   @id
+  nextValue Int      @default(1) @map("next_value")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("purchase_order_sequences")
+}
+
+model PurchaseOrder {
+  id                   String              @id @default(uuid()) @db.Uuid
+  businessId           String?             @map("business_id") @db.Uuid
+  branchId             String?             @map("branch_id") @db.Uuid
+  orderNumber          String              @unique @map("order_number")
+  supplierId           String?             @map("supplier_id") @db.Uuid
+  status               PurchaseOrderStatus @default(DRAFT)
+  orderDate            DateTime            @default(now()) @map("order_date")
+  expectedDeliveryDate DateTime?           @map("expected_delivery_date")
+  subtotal             Decimal             @default(0) @db.Decimal(12, 2)
+  discount             Decimal             @default(0) @db.Decimal(12, 2)
+  shippingCost         Decimal             @default(0) @map("shipping_cost") @db.Decimal(12, 2)
+  additionalCost       Decimal             @default(0) @map("additional_cost") @db.Decimal(12, 2)
+  tax                  Decimal             @default(0) @db.Decimal(12, 2)
+  total                Decimal             @default(0) @db.Decimal(12, 2)
+  paymentTerms         String?             @map("payment_terms") @db.Text
+  paymentMethod        String?             @map("payment_method")
+  shippingMethod       String?             @map("shipping_method")
+  notes                String?             @db.Text
+  supplierInstructions String?             @map("supplier_instructions") @db.Text
+  createdById          String              @map("created_by") @db.Uuid
+  approvedById         String?             @map("approved_by") @db.Uuid
+  approvedAt           DateTime?           @map("approved_at")
+  sentAt               DateTime?           @map("sent_at")
+  cancelledAt          DateTime?           @map("cancelled_at")
+  cancellationReason   String?             @map("cancellation_reason") @db.Text
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+  deletedAt            DateTime?           @map("deleted_at")
+
+  supplier   Supplier?           @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  createdBy  User                @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy User?               @relation("PurchaseOrderApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  items      PurchaseOrderItem[]
+  receipts   PurchaseReceipt[]
+
+  @@index([supplierId])
+  @@index([status])
+  @@index([orderDate])
+  @@index([createdById])
+  @@index([deletedAt])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id                              String   @id @default(uuid()) @db.Uuid
+  purchaseOrderId                 String   @map("purchase_order_id") @db.Uuid
+  productId                       String?  @map("product_id") @db.Uuid
+  externalProductId               String?  @map("external_product_id") @db.Uuid
+  productNameSnapshot             String   @map("product_name_snapshot")
+  productCodeSnapshot             String?  @map("product_code_snapshot")
+  descriptionSnapshot             String?  @map("description_snapshot") @db.Text
+  imageSnapshot                   String?  @map("image_snapshot") @db.Text
+  quantity                        Decimal  @db.Decimal(12, 3)
+  receivedQuantity                Decimal  @default(0) @map("received_quantity") @db.Decimal(12, 3)
+  pendingQuantity                 Decimal  @default(0) @map("pending_quantity") @db.Decimal(12, 3)
+  unitCost                        Decimal  @map("unit_cost") @db.Decimal(12, 2)
+  actualUnitCost                  Decimal? @map("actual_unit_cost") @db.Decimal(12, 2)
+  subtotal                        Decimal  @db.Decimal(12, 2)
+  supplierId                      String?  @map("supplier_id") @db.Uuid
+  notes                           String?  @db.Text
+  createInventoryProductOnReceipt Boolean  @default(false) @map("create_inventory_product_on_receipt")
+  createdAt                       DateTime @default(now()) @map("created_at")
+  updatedAt                       DateTime @updatedAt @map("updated_at")
+
+  purchaseOrder PurchaseOrder         @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product?              @relation(fields: [productId], references: [id], onDelete: SetNull)
+  supplier      Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  receiptItems  PurchaseReceiptItem[]
+
+  @@index([purchaseOrderId])
+  @@index([productId])
+  @@index([supplierId])
+  @@map("purchase_order_items")
+}
+
+model PurchaseReceipt {
+  id                    String   @id @default(uuid()) @db.Uuid
+  purchaseOrderId       String   @map("purchase_order_id") @db.Uuid
+  supplierInvoiceNumber String?  @map("supplier_invoice_number")
+  receiptDate           DateTime @default(now()) @map("receipt_date")
+  notes                 String?  @db.Text
+  invoiceImage          String?  @map("invoice_image") @db.Text
+  receivedById          String   @map("received_by") @db.Uuid
+  inventoryUpdated      Boolean  @default(false) @map("inventory_updated")
+  inventoryUpdatedAt    DateTime? @map("inventory_updated_at")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  purchaseOrder PurchaseOrder         @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  receivedBy    User                  @relation("PurchaseReceiptReceivedBy", fields: [receivedById], references: [id], onDelete: Restrict)
+  items         PurchaseReceiptItem[]
+
+  @@index([purchaseOrderId])
+  @@index([receivedById])
+  @@map("purchase_receipts")
+}
+
+model PurchaseReceiptItem {
+  id                  String   @id @default(uuid()) @db.Uuid
+  purchaseReceiptId   String   @map("purchase_receipt_id") @db.Uuid
+  purchaseOrderItemId String   @map("purchase_order_item_id") @db.Uuid
+  quantityReceived    Decimal  @map("quantity_received") @db.Decimal(12, 3)
+  unitCost            Decimal  @map("unit_cost") @db.Decimal(12, 2)
+  condition           String?
+  notes               String?  @db.Text
+  inventoryMovementId String?  @map("inventory_movement_id") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  receipt PurchaseReceipt   @relation(fields: [purchaseReceiptId], references: [id], onDelete: Cascade)
+  orderItem PurchaseOrderItem @relation(fields: [purchaseOrderItemId], references: [id], onDelete: Restrict)
+
+  @@unique([purchaseReceiptId, purchaseOrderItemId])
+  @@index([purchaseOrderItemId])
+  @@map("purchase_receipt_items")
 }
 
 model WebsiteProductOverride {
