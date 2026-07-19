@@ -428,6 +428,14 @@ class _RedTecnicaScreenState extends ConsumerState<RedTecnicaScreen> {
         preferDrawerLeading: true,
         showLogo: false,
         showDepartmentLabel: false,
+        bottom: _RedTecnicaTabBar(
+          tab: _tab,
+          onChanged: (value) => setState(() {
+            _tab = value;
+            _selectedApplicationId = null;
+            _selectedTechnicianId = null;
+          }),
+        ),
         actions: [
           IconButton(
             tooltip: 'Copiar formulario publico',
@@ -489,14 +497,6 @@ class _RedTecnicaScreenState extends ConsumerState<RedTecnicaScreen> {
                   onSpecialtyChanged: (value) =>
                       setState(() => _specialtyFilter = value),
                 ),
-                tabs: _RedTecnicaTabs(
-                  tab: _tab,
-                  onChanged: (value) => setState(() {
-                    _tab = value;
-                    _selectedApplicationId = null;
-                    _selectedTechnicianId = null;
-                  }),
-                ),
                 body: RefreshIndicator(
                   onRefresh: () async => _reload(),
                   child: AnimatedSwitcher(
@@ -525,16 +525,7 @@ class _RedTecnicaScreenState extends ConsumerState<RedTecnicaScreen> {
                             _showApplicationDetail(item);
                           }
                         },
-                        detail: isWide
-                            ? _ApplicationSidePanel(
-                                application: _selectedApplication(applications),
-                                onCall: _call,
-                                onWhatsApp: _openWhatsApp,
-                                onReviewing: _setReviewing,
-                                onApprove: _approve,
-                                onReject: _reject,
-                              )
-                            : null,
+                        detail: null,
                       ),
                       _ => _TechniciansTab(
                         key: const ValueKey('technicians'),
@@ -561,72 +552,32 @@ class _RedTecnicaScreenState extends ConsumerState<RedTecnicaScreen> {
                             );
                           }
                         },
-                        detail: isWide
-                            ? _TechnicianSidePanel(
-                                technician: _selectedTechnician(technicians),
-                                jobs: data.jobs,
-                                evaluations: data.evaluations,
-                                onCall: _call,
-                                onWhatsApp: _openWhatsApp,
-                                onFavorite: _toggleFavorite,
-                                onStatus: _changeStatus,
-                                onAddJob: (job) async {
-                                  await ref
-                                      .read(redTecnicaRepositoryProvider)
-                                      .addJob(job);
-                                  _reload();
-                                },
-                                onAddEvaluation: (evaluation) async {
-                                  await ref
-                                      .read(redTecnicaRepositoryProvider)
-                                      .addEvaluation(evaluation);
-                                  _reload();
-                                },
-                              )
-                            : null,
+                        detail: null,
                       ),
                     },
                   ),
                 ),
               );
-              final sideWidth = (constraints.maxWidth * .36).clamp(
-                430.0,
-                560.0,
+              final sideWidth = (constraints.maxWidth * .34).clamp(
+                500.0,
+                650.0,
               );
-              return Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1480),
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      isWide ? 18 : 10,
-                      isWide ? 14 : 10,
-                      isWide ? 18 : 10,
-                      isWide ? 14 : 10,
+              if (!isWide) return content;
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: content),
+                  SizedBox(
+                    width: sideWidth,
+                    child: _rightPanel(
+                      publicLink: publicLink,
+                      applications: applications,
+                      technicians: technicians,
+                      jobs: data.jobs,
+                      evaluations: data.evaluations,
                     ),
-                    child: isWide
-                        ? Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Expanded(child: content),
-                              const SizedBox(width: 14),
-                              SizedBox(
-                                width: sideWidth,
-                                child: _RightActionPanel(
-                                  publicLink: publicLink,
-                                  showForm: _showRegistrationPanel,
-                                  onCopyPublicLink: _copyPublicLink,
-                                  onRegister: _openManualRegistration,
-                                  onCloseForm: () => setState(
-                                    () => _showRegistrationPanel = false,
-                                  ),
-                                  form: _buildManualRegistrationForm(),
-                                ),
-                              ),
-                            ],
-                          )
-                        : content,
                   ),
-                ),
+                ],
               );
             },
           );
@@ -640,6 +591,67 @@ class _RedTecnicaScreenState extends ConsumerState<RedTecnicaScreen> {
             )
           : null,
       backgroundColor: _rtBackground,
+    );
+  }
+
+  Widget _rightPanel({
+    required String publicLink,
+    required List<TechnicianApplication> applications,
+    required List<Technician> technicians,
+    required List<TechnicianJob> jobs,
+    required List<TechnicianEvaluation> evaluations,
+  }) {
+    if (_showRegistrationPanel) {
+      return _RightActionPanel(
+        publicLink: publicLink,
+        showForm: true,
+        onCopyPublicLink: _copyPublicLink,
+        onRegister: _openManualRegistration,
+        onCloseForm: () => setState(() => _showRegistrationPanel = false),
+        form: _buildManualRegistrationForm(),
+      );
+    }
+
+    if (_tab == 1) {
+      return _ApplicationSidePanel(
+        application: _selectedApplication(applications),
+        onCall: _call,
+        onWhatsApp: _openWhatsApp,
+        onReviewing: _setReviewing,
+        onApprove: _approve,
+        onReject: _reject,
+      );
+    }
+
+    if (_tab == 2) {
+      return _TechnicianSidePanel(
+        technician: _selectedTechnician(technicians),
+        jobs: jobs,
+        evaluations: evaluations,
+        onCall: _call,
+        onWhatsApp: _openWhatsApp,
+        onFavorite: _toggleFavorite,
+        onStatus: _changeStatus,
+        onAddJob: (job) async {
+          await ref.read(redTecnicaRepositoryProvider).addJob(job);
+          _reload();
+        },
+        onAddEvaluation: (evaluation) async {
+          await ref
+              .read(redTecnicaRepositoryProvider)
+              .addEvaluation(evaluation);
+          _reload();
+        },
+      );
+    }
+
+    return _RightActionPanel(
+      publicLink: publicLink,
+      showForm: false,
+      onCopyPublicLink: _copyPublicLink,
+      onRegister: _openManualRegistration,
+      onCloseForm: () => setState(() => _showRegistrationPanel = false),
+      form: _buildManualRegistrationForm(),
     );
   }
 
@@ -843,75 +855,126 @@ class _PublicFormIntroCard extends StatelessWidget {
 }
 
 class _RedTecnicaWorkspace extends StatelessWidget {
-  const _RedTecnicaWorkspace({
-    required this.toolbar,
-    required this.tabs,
-    required this.body,
-  });
+  const _RedTecnicaWorkspace({required this.toolbar, required this.body});
 
   final Widget toolbar;
-  final Widget tabs;
   final Widget body;
 
   @override
   Widget build(BuildContext context) {
-    return _ShellCard(
-      padding: EdgeInsets.zero,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-            child: Column(
-              children: [toolbar, const SizedBox(height: 12), tabs],
-            ),
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
+          decoration: const BoxDecoration(
+            color: _rtSurface,
+            border: Border(bottom: BorderSide(color: _rtLine)),
           ),
-          const Divider(height: 1, color: _rtLine),
-          Expanded(child: body),
-        ],
-      ),
+          child: toolbar,
+        ),
+        Expanded(child: body),
+      ],
     );
   }
 }
 
-class _RedTecnicaTabs extends StatelessWidget {
-  const _RedTecnicaTabs({required this.tab, required this.onChanged});
+class _RedTecnicaTabBar extends StatelessWidget implements PreferredSizeWidget {
+  const _RedTecnicaTabBar({required this.tab, required this.onChanged});
 
   final int tab;
   final ValueChanged<int> onChanged;
 
   @override
+  Size get preferredSize => const Size.fromHeight(46);
+
+  @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: SegmentedButton<int>(
-        style: ButtonStyle(
-          visualDensity: VisualDensity.compact,
-          side: WidgetStateProperty.resolveWith(
-            (_) => const BorderSide(color: _rtLine),
+    return Material(
+      color: Colors.white,
+      child: Container(
+        height: preferredSize.height,
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: _rtLine)),
+        ),
+        child: Row(
+          children: [
+            _TopTabButton(
+              selected: tab == 0,
+              icon: Icons.dashboard_outlined,
+              label: 'Panel',
+              onTap: () => onChanged(0),
+            ),
+            _TopTabButton(
+              selected: tab == 1,
+              icon: Icons.inbox_outlined,
+              label: 'Solicitudes',
+              onTap: () => onChanged(1),
+            ),
+            _TopTabButton(
+              selected: tab == 2,
+              icon: Icons.engineering_outlined,
+              label: 'Tecnicos activos',
+              onTap: () => onChanged(2),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TopTabButton extends StatelessWidget {
+  const _TopTabButton({
+    required this.selected,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final bool selected;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          height: double.infinity,
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFFEAF1FF) : Colors.white,
+            border: Border(
+              bottom: BorderSide(
+                color: selected ? _rtBlue : Colors.transparent,
+                width: 2,
+              ),
+              right: const BorderSide(color: _rtLine),
+            ),
           ),
-          shape: WidgetStateProperty.all(
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 18, color: selected ? _rtBlue : _rtText),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    label,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: selected ? _rtBlue : _rtText,
+                      fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        segments: const [
-          ButtonSegment(
-            value: 0,
-            icon: Icon(Icons.dashboard_outlined, size: 18),
-            label: Text('Panel'),
-          ),
-          ButtonSegment(
-            value: 1,
-            icon: Icon(Icons.inbox_outlined, size: 18),
-            label: Text('Solicitudes'),
-          ),
-          ButtonSegment(
-            value: 2,
-            icon: Icon(Icons.engineering_outlined, size: 18),
-            label: Text('Tecnicos activos'),
-          ),
-        ],
-        selected: {tab},
-        onSelectionChanged: (value) => onChanged(value.first),
       ),
     );
   }
@@ -937,120 +1000,145 @@ class _RightActionPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (showForm) {
-      return _ShellCard(
-        padding: EdgeInsets.zero,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.person_add_alt_1_rounded, color: _rtBlue),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
-                      'Nuevo tecnico',
-                      style: TextStyle(
-                        color: _rtText,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 16,
+      return _RightPanelFrame(
+        child: _ShellCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.person_add_alt_1_rounded, color: _rtBlue),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Nuevo tecnico',
+                        style: TextStyle(
+                          color: _rtText,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                        ),
                       ),
                     ),
-                  ),
-                  IconButton(
-                    tooltip: 'Cerrar formulario',
-                    onPressed: onCloseForm,
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
+                    IconButton(
+                      tooltip: 'Cerrar formulario',
+                      onPressed: onCloseForm,
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const Divider(height: 1, color: _rtLine),
-            Expanded(child: form),
-          ],
+              const Divider(height: 1, color: _rtLine),
+              Expanded(child: form),
+            ],
+          ),
         ),
       );
     }
 
-    return _ShellCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: const Color(0xFFEAF1FF),
-              borderRadius: BorderRadius.circular(12),
+    return _RightPanelFrame(
+      child: _ShellCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEAF1FF),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.hub_outlined, color: _rtBlue),
             ),
-            child: const Icon(Icons.hub_outlined, color: _rtBlue),
-          ),
-          const SizedBox(height: 14),
-          const Text(
-            'Formulario publico',
-            style: TextStyle(
-              color: _rtText,
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Comparte este enlace para recibir solicitudes de tecnicos externos directamente en FullTech.',
-            style: TextStyle(color: _rtMuted, height: 1.35),
-          ),
-          const SizedBox(height: 14),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _rtLine),
-            ),
-            child: SelectableText(
-              publicLink,
-              style: const TextStyle(
+            const SizedBox(height: 14),
+            const Text(
+              'Formulario publico',
+              style: TextStyle(
                 color: _rtText,
-                fontSize: 12,
-                height: 1.35,
-                fontWeight: FontWeight.w700,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: onCopyPublicLink,
-              icon: const Icon(Icons.copy_rounded),
-              label: const Text('Copiar enlace'),
+            const SizedBox(height: 6),
+            const Text(
+              'Comparte este enlace para recibir solicitudes de tecnicos externos directamente en FullTech.',
+              style: TextStyle(color: _rtMuted, height: 1.35),
             ),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: onRegister,
-              icon: const Icon(Icons.person_add_alt_1_rounded),
-              label: const Text('Registrar manualmente'),
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _rtLine),
+              ),
+              child: SelectableText(
+                publicLink,
+                style: const TextStyle(
+                  color: _rtText,
+                  fontSize: 12,
+                  height: 1.35,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
-          ),
-          const SizedBox(height: 18),
-          const _PanelHint(
-            icon: Icons.verified_user_outlined,
-            title: 'Flujo recomendado',
-            detail:
-                'Revisa cada solicitud, valida datos y aprueba solo perfiles listos para recibir trabajos.',
-          ),
-          const SizedBox(height: 10),
-          const _PanelHint(
-            icon: Icons.phone_in_talk_outlined,
-            title: 'Contacto rapido',
-            detail:
-                'Desde cada tarjeta puedes llamar o escribir por WhatsApp sin salir del modulo.',
-          ),
-        ],
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: onCopyPublicLink,
+                icon: const Icon(Icons.copy_rounded),
+                label: const Text('Copiar enlace'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onRegister,
+                icon: const Icon(Icons.person_add_alt_1_rounded),
+                label: const Text('Registrar manualmente'),
+              ),
+            ),
+            const SizedBox(height: 18),
+            const _PanelHint(
+              icon: Icons.verified_user_outlined,
+              title: 'Flujo recomendado',
+              detail:
+                  'Revisa cada solicitud, valida datos y aprueba solo perfiles listos para recibir trabajos.',
+            ),
+            const SizedBox(height: 10),
+            const _PanelHint(
+              icon: Icons.phone_in_talk_outlined,
+              title: 'Contacto rapido',
+              detail:
+                  'Desde cada tarjeta puedes llamar o escribir por WhatsApp sin salir del modulo.',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RightPanelFrame extends StatelessWidget {
+  const _RightPanelFrame({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: double.infinity,
+      decoration: const BoxDecoration(
+        color: _rtBackground,
+        border: Border(left: BorderSide(color: _rtLine)),
+      ),
+      child: SafeArea(
+        left: false,
+        child: Padding(padding: const EdgeInsets.all(12), child: child),
       ),
     );
   }
@@ -1167,45 +1255,68 @@ class _DashboardTab extends StatelessWidget {
         Icons.verified_user_outlined,
       ),
     ];
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
-      children: [
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final columns = width >= 1180
+            ? 4
+            : width >= 840
+            ? 3
+            : width >= 560
+            ? 2
+            : 1;
+        final itemWidth = (width - 32 - ((columns - 1) * 10)) / columns;
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
           children: [
-            for (final card in cards)
-              _StatCard(title: card.$1, value: '${card.$2}', icon: card.$3),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (final card in cards)
+                  SizedBox(
+                    width: itemWidth,
+                    child: _StatCard(
+                      title: card.$1,
+                      value: '${card.$2}',
+                      icon: card.$3,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _ShellCard(
+              padding: const EdgeInsets.all(12),
+              child: Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  FilledButton.icon(
+                    onPressed: () => onTab(1),
+                    icon: const Icon(Icons.inbox_outlined),
+                    label: const Text('Ver solicitudes'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => onTab(2),
+                    icon: const Icon(Icons.engineering_outlined),
+                    label: const Text('Ver tecnicos activos'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: onRegister,
+                    icon: const Icon(Icons.person_add_alt_1_rounded),
+                    label: const Text('Registrar tecnico'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: onCopyPublicLink,
+                    icon: const Icon(Icons.link_rounded),
+                    label: const Text('Copiar enlace publico'),
+                  ),
+                ],
+              ),
+            ),
           ],
-        ),
-        const SizedBox(height: 16),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            FilledButton.icon(
-              onPressed: () => onTab(1),
-              icon: const Icon(Icons.inbox_outlined),
-              label: const Text('Ver solicitudes'),
-            ),
-            OutlinedButton.icon(
-              onPressed: () => onTab(2),
-              icon: const Icon(Icons.engineering_outlined),
-              label: const Text('Ver tecnicos activos'),
-            ),
-            OutlinedButton.icon(
-              onPressed: onRegister,
-              icon: const Icon(Icons.person_add_alt_1_rounded),
-              label: const Text('Registrar tecnico'),
-            ),
-            OutlinedButton.icon(
-              onPressed: onCopyPublicLink,
-              icon: const Icon(Icons.link_rounded),
-              label: const Text('Copiar enlace publico'),
-            ),
-          ],
-        ),
-      ],
+        );
+      },
     );
   }
 }
@@ -1940,14 +2051,12 @@ class _SideDetailFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: double.infinity,
-      decoration: const BoxDecoration(
-        color: _rtSurface,
-        border: Border(left: BorderSide(color: _rtLine)),
+    return _RightPanelFrame(
+      child: _ShellCard(
+        padding: EdgeInsets.zero,
+        child:
+            child ?? _SideDetailEmpty(title: emptyTitle, message: emptyMessage),
       ),
-      child:
-          child ?? _SideDetailEmpty(title: emptyTitle, message: emptyMessage),
     );
   }
 }
@@ -2660,33 +2769,46 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return SizedBox(
-      width: 220,
-      child: _ShellCard(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Icon(icon, color: theme.colorScheme.primary),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: theme.textTheme.labelLarge),
-                    Text(
-                      value,
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+    return _ShellCard(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEAF1FF),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: _rtBlue, size: 20),
           ),
-        ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _rtText,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    color: _rtText,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
