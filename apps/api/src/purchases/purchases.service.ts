@@ -44,7 +44,7 @@ export class PurchasesService {
       },
       orderBy: { commercialName: "asc" },
     });
-    return Promise.all(rows.map((row) => this.supplierWithStats(row)));
+    return this.suppliersWithStats(rows);
   }
 
   async createSupplier(dto: UpsertSupplierDto) {
@@ -414,20 +414,64 @@ export class PurchasesService {
     return `OC-${number.toString().padStart(6, "0")}`;
   }
 
-  private async supplierWithStats(row: { id: string; [key: string]: unknown }) {
-    const [orders, aggregate, latest] = await Promise.all([
-      this.prisma.purchaseOrder.count({ where: { supplierId: row.id, deletedAt: null, status: { not: PurchaseOrderStatus.CANCELLED } } }),
-      this.prisma.purchaseOrder.aggregate({ where: { supplierId: row.id, deletedAt: null, status: { not: PurchaseOrderStatus.CANCELLED } }, _sum: { total: true } }),
-      this.prisma.purchaseOrder.findFirst({ where: { supplierId: row.id, deletedAt: null }, orderBy: { orderDate: "desc" }, select: { orderNumber: true, orderDate: true, total: true, status: true } }),
+  private async suppliersWithStats(rows: Array<{ id: string; [key: string]: unknown }>) {
+    const ids = rows.map((row) => row.id);
+    if (!ids.length) return rows;
+
+    const [totals, latestRows] = await Promise.all([
+      this.prisma.purchaseOrder.groupBy({
+        by: ["supplierId"],
+        where: {
+          supplierId: { in: ids },
+          deletedAt: null,
+          status: { not: PurchaseOrderStatus.CANCELLED },
+        },
+        _count: { _all: true },
+        _sum: { total: true },
+      }),
+      this.prisma.purchaseOrder.findMany({
+        where: { supplierId: { in: ids }, deletedAt: null },
+        orderBy: [{ supplierId: "asc" }, { orderDate: "desc" }],
+        select: { supplierId: true, orderNumber: true, orderDate: true, total: true, status: true },
+      }),
     ]);
-    return { ...row, ordersCount: orders, totalPurchased: this.num(aggregate._sum.total), latestPurchase: latest };
+
+    const stats = new Map(
+      totals
+        .filter((row) => row.supplierId)
+        .map((row) => [
+          row.supplierId!,
+          {
+            ordersCount: row._count._all,
+            totalPurchased: this.num(row._sum.total),
+          },
+        ]),
+    );
+    const latest = new Map<string, { orderNumber: string; orderDate: Date; total: Prisma.Decimal; status: PurchaseOrderStatus }>();
+    for (const row of latestRows) {
+      if (row.supplierId && !latest.has(row.supplierId)) {
+        latest.set(row.supplierId, {
+          orderNumber: row.orderNumber,
+          orderDate: row.orderDate,
+          total: row.total,
+          status: row.status,
+        });
+      }
+    }
+
+    return rows.map((row) => {
+      const stat = stats.get(row.id);
+      return {
+        ...row,
+        ordersCount: stat?.ordersCount ?? 0,
+        totalPurchased: stat?.totalPurchased ?? 0,
+        latestPurchase: latest.get(row.id) ?? null,
+      };
+    });
   }
 
   private validateSupplier(dto: UpsertSupplierDto) {
     if (!this.clean(dto.commercialName)) throw new BadRequestException("El nombre comercial es obligatorio.");
-    if (!this.clean(dto.phone) && !this.clean(dto.whatsapp) && !this.clean(dto.email)) {
-      throw new BadRequestException("Indica teléfono, WhatsApp o correo del suplidor.");
-    }
   }
 
   private supplierData(dto: UpsertSupplierDto): Prisma.SupplierUncheckedCreateInput {

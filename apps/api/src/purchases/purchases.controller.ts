@@ -25,13 +25,13 @@ export class PurchasesController {
   }
 
   @Post("suppliers")
-  @Roles(Role.ADMIN, Role.ASISTENTE)
+  @Roles(Role.ADMIN, Role.ASISTENTE, Role.VENDEDOR)
   createSupplier(@Body() dto: UpsertSupplierDto) {
     return this.purchases.createSupplier(dto);
   }
 
   @Patch("suppliers/:id")
-  @Roles(Role.ADMIN, Role.ASISTENTE)
+  @Roles(Role.ADMIN, Role.ASISTENTE, Role.VENDEDOR)
   updateSupplier(@Param("id") id: string, @Body() dto: UpsertSupplierDto) {
     return this.purchases.updateSupplier(id, dto);
   }
@@ -110,4 +110,3 @@ export class PurchasesController {
     return this.purchases.recommendations();
   }
 }
-
