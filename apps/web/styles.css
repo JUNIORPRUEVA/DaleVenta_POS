@@ -1242,9 +1242,10 @@ img { display: block; }
   }
   .hero__inner { padding: 70px 0 70px; }
   .hero h1 {
-    font-size: 34px;
+    font-size: 30px;
     line-height: 1.10;
-    max-width: 430px;
+    max-width: 100%;
+    overflow-wrap: break-word;
   }
   .hero p {
     margin-top: 16px;
@@ -1267,9 +1268,11 @@ img { display: block; }
   }
   .hero-service-list span {
     border-radius: 8px;
-    padding: 12px 8px;
+    min-width: 0;
+    padding: 11px 6px;
     text-align: center;
-    font-size: 12px;
+    font-size: 11px;
+    overflow-wrap: anywhere;
   }
   .hero__eyebrow {
     display: inline-flex;
