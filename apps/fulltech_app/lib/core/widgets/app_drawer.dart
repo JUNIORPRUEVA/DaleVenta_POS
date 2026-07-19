@@ -396,6 +396,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     Routes.cajaMovimientos,
   ]);
   final salesCreditItem = pick(Routes.ventasCreditos);
+  final purchasesItem = pick(Routes.compras);
   final reportsItem = pick(Routes.ventas);
   if (ventasItems.isNotEmpty ||
       inventoryItems.isNotEmpty ||
@@ -409,6 +410,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
         trailingItems: [
           ...inventoryItems,
           if (salesCreditItem != null) salesCreditItem,
+          if (purchasesItem != null) purchasesItem,
           if (reportsItem != null) reportsItem,
         ],
         subgroups: [

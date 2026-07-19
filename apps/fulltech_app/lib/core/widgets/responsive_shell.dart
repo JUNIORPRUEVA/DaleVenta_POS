@@ -538,6 +538,12 @@ List<_SidebarMenuGroup> _buildDesktopSidebarGroups(
           ),
         if (routeToItem.containsKey(Routes.catalogo))
           menuItem(Routes.catalogo, 'Inventario', Icons.inventory_2_outlined),
+        if (routeToItem.containsKey(Routes.compras))
+          menuItem(
+            Routes.compras,
+            'Compras',
+            Icons.shopping_cart_checkout_outlined,
+          ),
         if (routeToItem.containsKey(Routes.ventas))
           menuItem(Routes.ventas, 'Reportes', Icons.query_stats_outlined),
       ],
@@ -807,6 +813,11 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
       Icons.credit_card_outlined,
     );
     final reportes = nav(Routes.ventas, 'Reportes', Icons.bar_chart_rounded);
+    final comprasTpv = nav(
+      Routes.compras,
+      'Compras',
+      Icons.shopping_cart_checkout_outlined,
+    );
     final cashIngreso = nav(
       Routes.cajaRegistrarIngreso,
       'Registrar entrada',
@@ -1150,6 +1161,18 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                               scale: scale,
                               onTap: () =>
                                   widget.onNavigate(creditosVentas.route),
+                            ),
+                          if (comprasTpv != null)
+                            _PremiumSidebarNavItem(
+                              item: comprasTpv,
+                              collapsed: visualCollapsed,
+                              currentLocation: widget.currentLocation,
+                              textColor: textColor,
+                              activeColor: activeColor,
+                              hoverColor: hoverColor,
+                              baseColor: baseColor,
+                              scale: scale,
+                              onTap: () => widget.onNavigate(comprasTpv.route),
                             ),
                           if (reportes != null)
                             _PremiumSidebarNavItem(

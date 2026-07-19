@@ -119,12 +119,6 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Créditos',
             route: Routes.ventasCreditos,
           ),
-        if (can(AppPermission.viewPurchases))
-          const AppNavigationItem(
-            icon: Icons.shopping_cart_checkout_outlined,
-            title: 'Compras',
-            route: Routes.compras,
-          ),
         if (can(AppPermission.viewPunch))
           const AppNavigationItem(
             icon: Icons.access_time_rounded,
@@ -136,6 +130,12 @@ List<AppNavigationSection> buildAppNavigationSections(
             icon: Icons.inventory_2_outlined,
             title: 'Inventario',
             route: Routes.catalogo,
+          ),
+        if (can(AppPermission.viewPurchases))
+          const AppNavigationItem(
+            icon: Icons.shopping_cart_checkout_outlined,
+            title: 'Compras',
+            route: Routes.compras,
           ),
         if (can(AppPermission.viewSalesReports))
           const AppNavigationItem(

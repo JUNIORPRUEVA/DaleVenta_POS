@@ -189,8 +189,12 @@ import { FulltechStore as fallbackStore } from "./data.js";
     return text.length > max ? `${text.slice(0, max - 1).trim()}...` : text;
   }
 
+  function shortCategory(value) {
+    return String(value || "Categoria").trim().split(/\s+/)[0] || "Categoria";
+  }
+
   function storeCartIcon() {
-    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm12 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0ZM6.1 6l1.1 6.2h8.9L17.4 8H8.2l-.3-2H5V4.4h4.2l.3 2h10.1l-2.1 7.4H6L4.6 6H2.8V4.4h2.8L6.1 6Z"/></svg>';
+    return '<img src="assets/cart-icon.png" alt="" aria-hidden="true">';
   }
 
   function storeProductCard(product) {
@@ -198,7 +202,9 @@ import { FulltechStore as fallbackStore } from "./data.js";
     return `
       <article class="store-product-card">
         <div class="store-product-media">
-          <img src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}" loading="lazy" onerror="this.onerror=null;this.src='${imageFallback}'">
+          <button class="store-product-image-button" type="button" data-image-preview="${escapeHtml(product.image)}" data-image-title="${escapeHtml(product.name)}" aria-label="Ver foto de ${escapeHtml(product.name)}">
+            <img src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}" loading="lazy" onerror="this.onerror=null;this.src='${imageFallback}'">
+          </button>
           <span class="store-badge store-badge--ok">${escapeHtml(status)}</span>
           ${product.featured || product.badge ? '<span class="store-badge store-badge--deal">Oferta</span>' : ""}
           <button class="store-cart-add" type="button" data-add-to-cart="${escapeHtml(product.id)}" aria-label="Agregar ${escapeHtml(product.name)} al carrito">${storeCartIcon()}</button>
@@ -270,7 +276,7 @@ import { FulltechStore as fallbackStore } from "./data.js";
       return `
         <a class="store-category-card" href="tienda.html?categoria=${encodeURIComponent(category)}">
           <img src="${escapeHtml(categoryImage(category))}" alt="${escapeHtml(category)}" onerror="this.onerror=null;this.src='${imageFallback}'">
-          <strong>${escapeHtml(category)}</strong>
+          <strong>${escapeHtml(shortCategory(category))}</strong>
           <span>${total} producto${total === 1 ? "" : "s"}</span>
         </a>
       `;
@@ -354,6 +360,7 @@ import { FulltechStore as fallbackStore } from "./data.js";
     renderStoreOffers();
     renderStoreCategories();
     renderStoreSections();
+    requestAnimationFrame(startAutoScrollRails);
   }
 
   function renderFeaturedProducts() {
@@ -462,6 +469,39 @@ import { FulltechStore as fallbackStore } from "./data.js";
     drawer.querySelector("a, button")?.focus?.();
   }
 
+  function openImagePreview(src, title) {
+    const modal = document.querySelector("[data-image-modal]");
+    if (!modal || !src) return;
+    modal.querySelector("img").src = src;
+    modal.querySelector("img").alt = title || "Imagen de producto";
+    modal.querySelector("[data-image-title]").textContent = title || "Producto FULLTECH";
+    modal.classList.add("is-open");
+    document.body.classList.add("image-modal-open");
+    modal.querySelector("[data-image-close]")?.focus?.();
+  }
+
+  function closeImagePreview() {
+    const modal = document.querySelector("[data-image-modal]");
+    if (!modal) return;
+    modal.classList.remove("is-open");
+    document.body.classList.remove("image-modal-open");
+  }
+
+  function startAutoScrollRails() {
+    document.querySelectorAll(".store-benefits, .category-rail").forEach((rail) => {
+      if (rail.dataset.autoScrollReady === "true") return;
+      rail.dataset.autoScrollReady = "true";
+      let direction = 1;
+      window.setInterval(() => {
+        if (rail.matches(":hover") || rail.scrollWidth <= rail.clientWidth) return;
+        const next = rail.scrollLeft + direction * 1.4;
+        if (next >= rail.scrollWidth - rail.clientWidth - 2) direction = -1;
+        if (next <= 0) direction = 1;
+        rail.scrollLeft = Math.max(0, Math.min(next, rail.scrollWidth - rail.clientWidth));
+      }, 28);
+    });
+  }
+
   function prepareDrawer() {
     const drawer = document.querySelector(".nav__links");
     const toggle = document.querySelector("[data-nav-toggle]");
@@ -516,6 +556,17 @@ import { FulltechStore as fallbackStore } from "./data.js";
 
       if (event.target.closest("[data-store-close]") || event.target.classList.contains("store-drawer-overlay")) {
         document.body.classList.remove("store-drawer-open");
+        return;
+      }
+
+      const previewButton = event.target.closest("[data-image-preview]");
+      if (previewButton) {
+        openImagePreview(previewButton.dataset.imagePreview, previewButton.dataset.imageTitle);
+        return;
+      }
+
+      if (event.target.closest("[data-image-close]") || event.target.classList.contains("image-modal")) {
+        closeImagePreview();
         return;
       }
 
@@ -578,6 +629,7 @@ import { FulltechStore as fallbackStore } from "./data.js";
         const wasOpen = document.querySelector(".site-header")?.classList.contains("is-open");
         closeDrawer();
         document.body.classList.remove("store-drawer-open");
+        closeImagePreview();
         if (wasOpen) document.querySelector("[data-nav-toggle]")?.focus?.();
       }
     });
@@ -623,6 +675,17 @@ import { FulltechStore as fallbackStore } from "./data.js";
       document.querySelectorAll("[data-whatsapp-link]").forEach((node) => {
         node.href = `https://wa.me/${store.company.whatsapp}`;
       });
+    }
+    if (!document.querySelector("[data-image-modal]")) {
+      document.body.insertAdjacentHTML("beforeend", `
+        <div class="image-modal" data-image-modal aria-hidden="true">
+          <div class="image-modal__bar">
+            <button type="button" data-image-close aria-label="Regresar">Regresar</button>
+            <strong data-image-title>Producto FULLTECH</strong>
+          </div>
+          <img src="assets/logo.png" alt="Producto FULLTECH">
+        </div>
+      `);
     }
   }
 
