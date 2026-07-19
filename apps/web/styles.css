@@ -1240,7 +1240,13 @@ img { display: block; }
       linear-gradient(90deg, rgba(5, 19, 43, 0.96) 0%, rgba(8, 19, 32, 0.88) 50%, rgba(8, 14, 20, 0.78) 100%),
       url("assets/storefront.jpeg") center/cover;
   }
-  .hero__inner { padding: 70px 0 70px; }
+  .hero__inner {
+    width: auto;
+    max-width: none;
+    margin-left: 16px;
+    margin-right: 16px;
+    padding: 70px 0 70px;
+  }
   .hero h1 {
     font-size: 30px;
     line-height: 1.10;
@@ -1262,7 +1268,7 @@ img { display: block; }
   }
   .hero-service-list {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
     margin-top: 28px;
   }
