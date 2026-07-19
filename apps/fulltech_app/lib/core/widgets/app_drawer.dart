@@ -466,6 +466,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
   addGroup('Operaciones', Icons.work_outline_rounded, [
     Routes.serviceOrders,
     Routes.mediaGallery,
+    Routes.redTecnica,
   ]);
   addGroup('Clientes', Icons.groups_2_outlined, [
     Routes.clientes,

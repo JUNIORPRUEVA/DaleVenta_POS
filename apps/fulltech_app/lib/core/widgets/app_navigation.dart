@@ -170,7 +170,7 @@ List<AppNavigationSection> buildAppNavigationSections(
         if (can(AppPermission.viewTechnicalNetwork))
           const AppNavigationItem(
             icon: Icons.handyman_outlined,
-            title: 'Red Técnica',
+            title: 'Red Técnicos',
             route: Routes.redTecnica,
           ),
       ],
@@ -339,7 +339,7 @@ String resolveNavigationTitle(
   if (path == Routes.whatsappCrm) return 'CRM WhatsApp';
   if (path == Routes.crmComercial) return 'CRM Comercial';
   if (path == Routes.sitioWeb) return 'Sitio web';
-  if (path == Routes.redTecnica) return 'Red Técnica';
+  if (path == Routes.redTecnica) return 'Red Técnicos';
   if (path == Routes.redTecnicaPublicForm) return 'Formulario Red Técnica';
   if (path == Routes.amonestaciones) return 'Amonestaciones';
   if (path == Routes.misAmonestacionesPendientes) {

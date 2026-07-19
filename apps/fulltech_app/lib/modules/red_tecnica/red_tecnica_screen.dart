@@ -22,36 +22,36 @@ const _rtSurface = Color(0xFFFFFFFF);
 const _rtBackground = Color(0xFFF1F7FA);
 
 const cameraSkills = [
-  'Camaras analogicas',
-  'Camaras IP',
+  'Cámaras analógicas',
+  'Cámaras IP',
   'DVR',
   'NVR',
   'BNC',
   'RJ45',
-  'Configuracion en celulares',
+  'Configuración en celulares',
   'Acceso remoto',
   'Cableado estructurado',
-  'Diagnostico y mantenimiento',
+  'Diagnóstico y mantenimiento',
 ];
 
 const gateMotorSkills = [
   'Motores corredizos',
   'Motores batientes',
   'Cremalleras',
-  'Programacion de controles',
+  'Programación de controles',
   'Fotoceldas',
-  'Lamparas',
-  'Limites',
-  'Electricidad basica',
+  'Lámparas',
+  'Límites',
+  'Electricidad básica',
   'Soldadura',
-  'Diagnostico y mantenimiento',
+  'Diagnóstico y mantenimiento',
 ];
 
 const technicianTools = [
   'Taladro',
   'Rotomartillo',
   'Escalera',
-  'Multimetro',
+  'Multímetro',
   'Ponchadora RJ45',
   'Herramientas manuales',
   'Pulidora',
@@ -62,8 +62,8 @@ const technicianTools = [
 
 const transportOptions = ['Moto', 'Carro', 'Camioneta', 'No tengo transporte'];
 const availabilityOptions = [
-  'Disponible de lunes a sabado',
-  'Disponible algunos dias',
+  'Disponible de lunes a sábado',
+  'Disponible algunos días',
   'Disponible fines de semana',
   'Disponible cuando sea contactado',
 ];
@@ -143,9 +143,9 @@ class _RedTecnicaScreenState extends ConsumerState<RedTecnicaScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Aprobar tecnico'),
+        title: const Text('Aprobar técnico'),
         content: Text(
-          'Deseas aprobar esta solicitud y agregar a ${app.fullName} a la Red Tecnica?',
+          '¿Deseas aprobar esta solicitud y agregar a ${app.fullName} a la Red Técnica?',
         ),
         actions: [
           TextButton(
@@ -154,7 +154,7 @@ class _RedTecnicaScreenState extends ConsumerState<RedTecnicaScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Aprobar tecnico'),
+            child: const Text('Aprobar técnico'),
           ),
         ],
       ),
@@ -184,8 +184,8 @@ class _RedTecnicaScreenState extends ConsumerState<RedTecnicaScreen> {
           controller: ctrl,
           maxLines: 3,
           decoration: const InputDecoration(
-            labelText: 'Razon interna opcional',
-            hintText: 'Informacion incompleta, duplicada, no cumple...',
+            labelText: 'Razón interna opcional',
+            hintText: 'Información incompleta, duplicada, no cumple...',
           ),
         ),
         actions: [
@@ -284,8 +284,8 @@ class _RedTecnicaScreenState extends ConsumerState<RedTecnicaScreen> {
 
   Widget _buildManualRegistrationForm({VoidCallback? closeOnSubmit}) {
     return _TechnicianApplicationForm(
-      title: 'Registrar tecnico',
-      submitLabel: 'Guardar tecnico',
+      title: 'Registrar técnico',
+      submitLabel: 'Guardar técnico',
       requireDocuments: false,
       allowStatusSelection: true,
       onSubmit: (draft, status) async {
@@ -379,7 +379,7 @@ class _RedTecnicaScreenState extends ConsumerState<RedTecnicaScreen> {
       final filterOk = switch (_technicianFilter) {
         'Favoritos' => item.isFavorite,
         'Disponibles' => item.status == TechnicianStatus.available,
-        'Camaras' => item.specialty == RedTecnicaSpecialty.cameras,
+        'Cámaras' => item.specialty == RedTecnicaSpecialty.cameras,
         'Motores' => item.specialty == RedTecnicaSpecialty.gateMotors,
         'Ambas areas' => item.specialty == RedTecnicaSpecialty.both,
         'Con herramientas' => item.toolsAvailability != ToolsAvailability.no,
@@ -423,7 +423,7 @@ class _RedTecnicaScreenState extends ConsumerState<RedTecnicaScreen> {
     final user = ref.watch(authStateProvider).user;
     return Scaffold(
       appBar: CustomAppBar(
-        title: 'Red Tecnica',
+        title: 'Red Técnica',
         fallbackRoute: Routes.home,
         preferDrawerLeading: true,
         showLogo: false,
@@ -443,7 +443,7 @@ class _RedTecnicaScreenState extends ConsumerState<RedTecnicaScreen> {
             icon: const Icon(Icons.link_rounded),
           ),
           IconButton(
-            tooltip: 'Registrar tecnico',
+            tooltip: 'Registrar técnico',
             onPressed: _openManualRegistration,
             icon: const Icon(Icons.person_add_alt_1_rounded),
           ),
@@ -460,7 +460,7 @@ class _RedTecnicaScreenState extends ConsumerState<RedTecnicaScreen> {
           if (snapshot.hasError) {
             return _EmptyState(
               icon: Icons.error_outline_rounded,
-              title: 'No se pudo cargar la Red Tecnica',
+              title: 'No se pudo cargar la Red Técnica',
               message: snapshot.error.toString(),
               actionLabel: 'Reintentar',
               onAction: _reload,
@@ -751,7 +751,7 @@ class _RedTecnicaPublicFormScreenState
                           child: _ShellCard(
                             padding: EdgeInsets.zero,
                             child: _TechnicianApplicationForm(
-                              title: 'Solicitud Red Tecnica FullTech',
+                              title: 'Solicitud Red Técnica FullTech',
                               submitLabel: 'Enviar solicitud',
                               requireDocuments: true,
                               onSubmit: (draft, _) async {
@@ -788,14 +788,14 @@ class _RedTecnicaPublicFormScreenState
                           ),
                           const SizedBox(height: 10),
                           Text(
-                            'Gracias por tu interes en formar parte de la Red Tecnica FullTech. Revisaremos tus datos y nos comunicaremos contigo cuando sea necesario.',
+                            'Gracias por tu interés en formar parte de la Red Técnica FullTech. Revisaremos tus datos y nos comunicaremos contigo cuando sea necesario.',
                             textAlign: TextAlign.center,
                             style: theme.textTheme.bodyMedium,
                           ),
                           const SizedBox(height: 18),
                           Chip(
                             avatar: const Icon(Icons.confirmation_number),
-                            label: Text('Numero: ${_sent!.applicationCode}'),
+                            label: Text('Número: ${_sent!.applicationCode}'),
                           ),
                         ],
                       ),
@@ -830,7 +830,7 @@ class _PublicFormIntroCard extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           const Text(
-            'Red Tecnica FullTech',
+            'Red Técnica FullTech',
             style: TextStyle(
               color: _rtText,
               fontSize: 24,
@@ -839,7 +839,7 @@ class _PublicFormIntroCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Formulario para evaluar tecnicos independientes de camaras, automatizaciones y servicios de soporte.',
+            'Formulario para evaluar técnicos independientes de cámaras, automatizaciones y servicios de soporte.',
             style: TextStyle(color: _rtMuted, height: 1.4),
           ),
           const Spacer(),
@@ -1013,7 +1013,7 @@ class _RightActionPanel extends StatelessWidget {
                     const SizedBox(width: 10),
                     const Expanded(
                       child: Text(
-                        'Nuevo tecnico',
+                        'Nuevo técnico',
                         style: TextStyle(
                           color: _rtText,
                           fontWeight: FontWeight.w900,
@@ -1039,84 +1039,86 @@ class _RightActionPanel extends StatelessWidget {
 
     return _RightPanelFrame(
       child: _ShellCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: const Color(0xFFEAF1FF),
-                borderRadius: BorderRadius.circular(12),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF1FF),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.hub_outlined, color: _rtBlue),
               ),
-              child: const Icon(Icons.hub_outlined, color: _rtBlue),
-            ),
-            const SizedBox(height: 14),
-            const Text(
-              'Formulario publico',
-              style: TextStyle(
-                color: _rtText,
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Comparte este enlace para recibir solicitudes de tecnicos externos directamente en FullTech.',
-              style: TextStyle(color: _rtMuted, height: 1.35),
-            ),
-            const SizedBox(height: 14),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _rtLine),
-              ),
-              child: SelectableText(
-                publicLink,
-                style: const TextStyle(
+              const SizedBox(height: 14),
+              const Text(
+                'Formulario público',
+                style: TextStyle(
                   color: _rtText,
-                  fontSize: 12,
-                  height: 1.35,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: onCopyPublicLink,
-                icon: const Icon(Icons.copy_rounded),
-                label: const Text('Copiar enlace'),
+              const SizedBox(height: 6),
+              const Text(
+                'Comparte este enlace para recibir solicitudes de técnicos externos directamente en FullTech.',
+                style: TextStyle(color: _rtMuted, height: 1.35),
               ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: onRegister,
-                icon: const Icon(Icons.person_add_alt_1_rounded),
-                label: const Text('Registrar manualmente'),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _rtLine),
+                ),
+                child: SelectableText(
+                  publicLink,
+                  style: const TextStyle(
+                    color: _rtText,
+                    fontSize: 12,
+                    height: 1.35,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 18),
-            const _PanelHint(
-              icon: Icons.verified_user_outlined,
-              title: 'Flujo recomendado',
-              detail:
-                  'Revisa cada solicitud, valida datos y aprueba solo perfiles listos para recibir trabajos.',
-            ),
-            const SizedBox(height: 10),
-            const _PanelHint(
-              icon: Icons.phone_in_talk_outlined,
-              title: 'Contacto rapido',
-              detail:
-                  'Desde cada tarjeta puedes llamar o escribir por WhatsApp sin salir del modulo.',
-            ),
-          ],
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onCopyPublicLink,
+                  icon: const Icon(Icons.copy_rounded),
+                  label: const Text('Copiar enlace'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: onRegister,
+                  icon: const Icon(Icons.person_add_alt_1_rounded),
+                  label: const Text('Registrar manualmente'),
+                ),
+              ),
+              const SizedBox(height: 18),
+              const _PanelHint(
+                icon: Icons.verified_user_outlined,
+                title: 'Flujo recomendado',
+                detail:
+                    'Revisa cada solicitud, valida datos y aprueba solo perfiles listos para recibir trabajos.',
+              ),
+              const SizedBox(height: 10),
+              const _PanelHint(
+                icon: Icons.phone_in_talk_outlined,
+                title: 'Contacto rápido',
+                detail:
+                    'Desde cada tarjeta puedes llamar o escribir por WhatsApp sin salir del módulo.',
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1299,17 +1301,17 @@ class _DashboardTab extends StatelessWidget {
                   OutlinedButton.icon(
                     onPressed: () => onTab(2),
                     icon: const Icon(Icons.engineering_outlined),
-                    label: const Text('Ver tecnicos activos'),
+                    label: const Text('Ver técnicos activos'),
                   ),
                   OutlinedButton.icon(
                     onPressed: onRegister,
                     icon: const Icon(Icons.person_add_alt_1_rounded),
-                    label: const Text('Registrar tecnico'),
+                    label: const Text('Registrar técnico'),
                   ),
                   OutlinedButton.icon(
                     onPressed: onCopyPublicLink,
                     icon: const Icon(Icons.link_rounded),
-                    label: const Text('Copiar enlace publico'),
+                    label: const Text('Copiar enlace público'),
                   ),
                 ],
               ),
@@ -1351,7 +1353,7 @@ class _ApplicationsTab extends StatelessWidget {
       return const _EmptyState(
         icon: Icons.inbox_outlined,
         title: 'Sin solicitudes',
-        message: 'Cuando un tecnico envie el formulario aparecera aqui.',
+        message: 'Cuando un técnico envíe el formulario aparecerá aquí.',
       );
     }
     final list = ListView.separated(
@@ -1413,8 +1415,8 @@ class _TechniciansTab extends StatelessWidget {
     if (items.isEmpty) {
       return const _EmptyState(
         icon: Icons.engineering_outlined,
-        title: 'Sin tecnicos activos',
-        message: 'Aprueba una solicitud o registra un tecnico manualmente.',
+        title: 'Sin técnicos activos',
+        message: 'Aprueba una solicitud o registra un técnico manualmente.',
       );
     }
     final list = ListView.separated(
@@ -1494,6 +1496,7 @@ class _Toolbar extends StatelessWidget {
                 width: compact ? (constraints.maxWidth - 10) / 2 : 190,
                 child: DropdownButtonFormField<String>(
                   initialValue: applicationStatusFilter,
+                  isExpanded: true,
                   decoration: _rtInputDecoration('Estado'),
                   items:
                       [
@@ -1504,7 +1507,7 @@ class _Toolbar extends StatelessWidget {
                       ].map((value) {
                         return DropdownMenuItem(
                           value: value,
-                          child: Text(value),
+                          child: Text(value, overflow: TextOverflow.ellipsis),
                         );
                       }).toList(),
                   onChanged: (value) =>
@@ -1516,21 +1519,22 @@ class _Toolbar extends StatelessWidget {
                 width: compact ? (constraints.maxWidth - 10) / 2 : 190,
                 child: DropdownButtonFormField<String>(
                   initialValue: technicianFilter,
+                  isExpanded: true,
                   decoration: _rtInputDecoration('Filtro'),
                   items:
                       const [
                         'Todos',
                         'Favoritos',
                         'Disponibles',
-                        'Camaras',
+                        'Cámaras',
                         'Motores',
-                        'Ambas areas',
+                        'Ambas áreas',
                         'Con herramientas',
                         'Con transporte',
                       ].map((value) {
                         return DropdownMenuItem(
                           value: value,
-                          child: Text(value),
+                          child: Text(value, overflow: TextOverflow.ellipsis),
                         );
                       }).toList(),
                   onChanged: (value) =>
@@ -1541,16 +1545,17 @@ class _Toolbar extends StatelessWidget {
               width: compact ? (constraints.maxWidth - 10) / 2 : 190,
               child: DropdownButtonFormField<RedTecnicaSpecialty?>(
                 initialValue: specialtyFilter,
+                isExpanded: true,
                 decoration: _rtInputDecoration('Especialidad'),
                 items: [
                   const DropdownMenuItem<RedTecnicaSpecialty?>(
                     value: null,
-                    child: Text('Todas'),
+                    child: Text('Todas', overflow: TextOverflow.ellipsis),
                   ),
                   ...RedTecnicaSpecialty.values.map(
                     (item) => DropdownMenuItem<RedTecnicaSpecialty?>(
                       value: item,
-                      child: Text(item.label),
+                      child: Text(item.label, overflow: TextOverflow.ellipsis),
                     ),
                   ),
                 ],
@@ -2017,7 +2022,7 @@ class _TechnicianSidePanel extends StatelessWidget {
         ? <TechnicianEvaluation>[]
         : evaluations.where((ev) => ev.technicianId == item.id).toList();
     return _SideDetailFrame(
-      emptyTitle: 'Selecciona un tecnico',
+      emptyTitle: 'Selecciona un técnico',
       emptyMessage:
           'El perfil, trabajos, evaluaciones y acciones quedaran fijos aqui.',
       child: item == null
@@ -2159,7 +2164,7 @@ class _TechnicianProfileSheet extends StatelessWidget {
       children: [
         _InfoGrid(rows: _technicianRows(technician)),
         _SkillSection(
-          title: 'Perfil tecnico',
+          title: 'Perfil técnico',
           cameraSkills: technician.cameraSkills,
           gateMotorSkills: technician.gateMotorSkills,
         ),
@@ -2384,16 +2389,16 @@ class _TechnicianApplicationFormState
           ),
           const SizedBox(height: 4),
           const Text(
-            'Completa los datos esenciales para evaluar y contactar al tecnico.',
+            'Completa los datos esenciales para evaluar y contactar al técnico.',
             style: TextStyle(color: _rtMuted, height: 1.3),
           ),
           const SizedBox(height: 18),
           _FormSection(
-            title: 'Informacion personal',
+            title: 'Información personal',
             children: [
               _Field(_name, 'Nombre completo', required: true),
-              _Field(_identity, 'Cedula', required: true, cedula: true),
-              _Field(_phone, 'Telefono', required: true, phone: true),
+              _Field(_identity, 'Cédula', required: true, cedula: true),
+              _Field(_phone, 'Teléfono', required: true, phone: true),
               _Field(_whatsapp, 'WhatsApp', required: true, phone: true),
               _Field(_province, 'Provincia', required: true),
               _Field(_municipality, 'Municipio', required: true),
@@ -2505,12 +2510,12 @@ class _TechnicianApplicationFormState
                     onTap: () => _pickSingle((path) => _profilePhoto = path),
                   ),
                   _PickButton(
-                    label: 'Cedula frontal',
+                    label: 'Cédula frontal',
                     path: _frontPhoto,
                     onTap: () => _pickSingle((path) => _frontPhoto = path),
                   ),
                   _PickButton(
-                    label: 'Cedula trasera',
+                    label: 'Cédula trasera',
                     path: _backPhoto,
                     onTap: () => _pickSingle((path) => _backPhoto = path),
                   ),
@@ -2527,7 +2532,7 @@ class _TechnicianApplicationFormState
             title: 'Referencia',
             children: [
               _Field(_referenceName, 'Nombre de referencia'),
-              _Field(_referencePhone, 'Telefono de referencia', phone: true),
+              _Field(_referencePhone, 'Teléfono de referencia', phone: true),
               _Field(_previousCompany, 'Empresa anterior'),
               if (widget.allowStatusSelection)
                 _Dropdown<TechnicianStatus>(
@@ -3140,33 +3145,59 @@ class _HistorySection extends StatelessWidget {
 }
 
 List<(String, String)> _applicationRows(TechnicianApplication item) => [
-  ('Cedula', _maskIdentity(item.identityNumber)),
-  ('Telefono', item.phone),
+  ('Cédula', _maskIdentity(item.identityNumber)),
+  ('Teléfono', item.phone),
   ('WhatsApp', item.whatsapp),
   ('Correo', item.email ?? ''),
   ('Provincia', item.province),
   ('Municipio', item.municipality),
   ('Sector', item.sector ?? ''),
+  ('Dirección', item.manualAddress),
+  ('Ubicación', item.formattedAddress),
+  ('Coordenadas', _coords(item.latitude, item.longitude)),
+  (
+    'Precisión',
+    item.locationAccuracy == null
+        ? ''
+        : '${item.locationAccuracy!.round()} metros',
+  ),
+  ('Fuente ubicación', item.locationSource),
   ('Especialidad', item.specialty.label),
   ('Experiencia', item.experienceLevel.label),
   ('Herramientas', item.toolsAvailability.label),
   ('Transporte', item.transportation),
   ('Disponibilidad', item.availability),
   ('Fecha solicitud', DateFormat('dd/MM/yyyy h:mm a').format(item.submittedAt)),
+  (
+    'Currículum',
+    item.resumeOriginalName.isNotEmpty
+        ? item.resumeOriginalName
+        : item.resumePath ?? '',
+  ),
   ('Referencia', item.referenceName),
   ('Empresa anterior', item.previousCompany),
   ('Notas internas', item.internalNotes),
 ];
 
 List<(String, String)> _technicianRows(Technician item) => [
-  ('Codigo', item.technicianCode),
-  ('Cedula', _maskIdentity(item.identityNumber)),
-  ('Telefono', item.phone),
+  ('Código', item.technicianCode),
+  ('Cédula', _maskIdentity(item.identityNumber)),
+  ('Teléfono', item.phone),
   ('WhatsApp', item.whatsapp),
   ('Correo', item.email ?? ''),
   ('Provincia', item.province),
   ('Municipio', item.municipality),
   ('Sector', item.sector ?? ''),
+  ('Dirección', item.manualAddress),
+  ('Ubicación', item.formattedAddress),
+  ('Coordenadas', _coords(item.latitude, item.longitude)),
+  (
+    'Precisión',
+    item.locationAccuracy == null
+        ? ''
+        : '${item.locationAccuracy!.round()} metros',
+  ),
+  ('Fuente ubicación', item.locationSource),
   ('Especialidad', item.specialty.label),
   ('Experiencia', item.experienceLevel.label),
   ('Herramientas', item.toolsAvailability.label),
@@ -3174,18 +3205,29 @@ List<(String, String)> _technicianRows(Technician item) => [
   ('Disponibilidad', item.availability),
   ('Trabajos', '${item.completedJobsCount}'),
   (
-    'Calificacion',
+    'Calificación',
     item.rating <= 0 ? 'Sin evaluar' : item.rating.toStringAsFixed(1),
   ),
   ('Aprobado', DateFormat('dd/MM/yyyy h:mm a').format(item.approvedAt)),
   (
-    'Ultimo trabajo',
+    'Último trabajo',
     item.lastJobAt == null
         ? ''
         : DateFormat('dd/MM/yyyy').format(item.lastJobAt!),
   ),
+  (
+    'Currículum',
+    item.resumeOriginalName.isNotEmpty
+        ? item.resumeOriginalName
+        : item.resumePath ?? '',
+  ),
   ('Notas internas', item.internalNotes),
 ];
+
+String _coords(double? latitude, double? longitude) {
+  if (latitude == null || longitude == null) return '';
+  return '${latitude.toStringAsFixed(6)}, ${longitude.toStringAsFixed(6)}';
+}
 
 String _maskIdentity(String value) {
   final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
@@ -3334,7 +3376,7 @@ Future<void> _showEvaluationDialog(
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setState) => AlertDialog(
-        title: const Text('Evaluar tecnico'),
+        title: const Text('Evaluar técnico'),
         content: SizedBox(
           width: 420,
           child: Column(

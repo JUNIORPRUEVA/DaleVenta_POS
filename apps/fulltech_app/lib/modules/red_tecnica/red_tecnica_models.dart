@@ -36,11 +36,11 @@ extension RedTecnicaSpecialtyLabel on RedTecnicaSpecialty {
   String get label {
     switch (this) {
       case RedTecnicaSpecialty.cameras:
-        return 'Camaras';
+        return 'Cámaras';
       case RedTecnicaSpecialty.gateMotors:
         return 'Motores de portones';
       case RedTecnicaSpecialty.both:
-        return 'Camaras y motores';
+        return 'Cámaras y motores';
     }
   }
 }
@@ -51,7 +51,7 @@ extension TechnicianApplicationStatusLabel on TechnicianApplicationStatus {
       case TechnicianApplicationStatus.pending:
         return 'Pendiente';
       case TechnicianApplicationStatus.reviewing:
-        return 'En revision';
+        return 'En revisión';
       case TechnicianApplicationStatus.approved:
         return 'Aprobado';
       case TechnicianApplicationStatus.rejected:
@@ -81,11 +81,11 @@ extension TechnicianExperienceLevelLabel on TechnicianExperienceLevel {
       case TechnicianExperienceLevel.noExperience:
         return 'Sin experiencia, deseo aprender';
       case TechnicianExperienceLevel.lessThanOneYear:
-        return 'Menos de un ano';
+        return 'Menos de un año';
       case TechnicianExperienceLevel.oneToThreeYears:
-        return 'De uno a tres anos';
+        return 'De uno a tres años';
       case TechnicianExperienceLevel.moreThanThreeYears:
-        return 'Mas de tres anos';
+        return 'Más de tres años';
     }
   }
 }
@@ -94,7 +94,7 @@ extension ToolsAvailabilityLabel on ToolsAvailability {
   String get label {
     switch (this) {
       case ToolsAvailability.yes:
-        return 'Si';
+        return 'Sí';
       case ToolsAvailability.some:
         return 'Algunas';
       case ToolsAvailability.no:
@@ -107,11 +107,11 @@ extension TechnicianJobTypeLabel on TechnicianJobType {
   String get label {
     switch (this) {
       case TechnicianJobType.cameraInstallation:
-        return 'Instalacion de camaras';
+        return 'Instalación de cámaras';
       case TechnicianJobType.cameraMaintenance:
-        return 'Mantenimiento de camaras';
+        return 'Mantenimiento de cámaras';
       case TechnicianJobType.gateMotorInstallation:
-        return 'Instalacion de motor';
+        return 'Instalación de motor';
       case TechnicianJobType.gateMotorMaintenance:
         return 'Mantenimiento de motor';
     }
@@ -155,6 +155,13 @@ class TechnicianApplication {
     this.birthDate,
     this.email,
     this.sector,
+    this.manualAddress = '',
+    this.formattedAddress = '',
+    this.latitude,
+    this.longitude,
+    this.locationAccuracy,
+    this.locationCapturedAt,
+    this.locationSource = '',
     this.experienceDescription = '',
     this.cameraSkills = const [],
     this.gateMotorSkills = const [],
@@ -167,6 +174,10 @@ class TechnicianApplication {
     this.identityFrontPhotoPath,
     this.identityBackPhotoPath,
     this.workEvidencePhotoPaths = const [],
+    this.resumePath,
+    this.resumeOriginalName = '',
+    this.resumeMimeType = '',
+    this.resumeSizeBytes,
     this.referenceName = '',
     this.referencePhone = '',
     this.previousCompany = '',
@@ -174,6 +185,8 @@ class TechnicianApplication {
     this.internalNotes = '',
     this.reviewedAt,
     this.reviewedBy,
+    this.consentAccepted = false,
+    this.consentAcceptedAt,
   });
 
   final String id;
@@ -187,6 +200,13 @@ class TechnicianApplication {
   final String province;
   final String municipality;
   final String? sector;
+  final String manualAddress;
+  final String formattedAddress;
+  final double? latitude;
+  final double? longitude;
+  final double? locationAccuracy;
+  final DateTime? locationCapturedAt;
+  final String locationSource;
   final RedTecnicaSpecialty specialty;
   final TechnicianExperienceLevel experienceLevel;
   final String experienceDescription;
@@ -204,6 +224,10 @@ class TechnicianApplication {
   final String? identityFrontPhotoPath;
   final String? identityBackPhotoPath;
   final List<String> workEvidencePhotoPaths;
+  final String? resumePath;
+  final String resumeOriginalName;
+  final String resumeMimeType;
+  final int? resumeSizeBytes;
   final String referenceName;
   final String referencePhone;
   final String previousCompany;
@@ -213,6 +237,8 @@ class TechnicianApplication {
   final DateTime submittedAt;
   final DateTime? reviewedAt;
   final String? reviewedBy;
+  final bool consentAccepted;
+  final DateTime? consentAcceptedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -235,6 +261,13 @@ class TechnicianApplication {
       province: province,
       municipality: municipality,
       sector: sector,
+      manualAddress: manualAddress,
+      formattedAddress: formattedAddress,
+      latitude: latitude,
+      longitude: longitude,
+      locationAccuracy: locationAccuracy,
+      locationCapturedAt: locationCapturedAt,
+      locationSource: locationSource,
       specialty: specialty,
       experienceLevel: experienceLevel,
       experienceDescription: experienceDescription,
@@ -252,6 +285,10 @@ class TechnicianApplication {
       identityFrontPhotoPath: identityFrontPhotoPath,
       identityBackPhotoPath: identityBackPhotoPath,
       workEvidencePhotoPaths: workEvidencePhotoPaths,
+      resumePath: resumePath,
+      resumeOriginalName: resumeOriginalName,
+      resumeMimeType: resumeMimeType,
+      resumeSizeBytes: resumeSizeBytes,
       referenceName: referenceName,
       referencePhone: referencePhone,
       previousCompany: previousCompany,
@@ -261,6 +298,8 @@ class TechnicianApplication {
       submittedAt: submittedAt,
       reviewedAt: reviewedAt ?? this.reviewedAt,
       reviewedBy: reviewedBy ?? this.reviewedBy,
+      consentAccepted: consentAccepted,
+      consentAcceptedAt: consentAcceptedAt,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
     );
@@ -293,6 +332,13 @@ class Technician {
     this.birthDate,
     this.email,
     this.sector,
+    this.manualAddress = '',
+    this.formattedAddress = '',
+    this.latitude,
+    this.longitude,
+    this.locationAccuracy,
+    this.locationCapturedAt,
+    this.locationSource = '',
     this.experienceDescription = '',
     this.cameraSkills = const [],
     this.gateMotorSkills = const [],
@@ -304,6 +350,10 @@ class Technician {
     this.profilePhotoPath,
     this.identityDocumentPaths = const [],
     this.workEvidencePhotoPaths = const [],
+    this.resumePath,
+    this.resumeOriginalName = '',
+    this.resumeMimeType = '',
+    this.resumeSizeBytes,
     this.internalNotes = '',
     this.lastJobAt,
   });
@@ -320,6 +370,13 @@ class Technician {
   final String province;
   final String municipality;
   final String? sector;
+  final String manualAddress;
+  final String formattedAddress;
+  final double? latitude;
+  final double? longitude;
+  final double? locationAccuracy;
+  final DateTime? locationCapturedAt;
+  final String locationSource;
   final RedTecnicaSpecialty specialty;
   final TechnicianExperienceLevel experienceLevel;
   final String experienceDescription;
@@ -336,6 +393,10 @@ class Technician {
   final String? profilePhotoPath;
   final List<String> identityDocumentPaths;
   final List<String> workEvidencePhotoPaths;
+  final String? resumePath;
+  final String resumeOriginalName;
+  final String resumeMimeType;
+  final int? resumeSizeBytes;
   final TechnicianStatus status;
   final bool isFavorite;
   final int completedJobsCount;
@@ -367,6 +428,13 @@ class Technician {
       province: province,
       municipality: municipality,
       sector: sector,
+      manualAddress: manualAddress,
+      formattedAddress: formattedAddress,
+      latitude: latitude,
+      longitude: longitude,
+      locationAccuracy: locationAccuracy,
+      locationCapturedAt: locationCapturedAt,
+      locationSource: locationSource,
       specialty: specialty,
       experienceLevel: experienceLevel,
       experienceDescription: experienceDescription,
@@ -383,6 +451,10 @@ class Technician {
       profilePhotoPath: profilePhotoPath,
       identityDocumentPaths: identityDocumentPaths,
       workEvidencePhotoPaths: workEvidencePhotoPaths,
+      resumePath: resumePath,
+      resumeOriginalName: resumeOriginalName,
+      resumeMimeType: resumeMimeType,
+      resumeSizeBytes: resumeSizeBytes,
       status: status ?? this.status,
       isFavorite: isFavorite ?? this.isFavorite,
       completedJobsCount: completedJobsCount ?? this.completedJobsCount,
