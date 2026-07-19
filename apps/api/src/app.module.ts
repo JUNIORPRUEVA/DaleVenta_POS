@@ -35,6 +35,7 @@ import { CashModule } from './cash/cash.module';
 import { ReportsModule } from './reports/reports.module';
 import { WebsiteModule } from './website/website.module';
 import { TechnicalNetworkModule } from './technical-network/technical-network.module';
+import { PurchasesModule } from './purchases/purchases.module';
 
 @Module({
   imports: [
@@ -80,6 +81,7 @@ import { TechnicalNetworkModule } from './technical-network/technical-network.mo
     ReportsModule,
     WebsiteModule,
     TechnicalNetworkModule,
+    PurchasesModule,
   ]
 })
 export class AppModule {}
