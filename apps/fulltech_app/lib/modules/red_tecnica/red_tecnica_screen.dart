@@ -2,11 +2,14 @@ import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../core/auth/auth_provider.dart';
+import '../../core/api/env.dart';
 import '../../core/routing/routes.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -527,6 +530,25 @@ class _RedTecnicaScreenState extends ConsumerState<RedTecnicaScreen> {
                         },
                         detail: null,
                       ),
+                      3 => _TechnicianMapTab(
+                        key: const ValueKey('map'),
+                        applications: applications,
+                        technicians: technicians,
+                        onOpenApplication: (item) {
+                          setState(() {
+                            _tab = 1;
+                            _selectedApplicationId = item.id;
+                            _selectedTechnicianId = null;
+                          });
+                        },
+                        onOpenTechnician: (item) {
+                          setState(() {
+                            _tab = 2;
+                            _selectedTechnicianId = item.id;
+                            _selectedApplicationId = null;
+                          });
+                        },
+                      ),
                       _ => _TechniciansTab(
                         key: const ValueKey('technicians'),
                         items: technicians,
@@ -660,6 +682,11 @@ class _RedTecnicaScreenState extends ConsumerState<RedTecnicaScreen> {
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: _rtBackground,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * .96,
+      ),
       builder: (context) => _ApplicationDetailSheet(
         application: app,
         onCall: _call,
@@ -680,6 +707,11 @@ class _RedTecnicaScreenState extends ConsumerState<RedTecnicaScreen> {
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: _rtBackground,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * .96,
+      ),
       builder: (context) => _TechnicianProfileSheet(
         technician: technician,
         jobs: jobs,
@@ -862,11 +894,17 @@ class _RedTecnicaWorkspace extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
     return Column(
       children: [
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
+          padding: EdgeInsets.fromLTRB(
+            isMobile ? 10 : 16,
+            isMobile ? 10 : 12,
+            isMobile ? 10 : 12,
+            8,
+          ),
           decoration: const BoxDecoration(
             color: _rtSurface,
             border: Border(bottom: BorderSide(color: _rtLine)),
@@ -886,10 +924,11 @@ class _RedTecnicaTabBar extends StatelessWidget implements PreferredSizeWidget {
   final ValueChanged<int> onChanged;
 
   @override
-  Size get preferredSize => const Size.fromHeight(46);
+  Size get preferredSize => const Size.fromHeight(54);
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 430;
     return Material(
       color: Colors.white,
       child: Container(
@@ -903,19 +942,29 @@ class _RedTecnicaTabBar extends StatelessWidget implements PreferredSizeWidget {
               selected: tab == 0,
               icon: Icons.dashboard_outlined,
               label: 'Panel',
+              compact: compact,
               onTap: () => onChanged(0),
             ),
             _TopTabButton(
               selected: tab == 1,
               icon: Icons.inbox_outlined,
               label: 'Solicitudes',
+              compact: compact,
               onTap: () => onChanged(1),
             ),
             _TopTabButton(
               selected: tab == 2,
               icon: Icons.engineering_outlined,
-              label: 'Tecnicos activos',
+              label: 'Técnicos',
+              compact: compact,
               onTap: () => onChanged(2),
+            ),
+            _TopTabButton(
+              selected: tab == 3,
+              icon: Icons.map_outlined,
+              label: 'Mapa',
+              compact: compact,
+              onTap: () => onChanged(3),
             ),
           ],
         ),
@@ -930,12 +979,14 @@ class _TopTabButton extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.compact = false,
   });
 
   final bool selected;
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -956,23 +1007,34 @@ class _TopTabButton extends StatelessWidget {
             ),
           ),
           child: Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 18, color: selected ? _rtBlue : _rtText),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    label,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
+            child: compact
+                ? Tooltip(
+                    message: label,
+                    child: Icon(
+                      icon,
+                      size: 22,
                       color: selected ? _rtBlue : _rtText,
-                      fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
                     ),
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 18, color: selected ? _rtBlue : _rtText),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          label,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: selected ? _rtBlue : _rtText,
+                            fontWeight: selected
+                                ? FontWeight.w900
+                                : FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
           ),
         ),
       ),
@@ -1260,6 +1322,7 @@ class _DashboardTab extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
+        final isMobile = width < 560;
         final columns = width >= 1180
             ? 4
             : width >= 840
@@ -1267,9 +1330,16 @@ class _DashboardTab extends StatelessWidget {
             : width >= 560
             ? 2
             : 1;
-        final itemWidth = (width - 32 - ((columns - 1) * 10)) / columns;
+        final horizontalPadding = isMobile ? 10.0 : 16.0;
+        final itemWidth =
+            (width - (horizontalPadding * 2) - ((columns - 1) * 10)) / columns;
         return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+          padding: EdgeInsets.fromLTRB(
+            horizontalPadding,
+            10,
+            horizontalPadding,
+            28,
+          ),
           children: [
             Wrap(
               spacing: 10,
@@ -1293,25 +1363,37 @@ class _DashboardTab extends StatelessWidget {
                 spacing: 10,
                 runSpacing: 10,
                 children: [
-                  FilledButton.icon(
-                    onPressed: () => onTab(1),
-                    icon: const Icon(Icons.inbox_outlined),
-                    label: const Text('Ver solicitudes'),
+                  SizedBox(
+                    width: isMobile ? double.infinity : null,
+                    child: FilledButton.icon(
+                      onPressed: () => onTab(1),
+                      icon: const Icon(Icons.inbox_outlined),
+                      label: const Text('Ver solicitudes'),
+                    ),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: () => onTab(2),
-                    icon: const Icon(Icons.engineering_outlined),
-                    label: const Text('Ver técnicos activos'),
+                  SizedBox(
+                    width: isMobile ? double.infinity : null,
+                    child: OutlinedButton.icon(
+                      onPressed: () => onTab(2),
+                      icon: const Icon(Icons.engineering_outlined),
+                      label: const Text('Ver técnicos activos'),
+                    ),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: onRegister,
-                    icon: const Icon(Icons.person_add_alt_1_rounded),
-                    label: const Text('Registrar técnico'),
+                  SizedBox(
+                    width: isMobile ? double.infinity : null,
+                    child: OutlinedButton.icon(
+                      onPressed: onRegister,
+                      icon: const Icon(Icons.person_add_alt_1_rounded),
+                      label: const Text('Registrar técnico'),
+                    ),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: onCopyPublicLink,
-                    icon: const Icon(Icons.link_rounded),
-                    label: const Text('Copiar enlace público'),
+                  SizedBox(
+                    width: isMobile ? double.infinity : null,
+                    child: OutlinedButton.icon(
+                      onPressed: onCopyPublicLink,
+                      icon: const Icon(Icons.link_rounded),
+                      label: const Text('Copiar enlace público'),
+                    ),
                   ),
                 ],
               ),
@@ -1356,8 +1438,14 @@ class _ApplicationsTab extends StatelessWidget {
         message: 'Cuando un técnico envíe el formulario aparecerá aquí.',
       );
     }
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
     final list = ListView.separated(
-      padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
+      padding: EdgeInsets.fromLTRB(
+        isMobile ? 10 : 14,
+        isMobile ? 10 : 8,
+        isMobile ? 10 : 14,
+        24,
+      ),
       itemCount: items.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
@@ -1419,8 +1507,14 @@ class _TechniciansTab extends StatelessWidget {
         message: 'Aprueba una solicitud o registra un técnico manualmente.',
       );
     }
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
     final list = ListView.separated(
-      padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
+      padding: EdgeInsets.fromLTRB(
+        isMobile ? 10 : 14,
+        isMobile ? 10 : 8,
+        isMobile ? 10 : 14,
+        24,
+      ),
       itemCount: items.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
@@ -1474,6 +1568,7 @@ class _Toolbar extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 700;
+        final controlWidth = compact ? constraints.maxWidth : 190.0;
         return Wrap(
           spacing: 10,
           runSpacing: 10,
@@ -1493,7 +1588,7 @@ class _Toolbar extends StatelessWidget {
             ),
             if (tab == 1)
               SizedBox(
-                width: compact ? (constraints.maxWidth - 10) / 2 : 190,
+                width: controlWidth,
                 child: DropdownButtonFormField<String>(
                   initialValue: applicationStatusFilter,
                   isExpanded: true,
@@ -1516,7 +1611,7 @@ class _Toolbar extends StatelessWidget {
               ),
             if (tab == 2)
               SizedBox(
-                width: compact ? (constraints.maxWidth - 10) / 2 : 190,
+                width: controlWidth,
                 child: DropdownButtonFormField<String>(
                   initialValue: technicianFilter,
                   isExpanded: true,
@@ -1542,7 +1637,7 @@ class _Toolbar extends StatelessWidget {
                 ),
               ),
             SizedBox(
-              width: compact ? (constraints.maxWidth - 10) / 2 : 190,
+              width: controlWidth,
               child: DropdownButtonFormField<RedTecnicaSpecialty?>(
                 initialValue: specialtyFilter,
                 isExpanded: true,
@@ -1566,6 +1661,201 @@ class _Toolbar extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+class _TechnicianMapTab extends StatelessWidget {
+  const _TechnicianMapTab({
+    super.key,
+    required this.applications,
+    required this.technicians,
+    required this.onOpenApplication,
+    required this.onOpenTechnician,
+  });
+
+  final List<TechnicianApplication> applications;
+  final List<Technician> technicians;
+  final ValueChanged<TechnicianApplication> onOpenApplication;
+  final ValueChanged<Technician> onOpenTechnician;
+
+  @override
+  Widget build(BuildContext context) {
+    final points = <_RtMapPoint>[
+      for (final item in technicians)
+        if (item.latitude != null && item.longitude != null)
+          _RtMapPoint.technician(item),
+      for (final item in applications)
+        if (item.latitude != null && item.longitude != null)
+          _RtMapPoint.application(item),
+    ];
+    if (points.isEmpty) {
+      return const _EmptyState(
+        icon: Icons.location_off_outlined,
+        title: 'Sin ubicaciones GPS',
+        message:
+            'Cuando un técnico envíe el formulario con ubicación, aparecerá en este mapa.',
+      );
+    }
+    final center = LatLng(points.first.latitude, points.first.longitude);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 760;
+        final map = ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: FlutterMap(
+            options: MapOptions(initialCenter: center, initialZoom: 11),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.fulltech.pos',
+              ),
+              MarkerLayer(
+                markers: [
+                  for (final point in points)
+                    Marker(
+                      point: LatLng(point.latitude, point.longitude),
+                      width: 46,
+                      height: 46,
+                      child: Tooltip(
+                        message: point.title,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(999),
+                          onTap: () =>
+                              point.open(onOpenApplication, onOpenTechnician),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: point.isTechnician
+                                  ? _rtBlue
+                                  : const Color(0xFFF59E0B),
+                              shape: BoxShape.circle,
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x33000000),
+                                  blurRadius: 10,
+                                  offset: Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              point.isTechnician
+                                  ? Icons.engineering_rounded
+                                  : Icons.assignment_ind_outlined,
+                              color: Colors.white,
+                              size: 22,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        );
+        final list = ListView.separated(
+          padding: EdgeInsets.zero,
+          itemCount: points.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (context, index) {
+            final point = points[index];
+            return ListTile(
+              leading: CircleAvatar(
+                backgroundColor: point.isTechnician
+                    ? const Color(0xFFEAF1FF)
+                    : const Color(0xFFFFF7ED),
+                child: Icon(
+                  point.isTechnician
+                      ? Icons.engineering_rounded
+                      : Icons.assignment_ind_outlined,
+                  color: point.isTechnician ? _rtBlue : const Color(0xFFC2410C),
+                ),
+              ),
+              title: Text(
+                point.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+              subtitle: Text(point.subtitle),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => point.open(onOpenApplication, onOpenTechnician),
+            );
+          },
+        );
+        return Padding(
+          padding: const EdgeInsets.all(14),
+          child: compact
+              ? Column(
+                  children: [
+                    SizedBox(
+                      height: constraints.maxHeight.clamp(520, 760) * .48,
+                      child: map,
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(child: _ShellCard(child: list)),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(flex: 7, child: map),
+                    const SizedBox(width: 12),
+                    SizedBox(width: 360, child: _ShellCard(child: list)),
+                  ],
+                ),
+        );
+      },
+    );
+  }
+}
+
+class _RtMapPoint {
+  const _RtMapPoint({
+    required this.title,
+    required this.subtitle,
+    required this.latitude,
+    required this.longitude,
+    required this.isTechnician,
+    this.application,
+    this.technician,
+  });
+
+  factory _RtMapPoint.application(TechnicianApplication item) => _RtMapPoint(
+    title: item.fullName,
+    subtitle: '${item.applicationCode} • ${item.status.label}',
+    latitude: item.latitude!,
+    longitude: item.longitude!,
+    isTechnician: false,
+    application: item,
+  );
+
+  factory _RtMapPoint.technician(Technician item) => _RtMapPoint(
+    title: item.fullName,
+    subtitle: '${item.technicianCode} • ${item.status.label}',
+    latitude: item.latitude!,
+    longitude: item.longitude!,
+    isTechnician: true,
+    technician: item,
+  );
+
+  final String title;
+  final String subtitle;
+  final double latitude;
+  final double longitude;
+  final bool isTechnician;
+  final TechnicianApplication? application;
+  final Technician? technician;
+
+  void open(
+    ValueChanged<TechnicianApplication> onOpenApplication,
+    ValueChanged<Technician> onOpenTechnician,
+  ) {
+    final tech = technician;
+    if (tech != null) {
+      onOpenTechnician(tech);
+      return;
+    }
+    final app = application;
+    if (app != null) onOpenApplication(app);
   }
 }
 
@@ -1929,6 +2219,12 @@ class _ApplicationDetailSheet extends StatelessWidget {
       ],
       children: [
         _InfoGrid(rows: _applicationRows(application)),
+        _LocationSection(
+          title: 'Ubicación GPS',
+          latitude: application.latitude,
+          longitude: application.longitude,
+          accuracy: application.locationAccuracy,
+        ),
         _SkillSection(
           title: 'Conocimientos',
           cameraSkills: application.cameraSkills,
@@ -1943,6 +2239,8 @@ class _ApplicationDetailSheet extends StatelessWidget {
             if ((application.identityBackPhotoPath ?? '').isNotEmpty)
               application.identityBackPhotoPath!,
             ...application.workEvidencePhotoPaths,
+            if ((application.resumePath ?? '').isNotEmpty)
+              application.resumePath!,
           ],
         ),
       ],
@@ -2163,25 +2461,42 @@ class _TechnicianProfileSheet extends StatelessWidget {
       ],
       children: [
         _InfoGrid(rows: _technicianRows(technician)),
+        _LocationSection(
+          title: 'Ubicación GPS',
+          latitude: technician.latitude,
+          longitude: technician.longitude,
+          accuracy: technician.locationAccuracy,
+        ),
         _SkillSection(
           title: 'Perfil técnico',
           cameraSkills: technician.cameraSkills,
           gateMotorSkills: technician.gateMotorSkills,
         ),
-        Row(
+        Wrap(
+          spacing: 10,
+          runSpacing: 8,
           children: [
             FilledButton.icon(
               onPressed: () => _showJobDialog(context, technician, onAddJob),
               icon: const Icon(Icons.work_outline_rounded),
-              label: const Text('Registrar trabajo'),
+              label: const Text('Trabajo'),
             ),
-            const SizedBox(width: 10),
             OutlinedButton.icon(
               onPressed: () =>
                   _showEvaluationDialog(context, technician, onAddEvaluation),
               icon: const Icon(Icons.star_rate_rounded),
               label: const Text('Evaluar'),
             ),
+          ],
+        ),
+        _EvidenceSection(
+          paths: [
+            if ((technician.profilePhotoPath ?? '').isNotEmpty)
+              technician.profilePhotoPath!,
+            ...technician.identityDocumentPaths,
+            ...technician.workEvidencePhotoPaths,
+            if ((technician.resumePath ?? '').isNotEmpty)
+              technician.resumePath!,
           ],
         ),
         _HistorySection(jobs: jobs, evaluations: evaluations),
@@ -2943,45 +3258,65 @@ class _DetailShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 720;
+    final headerText = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w900,
+            fontSize: compact ? 20 : null,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          subtitle,
+          style: const TextStyle(color: _rtMuted, fontWeight: FontWeight.w700),
+        ),
+      ],
+    );
+    final actionBar = Wrap(spacing: 4, runSpacing: 4, children: actions);
     final content = ListView(
       padding: EdgeInsets.fromLTRB(
-        embedded ? 16 : 22,
-        embedded ? 14 : 8,
-        embedded ? 16 : 22,
-        28,
+        embedded
+            ? 16
+            : compact
+            ? 12
+            : 22,
+        embedded
+            ? 14
+            : compact
+            ? 10
+            : 8,
+        embedded
+            ? 16
+            : compact
+            ? 12
+            : 22,
+        compact ? 18 : 28,
       ),
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      color: _rtMuted,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Wrap(spacing: 4, runSpacing: 4, children: actions),
-          ],
-        ),
+        if (compact) ...[
+          headerText,
+          const SizedBox(height: 10),
+          actionBar,
+        ] else
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: headerText),
+              actionBar,
+            ],
+          ),
         const SizedBox(height: 14),
         for (final child in children) ...[
           _ShellCard(
-            child: Padding(padding: const EdgeInsets.all(14), child: child),
+            padding: EdgeInsets.all(compact ? 10 : 16),
+            child: Padding(
+              padding: EdgeInsets.all(compact ? 4 : 14),
+              child: child,
+            ),
           ),
           const SizedBox(height: 10),
         ],
@@ -2993,10 +3328,10 @@ class _DetailShell extends StatelessWidget {
     }
 
     return FractionallySizedBox(
-      heightFactor: 0.92,
+      heightFactor: compact ? 0.98 : 0.92,
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1040),
+          constraints: BoxConstraints(maxWidth: compact ? 720 : 1040),
           child: content,
         ),
       ),
@@ -3011,26 +3346,34 @@ class _InfoGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 16,
-      runSpacing: 12,
-      children: [
-        for (final row in rows)
-          SizedBox(
-            width: 230,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(row.$1, style: Theme.of(context).textTheme.labelSmall),
-                const SizedBox(height: 3),
-                Text(
-                  row.$2.isEmpty ? 'No registrado' : row.$2,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 520;
+        final itemWidth = compact
+            ? constraints.maxWidth
+            : ((constraints.maxWidth - 16) / 2).clamp(210.0, 320.0);
+        return Wrap(
+          spacing: 16,
+          runSpacing: 12,
+          children: [
+            for (final row in rows)
+              SizedBox(
+                width: itemWidth,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(row.$1, style: Theme.of(context).textTheme.labelSmall),
+                    const SizedBox(height: 3),
+                    Text(
+                      row.$2.isEmpty ? 'No registrado' : row.$2,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-      ],
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -3086,16 +3429,175 @@ class _EvidenceSection extends StatelessWidget {
           const Text('No hay documentos cargados.')
         else
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final path in paths)
-                Chip(
-                  avatar: const Icon(Icons.lock_outline_rounded, size: 16),
-                  label: Text(path.split(RegExp(r'[\\/]')).last),
-                ),
-            ],
+            spacing: 10,
+            runSpacing: 10,
+            children: [for (final path in paths) _EvidenceTile(path: path)],
           ),
+      ],
+    );
+  }
+}
+
+class _EvidenceTile extends StatelessWidget {
+  const _EvidenceTile({required this.path});
+
+  final String path;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = _storageUrl(path);
+    final name = _fileName(path);
+    final image = _isImagePath(path);
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () async {
+        if (image) {
+          await showDialog<void>(
+            context: context,
+            builder: (context) => Dialog(
+              insetPadding: const EdgeInsets.all(18),
+              child: Stack(
+                children: [
+                  InteractiveViewer(
+                    child: Image.network(
+                      url,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const SizedBox(
+                        width: 420,
+                        height: 260,
+                        child: Center(child: Text('No se pudo cargar la foto')),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: IconButton.filledTonal(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+          return;
+        }
+        await safeOpenUrl(context, Uri.parse(url));
+      },
+      child: Container(
+        width: 138,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: _rtLine),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(13),
+              ),
+              child: SizedBox(
+                height: 92,
+                child: image
+                    ? Image.network(
+                        url,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            const Icon(Icons.broken_image_outlined),
+                      )
+                    : const ColoredBox(
+                        color: Color(0xFFF8FAFC),
+                        child: Icon(
+                          Icons.description_outlined,
+                          color: _rtBlue,
+                          size: 34,
+                        ),
+                      ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Text(
+                name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LocationSection extends StatelessWidget {
+  const _LocationSection({
+    required this.title,
+    required this.latitude,
+    required this.longitude,
+    this.accuracy,
+  });
+
+  final String title;
+  final double? latitude;
+  final double? longitude;
+  final double? accuracy;
+
+  @override
+  Widget build(BuildContext context) {
+    if (latitude == null || longitude == null) {
+      return const SizedBox.shrink();
+    }
+    final point = LatLng(latitude!, longitude!);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: SizedBox(
+            height: 220,
+            child: FlutterMap(
+              options: MapOptions(initialCenter: point, initialZoom: 15),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.fulltech.pos',
+                ),
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: point,
+                      width: 44,
+                      height: 44,
+                      child: const Icon(
+                        Icons.location_on_rounded,
+                        color: _rtBlue,
+                        size: 42,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          accuracy == null
+              ? _coords(latitude, longitude)
+              : '${_coords(latitude, longitude)} • precisión ${accuracy!.round()} m',
+          style: const TextStyle(color: _rtMuted, fontSize: 12),
+        ),
       ],
     );
   }
@@ -3146,14 +3648,8 @@ class _HistorySection extends StatelessWidget {
 
 List<(String, String)> _applicationRows(TechnicianApplication item) => [
   ('Cédula', _maskIdentity(item.identityNumber)),
-  ('Teléfono', item.phone),
   ('WhatsApp', item.whatsapp),
-  ('Correo', item.email ?? ''),
-  ('Provincia', item.province),
-  ('Municipio', item.municipality),
-  ('Sector', item.sector ?? ''),
-  ('Dirección', item.manualAddress),
-  ('Ubicación', item.formattedAddress),
+  ('Referencia', item.referencePhone),
   ('Coordenadas', _coords(item.latitude, item.longitude)),
   (
     'Precisión',
@@ -3161,7 +3657,7 @@ List<(String, String)> _applicationRows(TechnicianApplication item) => [
         ? ''
         : '${item.locationAccuracy!.round()} metros',
   ),
-  ('Fuente ubicación', item.locationSource),
+  ('Fuente GPS', item.locationSource),
   ('Especialidad', item.specialty.label),
   ('Experiencia', item.experienceLevel.label),
   ('Herramientas', item.toolsAvailability.label),
@@ -3174,22 +3670,13 @@ List<(String, String)> _applicationRows(TechnicianApplication item) => [
         ? item.resumeOriginalName
         : item.resumePath ?? '',
   ),
-  ('Referencia', item.referenceName),
-  ('Empresa anterior', item.previousCompany),
   ('Notas internas', item.internalNotes),
 ];
 
 List<(String, String)> _technicianRows(Technician item) => [
   ('Código', item.technicianCode),
   ('Cédula', _maskIdentity(item.identityNumber)),
-  ('Teléfono', item.phone),
   ('WhatsApp', item.whatsapp),
-  ('Correo', item.email ?? ''),
-  ('Provincia', item.province),
-  ('Municipio', item.municipality),
-  ('Sector', item.sector ?? ''),
-  ('Dirección', item.manualAddress),
-  ('Ubicación', item.formattedAddress),
   ('Coordenadas', _coords(item.latitude, item.longitude)),
   (
     'Precisión',
@@ -3197,7 +3684,7 @@ List<(String, String)> _technicianRows(Technician item) => [
         ? ''
         : '${item.locationAccuracy!.round()} metros',
   ),
-  ('Fuente ubicación', item.locationSource),
+  ('Fuente GPS', item.locationSource),
   ('Especialidad', item.specialty.label),
   ('Experiencia', item.experienceLevel.label),
   ('Herramientas', item.toolsAvailability.label),
@@ -3227,6 +3714,30 @@ List<(String, String)> _technicianRows(Technician item) => [
 String _coords(double? latitude, double? longitude) {
   if (latitude == null || longitude == null) return '';
   return '${latitude.toStringAsFixed(6)}, ${longitude.toStringAsFixed(6)}';
+}
+
+String _storageUrl(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) return trimmed;
+  final uri = Uri.tryParse(trimmed);
+  if (uri != null && uri.hasScheme) return trimmed;
+  final base = Env.apiBaseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+  final path = trimmed.startsWith('/') ? trimmed : '/$trimmed';
+  return '$base$path';
+}
+
+String _fileName(String value) {
+  final path = Uri.tryParse(value)?.path ?? value;
+  final parts = path.split(RegExp(r'[\\/]')).where((part) => part.isNotEmpty);
+  return parts.isEmpty ? 'Documento' : parts.last;
+}
+
+bool _isImagePath(String value) {
+  final path = (Uri.tryParse(value)?.path ?? value).toLowerCase();
+  return path.endsWith('.jpg') ||
+      path.endsWith('.jpeg') ||
+      path.endsWith('.png') ||
+      path.endsWith('.webp');
 }
 
 String _maskIdentity(String value) {
