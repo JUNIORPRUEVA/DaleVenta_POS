@@ -1244,7 +1244,7 @@ img { display: block; }
     width: auto;
     max-width: none;
     margin-left: 16px;
-    margin-right: 16px;
+    margin-right: 32px;
     padding: 70px 0 70px;
   }
   .hero h1 {
@@ -1256,6 +1256,8 @@ img { display: block; }
   .hero p {
     margin-top: 16px;
     font-size: 16px;
+    max-width: 100%;
+    overflow-wrap: break-word;
   }
   .hero__actions {
     display: grid;
