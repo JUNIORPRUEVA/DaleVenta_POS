@@ -664,6 +664,14 @@ body > * {
   position: relative;
   background: var(--soft);
 }
+.product-image-button {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  display: block;
+  background: transparent;
+  cursor: zoom-in;
+}
 .product-card__image {
   aspect-ratio: 4 / 3;
   object-fit: cover;
@@ -1150,6 +1158,11 @@ body > * {
   width: 22px;
   height: 22px;
   filter: invert(1);
+}
+.store-cart-add svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
 }
 .store-cart-add.is-success,
 .store-cart-add:hover {
@@ -1695,7 +1708,7 @@ body.image-modal-open {
     content: "";
     width: 22px;
     height: 22px;
-    background: url("assets/menu-icon.png") center/contain no-repeat;
+    background: url("/assets/menu-icon.png") center/contain no-repeat;
   }
   .site-header::after {
     content: "";

@@ -158,7 +158,9 @@ import { FulltechStore as fallbackStore } from "./data.js";
     return `
       <article class="product-card">
         <div class="product-card__media">
-          <img class="product-card__image" src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}" loading="lazy" onerror="this.onerror=null;this.src='${imageFallback}'">
+          <button class="product-image-button" type="button" data-image-preview="${escapeHtml(product.image)}" data-image-title="${escapeHtml(product.name)}" aria-label="Ver foto de ${escapeHtml(product.name)}">
+            <img class="product-card__image" src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}" loading="lazy" onerror="this.onerror=null;this.src='${imageFallback}'">
+          </button>
           ${product.badge ? `<span class="badge">${escapeHtml(product.badge)}</span>` : ""}
         </div>
         <div class="product-card__body">
@@ -194,7 +196,7 @@ import { FulltechStore as fallbackStore } from "./data.js";
   }
 
   function storeCartIcon() {
-    return '<img src="assets/cart-icon.png" alt="" aria-hidden="true">';
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm12 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0ZM6.1 6l1.1 6.2h8.9L17.4 8H8.2l-.3-2H5V4.4h4.2l.3 2h10.1l-2.1 7.4H6L4.6 6H2.8V4.4h2.8L6.1 6Z"/></svg>';
   }
 
   function storeProductCard(product) {
