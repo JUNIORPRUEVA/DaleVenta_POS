@@ -636,18 +636,118 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     bool showInlineDetail = false,
     bool canDelete = false,
   }) {
+    final theme = Theme.of(context);
+    final title =
+        '${order.orderNumber} · ${order.supplier?.commercialName ?? 'Sin suplidor'}';
+    final subtitle =
+        '${order.items.length} artículos · ${_qty(order.items.fold(0, (sum, i) => sum + i.quantity))} unidades · ${order.status}';
+    void open() {
+      if (showInlineDetail) {
+        setState(() => _selectedOrderDetailId = order.id);
+      } else {
+        _showOrderDetail(order, canDelete: canDelete);
+      }
+    }
+
+    final actions = <PopupMenuEntry<String>>[
+      const PopupMenuItem(value: 'pdf', child: Text('Ver PDF')),
+      if (order.status == 'DRAFT')
+        const PopupMenuItem(value: 'approve', child: Text('Aprobar')),
+      if (['APPROVED', 'DRAFT'].contains(order.status))
+        const PopupMenuItem(value: 'send', child: Text('Enviar')),
+      if (['SENT', 'APPROVED', 'PARTIALLY_RECEIVED'].contains(order.status))
+        const PopupMenuItem(
+          value: 'receive',
+          child: Text('Registrar recepción'),
+        ),
+      const PopupMenuItem(value: 'duplicate', child: Text('Duplicar')),
+      if (canDelete) const PopupMenuDivider(),
+      if (canDelete)
+        const PopupMenuItem(value: 'delete', child: Text('Eliminar')),
+    ];
+    void runAction(String value) {
+      if (value == 'pdf') _openOrderPdfPreview(order);
+      if (value == 'approve') {
+        _orderAction(
+          () => ref.read(purchasesRepositoryProvider).approve(order.id),
+          'Orden aprobada.',
+        );
+      }
+      if (value == 'send') _sendOrderPdfToSupplier(order);
+      if (value == 'receive') _receive(order);
+      if (value == 'duplicate') {
+        _orderAction(
+          () => ref.read(purchasesRepositoryProvider).duplicate(order.id),
+          'Orden duplicada.',
+        );
+      }
+      if (value == 'delete') _confirmDeleteOrder(order);
+    }
+
+    if (MediaQuery.sizeOf(context).width < 720) {
+      return Card(
+        elevation: 0,
+        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: theme.dividerColor.withValues(alpha: .45)),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: open,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                    PopupMenuButton<String>(
+                      tooltip: 'Acciones',
+                      onSelected: runAction,
+                      itemBuilder: (_) => actions,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Color(0xFF52657A)),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _StatusChip(label: order.status),
+                    const Spacer(),
+                    Text(
+                      _money(order.total),
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return ListTile(
       selected: selected,
-      selectedTileColor: Theme.of(
-        context,
-      ).colorScheme.primaryContainer.withValues(alpha: .35),
-      title: Text(
-        '${order.orderNumber} · ${order.supplier?.commercialName ?? 'Sin suplidor'}',
-        style: const TextStyle(fontWeight: FontWeight.w800),
+      selectedTileColor: theme.colorScheme.primaryContainer.withValues(
+        alpha: .35,
       ),
-      subtitle: Text(
-        '${order.items.length} artículos · ${_qty(order.items.fold(0, (sum, i) => sum + i.quantity))} unidades · ${order.status}',
-      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+      subtitle: Text(subtitle),
       trailing: Wrap(
         spacing: 4,
         children: [
@@ -707,18 +807,13 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
             ),
         ],
       ),
-      onTap: () {
-        if (showInlineDetail) {
-          setState(() => _selectedOrderDetailId = order.id);
-        } else {
-          _showOrderDetail(order);
-        }
-      },
+      onTap: open,
     );
   }
 
   Widget _suppliersTab() {
     final isWide = MediaQuery.sizeOf(context).width >= 980;
+    final isMobile = MediaQuery.sizeOf(context).width < 720;
     SupplierModel? selected;
     for (final supplier in _suppliers) {
       if (supplier.id == _selectedSupplierDetailId) {
@@ -729,24 +824,42 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Suplidores',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+          padding: EdgeInsets.all(isMobile ? 10 : 12),
+          child: isMobile
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Suplidores',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    FilledButton.icon(
+                      onPressed: () => _supplierDialog(),
+                      icon: const Icon(Icons.add_business_outlined),
+                      label: const Text('Crear suplidor'),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Suplidores',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    FilledButton.icon(
+                      onPressed: () => _supplierDialog(),
+                      icon: const Icon(Icons.add_business_outlined),
+                      label: const Text('Crear suplidor'),
+                    ),
+                  ],
                 ),
-              ),
-              FilledButton.icon(
-                onPressed: () => _supplierDialog(),
-                icon: const Icon(Icons.add_business_outlined),
-                label: const Text('Crear suplidor'),
-              ),
-            ],
-          ),
         ),
         Expanded(
           child: _suppliers.isEmpty
@@ -759,6 +872,49 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                         separatorBuilder: (_, __) => const Divider(height: 1),
                         itemBuilder: (context, index) {
                           final s = _suppliers[index];
+                          if (isMobile) {
+                            return Card(
+                              elevation: 0,
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                side: BorderSide(
+                                  color: Theme.of(
+                                    context,
+                                  ).dividerColor.withValues(alpha: .45),
+                                ),
+                              ),
+                              child: ListTile(
+                                leading: Icon(
+                                  s.isActive
+                                      ? Icons.storefront_outlined
+                                      : Icons.block_outlined,
+                                ),
+                                title: Text(
+                                  s.commercialName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  [s.contactName, s.phone, s.whatsapp, s.email]
+                                      .where((e) => (e ?? '').isNotEmpty)
+                                      .join(' · '),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                trailing: const Icon(
+                                  Icons.chevron_right_rounded,
+                                ),
+                                onTap: () => _showSupplierDetail(s),
+                              ),
+                            );
+                          }
                           return ListTile(
                             selected: s.id == _selectedSupplierDetailId,
                             selectedTileColor: Theme.of(context)
@@ -835,8 +991,9 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   }
 
   Widget _recommendationsTab() {
+    final isMobile = MediaQuery.sizeOf(context).width < 720;
     return ListView.separated(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(isMobile ? 10 : 12),
       itemCount: _recommendations.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
@@ -847,37 +1004,98 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
             borderRadius: BorderRadius.circular(8),
             side: BorderSide(color: Theme.of(context).dividerColor),
           ),
-          child: ListTile(
-            leading: SizedBox(
-              width: 44,
-              height: 44,
-              child: ProductNetworkImage(
-                imageUrl: r.product.displayFotoUrl ?? '',
-                productId: r.product.id,
-                productName: r.product.nombre,
-                originalUrl: r.product.originalFotoUrl,
-                fit: BoxFit.cover,
-                fallback: const Icon(Icons.inventory_2_outlined),
-              ),
-            ),
-            title: Text(
-              r.product.nombre,
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-            subtitle: Text(
-              '${r.reason} · Stock ${_qty(r.stock)} · Ordenado ${_qty(r.alreadyOrdered)} · Sugerido ${_qty(r.suggestedQuantity)}',
-            ),
-            trailing: FilledButton.tonalIcon(
-              onPressed: r.suggestedQuantity <= 0
-                  ? null
-                  : () => _quickAddProduct(
-                      r.product,
-                      initialQty: r.suggestedQuantity,
+          child: isMobile
+              ? Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 48,
+                            height: 48,
+                            child: ProductNetworkImage(
+                              imageUrl: r.product.displayFotoUrl ?? '',
+                              productId: r.product.id,
+                              productName: r.product.nombre,
+                              originalUrl: r.product.originalFotoUrl,
+                              fit: BoxFit.cover,
+                              fallback: const Icon(Icons.inventory_2_outlined),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  r.product.nombre,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${r.reason} · Stock ${_qty(r.stock)} · Ordenado ${_qty(r.alreadyOrdered)}',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Color(0xFF52657A),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      FilledButton.tonalIcon(
+                        onPressed: r.suggestedQuantity <= 0
+                            ? null
+                            : () => _quickAddProduct(
+                                r.product,
+                                initialQty: r.suggestedQuantity,
+                              ),
+                        icon: const Icon(Icons.add_shopping_cart_outlined),
+                        label: Text('Agregar ${_qty(r.suggestedQuantity)}'),
+                      ),
+                    ],
+                  ),
+                )
+              : ListTile(
+                  leading: SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: ProductNetworkImage(
+                      imageUrl: r.product.displayFotoUrl ?? '',
+                      productId: r.product.id,
+                      productName: r.product.nombre,
+                      originalUrl: r.product.originalFotoUrl,
+                      fit: BoxFit.cover,
+                      fallback: const Icon(Icons.inventory_2_outlined),
                     ),
-              icon: const Icon(Icons.add_shopping_cart_outlined),
-              label: const Text('Agregar'),
-            ),
-          ),
+                  ),
+                  title: Text(
+                    r.product.nombre,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  subtitle: Text(
+                    '${r.reason} · Stock ${_qty(r.stock)} · Ordenado ${_qty(r.alreadyOrdered)} · Sugerido ${_qty(r.suggestedQuantity)}',
+                  ),
+                  trailing: FilledButton.tonalIcon(
+                    onPressed: r.suggestedQuantity <= 0
+                        ? null
+                        : () => _quickAddProduct(
+                            r.product,
+                            initialQty: r.suggestedQuantity,
+                          ),
+                    icon: const Icon(Icons.add_shopping_cart_outlined),
+                    label: const Text('Agregar'),
+                  ),
+                ),
         );
       },
     );
@@ -1613,32 +1831,51 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     _snack('Suplidor desactivado.');
   }
 
-  void _showOrderDetail(PurchaseOrderModel order) {
+  void _showOrderDetail(PurchaseOrderModel order, {bool canDelete = false}) {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (context) => ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(
-            '${order.orderNumber} · ${order.status}',
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => FractionallySizedBox(
+        heightFactor: .94,
+        child: _OrderDetailPanel(
+          order: order,
+          money: _money,
+          qty: _qty,
+          onPdf: () => _openOrderPdfPreview(order),
+          onSend: () => _sendOrderPdfToSupplier(order),
+          onReceive: () => _receive(order),
+          onDuplicate: () => _orderAction(
+            () => ref.read(purchasesRepositoryProvider).duplicate(order.id),
+            'Orden duplicada.',
           ),
-          Text(order.supplier?.commercialName ?? 'Sin suplidor'),
-          const Divider(),
-          for (final item in order.items)
-            ListTile(
-              title: Text(item.productName),
-              subtitle: Text(
-                'Pedido ${_qty(item.quantity)} · Recibido ${_qty(item.receivedQuantity)} · Pendiente ${_qty(item.pendingQuantity)}',
-              ),
-              trailing: Text(_money(item.subtotal)),
-            ),
-          const Divider(),
-          _totalRow('Total general', _money(order.total), strong: true),
-        ],
+          onDelete: canDelete ? () => _confirmDeleteOrder(order) : null,
+        ),
+      ),
+    );
+  }
+
+  void _showSupplierDetail(SupplierModel supplier) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => FractionallySizedBox(
+        heightFactor: .9,
+        child: _SupplierDetailPanel(
+          supplier: supplier,
+          money: _money,
+          onEdit: () {
+            Navigator.pop(context);
+            _supplierDialog(supplier: supplier);
+          },
+          onDeactivate: () {
+            Navigator.pop(context);
+            _deactivateSupplier(supplier);
+          },
+        ),
       ),
     );
   }
@@ -1649,8 +1886,9 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       builder: (context) =>
-          FractionallySizedBox(heightFactor: .92, child: _cartPanel()),
+          FractionallySizedBox(heightFactor: .96, child: _cartPanel()),
     );
   }
 
@@ -1677,27 +1915,6 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     keyboardType: TextInputType.number,
     onChanged: (_) => setState(() {}),
     decoration: _fieldDecoration(label),
-  );
-
-  Widget _totalRow(
-    String label,
-    String value, {
-    bool strong = false,
-  }) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 2),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: strong ? const TextStyle(fontWeight: FontWeight.w800) : null,
-        ),
-        Text(
-          value,
-          style: strong ? const TextStyle(fontWeight: FontWeight.w900) : null,
-        ),
-      ],
-    ),
   );
 
   void _snack(String message) => ScaffoldMessenger.of(
@@ -2196,27 +2413,37 @@ class _PurchaseToolbar extends StatelessWidget {
         ),
       ],
     );
-    final actions = Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      alignment: WrapAlignment.end,
-      children: [
-        OutlinedButton.icon(
-          onPressed: onAddExternal,
-          icon: const Icon(Icons.add_box_outlined, size: 17),
-          label: const Text('Nuevo producto'),
-        ),
-        if (onOpenOrder != null)
-          FilledButton.icon(
+    final externalButton = OutlinedButton.icon(
+      onPressed: onAddExternal,
+      icon: const Icon(Icons.add_box_outlined, size: 17),
+      label: const Text('Nuevo producto', overflow: TextOverflow.ellipsis),
+    );
+    final orderButton = onOpenOrder == null
+        ? null
+        : FilledButton.icon(
             onPressed: onOpenOrder,
             icon: const Icon(Icons.receipt_long_outlined, size: 17),
             label: Text(
               itemCount == 0 ? 'Detalle' : '$itemCount · $total',
               overflow: TextOverflow.ellipsis,
             ),
-          ),
-      ],
-    );
+          );
+    final actions = compact
+        ? Row(
+            children: [
+              Expanded(child: externalButton),
+              if (orderButton != null) ...[
+                const SizedBox(width: 8),
+                Expanded(child: orderButton),
+              ],
+            ],
+          )
+        : Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.end,
+            children: [externalButton, if (orderButton != null) orderButton],
+          );
     final categoryChips = SizedBox(
       height: 38,
       child: ListView.separated(
