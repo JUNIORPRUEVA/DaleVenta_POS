@@ -158,6 +158,17 @@ class PurchasesRepository {
   Future<PurchaseOrderModel> duplicate(String id) =>
       _postOrder(ApiRoutes.purchaseOrderDuplicate(id), 'No se pudo duplicar');
 
+  Future<void> deleteOrder(String id) async {
+    try {
+      await _dio.delete(ApiRoutes.purchaseOrder(id));
+    } on DioException catch (e) {
+      throw ApiException(
+        _message(e.response?.data, 'No se pudo eliminar la orden'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
   Future<PurchaseOrderModel> _postOrder(String path, String fallback) async {
     try {
       final res = await _dio.post(path);

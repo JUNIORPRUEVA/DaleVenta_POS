@@ -666,7 +666,10 @@ export class SalesService {
     };
   }
 
-  async remove(requestUserId: string, saleId: string) {
+  async remove(
+    requestUser: { id: string; role: Role | string },
+    saleId: string,
+  ) {
     let sale: { id: string; isDeleted: boolean; userId: string } | null = null;
     try {
       sale = await this.prisma.sale.findUnique({ where: { id: saleId } });
@@ -678,7 +681,8 @@ export class SalesService {
       throw new NotFoundException("Venta no encontrada");
     }
 
-    if (sale.userId !== requestUserId) {
+    const isAdmin = `${requestUser.role}`.trim().toUpperCase() === Role.ADMIN;
+    if (!isAdmin && sale.userId !== requestUser.id) {
       throw new ForbiddenException("No puedes eliminar esta venta");
     }
 
@@ -688,7 +692,7 @@ export class SalesService {
         data: {
           isDeleted: true,
           deletedAt: new Date(),
-          deletedById: requestUserId,
+          deletedById: requestUser.id,
         },
       });
     } catch (error) {

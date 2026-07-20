@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Prisma, PurchaseOrderStatus, Role } from "@prisma/client";
 import * as fs from "node:fs";
@@ -27,8 +32,17 @@ export class PurchasesService {
       supplier: true,
       createdBy: { select: { id: true, nombreCompleto: true, email: true } },
       approvedBy: { select: { id: true, nombreCompleto: true, email: true } },
-      items: { orderBy: { createdAt: "asc" }, include: { product: true, supplier: true } },
-      receipts: { orderBy: { createdAt: "desc" }, include: { items: true, receivedBy: { select: { id: true, nombreCompleto: true } } } },
+      items: {
+        orderBy: { createdAt: "asc" },
+        include: { product: true, supplier: true },
+      },
+      receipts: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          items: true,
+          receivedBy: { select: { id: true, nombreCompleto: true } },
+        },
+      },
     } satisfies Prisma.PurchaseOrderInclude;
   }
 
@@ -63,7 +77,10 @@ export class PurchasesService {
   async updateSupplier(id: string, dto: UpsertSupplierDto) {
     await this.assertSupplier(id);
     this.validateSupplier(dto);
-    return this.prisma.supplier.update({ where: { id }, data: this.supplierData(dto) });
+    return this.prisma.supplier.update({
+      where: { id },
+      data: this.supplierData(dto),
+    });
   }
 
   async deactivateSupplier(id: string) {
@@ -74,7 +91,10 @@ export class PurchasesService {
     });
   }
 
-  async listOrders(user: RequestUser, filters: { q?: string; status?: string; supplierId?: string }) {
+  async listOrders(
+    user: RequestUser,
+    filters: { q?: string; status?: string; supplierId?: string },
+  ) {
     const q = (filters.q ?? "").trim();
     const status = this.parseStatus(filters.status, false);
     return this.prisma.purchaseOrder.findMany({
@@ -87,8 +107,18 @@ export class PurchasesService {
           ? {
               OR: [
                 { orderNumber: { contains: q, mode: "insensitive" } },
-                { supplier: { commercialName: { contains: q, mode: "insensitive" } } },
-                { items: { some: { productNameSnapshot: { contains: q, mode: "insensitive" } } } },
+                {
+                  supplier: {
+                    commercialName: { contains: q, mode: "insensitive" },
+                  },
+                },
+                {
+                  items: {
+                    some: {
+                      productNameSnapshot: { contains: q, mode: "insensitive" },
+                    },
+                  },
+                },
               ],
             }
           : {}),
@@ -100,7 +130,11 @@ export class PurchasesService {
 
   async getOrder(user: RequestUser, id: string) {
     const order = await this.prisma.purchaseOrder.findFirst({
-      where: { id, deletedAt: null, ...(this.canSeeAll(user) ? {} : { createdById: user.id }) },
+      where: {
+        id,
+        deletedAt: null,
+        ...(this.canSeeAll(user) ? {} : { createdById: user.id }),
+      },
       include: this.includeOrder(),
     });
     if (!order) throw new NotFoundException("Orden de compra no encontrada.");
@@ -136,13 +170,25 @@ export class PurchasesService {
     });
   }
 
-  async updateOrder(user: RequestUser, id: string, dto: CreatePurchaseOrderDto) {
+  async updateOrder(
+    user: RequestUser,
+    id: string,
+    dto: CreatePurchaseOrderDto,
+  ) {
     const current = await this.getOrder(user, id);
-    if (current.status === PurchaseOrderStatus.RECEIVED || current.status === PurchaseOrderStatus.CANCELLED) {
+    if (
+      current.status === PurchaseOrderStatus.RECEIVED ||
+      current.status === PurchaseOrderStatus.CANCELLED
+    ) {
       throw new BadRequestException("Esta orden ya no puede editarse.");
     }
-    if (current.status !== PurchaseOrderStatus.DRAFT && !this.canApprove(user)) {
-      throw new ForbiddenException("Necesitas permiso para editar una orden aprobada o enviada.");
+    if (
+      current.status !== PurchaseOrderStatus.DRAFT &&
+      !this.canApprove(user)
+    ) {
+      throw new ForbiddenException(
+        "Necesitas permiso para editar una orden aprobada o enviada.",
+      );
     }
     const items = await this.normalizeItems(dto.items ?? []);
     const totals = this.computeTotals(items, dto);
@@ -203,11 +249,17 @@ export class PurchasesService {
 
   async approveOrder(user: RequestUser, id: string) {
     const order = await this.getOrder(user, id);
-    if (!order.items.length) throw new BadRequestException("Agrega al menos un producto.");
-    if (!order.supplierId) throw new BadRequestException("Selecciona un suplidor para continuar.");
+    if (!order.items.length)
+      throw new BadRequestException("Agrega al menos un producto.");
+    if (!order.supplierId)
+      throw new BadRequestException("Selecciona un suplidor para continuar.");
     return this.prisma.purchaseOrder.update({
       where: { id },
-      data: { status: PurchaseOrderStatus.APPROVED, approvedById: user.id, approvedAt: new Date() },
+      data: {
+        status: PurchaseOrderStatus.APPROVED,
+        approvedById: user.id,
+        approvedAt: new Date(),
+      },
       include: this.includeOrder(),
     });
   }
@@ -225,33 +277,50 @@ export class PurchasesService {
     await this.getOrder(user, id);
     return this.prisma.purchaseOrder.update({
       where: { id },
-      data: { status: PurchaseOrderStatus.CANCELLED, cancelledAt: new Date(), cancellationReason: this.clean(reason) },
+      data: {
+        status: PurchaseOrderStatus.CANCELLED,
+        cancelledAt: new Date(),
+        cancellationReason: this.clean(reason),
+      },
       include: this.includeOrder(),
     });
   }
 
   async deleteDraft(user: RequestUser, id: string) {
-    const order = await this.getOrder(user, id);
-    if (order.status !== PurchaseOrderStatus.DRAFT) {
-      throw new BadRequestException("Solo se pueden eliminar borradores.");
-    }
-    await this.prisma.purchaseOrder.update({ where: { id }, data: { deletedAt: new Date() } });
+    await this.getOrder(user, id);
+    await this.prisma.purchaseOrder.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
     return { ok: true };
   }
 
-  async receiveOrder(user: RequestUser, id: string, dto: ReceivePurchaseOrderDto) {
+  async receiveOrder(
+    user: RequestUser,
+    id: string,
+    dto: ReceivePurchaseOrderDto,
+  ) {
     const order = await this.getOrder(user, id);
     if (order.status === PurchaseOrderStatus.CANCELLED) {
-      throw new BadRequestException("Una orden cancelada no puede recibir mercancía.");
+      throw new BadRequestException(
+        "Una orden cancelada no puede recibir mercancía.",
+      );
     }
     const itemMap = new Map(order.items.map((item) => [item.id, item]));
     const normalized = dto.items.map((item) => {
       const current = itemMap.get(item.purchaseOrderItemId);
-      if (!current) throw new BadRequestException("Producto de orden inválido.");
+      if (!current)
+        throw new BadRequestException("Producto de orden inválido.");
       const qty = new Prisma.Decimal(item.quantityReceived);
       const pending = new Prisma.Decimal(current.pendingQuantity);
-      if (qty.lte(0)) throw new BadRequestException("La cantidad recibida debe ser mayor que cero.");
-      if (qty.greaterThan(pending)) throw new BadRequestException(`La cantidad recibida supera lo pendiente para ${current.productNameSnapshot}.`);
+      if (qty.lte(0))
+        throw new BadRequestException(
+          "La cantidad recibida debe ser mayor que cero.",
+        );
+      if (qty.greaterThan(pending))
+        throw new BadRequestException(
+          `La cantidad recibida supera lo pendiente para ${current.productNameSnapshot}.`,
+        );
       return {
         current,
         quantityReceived: qty,
@@ -285,13 +354,19 @@ export class PurchasesService {
       });
 
       for (const item of normalized) {
-        const nextReceived = new Prisma.Decimal(item.current.receivedQuantity).plus(item.quantityReceived);
-        const nextPending = new Prisma.Decimal(item.current.quantity).minus(nextReceived);
+        const nextReceived = new Prisma.Decimal(
+          item.current.receivedQuantity,
+        ).plus(item.quantityReceived);
+        const nextPending = new Prisma.Decimal(item.current.quantity).minus(
+          nextReceived,
+        );
         await tx.purchaseOrderItem.update({
           where: { id: item.current.id },
           data: {
             receivedQuantity: nextReceived,
-            pendingQuantity: nextPending.lessThan(0) ? new Prisma.Decimal(0) : nextPending,
+            pendingQuantity: nextPending.lessThan(0)
+              ? new Prisma.Decimal(0)
+              : nextPending,
             actualUnitCost: item.unitCost,
           },
         });
@@ -300,54 +375,92 @@ export class PurchasesService {
           if (item.current.productId) {
             await tx.product.update({
               where: { id: item.current.productId },
-              data: { stock: { increment: item.quantityReceived }, costo: item.unitCost },
+              data: {
+                stock: { increment: item.quantityReceived },
+                costo: item.unitCost,
+              },
             });
           } else if (item.current.createInventoryProductOnReceipt) {
             const created = await tx.product.create({
               data: {
                 nombre: item.current.productNameSnapshot,
-                categoria: item.current.descriptionSnapshot?.slice(0, 80) || "Sin categoría",
+                categoria:
+                  item.current.descriptionSnapshot?.slice(0, 80) ||
+                  "Sin categoría",
                 precio: item.unitCost,
                 costo: item.unitCost,
                 stock: item.quantityReceived,
                 imagen: item.current.imageSnapshot,
               },
             });
-            await tx.purchaseOrderItem.update({ where: { id: item.current.id }, data: { productId: created.id } });
+            await tx.purchaseOrderItem.update({
+              where: { id: item.current.id },
+              data: { productId: created.id },
+            });
           }
         }
       }
 
-      const refreshedItems = await tx.purchaseOrderItem.findMany({ where: { purchaseOrderId: id } });
-      const allReceived = refreshedItems.every((item) => new Prisma.Decimal(item.pendingQuantity).lte(0));
-      const someReceived = refreshedItems.some((item) => new Prisma.Decimal(item.receivedQuantity).gt(0));
+      const refreshedItems = await tx.purchaseOrderItem.findMany({
+        where: { purchaseOrderId: id },
+      });
+      const allReceived = refreshedItems.every((item) =>
+        new Prisma.Decimal(item.pendingQuantity).lte(0),
+      );
+      const someReceived = refreshedItems.some((item) =>
+        new Prisma.Decimal(item.receivedQuantity).gt(0),
+      );
       const status = allReceived
         ? PurchaseOrderStatus.RECEIVED
         : someReceived
           ? PurchaseOrderStatus.PARTIALLY_RECEIVED
           : order.status;
-      const updated = await tx.purchaseOrder.update({ where: { id }, data: { status }, include: this.includeOrder() });
+      const updated = await tx.purchaseOrder.update({
+        where: { id },
+        data: { status },
+        include: this.includeOrder(),
+      });
       return { receipt, order: updated };
     });
   }
 
   async recommendations() {
-    const products = await this.prisma.product.findMany({ orderBy: { nombre: "asc" } });
+    const products = await this.prisma.product.findMany({
+      orderBy: { nombre: "asc" },
+    });
     const pending = await this.prisma.purchaseOrderItem.groupBy({
       by: ["productId"],
       where: {
         productId: { not: null },
-        purchaseOrder: { deletedAt: null, status: { in: [PurchaseOrderStatus.APPROVED, PurchaseOrderStatus.SENT, PurchaseOrderStatus.PARTIALLY_RECEIVED] } },
+        purchaseOrder: {
+          deletedAt: null,
+          status: {
+            in: [
+              PurchaseOrderStatus.APPROVED,
+              PurchaseOrderStatus.SENT,
+              PurchaseOrderStatus.PARTIALLY_RECEIVED,
+            ],
+          },
+        },
       },
       _sum: { pendingQuantity: true },
     });
-    const ordered = new Map(pending.map((row) => [row.productId, this.num(row._sum.pendingQuantity)]));
+    const ordered = new Map(
+      pending.map((row) => [row.productId, this.num(row._sum.pendingQuantity)]),
+    );
     return products.map((product) => {
       const stock = this.num(product.stock);
       const minStock = 5;
       const alreadyOrdered = ordered.get(product.id) ?? 0;
       const suggested = Math.max(0, minStock * 2 - stock - alreadyOrdered);
-      const reason = stock <= 0 ? "Agotado" : stock < minStock ? "Por debajo del mínimo" : suggested > 0 ? "Compra recomendada" : "Disponible";
+      const reason =
+        stock <= 0
+          ? "Agotado"
+          : stock < minStock
+            ? "Por debajo del mínimo"
+            : suggested > 0
+              ? "Compra recomendada"
+              : "Disponible";
       return {
         product,
         stock,
@@ -372,7 +485,11 @@ export class PurchasesService {
       dto.fileName ?? "",
       `orden_compra_${purchaseOrderId.slice(0, 8)}.pdf`,
     );
-    const orderDir = path.join(this.resolveUploadDir(), "compras", purchaseOrderId);
+    const orderDir = path.join(
+      this.resolveUploadDir(),
+      "compras",
+      purchaseOrderId,
+    );
     await mkdir(orderDir, { recursive: true });
     await writeFile(path.join(orderDir, fileName), bytes);
 
@@ -395,12 +512,24 @@ export class PurchasesService {
 
   async resolvePublicPdfDownload(purchaseOrderId: string, fileName: string) {
     const safeOrderId = (purchaseOrderId ?? "").trim();
-    const safeFileName = this.sanitizePdfFileName(fileName ?? "", "orden_compra.pdf");
-    if (!safeOrderId || safeOrderId.includes("/") || safeOrderId.includes("\\")) {
+    const safeFileName = this.sanitizePdfFileName(
+      fileName ?? "",
+      "orden_compra.pdf",
+    );
+    if (
+      !safeOrderId ||
+      safeOrderId.includes("/") ||
+      safeOrderId.includes("\\")
+    ) {
       throw new NotFoundException("PDF de orden de compra no encontrado.");
     }
 
-    const absolutePath = path.join(this.resolveUploadDir(), "compras", safeOrderId, safeFileName);
+    const absolutePath = path.join(
+      this.resolveUploadDir(),
+      "compras",
+      safeOrderId,
+      safeFileName,
+    );
     if (!fs.existsSync(absolutePath)) {
       throw new NotFoundException("PDF de orden de compra no encontrado.");
     }
@@ -409,20 +538,40 @@ export class PurchasesService {
   }
 
   private async normalizeItems(items: PurchaseOrderItemDto[]) {
-    const productIds = [...new Set(items.map((item) => item.productId).filter((id): id is string => Boolean(id)))];
+    const productIds = [
+      ...new Set(
+        items
+          .map((item) => item.productId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
     const products = productIds.length
-      ? await this.prisma.product.findMany({ where: { id: { in: productIds } } })
+      ? await this.prisma.product.findMany({
+          where: { id: { in: productIds } },
+        })
       : [];
-    const productMap = new Map(products.map((product) => [product.id, product]));
+    const productMap = new Map(
+      products.map((product) => [product.id, product]),
+    );
     return items.map((item, index) => {
       const product = item.productId ? productMap.get(item.productId) : null;
-      if (item.productId && !product) throw new BadRequestException(`Producto inválido en línea ${index + 1}.`);
+      if (item.productId && !product)
+        throw new BadRequestException(
+          `Producto inválido en línea ${index + 1}.`,
+        );
       const name = (product?.nombre ?? item.productName ?? "").trim();
-      if (!name) throw new BadRequestException(`Producto sin nombre en línea ${index + 1}.`);
+      if (!name)
+        throw new BadRequestException(
+          `Producto sin nombre en línea ${index + 1}.`,
+        );
       const quantity = new Prisma.Decimal(item.quantity);
       const unitCost = new Prisma.Decimal(item.unitCost);
-      if (quantity.lte(0)) throw new BadRequestException("Las cantidades deben ser mayores que cero.");
-      if (unitCost.lt(0)) throw new BadRequestException("Los montos no pueden ser negativos.");
+      if (quantity.lte(0))
+        throw new BadRequestException(
+          "Las cantidades deben ser mayores que cero.",
+        );
+      if (unitCost.lt(0))
+        throw new BadRequestException("Los montos no pueden ser negativos.");
       const subtotal = quantity.mul(unitCost).toDecimalPlaces(2);
       return {
         data: {
@@ -439,24 +588,42 @@ export class PurchasesService {
           subtotal,
           supplierId: this.cleanId(item.supplierId),
           notes: this.clean(item.notes),
-          createInventoryProductOnReceipt: Boolean(item.createInventoryProductOnReceipt),
+          createInventoryProductOnReceipt: Boolean(
+            item.createInventoryProductOnReceipt,
+          ),
         },
         subtotal,
       };
     });
   }
 
-  private computeTotals(items: Array<{ subtotal: Prisma.Decimal }>, dto: CreatePurchaseOrderDto) {
-    const subtotal = items.reduce((acc, item) => acc.plus(item.subtotal), new Prisma.Decimal(0)).toDecimalPlaces(2);
+  private computeTotals(
+    items: Array<{ subtotal: Prisma.Decimal }>,
+    dto: CreatePurchaseOrderDto,
+  ) {
+    const subtotal = items
+      .reduce((acc, item) => acc.plus(item.subtotal), new Prisma.Decimal(0))
+      .toDecimalPlaces(2);
     const discount = new Prisma.Decimal(dto.discount ?? 0).toDecimalPlaces(2);
-    const shippingCost = new Prisma.Decimal(dto.shippingCost ?? 0).toDecimalPlaces(2);
-    const additionalCost = new Prisma.Decimal(dto.additionalCost ?? 0).toDecimalPlaces(2);
+    const shippingCost = new Prisma.Decimal(
+      dto.shippingCost ?? 0,
+    ).toDecimalPlaces(2);
+    const additionalCost = new Prisma.Decimal(
+      dto.additionalCost ?? 0,
+    ).toDecimalPlaces(2);
     const tax = new Prisma.Decimal(dto.tax ?? 0).toDecimalPlaces(2);
     for (const amount of [discount, shippingCost, additionalCost, tax]) {
-      if (amount.lt(0)) throw new BadRequestException("Los montos no pueden ser negativos.");
+      if (amount.lt(0))
+        throw new BadRequestException("Los montos no pueden ser negativos.");
     }
-    const total = subtotal.minus(discount).plus(shippingCost).plus(additionalCost).plus(tax).toDecimalPlaces(2);
-    if (total.lt(0)) throw new BadRequestException("El total no puede ser negativo.");
+    const total = subtotal
+      .minus(discount)
+      .plus(shippingCost)
+      .plus(additionalCost)
+      .plus(tax)
+      .toDecimalPlaces(2);
+    if (total.lt(0))
+      throw new BadRequestException("El total no puede ser negativo.");
     return { subtotal, discount, shippingCost, additionalCost, tax, total };
   }
 
@@ -471,7 +638,9 @@ export class PurchasesService {
     return `OC-${number.toString().padStart(6, "0")}`;
   }
 
-  private async suppliersWithStats(rows: Array<{ id: string; [key: string]: unknown }>) {
+  private async suppliersWithStats(
+    rows: Array<{ id: string; [key: string]: unknown }>,
+  ) {
     const ids = rows.map((row) => row.id);
     if (!ids.length) return rows;
 
@@ -489,7 +658,13 @@ export class PurchasesService {
       this.prisma.purchaseOrder.findMany({
         where: { supplierId: { in: ids }, deletedAt: null },
         orderBy: [{ supplierId: "asc" }, { orderDate: "desc" }],
-        select: { supplierId: true, orderNumber: true, orderDate: true, total: true, status: true },
+        select: {
+          supplierId: true,
+          orderNumber: true,
+          orderDate: true,
+          total: true,
+          status: true,
+        },
       }),
     ]);
 
@@ -504,7 +679,15 @@ export class PurchasesService {
           },
         ]),
     );
-    const latest = new Map<string, { orderNumber: string; orderDate: Date; total: Prisma.Decimal; status: PurchaseOrderStatus }>();
+    const latest = new Map<
+      string,
+      {
+        orderNumber: string;
+        orderDate: Date;
+        total: Prisma.Decimal;
+        status: PurchaseOrderStatus;
+      }
+    >();
     for (const row of latestRows) {
       if (row.supplierId && !latest.has(row.supplierId)) {
         latest.set(row.supplierId, {
@@ -528,10 +711,13 @@ export class PurchasesService {
   }
 
   private validateSupplier(dto: UpsertSupplierDto) {
-    if (!this.clean(dto.commercialName)) throw new BadRequestException("El nombre comercial es obligatorio.");
+    if (!this.clean(dto.commercialName))
+      throw new BadRequestException("El nombre comercial es obligatorio.");
   }
 
-  private supplierData(dto: UpsertSupplierDto): Prisma.SupplierUncheckedCreateInput {
+  private supplierData(
+    dto: UpsertSupplierDto,
+  ): Prisma.SupplierUncheckedCreateInput {
     return {
       commercialName: this.clean(dto.commercialName)!,
       legalName: this.clean(dto.legalName),
@@ -553,16 +739,23 @@ export class PurchasesService {
   }
 
   private async assertSupplier(id: string) {
-    const supplier = await this.prisma.supplier.findFirst({ where: { id, deletedAt: null } });
+    const supplier = await this.prisma.supplier.findFirst({
+      where: { id, deletedAt: null },
+    });
     if (!supplier) throw new NotFoundException("Suplidor no encontrado.");
     return supplier;
   }
 
-  private parseStatus(value?: string, throwOnInvalid = true): PurchaseOrderStatus | null {
+  private parseStatus(
+    value?: string,
+    throwOnInvalid = true,
+  ): PurchaseOrderStatus | null {
     const raw = (value ?? "").trim().toUpperCase();
     if (!raw) return null;
-    if (Object.values(PurchaseOrderStatus).includes(raw as PurchaseOrderStatus)) return raw as PurchaseOrderStatus;
-    if (throwOnInvalid) throw new BadRequestException("Estado de orden inválido.");
+    if (Object.values(PurchaseOrderStatus).includes(raw as PurchaseOrderStatus))
+      return raw as PurchaseOrderStatus;
+    if (throwOnInvalid)
+      throw new BadRequestException("Estado de orden inválido.");
     return null;
   }
 
@@ -577,7 +770,8 @@ export class PurchasesService {
   private parseDate(value?: string) {
     if (!value?.trim()) return null;
     const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) throw new BadRequestException("Fecha inválida.");
+    if (Number.isNaN(parsed.getTime()))
+      throw new BadRequestException("Fecha inválida.");
     return parsed;
   }
 
@@ -597,14 +791,24 @@ export class PurchasesService {
 
   private parsePdfBase64(value: string) {
     const trimmed = (value ?? "").trim();
-    if (!trimmed) throw new BadRequestException("Debes enviar el PDF de la orden de compra.");
-    const base64 = trimmed.startsWith("data:") ? trimmed.slice(trimmed.indexOf(",") + 1) : trimmed;
+    if (!trimmed)
+      throw new BadRequestException(
+        "Debes enviar el PDF de la orden de compra.",
+      );
+    const base64 = trimmed.startsWith("data:")
+      ? trimmed.slice(trimmed.indexOf(",") + 1)
+      : trimmed;
     const bytes = Buffer.from(base64, "base64");
-    if (!bytes.length) throw new BadRequestException("El PDF de la orden de compra llegó vacío.");
+    if (!bytes.length)
+      throw new BadRequestException(
+        "El PDF de la orden de compra llegó vacío.",
+      );
     const maxPdfBytes = 8 * 1024 * 1024;
     if (bytes.length > maxPdfBytes) {
       const sizeMb = (bytes.length / (1024 * 1024)).toFixed(2);
-      throw new BadRequestException(`El PDF de la orden de compra pesa ${sizeMb} MB y supera el límite de 8 MB.`);
+      throw new BadRequestException(
+        `El PDF de la orden de compra pesa ${sizeMb} MB y supera el límite de 8 MB.`,
+      );
     }
     return bytes;
   }
@@ -614,7 +818,8 @@ export class PurchasesService {
     const volumeDir = "/uploads";
     const volumeExists = fs.existsSync(volumeDir);
     if (fromEnv) {
-      if ((fromEnv === "./uploads" || fromEnv === "uploads") && volumeExists) return volumeDir;
+      if ((fromEnv === "./uploads" || fromEnv === "uploads") && volumeExists)
+        return volumeDir;
       return fromEnv;
     }
     return volumeExists ? volumeDir : path.join(process.cwd(), "uploads");
@@ -632,7 +837,10 @@ export class PurchasesService {
 
   private sanitizePdfFileName(value: string, fallback: string) {
     const source = (value || fallback).trim() || fallback;
-    const base = path.basename(source).replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "");
+    const base = path
+      .basename(source)
+      .replace(/[^a-zA-Z0-9._-]+/g, "_")
+      .replace(/^_+|_+$/g, "");
     const withExt = base.toLowerCase().endsWith(".pdf") ? base : `${base}.pdf`;
     return withExt || fallback;
   }

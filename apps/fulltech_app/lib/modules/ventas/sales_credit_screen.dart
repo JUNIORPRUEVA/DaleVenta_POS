@@ -8,6 +8,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
@@ -87,6 +88,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
   }
 
   Widget _buildContent(List<SaleModel> rows) {
+    final isAdmin = ref.watch(authStateProvider).user?.appRole.isAdmin ?? false;
     final open = rows.where((sale) => sale.creditBalance > 0.009).toList();
     final totalPending = open.fold<double>(
       0,
@@ -223,6 +225,9 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                               },
                               onPayment: () => _openPaymentDialog(sale),
                               onPdf: () => _openCreditPdfPreview(sale),
+                              onDelete: isAdmin
+                                  ? () => _confirmDeleteCredit(sale)
+                                  : null,
                             );
                           },
                         ),
@@ -241,6 +246,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
               onPrint: () => _printCreditPdf(selected),
               onSharePdf: () => _openCreditPdfPreview(selected),
               onWhatsApp: () => _sendCreditWhatsApp(selected),
+              onDelete: isAdmin ? () => _confirmDeleteCredit(selected) : null,
             ),
         ],
       ),
@@ -248,6 +254,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
   }
 
   Future<void> _openMobileCreditDetail(SaleModel sale) async {
+    final isAdmin = ref.read(authStateProvider).user?.appRole.isAdmin ?? false;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -268,6 +275,12 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                 onPrint: () => _printCreditPdf(sale),
                 onSharePdf: () => _openCreditPdfPreview(sale),
                 onWhatsApp: () => _sendCreditWhatsApp(sale),
+                onDelete: isAdmin
+                    ? () => _confirmDeleteCredit(
+                        sale,
+                        afterDelete: () => Navigator.of(sheetContext).pop(),
+                      )
+                    : null,
               ),
             ),
           ),
@@ -306,6 +319,55 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
       ref.invalidate(salesCreditsProvider);
       if (!mounted) return;
       showCashToast(context, settle ? 'Crédito saldado' : 'Abono registrado');
+    } catch (error) {
+      if (!mounted) return;
+      showCashToast(
+        context,
+        error is ApiException ? error.message : '$error',
+        isError: true,
+      );
+    }
+  }
+
+  Future<void> _confirmDeleteCredit(
+    SaleModel sale, {
+    VoidCallback? afterDelete,
+  }) async {
+    final shortId = _shortId(sale);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar crédito'),
+        content: Text(
+          '¿Seguro que deseas eliminar el crédito/factura $shortId? Esta acción ocultará la venta y el crédito del sistema.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.delete_outline_rounded),
+            label: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(ventasRepositoryProvider).deleteSale(sale.id);
+      ref.invalidate(salesCreditsProvider);
+      if (!mounted) return;
+      setState(() {
+        if (_selectedCreditId == sale.id) _selectedCreditId = null;
+      });
+      afterDelete?.call();
+      showCashToast(context, 'Crédito eliminado');
     } catch (error) {
       if (!mounted) return;
       showCashToast(
@@ -1205,6 +1267,7 @@ class _CreditCard extends StatelessWidget {
     required this.onTap,
     required this.onPayment,
     required this.onPdf,
+    this.onDelete,
   });
 
   final SaleModel sale;
@@ -1212,6 +1275,7 @@ class _CreditCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onPayment;
   final VoidCallback onPdf;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1269,6 +1333,15 @@ class _CreditCard extends StatelessWidget {
                             label: const Text('Abonar'),
                           ),
                         ),
+                        if (onDelete != null) ...[
+                          const SizedBox(width: 8),
+                          IconButton.filledTonal(
+                            tooltip: 'Eliminar',
+                            onPressed: onDelete,
+                            color: Theme.of(context).colorScheme.error,
+                            icon: const Icon(Icons.delete_outline_rounded),
+                          ),
+                        ],
                       ],
                     ),
                   ],
@@ -1295,6 +1368,15 @@ class _CreditCard extends StatelessWidget {
                       icon: const Icon(Icons.payments_outlined, size: 18),
                       label: const Text('Abonar'),
                     ),
+                    if (onDelete != null) ...[
+                      const SizedBox(width: 8),
+                      IconButton.filledTonal(
+                        tooltip: 'Eliminar',
+                        onPressed: onDelete,
+                        color: Theme.of(context).colorScheme.error,
+                        icon: const Icon(Icons.delete_outline_rounded),
+                      ),
+                    ],
                   ],
                 ),
         ),
@@ -1368,6 +1450,7 @@ class _CreditDetailPanel extends StatelessWidget {
     required this.onPrint,
     required this.onSharePdf,
     required this.onWhatsApp,
+    this.onDelete,
   });
 
   final SaleModel sale;
@@ -1377,6 +1460,7 @@ class _CreditDetailPanel extends StatelessWidget {
   final VoidCallback onPrint;
   final VoidCallback onSharePdf;
   final VoidCallback onWhatsApp;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1578,6 +1662,23 @@ class _CreditDetailPanel extends StatelessWidget {
                     label: const Text('Enviar pendiente por WhatsApp'),
                   ),
                 ),
+                if (onDelete != null) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.error,
+                        side: BorderSide(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                      onPressed: onDelete,
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      label: const Text('Eliminar crédito'),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

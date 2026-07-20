@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/errors/api_exception.dart';
@@ -519,6 +520,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   }
 
   Widget _ordersTab() {
+    final canDeleteOrders =
+        ref.watch(authStateProvider).user?.appRole.isAdmin ?? false;
     final visible = _orders
         .where((o) => _statusFilter.isEmpty || o.status == _statusFilter)
         .toList();
@@ -579,6 +582,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                           visible[index],
                           selected: visible[index].id == _selectedOrderDetailId,
                           showInlineDetail: isWide,
+                          canDelete: canDeleteOrders,
                         ),
                       ),
                     ),
@@ -611,6 +615,10 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                                           .duplicate(selectedOrder.id),
                                       'Orden duplicada.',
                                     ),
+                              onDelete:
+                                  selectedOrder == null || !canDeleteOrders
+                                  ? null
+                                  : () => _confirmDeleteOrder(selectedOrder),
                             ),
                           );
                         },
@@ -626,6 +634,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     PurchaseOrderModel order, {
     bool selected = false,
     bool showInlineDetail = false,
+    bool canDelete = false,
   }) {
     return ListTile(
       selected: selected,
@@ -689,6 +698,13 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
               'Orden duplicada.',
             ),
           ),
+          if (canDelete)
+            IconButton(
+              tooltip: 'Eliminar',
+              color: Theme.of(context).colorScheme.error,
+              icon: const Icon(Icons.delete_outline_rounded),
+              onPressed: () => _confirmDeleteOrder(order),
+            ),
         ],
       ),
       onTap: () {
@@ -1100,6 +1116,49 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         ],
       );
       _snack(message);
+    } catch (e) {
+      _snack('$e');
+    }
+  }
+
+  Future<void> _confirmDeleteOrder(PurchaseOrderModel order) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar orden de compra'),
+        content: Text(
+          '¿Seguro que deseas eliminar la orden ${order.orderNumber}? Esta acción la ocultará del módulo de compras.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.delete_outline_rounded),
+            label: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(purchasesRepositoryProvider).deleteOrder(order.id);
+      setState(() {
+        _orders = [
+          for (final item in _orders)
+            if (item.id != order.id) item,
+        ];
+        if (_selectedOrderDetailId == order.id) {
+          _selectedOrderDetailId = null;
+        }
+      });
+      _snack('Orden eliminada.');
     } catch (e) {
       _snack('$e');
     }
@@ -1739,6 +1798,7 @@ class _OrderDetailPanel extends StatelessWidget {
     required this.onSend,
     required this.onReceive,
     required this.onDuplicate,
+    required this.onDelete,
   });
 
   final PurchaseOrderModel? order;
@@ -1748,6 +1808,7 @@ class _OrderDetailPanel extends StatelessWidget {
   final VoidCallback? onSend;
   final VoidCallback? onReceive;
   final VoidCallback? onDuplicate;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1823,6 +1884,12 @@ class _OrderDetailPanel extends StatelessWidget {
                           onPressed: onDuplicate,
                           tooltip: 'Duplicar',
                           icon: const Icon(Icons.copy_outlined),
+                        ),
+                        IconButton.filledTonal(
+                          onPressed: onDelete,
+                          tooltip: 'Eliminar',
+                          icon: const Icon(Icons.delete_outline_rounded),
+                          color: theme.colorScheme.error,
                         ),
                       ],
                     ),
