@@ -1,16 +1,21 @@
-import 'dart:typed_data';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/auth/auth_provider.dart';
 import '../../core/utils/money_formatters.dart';
+import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/product_network_image.dart';
 import 'website_controller.dart';
 import 'website_product_model.dart';
+
+const _publicWebsiteUrl = 'https://fulltechrd.com/';
+const _publicStoreUrl = 'https://fulltechrd.com/tienda.html';
+const _publicShareMessage =
+    'Hola, conoce FULLTECH SRL. Seguridad electronica, camaras, motores de portones, punto de venta y tecnologia en Higuey.\n\nPagina web: $_publicWebsiteUrl\nTienda online: $_publicStoreUrl';
 
 class SitioWebScreen extends ConsumerStatefulWidget {
   const SitioWebScreen({super.key});
@@ -84,6 +89,14 @@ class _SitioWebScreenState extends ConsumerState<SitioWebScreen> {
               featured: state.products.where((p) => p.featured).length,
             ),
             const SizedBox(height: 14),
+            _WebLinksPanel(
+              websiteUrl: _publicWebsiteUrl,
+              storeUrl: _publicStoreUrl,
+              onOpen: _openPublicLink,
+              onCopy: _copyPublicLink,
+              onShare: _sharePublicCatalog,
+            ),
+            const SizedBox(height: 14),
             _Toolbar(
               searchCtrl: _searchCtrl,
               status: _status,
@@ -148,6 +161,31 @@ class _SitioWebScreenState extends ConsumerState<SitioWebScreen> {
       isScrollControlled: true,
       useSafeArea: true,
       builder: (context) => _WebsiteProductEditor(product: product),
+    );
+  }
+
+  Future<void> _openPublicLink(String url) async {
+    await safeOpenUrl(context, Uri.parse(url));
+  }
+
+  Future<void> _copyPublicLink(String label, String url) async {
+    await Clipboard.setData(ClipboardData(text: url));
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('$label copiado')));
+  }
+
+  Future<void> _sharePublicCatalog() async {
+    await Clipboard.setData(const ClipboardData(text: _publicShareMessage));
+    if (!mounted) return;
+    final uri = Uri.https('api.whatsapp.com', '/send', {
+      'text': _publicShareMessage,
+    });
+    await safeOpenUrl(
+      context,
+      uri,
+      copiedMessage: 'Mensaje del catalogo copiado',
     );
   }
 }
@@ -237,6 +275,220 @@ class _StatChip extends StatelessWidget {
   }
 }
 
+class _WebLinksPanel extends StatelessWidget {
+  const _WebLinksPanel({
+    required this.websiteUrl,
+    required this.storeUrl,
+    required this.onOpen,
+    required this.onCopy,
+    required this.onShare,
+  });
+
+  final String websiteUrl;
+  final String storeUrl;
+  final ValueChanged<String> onOpen;
+  final void Function(String label, String url) onCopy;
+  final VoidCallback onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 0,
+      color: theme.colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final compact = constraints.maxWidth < 640;
+                final title = Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF006D75).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.link_rounded,
+                        color: Color(0xFF006D75),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Links publicos y catalogo',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'Usa estos enlaces para abrir la web, copiar la tienda online o compartir el catalogo completo con clientes.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+                final shareButton = FilledButton.icon(
+                  onPressed: onShare,
+                  icon: const Icon(Icons.ios_share_rounded, size: 18),
+                  label: const Text('Compartir catalogo'),
+                );
+                if (compact) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [title, const SizedBox(height: 12), shareButton],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: title),
+                    const SizedBox(width: 12),
+                    shareButton,
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 14),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final compact = constraints.maxWidth < 860;
+                final cards = [
+                  _WebLinkCard(
+                    icon: Icons.public_rounded,
+                    title: 'Pagina web',
+                    description: 'Presentacion oficial de FULLTECH SRL',
+                    url: websiteUrl,
+                    onOpen: () => onOpen(websiteUrl),
+                    onCopy: () => onCopy('Pagina web', websiteUrl),
+                  ),
+                  _WebLinkCard(
+                    icon: Icons.storefront_rounded,
+                    title: 'Tienda online',
+                    description: 'Catalogo con productos reales del POS',
+                    url: storeUrl,
+                    onOpen: () => onOpen(storeUrl),
+                    onCopy: () => onCopy('Tienda online', storeUrl),
+                  ),
+                ];
+                if (compact) {
+                  return Column(
+                    children: [
+                      for (final card in cards) ...[
+                        card,
+                        if (card != cards.last) const SizedBox(height: 10),
+                      ],
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    for (final card in cards) ...[
+                      Expanded(child: card),
+                      if (card != cards.last) const SizedBox(width: 10),
+                    ],
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WebLinkCard extends StatelessWidget {
+  const _WebLinkCard({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.url,
+    required this.onOpen,
+    required this.onCopy,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final String url;
+  final VoidCallback onOpen;
+  final VoidCallback onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: const Color(0xFF006D75)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(description, style: theme.textTheme.bodySmall),
+                const SizedBox(height: 6),
+                SelectableText(
+                  url,
+                  maxLines: 1,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF006D75),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton.filledTonal(
+            tooltip: 'Abrir',
+            onPressed: onOpen,
+            icon: const Icon(Icons.open_in_new_rounded),
+          ),
+          const SizedBox(width: 6),
+          IconButton.filledTonal(
+            tooltip: 'Copiar',
+            onPressed: onCopy,
+            icon: const Icon(Icons.copy_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _Toolbar extends StatelessWidget {
   const _Toolbar({
     required this.searchCtrl,
@@ -252,30 +504,57 @@ class _Toolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: TextField(
-            controller: searchCtrl,
-            onChanged: onSearchChanged,
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.search_rounded),
-              hintText: 'Buscar producto, categoria o titulo web',
-              border: OutlineInputBorder(),
+    final theme = Theme.of(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 720;
+        final search = TextField(
+          controller: searchCtrl,
+          onChanged: onSearchChanged,
+          decoration: const InputDecoration(
+            prefixIcon: Icon(Icons.search_rounded),
+            hintText: 'Buscar producto, categoria o titulo web',
+            border: OutlineInputBorder(),
+          ),
+        );
+        final filter = DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: status,
+                isExpanded: compact,
+                items: const ['Todos', 'Visibles', 'Ocultos', 'Destacados']
+                    .map(
+                      (item) =>
+                          DropdownMenuItem(value: item, child: Text(item)),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) onStatusChanged(value);
+                },
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 10),
-        DropdownButton<String>(
-          value: status,
-          items: const ['Todos', 'Visibles', 'Ocultos', 'Destacados']
-              .map((item) => DropdownMenuItem(value: item, child: Text(item)))
-              .toList(),
-          onChanged: (value) {
-            if (value != null) onStatusChanged(value);
-          },
-        ),
-      ],
+        );
+        if (compact) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [search, const SizedBox(height: 10), filter],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: search),
+            const SizedBox(width: 10),
+            SizedBox(width: 180, child: filter),
+          ],
+        );
+      },
     );
   }
 }
