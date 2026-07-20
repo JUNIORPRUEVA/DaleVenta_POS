@@ -458,16 +458,16 @@ import { FulltechStore as fallbackStore } from "./data.js";
     const toggle = document.querySelector("[data-nav-toggle]");
     header?.classList.remove("is-open");
     document.body.classList.remove("nav-open");
+    document.body.classList.remove("store-drawer-open");
     toggle?.setAttribute("aria-expanded", "false");
   }
 
   function openDrawer() {
     const header = document.querySelector(".site-header");
     const toggle = document.querySelector("[data-nav-toggle]");
-    const drawer = document.querySelector(".nav__links");
+    const drawer = document.querySelector(".store-drawer");
     if (!header || !toggle || !drawer) return;
-    header.classList.add("is-open");
-    document.body.classList.add("nav-open");
+    document.body.classList.add("store-drawer-open");
     toggle.setAttribute("aria-expanded", "true");
     drawer.querySelector("a, button")?.focus?.();
   }
@@ -506,26 +506,12 @@ import { FulltechStore as fallbackStore } from "./data.js";
   }
 
   function prepareDrawer() {
-    const drawer = document.querySelector(".nav__links");
     const toggle = document.querySelector("[data-nav-toggle]");
-    if (!drawer || !toggle || drawer.querySelector(".drawer-head")) return;
-    const drawerId = "fulltech-mobile-nav";
+    const drawer = document.querySelector(".store-drawer");
+    if (!toggle || !drawer) return;
+    const drawerId = "fulltech-shared-drawer";
     drawer.id = drawerId;
     toggle.setAttribute("aria-controls", drawerId);
-    drawer.insertAdjacentHTML("afterbegin", `
-      <div class="drawer-head">
-        <img src="assets/logo.png" alt="Logo FULLTECH">
-        <div><strong>FULLTECH SRL</strong><span>Soluciones tecnologicas y seguridad</span></div>
-        <button class="drawer-close" type="button" data-nav-close aria-label="Cerrar menu">x</button>
-      </div>
-    `);
-    drawer.insertAdjacentHTML("beforeend", `
-      <a class="drawer-cta" data-whatsapp-link>Cotizar por WhatsApp</a>
-      <div class="drawer-meta">829-477-0756<br>Higuey, La Altagracia</div>
-    `);
-    drawer.querySelectorAll("[data-whatsapp-link]").forEach((node) => {
-      node.href = `https://wa.me/${store.company.whatsapp}`;
-    });
   }
 
   function wireEvents() {
@@ -533,7 +519,7 @@ import { FulltechStore as fallbackStore } from "./data.js";
     document.addEventListener("click", (event) => {
       const navToggle = event.target.closest("[data-nav-toggle]");
       if (navToggle) {
-        const isOpen = document.querySelector(".site-header")?.classList.contains("is-open");
+        const isOpen = document.body.classList.contains("store-drawer-open");
         if (isOpen) closeDrawer();
         else openDrawer();
         return;
@@ -558,8 +544,12 @@ import { FulltechStore as fallbackStore } from "./data.js";
       }
 
       if (event.target.closest("[data-store-close]") || event.target.classList.contains("store-drawer-overlay")) {
-        document.body.classList.remove("store-drawer-open");
+        closeDrawer();
         return;
+      }
+
+      if (event.target.closest(".store-drawer a")) {
+        closeDrawer();
       }
 
       const previewButton = event.target.closest("[data-image-preview]");
@@ -629,9 +619,8 @@ import { FulltechStore as fallbackStore } from "./data.js";
 
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
-        const wasOpen = document.querySelector(".site-header")?.classList.contains("is-open");
+        const wasOpen = document.body.classList.contains("store-drawer-open") || document.querySelector(".site-header")?.classList.contains("is-open");
         closeDrawer();
-        document.body.classList.remove("store-drawer-open");
         closeImagePreview();
         if (wasOpen) document.querySelector("[data-nav-toggle]")?.focus?.();
       }
@@ -657,10 +646,10 @@ import { FulltechStore as fallbackStore } from "./data.js";
       link.innerHTML = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16.04 3.2c-7.06 0-12.8 5.72-12.8 12.76 0 2.25.59 4.44 1.72 6.37L3.13 29l6.84-1.79a12.77 12.77 0 0 0 6.07 1.55h.01c7.05 0 12.79-5.72 12.79-12.76S23.1 3.2 16.04 3.2Zm0 23.39h-.01c-1.91 0-3.78-.51-5.42-1.48l-.39-.23-4.06 1.06 1.08-3.95-.26-.41a10.56 10.56 0 0 1-1.62-5.62c0-5.84 4.79-10.59 10.68-10.59 2.85 0 5.53 1.11 7.55 3.11a10.48 10.48 0 0 1 3.13 7.52c0 5.84-4.79 10.59-10.68 10.59Zm5.86-7.93c-.32-.16-1.9-.93-2.19-1.04-.29-.11-.5-.16-.71.16-.21.32-.82 1.04-1.01 1.25-.19.21-.37.24-.69.08-.32-.16-1.35-.5-2.58-1.59-.95-.85-1.6-1.9-1.79-2.22-.19-.32-.02-.49.14-.65.15-.15.32-.37.48-.56.16-.19.21-.32.32-.53.11-.21.05-.4-.03-.56-.08-.16-.71-1.7-.97-2.33-.25-.61-.52-.53-.71-.54l-.61-.01c-.21 0-.56.08-.85.4-.29.32-1.12 1.09-1.12 2.65s1.15 3.08 1.31 3.29c.16.21 2.27 3.45 5.5 4.84.77.33 1.37.53 1.84.68.77.24 1.47.21 2.02.13.62-.09 1.9-.77 2.17-1.52.27-.75.27-1.39.19-1.52-.08-.13-.29-.21-.61-.37Z"/></svg>';
       document.body.appendChild(link);
     }
-    if (document.querySelector(".store-app") && !document.querySelector(".store-drawer")) {
+    if (!document.querySelector(".store-drawer")) {
       document.body.insertAdjacentHTML("beforeend", `
         <div class="store-drawer-overlay" aria-hidden="true"></div>
-        <aside class="store-drawer" aria-label="Menu de tienda">
+        <aside class="store-drawer" aria-label="Menu de FULLTECH">
           <div class="drawer-head">
             <img src="assets/logo.png" alt="Logo FULLTECH">
             <div><strong>FULLTECH</strong><span>Tienda online</span></div>
