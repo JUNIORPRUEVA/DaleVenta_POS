@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -51,17 +52,20 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   List<SupplierModel> _suppliers = const [];
   List<PurchaseOrderModel> _orders = const [];
   List<PurchaseRecommendationModel> _recommendations = const [];
+  List<PurchaseInvoiceModel> _purchaseInvoices = const [];
   List<PurchaseDraftItem> _cart = const [];
   String? _selectedCategory;
   String? _selectedSupplierId;
   String? _selectedOrderDetailId;
   String? _selectedSupplierDetailId;
+  String? _invoiceSupplierFilterId;
+  String? _selectedInvoiceDetailId;
   String _statusFilter = '';
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
+    _tabs = TabController(length: 5, vsync: this);
     for (final ctrl in [
       _notesCtrl,
       _instructionsCtrl,
@@ -124,6 +128,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         repo.listSuppliers(),
         repo.listOrders(),
         repo.recommendations(),
+        repo.listInvoices(),
       ]);
       if (!mounted) return;
       setState(() {
@@ -131,6 +136,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         _suppliers = results[1] as List<SupplierModel>;
         _orders = results[2] as List<PurchaseOrderModel>;
         _recommendations = results[3] as List<PurchaseRecommendationModel>;
+        _purchaseInvoices = results[4] as List<PurchaseInvoiceModel>;
         _loading = false;
       });
       await _restoreDraft();
@@ -163,6 +169,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
               text: 'Lista de compras',
             ),
             Tab(icon: Icon(Icons.storefront_outlined), text: 'Suplidores'),
+            Tab(icon: Icon(Icons.folder_copy_outlined), text: 'Facturas'),
             Tab(
               icon: Icon(Icons.trending_up_rounded),
               text: 'Productos por comprar',
@@ -179,6 +186,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                 _newPurchaseTab(),
                 _ordersTab(),
                 _suppliersTab(),
+                _purchaseInvoicesTab(),
                 _recommendationsTab(),
               ],
             ),
@@ -990,6 +998,210 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     );
   }
 
+  Widget _purchaseInvoicesTab() {
+    final isWide = MediaQuery.sizeOf(context).width >= 980;
+    final isMobile = MediaQuery.sizeOf(context).width < 720;
+    final filtered = _purchaseInvoices.where((invoice) {
+      return _invoiceSupplierFilterId == null ||
+          invoice.supplier.id == _invoiceSupplierFilterId;
+    }).toList();
+    PurchaseInvoiceModel? selected;
+    for (final invoice in filtered) {
+      if (invoice.id == _selectedInvoiceDetailId) {
+        selected = invoice;
+        break;
+      }
+    }
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.all(isMobile ? 10 : 12),
+          child: isMobile
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Facturas de compra',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _invoiceSupplierFilter(),
+                    const SizedBox(height: 8),
+                    FilledButton.icon(
+                      onPressed: _uploadPurchaseInvoiceDialog,
+                      icon: const Icon(Icons.upload_file_outlined),
+                      label: const Text('Subir factura'),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Facturas de compra',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 320, child: _invoiceSupplierFilter()),
+                    const SizedBox(width: 10),
+                    FilledButton.icon(
+                      onPressed: _uploadPurchaseInvoiceDialog,
+                      icon: const Icon(Icons.upload_file_outlined),
+                      label: const Text('Subir factura'),
+                    ),
+                  ],
+                ),
+        ),
+        Expanded(
+          child: filtered.isEmpty
+              ? _EmptyPurchaseInvoices(onUpload: _uploadPurchaseInvoiceDialog)
+              : Row(
+                  children: [
+                    Expanded(
+                      child: ListView.separated(
+                        padding: EdgeInsets.fromLTRB(
+                          isMobile ? 10 : 12,
+                          0,
+                          isMobile ? 10 : 0,
+                          12,
+                        ),
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) =>
+                            SizedBox(height: isMobile ? 8 : 0),
+                        itemBuilder: (context, index) {
+                          final invoice = filtered[index];
+                          return _purchaseInvoiceTile(
+                            invoice,
+                            selected: invoice.id == _selectedInvoiceDetailId,
+                            inline: isWide,
+                          );
+                        },
+                      ),
+                    ),
+                    if (isWide)
+                      SizedBox(
+                        width: (MediaQuery.sizeOf(context).width * .38).clamp(
+                          500.0,
+                          680.0,
+                        ),
+                        child: _PurchaseInvoiceDetailPanel(
+                          invoice: selected,
+                          money: _money,
+                          dateLabel: _dateLabel,
+                          fileSizeLabel: _fileSizeLabel,
+                          onOpen: selected == null
+                              ? null
+                              : () => _openInvoiceFile(selected!),
+                          onDelete: selected == null
+                              ? null
+                              : () => _confirmDeleteInvoice(selected!),
+                        ),
+                      ),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _invoiceSupplierFilter() {
+    return DropdownButtonFormField<String>(
+      initialValue: _invoiceSupplierFilterId,
+      isExpanded: true,
+      decoration: _fieldDecoration(
+        'Filtrar por suplidor',
+        icon: Icons.storefront_outlined,
+      ),
+      items: [
+        const DropdownMenuItem<String>(
+          value: null,
+          child: Text('Todos los suplidores'),
+        ),
+        for (final supplier in _suppliers)
+          DropdownMenuItem(
+            value: supplier.id,
+            child: Text(
+              supplier.commercialName,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+      ],
+      onChanged: (value) => setState(() {
+        _invoiceSupplierFilterId = value;
+        _selectedInvoiceDetailId = null;
+      }),
+    );
+  }
+
+  Widget _purchaseInvoiceTile(
+    PurchaseInvoiceModel invoice, {
+    required bool selected,
+    required bool inline,
+  }) {
+    final theme = Theme.of(context);
+    final title = invoice.invoiceNumber?.isNotEmpty == true
+        ? 'Factura ${invoice.invoiceNumber}'
+        : invoice.fileName;
+    final subtitle = [
+      invoice.supplier.commercialName,
+      invoice.order?.orderNumber,
+      _dateLabel(invoice.invoiceDate),
+    ].where((item) => (item ?? '').isNotEmpty).join(' · ');
+    void open() {
+      if (inline) {
+        setState(() => _selectedInvoiceDetailId = invoice.id);
+      } else {
+        _showPurchaseInvoiceDetail(invoice);
+      }
+    }
+
+    if (MediaQuery.sizeOf(context).width < 720) {
+      return Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: theme.dividerColor.withValues(alpha: .45)),
+        ),
+        child: ListTile(
+          leading: const Icon(Icons.description_outlined),
+          title: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+          subtitle: Text(
+            subtitle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: open,
+        ),
+      );
+    }
+    return ListTile(
+      selected: selected,
+      selectedTileColor: theme.colorScheme.primaryContainer.withValues(
+        alpha: .35,
+      ),
+      leading: const Icon(Icons.description_outlined),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+      subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+      trailing: Text(
+        invoice.amount == null
+            ? _fileSizeLabel(invoice.fileSize)
+            : _money(invoice.amount!),
+        style: const TextStyle(fontWeight: FontWeight.w800),
+      ),
+      onTap: open,
+    );
+  }
+
   Widget _recommendationsTab() {
     final isMobile = MediaQuery.sizeOf(context).width < 720;
     return ListView.separated(
@@ -1732,6 +1944,294 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         'PDF: $pdfUrl';
   }
 
+  Future<void> _uploadPurchaseInvoiceDialog() async {
+    if (_suppliers.isEmpty) {
+      _snack('Primero crea un suplidor para asociar la factura.');
+      return;
+    }
+    String? supplierId = _invoiceSupplierFilterId ?? _selectedSupplierId;
+    if (supplierId == null || !_suppliers.any((s) => s.id == supplierId)) {
+      supplierId = _suppliers.first.id;
+    }
+    String? orderId;
+    PlatformFile? pickedFile;
+    final numberCtrl = TextEditingController();
+    final dateCtrl = TextEditingController(
+      text: DateTime.now().toIso8601String().substring(0, 10),
+    );
+    final amountCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final supplierOrders = _orders
+              .where((order) => order.supplier?.id == supplierId)
+              .toList();
+          return AlertDialog(
+            title: const Text('Subir factura de compra'),
+            content: SizedBox(
+              width: 520,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      initialValue: supplierId,
+                      isExpanded: true,
+                      decoration: _fieldDecoration(
+                        'Suplidor',
+                        icon: Icons.storefront_outlined,
+                      ),
+                      items: [
+                        for (final supplier in _suppliers)
+                          DropdownMenuItem(
+                            value: supplier.id,
+                            child: Text(
+                              supplier.commercialName,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                      onChanged: (value) => setDialogState(() {
+                        supplierId = value;
+                        orderId = null;
+                      }),
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      initialValue: orderId,
+                      isExpanded: true,
+                      decoration: _fieldDecoration(
+                        'Orden relacionada',
+                        icon: Icons.receipt_long_outlined,
+                      ),
+                      items: [
+                        const DropdownMenuItem(
+                          value: null,
+                          child: Text('Sin orden relacionada'),
+                        ),
+                        for (final order in supplierOrders)
+                          DropdownMenuItem(
+                            value: order.id,
+                            child: Text(
+                              '${order.orderNumber} · ${_money(order.total)}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                      onChanged: (value) =>
+                          setDialogState(() => orderId = value),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: numberCtrl,
+                      decoration: _fieldDecoration(
+                        'Número de factura',
+                        icon: Icons.tag_outlined,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: dateCtrl,
+                      keyboardType: TextInputType.datetime,
+                      decoration: _fieldDecoration(
+                        'Fecha de factura (AAAA-MM-DD)',
+                        icon: Icons.event_outlined,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: amountCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: _fieldDecoration(
+                        'Monto',
+                        icon: Icons.payments_outlined,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: notesCtrl,
+                      minLines: 2,
+                      maxLines: 4,
+                      decoration: _fieldDecoration(
+                        'Notas',
+                        icon: Icons.notes_outlined,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final result = await FilePicker.platform.pickFiles(
+                          type: FileType.custom,
+                          allowedExtensions: const [
+                            'pdf',
+                            'png',
+                            'jpg',
+                            'jpeg',
+                            'webp',
+                            'doc',
+                            'docx',
+                            'xls',
+                            'xlsx',
+                          ],
+                          withData: true,
+                        );
+                        final file = result?.files.single;
+                        if (file == null) return;
+                        setDialogState(() => pickedFile = file);
+                      },
+                      icon: const Icon(Icons.attach_file_outlined),
+                      label: Text(
+                        pickedFile == null
+                            ? 'Seleccionar archivo'
+                            : pickedFile!.name,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (pickedFile != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          _fileSizeLabel(pickedFile!.size),
+                          style: const TextStyle(color: Color(0xFF52657A)),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(context, true),
+                icon: const Icon(Icons.cloud_upload_outlined),
+                label: const Text('Guardar factura'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (ok != true) return;
+    final file = pickedFile;
+    final selectedSupplierId = supplierId;
+    if (selectedSupplierId == null) {
+      _snack('Selecciona un suplidor.');
+      return;
+    }
+    if (file == null) {
+      _snack('Selecciona el archivo de la factura.');
+      return;
+    }
+    try {
+      final invoice = await ref
+          .read(purchasesRepositoryProvider)
+          .uploadInvoice(
+            file: file,
+            supplierId: selectedSupplierId,
+            purchaseOrderId: orderId,
+            invoiceNumber: numberCtrl.text,
+            invoiceDate: dateCtrl.text,
+            amount: amountCtrl.text.trim().isEmpty
+                ? null
+                : _parseAmount(amountCtrl.text),
+            notes: notesCtrl.text,
+          );
+      setState(() {
+        _purchaseInvoices = [
+          invoice,
+          ..._purchaseInvoices.where((item) => item.id != invoice.id),
+        ];
+        _invoiceSupplierFilterId ??= invoice.supplier.id;
+        _selectedInvoiceDetailId = invoice.id;
+      });
+      _snack('Factura de compra guardada.');
+    } catch (e) {
+      _snack('$e');
+    }
+  }
+
+  void _showPurchaseInvoiceDetail(PurchaseInvoiceModel invoice) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => FractionallySizedBox(
+        heightFactor: .9,
+        child: _PurchaseInvoiceDetailPanel(
+          invoice: invoice,
+          money: _money,
+          dateLabel: _dateLabel,
+          fileSizeLabel: _fileSizeLabel,
+          onOpen: () => _openInvoiceFile(invoice),
+          onDelete: () => _confirmDeleteInvoice(invoice),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openInvoiceFile(PurchaseInvoiceModel invoice) async {
+    final url = invoice.fileUrl.trim();
+    if (url.isEmpty) {
+      _snack('La factura no tiene enlace de archivo.');
+      return;
+    }
+    await safeOpenUrl(
+      context,
+      Uri.parse(url),
+      copiedMessage: 'No se pudo abrir la factura. Enlace copiado.',
+    );
+  }
+
+  Future<void> _confirmDeleteInvoice(PurchaseInvoiceModel invoice) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar factura'),
+        content: Text(
+          '¿Seguro que deseas eliminar el registro ${invoice.invoiceNumber ?? invoice.fileName}?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.delete_outline_rounded),
+            label: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(purchasesRepositoryProvider).deleteInvoice(invoice.id);
+      setState(() {
+        _purchaseInvoices = [
+          for (final item in _purchaseInvoices)
+            if (item.id != invoice.id) item,
+        ];
+        if (_selectedInvoiceDetailId == invoice.id) {
+          _selectedInvoiceDetailId = null;
+        }
+      });
+      _snack('Factura eliminada.');
+    } catch (e) {
+      _snack('$e');
+    }
+  }
+
   Future<void> _supplierDialog({SupplierModel? supplier}) async {
     final name = TextEditingController(text: supplier?.commercialName ?? '');
     final phone = TextEditingController(text: supplier?.phone ?? '');
@@ -1925,6 +2425,20 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(2);
   double _parseAmount(String value) =>
       double.tryParse(value.trim().replaceAll(',', '.')) ?? 0;
+  String _dateLabel(DateTime? value) {
+    if (value == null) return '';
+    final local = value.toLocal();
+    return '${local.year.toString().padLeft(4, '0')}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
+  }
+
+  String _fileSizeLabel(int bytes) {
+    if (bytes <= 0) return 'Archivo';
+    if (bytes < 1024) return '$bytes B';
+    final kb = bytes / 1024;
+    if (kb < 1024) return '${kb.toStringAsFixed(1)} KB';
+    final mb = kb / 1024;
+    return '${mb.toStringAsFixed(1)} MB';
+  }
 
   void _scheduleDraftSave() {
     if (_restoringDraft) return;
@@ -2003,6 +2517,294 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_draftStorageKey);
     } catch (_) {}
+  }
+}
+
+class _PurchaseInvoiceDetailPanel extends StatelessWidget {
+  const _PurchaseInvoiceDetailPanel({
+    required this.invoice,
+    required this.money,
+    required this.dateLabel,
+    required this.fileSizeLabel,
+    this.onOpen,
+    this.onDelete,
+  });
+
+  final PurchaseInvoiceModel? invoice;
+  final String Function(double value) money;
+  final String Function(DateTime? value) dateLabel;
+  final String Function(int bytes) fileSizeLabel;
+  final VoidCallback? onOpen;
+  final VoidCallback? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = invoice;
+    final theme = Theme.of(context);
+    if (current == null) {
+      return Container(
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(color: theme.dividerColor)),
+          color: theme.colorScheme.surface,
+        ),
+        child: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text('Selecciona una factura para ver el detalle.'),
+          ),
+        ),
+      );
+    }
+    final amount = current.amount == null
+        ? 'Sin monto'
+        : money(current.amount!);
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(color: theme.dividerColor)),
+        color: theme.colorScheme.surface,
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 12, 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.description_outlined,
+                    color: theme.colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        current.invoiceNumber?.isNotEmpty == true
+                            ? 'Factura ${current.invoiceNumber}'
+                            : current.fileName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      Text(
+                        current.supplier.commercialName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Color(0xFF52657A)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(18),
+              children: [
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    _InfoPill(
+                      icon: Icons.event_outlined,
+                      label: 'Fecha',
+                      value: dateLabel(current.invoiceDate),
+                    ),
+                    _InfoPill(
+                      icon: Icons.payments_outlined,
+                      label: 'Monto',
+                      value: amount,
+                    ),
+                    _InfoPill(
+                      icon: Icons.insert_drive_file_outlined,
+                      label: 'Archivo',
+                      value: fileSizeLabel(current.fileSize),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                _DetailRow(
+                  label: 'Orden relacionada',
+                  value: current.order?.orderNumber ?? 'Sin orden relacionada',
+                ),
+                _DetailRow(label: 'Nombre archivo', value: current.fileName),
+                _DetailRow(label: 'Tipo', value: current.mimeType),
+                if ((current.uploadedByName ?? '').isNotEmpty)
+                  _DetailRow(
+                    label: 'Subido por',
+                    value: current.uploadedByName!,
+                  ),
+                if ((current.notes ?? '').isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Notas',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(current.notes!),
+                ],
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: onOpen,
+                    icon: const Icon(Icons.open_in_new_outlined),
+                    label: const Text('Abrir archivo'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                IconButton.filledTonal(
+                  tooltip: 'Eliminar',
+                  color: theme.colorScheme.error,
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline_rounded),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyPurchaseInvoices extends StatelessWidget {
+  const _EmptyPurchaseInvoices({required this.onUpload});
+
+  final VoidCallback onUpload;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.folder_copy_outlined, size: 46),
+            const SizedBox(height: 12),
+            const Text(
+              'No hay facturas de compra guardadas.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: onUpload,
+              icon: const Icon(Icons.upload_file_outlined),
+              label: const Text('Subir primera factura'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoPill extends StatelessWidget {
+  const _InfoPill({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 140),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Theme.of(context).dividerColor),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Color(0xFF52657A),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  value.isEmpty ? 'Sin fecha' : value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFF52657A),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

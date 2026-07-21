@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -8,14 +9,19 @@ import {
   Post,
   Query,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { AuthGuard } from "@nestjs/passport";
 import { Role } from "@prisma/client";
-import { Request } from "express";
+import type { Express, Request } from "express";
+import { memoryStorage } from "multer";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import {
+  CreatePurchaseInvoiceDto,
   CreatePurchaseOrderPdfShareLinkDto,
   CreatePurchaseOrderDto,
   ReceivePurchaseOrderDto,
@@ -70,6 +76,74 @@ export class PurchasesController {
       status,
       supplierId,
     });
+  }
+
+  @Get("invoices")
+  listInvoices(
+    @Query("q") q?: string,
+    @Query("supplierId") supplierId?: string,
+    @Query("purchaseOrderId") purchaseOrderId?: string,
+  ) {
+    return this.purchases.listInvoices({ q, supplierId, purchaseOrderId });
+  }
+
+  @Post("invoices")
+  @Roles(Role.ADMIN)
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      fileFilter: (_req, file, cb) => {
+        const allowed =
+          /^image\/(png|jpe?g|webp)$/.test(file.mimetype) ||
+          file.mimetype === "application/pdf" ||
+          file.mimetype === "application/msword" ||
+          file.mimetype ===
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+          file.mimetype === "application/vnd.ms-excel" ||
+          file.mimetype ===
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        if (!allowed) {
+          return cb(
+            new BadRequestException(
+              "Solo se permiten facturas en PDF, imagen, Word o Excel.",
+            ),
+            false,
+          );
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 20 * 1024 * 1024 },
+    }),
+  )
+  createInvoice(
+    @Req() req: Request,
+    @Body() dto: CreatePurchaseInvoiceDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException("Selecciona el archivo de la factura.");
+    }
+    const forwardedProto = `${req.headers["x-forwarded-proto"] ?? ""}`
+      .split(",")[0]
+      .trim();
+    const proto = forwardedProto || req.protocol || "http";
+    const forwardedHost = `${req.headers["x-forwarded-host"] ?? ""}`
+      .split(",")[0]
+      .trim();
+    const host = forwardedHost || req.get("host") || "";
+    const requestBaseUrl = host ? `${proto}://${host}` : undefined;
+    return this.purchases.createInvoice(
+      req.user as RequestUser,
+      dto,
+      file,
+      requestBaseUrl,
+    );
+  }
+
+  @Delete("invoices/:id")
+  @Roles(Role.ADMIN)
+  deleteInvoice(@Param("id") id: string) {
+    return this.purchases.deleteInvoice(id);
   }
 
   @Get("orders/:id")

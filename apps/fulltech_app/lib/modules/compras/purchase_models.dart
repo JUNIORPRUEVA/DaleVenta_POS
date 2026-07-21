@@ -353,3 +353,91 @@ class PurchaseRecommendationModel {
         reason: _str(json['reason']) ?? 'Compra recomendada',
       );
 }
+
+class PurchaseInvoiceOrderSummary {
+  const PurchaseInvoiceOrderSummary({
+    required this.id,
+    required this.orderNumber,
+    this.total = 0,
+    this.orderDate,
+  });
+
+  final String id;
+  final String orderNumber;
+  final double total;
+  final DateTime? orderDate;
+
+  factory PurchaseInvoiceOrderSummary.fromJson(Map<String, dynamic> json) =>
+      PurchaseInvoiceOrderSummary(
+        id: _str(json['id']) ?? '',
+        orderNumber: _str(json['orderNumber'] ?? json['order_number']) ?? '',
+        total: _num(json['total']),
+        orderDate: _date(json['orderDate'] ?? json['order_date']),
+      );
+}
+
+class PurchaseInvoiceModel {
+  const PurchaseInvoiceModel({
+    required this.id,
+    required this.supplier,
+    this.order,
+    this.invoiceNumber,
+    this.invoiceDate,
+    this.amount,
+    this.currency = 'DOP',
+    required this.fileName,
+    required this.fileUrl,
+    required this.mimeType,
+    required this.fileSize,
+    this.notes,
+    this.uploadedByName,
+    this.createdAt,
+  });
+
+  final String id;
+  final SupplierModel supplier;
+  final PurchaseInvoiceOrderSummary? order;
+  final String? invoiceNumber;
+  final DateTime? invoiceDate;
+  final double? amount;
+  final String currency;
+  final String fileName;
+  final String fileUrl;
+  final String mimeType;
+  final int fileSize;
+  final String? notes;
+  final String? uploadedByName;
+  final DateTime? createdAt;
+
+  factory PurchaseInvoiceModel.fromJson(Map<String, dynamic> json) =>
+      PurchaseInvoiceModel(
+        id: _str(json['id']) ?? '',
+        supplier: json['supplier'] is Map
+            ? SupplierModel.fromJson(
+                Map<String, dynamic>.from(json['supplier'] as Map),
+              )
+            : SupplierModel(
+                id: _str(json['supplierId'] ?? json['supplier_id']) ?? '',
+                commercialName: 'Sin suplidor',
+              ),
+        order: json['purchaseOrder'] is Map
+            ? PurchaseInvoiceOrderSummary.fromJson(
+                Map<String, dynamic>.from(json['purchaseOrder'] as Map),
+              )
+            : null,
+        invoiceNumber: _str(json['invoiceNumber'] ?? json['invoice_number']),
+        invoiceDate: _date(json['invoiceDate'] ?? json['invoice_date']),
+        amount: json['amount'] == null ? null : _num(json['amount']),
+        currency: _str(json['currency']) ?? 'DOP',
+        fileName: _str(json['fileName'] ?? json['file_name']) ?? '',
+        fileUrl: _str(json['fileUrl'] ?? json['file_url']) ?? '',
+        mimeType: _str(json['mimeType'] ?? json['mime_type']) ?? '',
+        fileSize:
+            ((json['fileSize'] ?? json['file_size']) as num?)?.toInt() ?? 0,
+        notes: _str(json['notes']),
+        uploadedByName: json['uploadedBy'] is Map
+            ? _str((json['uploadedBy'] as Map)['nombreCompleto'])
+            : null,
+        createdAt: _date(json['createdAt'] ?? json['created_at']),
+      );
+}

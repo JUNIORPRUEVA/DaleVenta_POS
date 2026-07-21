@@ -6,11 +6,14 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Prisma, PurchaseOrderStatus, Role } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import * as path from "node:path";
+import type { Express } from "express";
 import { PrismaService } from "../prisma/prisma.service";
 import {
+  CreatePurchaseInvoiceDto,
   CreatePurchaseOrderPdfShareLinkDto,
   CreatePurchaseOrderDto,
   PurchaseOrderItemDto,
@@ -89,6 +92,117 @@ export class PurchasesService {
       where: { id },
       data: { isActive: false, deletedAt: new Date() },
     });
+  }
+
+  async listInvoices(filters: {
+    q?: string;
+    supplierId?: string;
+    purchaseOrderId?: string;
+  }) {
+    const q = (filters.q ?? "").trim();
+    return this.prisma.purchaseInvoice.findMany({
+      where: {
+        deletedAt: null,
+        ...(this.cleanId(filters.supplierId)
+          ? { supplierId: this.cleanId(filters.supplierId)! }
+          : {}),
+        ...(this.cleanId(filters.purchaseOrderId)
+          ? { purchaseOrderId: this.cleanId(filters.purchaseOrderId)! }
+          : {}),
+        ...(q
+          ? {
+              OR: [
+                { invoiceNumber: { contains: q, mode: "insensitive" } },
+                { fileName: { contains: q, mode: "insensitive" } },
+                { notes: { contains: q, mode: "insensitive" } },
+                {
+                  supplier: {
+                    commercialName: { contains: q, mode: "insensitive" },
+                  },
+                },
+                {
+                  purchaseOrder: {
+                    orderNumber: { contains: q, mode: "insensitive" },
+                  },
+                },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
+      include: {
+        supplier: true,
+        purchaseOrder: {
+          select: { id: true, orderNumber: true, total: true, orderDate: true },
+        },
+        uploadedBy: { select: { id: true, nombreCompleto: true } },
+      },
+    });
+  }
+
+  async createInvoice(
+    user: RequestUser,
+    dto: CreatePurchaseInvoiceDto,
+    file: Express.Multer.File,
+    requestBaseUrl?: string,
+  ) {
+    const supplierId = this.cleanId(dto.supplierId);
+    if (!supplierId) throw new BadRequestException("Selecciona un suplidor.");
+    await this.assertSupplier(supplierId);
+
+    const purchaseOrderId = this.cleanId(dto.purchaseOrderId);
+    if (purchaseOrderId) {
+      const order = await this.prisma.purchaseOrder.findFirst({
+        where: { id: purchaseOrderId, deletedAt: null },
+        select: { id: true, supplierId: true },
+      });
+      if (!order) throw new NotFoundException("Orden de compra no encontrada.");
+      if (order.supplierId && order.supplierId !== supplierId) {
+        throw new BadRequestException(
+          "La orden seleccionada pertenece a otro suplidor.",
+        );
+      }
+    }
+
+    const uploaded = await this.persistInvoiceFile(file, requestBaseUrl);
+    const amount =
+      dto.amount == null ? null : new Prisma.Decimal(dto.amount).toDecimalPlaces(2);
+    if (amount?.lt(0)) {
+      throw new BadRequestException("El monto no puede ser negativo.");
+    }
+
+    return this.prisma.purchaseInvoice.create({
+      data: {
+        supplierId,
+        purchaseOrderId,
+        invoiceNumber: this.clean(dto.invoiceNumber),
+        invoiceDate: this.parseDate(dto.invoiceDate) ?? new Date(),
+        amount,
+        currency: (this.clean(dto.currency) ?? "DOP").slice(0, 8).toUpperCase(),
+        fileName: uploaded.fileName,
+        fileUrl: uploaded.fileUrl,
+        storageKey: uploaded.storageKey,
+        mimeType: uploaded.mimeType,
+        fileSize: uploaded.fileSize,
+        notes: this.clean(dto.notes),
+        uploadedById: user.id,
+      },
+      include: {
+        supplier: true,
+        purchaseOrder: {
+          select: { id: true, orderNumber: true, total: true, orderDate: true },
+        },
+        uploadedBy: { select: { id: true, nombreCompleto: true } },
+      },
+    });
+  }
+
+  async deleteInvoice(id: string) {
+    await this.prisma.purchaseInvoice.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+    return { ok: true };
   }
 
   async listOrders(
@@ -537,6 +651,45 @@ export class PurchasesService {
     return { absolutePath, fileName: safeFileName };
   }
 
+  private async persistInvoiceFile(
+    file: Express.Multer.File,
+    requestBaseUrl?: string,
+  ) {
+    if (!file.buffer?.length) {
+      throw new BadRequestException("No se pudo leer el archivo de la factura.");
+    }
+    const original = this.sanitizeUploadFileName(
+      file.originalname || "factura-compra",
+    );
+    const ext = this.safeInvoiceExtension(original, file.mimetype);
+    const baseName = path
+      .basename(original, path.extname(original))
+      .replace(/[^a-zA-Z0-9_-]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 80);
+    const now = new Date();
+    const yyyy = now.getUTCFullYear().toString();
+    const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
+    const storedName = `${Date.now()}-${randomUUID()}-${baseName || "factura"}${ext}`;
+    const storageKey = `compras/facturas/${yyyy}/${mm}/${storedName}`;
+    const absolutePath = path.join(this.resolveUploadDir(), ...storageKey.split("/"));
+    await mkdir(path.dirname(absolutePath), { recursive: true });
+    await writeFile(absolutePath, file.buffer);
+    const baseUrl = this.publicBaseUrl(requestBaseUrl);
+    return {
+      fileName: original.endsWith(ext) ? original : `${original}${ext}`,
+      storageKey,
+      fileUrl: baseUrl
+        ? `${baseUrl}/uploads/${storageKey
+            .split("/")
+            .map((part) => encodeURIComponent(part))
+            .join("/")}`
+        : `/uploads/${storageKey}`,
+      mimeType: this.safeInvoiceMimeType(file.mimetype, ext),
+      fileSize: file.size ?? file.buffer.length,
+    };
+  }
+
   private async normalizeItems(items: PurchaseOrderItemDto[]) {
     const productIds = [
       ...new Set(
@@ -778,6 +931,60 @@ export class PurchasesService {
   private clean(value?: string | null) {
     const text = (value ?? "").trim();
     return text ? text : null;
+  }
+
+  private sanitizeUploadFileName(value: string) {
+    const base = path.basename(value || "factura-compra");
+    return (
+      base
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9._ -]+/g, "_")
+        .replace(/\s+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 160) || "factura-compra"
+    );
+  }
+
+  private safeInvoiceExtension(fileName: string, mimeType: string) {
+    const ext = path.extname(fileName).toLowerCase();
+    if (/^\.(png|jpe?g|webp|pdf|doc|docx|xls|xlsx)$/.test(ext)) return ext;
+    if (mimeType === "application/pdf") return ".pdf";
+    if (mimeType === "image/png") return ".png";
+    if (mimeType === "image/webp") return ".webp";
+    if (mimeType === "image/jpeg" || mimeType === "image/jpg") return ".jpg";
+    if (mimeType === "application/msword") return ".doc";
+    if (
+      mimeType ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ) {
+      return ".docx";
+    }
+    if (mimeType === "application/vnd.ms-excel") return ".xls";
+    if (
+      mimeType ===
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    ) {
+      return ".xlsx";
+    }
+    return ".pdf";
+  }
+
+  private safeInvoiceMimeType(mimeType: string, ext: string) {
+    if (mimeType) return mimeType;
+    if (ext === ".pdf") return "application/pdf";
+    if (ext === ".png") return "image/png";
+    if (ext === ".webp") return "image/webp";
+    if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+    if (ext === ".doc") return "application/msword";
+    if (ext === ".docx") {
+      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    }
+    if (ext === ".xls") return "application/vnd.ms-excel";
+    if (ext === ".xlsx") {
+      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    }
+    return "application/octet-stream";
   }
 
   private cleanId(value?: string | null) {

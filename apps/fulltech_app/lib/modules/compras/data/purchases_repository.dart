@@ -1,7 +1,9 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http_parser/http_parser.dart';
 
 import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
@@ -261,6 +263,113 @@ class PurchasesRepository {
         _message(e.response?.data, 'No se pudo generar el enlace del PDF'),
         e.response?.statusCode,
       );
+    }
+  }
+
+  Future<List<PurchaseInvoiceModel>> listInvoices({
+    String? query,
+    String? supplierId,
+    String? purchaseOrderId,
+  }) async {
+    try {
+      final res = await _dio.get(
+        ApiRoutes.purchaseInvoices,
+        queryParameters: {
+          'q': query,
+          'supplierId': supplierId,
+          'purchaseOrderId': purchaseOrderId,
+        }..removeWhere((_, value) => value == null || '$value'.trim().isEmpty),
+      );
+      return _rows(res.data)
+          .whereType<Map>()
+          .map(
+            (row) =>
+                PurchaseInvoiceModel.fromJson(Map<String, dynamic>.from(row)),
+          )
+          .toList();
+    } on DioException catch (e) {
+      throw ApiException(
+        _message(e.response?.data, 'No se pudieron cargar facturas de compra'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<PurchaseInvoiceModel> uploadInvoice({
+    required PlatformFile file,
+    required String supplierId,
+    String? purchaseOrderId,
+    String? invoiceNumber,
+    String? invoiceDate,
+    double? amount,
+    String? notes,
+  }) async {
+    try {
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        throw ApiException('No se pudo leer el archivo seleccionado');
+      }
+      final form = FormData.fromMap({
+        'supplierId': supplierId,
+        if ((purchaseOrderId ?? '').trim().isNotEmpty)
+          'purchaseOrderId': purchaseOrderId!.trim(),
+        if ((invoiceNumber ?? '').trim().isNotEmpty)
+          'invoiceNumber': invoiceNumber!.trim(),
+        if ((invoiceDate ?? '').trim().isNotEmpty)
+          'invoiceDate': invoiceDate!.trim(),
+        if (amount != null) 'amount': amount,
+        if ((notes ?? '').trim().isNotEmpty) 'notes': notes!.trim(),
+        'file': MultipartFile.fromBytes(
+          bytes,
+          filename: file.name,
+          contentType: MediaType.parse(
+            _contentTypeForExtension(file.extension),
+          ),
+        ),
+      });
+      final res = await _dio.post(ApiRoutes.purchaseInvoices, data: form);
+      return PurchaseInvoiceModel.fromJson(
+        Map<String, dynamic>.from(res.data as Map),
+      );
+    } on DioException catch (e) {
+      throw ApiException(
+        _message(e.response?.data, 'No se pudo subir la factura de compra'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<void> deleteInvoice(String id) async {
+    try {
+      await _dio.delete(ApiRoutes.purchaseInvoice(id));
+    } on DioException catch (e) {
+      throw ApiException(
+        _message(e.response?.data, 'No se pudo eliminar la factura'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  String _contentTypeForExtension(String? extension) {
+    switch ((extension ?? '').toLowerCase()) {
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'xls':
+        return 'application/vnd.ms-excel';
+      case 'xlsx':
+        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      case 'pdf':
+      default:
+        return 'application/pdf';
     }
   }
 }

@@ -107,3 +107,36 @@ export class CreatePurchaseOrderPdfShareLinkDto {
   @MaxLength(180)
   fileName?: string;
 }
+
+export class CreatePurchaseInvoiceDto {
+  @IsUUID()
+  supplierId!: string;
+
+  @IsOptional()
+  @IsUUID()
+  purchaseOrderId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  invoiceNumber?: string;
+
+  @IsOptional()
+  @IsDateString()
+  invoiceDate?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  amount?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(8)
+  currency?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}

@@ -623,6 +623,7 @@ model User {
   purchaseOrdersCreated                    PurchaseOrder[]                   @relation("PurchaseOrderCreatedBy")
   purchaseOrdersApproved                   PurchaseOrder[]                   @relation("PurchaseOrderApprovedBy")
   purchaseReceiptsReceived                 PurchaseReceipt[]                 @relation("PurchaseReceiptReceivedBy")
+  purchaseInvoicesUploaded                 PurchaseInvoice[]                 @relation("PurchaseInvoiceUploadedBy")
   createdServices                          Service[]                         @relation("ServiceCreatedBy")
   assignedServices                         ServiceAssignment[]
   technicianServices                       Service[]                         @relation("ServiceTechnician")
@@ -1562,11 +1563,42 @@ model Supplier {
 
   purchaseOrders PurchaseOrder[]
   purchaseItems  PurchaseOrderItem[]
+  purchaseInvoices PurchaseInvoice[]
 
   @@index([businessId])
   @@index([commercialName])
   @@index([isActive])
   @@map("suppliers")
+}
+
+model PurchaseInvoice {
+  id             String   @id @default(uuid()) @db.Uuid
+  supplierId     String   @map("supplier_id") @db.Uuid
+  purchaseOrderId String? @map("purchase_order_id") @db.Uuid
+  invoiceNumber  String?  @map("invoice_number")
+  invoiceDate    DateTime @default(now()) @map("invoice_date")
+  amount         Decimal? @db.Decimal(12, 2)
+  currency       String   @default("DOP")
+  fileName       String   @map("file_name")
+  fileUrl        String   @map("file_url") @db.Text
+  storageKey     String   @map("storage_key") @db.Text
+  mimeType       String   @map("mime_type")
+  fileSize       Int      @map("file_size")
+  notes          String?  @db.Text
+  uploadedById   String   @map("uploaded_by") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  supplier      Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  uploadedBy    User           @relation("PurchaseInvoiceUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([supplierId])
+  @@index([purchaseOrderId])
+  @@index([invoiceDate])
+  @@index([deletedAt])
+  @@map("purchase_invoices")
 }
 
 model PurchaseOrderSequence {
@@ -1612,6 +1644,7 @@ model PurchaseOrder {
   approvedBy User?               @relation("PurchaseOrderApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
   items      PurchaseOrderItem[]
   receipts   PurchaseReceipt[]
+  invoices   PurchaseInvoice[]
 
   @@index([supplierId])
   @@index([status])
