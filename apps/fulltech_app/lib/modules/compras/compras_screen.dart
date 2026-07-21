@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
@@ -43,6 +44,9 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   final _shippingCtrl = TextEditingController(text: '0');
   final _additionalCtrl = TextEditingController(text: '0');
   final _taxCtrl = TextEditingController(text: '0');
+  final _invoiceSearchCtrl = TextEditingController();
+  final _invoiceFromCtrl = TextEditingController();
+  final _invoiceToCtrl = TextEditingController();
 
   bool _loading = true;
   bool _saving = false;
@@ -76,6 +80,11 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     ]) {
       ctrl.addListener(_scheduleDraftSave);
     }
+    for (final ctrl in [_invoiceSearchCtrl, _invoiceFromCtrl, _invoiceToCtrl]) {
+      ctrl.addListener(() {
+        if (mounted) setState(() {});
+      });
+    }
     unawaited(_load());
   }
 
@@ -90,6 +99,9 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     _shippingCtrl.dispose();
     _additionalCtrl.dispose();
     _taxCtrl.dispose();
+    _invoiceSearchCtrl.dispose();
+    _invoiceFromCtrl.dispose();
+    _invoiceToCtrl.dispose();
     super.dispose();
   }
 
@@ -1002,8 +1014,25 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     final isWide = MediaQuery.sizeOf(context).width >= 980;
     final isMobile = MediaQuery.sizeOf(context).width < 720;
     final filtered = _purchaseInvoices.where((invoice) {
-      return _invoiceSupplierFilterId == null ||
+      final supplierMatch =
+          _invoiceSupplierFilterId == null ||
           invoice.supplier.id == _invoiceSupplierFilterId;
+      final query = _invoiceSearchCtrl.text.trim().toLowerCase();
+      final queryMatch =
+          query.isEmpty ||
+          invoice.supplier.commercialName.toLowerCase().contains(query) ||
+          (invoice.invoiceNumber ?? '').toLowerCase().contains(query) ||
+          invoice.fileName.toLowerCase().contains(query) ||
+          (invoice.notes ?? '').toLowerCase().contains(query) ||
+          (invoice.uploadedByName ?? '').toLowerCase().contains(query);
+      final date = invoice.invoiceDate;
+      final from = _parseDateOnly(_invoiceFromCtrl.text);
+      final to = _parseDateOnly(_invoiceToCtrl.text);
+      final dateMatch =
+          date == null ||
+          ((from == null || !date.isBefore(from)) &&
+              (to == null || date.isBefore(to.add(const Duration(days: 1)))));
+      return supplierMatch && queryMatch && dateMatch;
     }).toList();
     PurchaseInvoiceModel? selected;
     for (final invoice in filtered) {
@@ -1012,50 +1041,12 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         break;
       }
     }
+    if (isWide && selected == null && filtered.isNotEmpty) {
+      selected = filtered.first;
+    }
     return Column(
       children: [
-        Padding(
-          padding: EdgeInsets.all(isMobile ? 10 : 12),
-          child: isMobile
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Facturas de compra',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    _invoiceSupplierFilter(),
-                    const SizedBox(height: 8),
-                    FilledButton.icon(
-                      onPressed: _uploadPurchaseInvoiceDialog,
-                      icon: const Icon(Icons.upload_file_outlined),
-                      label: const Text('Subir factura'),
-                    ),
-                  ],
-                )
-              : Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Facturas de compra',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 320, child: _invoiceSupplierFilter()),
-                    const SizedBox(width: 10),
-                    FilledButton.icon(
-                      onPressed: _uploadPurchaseInvoiceDialog,
-                      icon: const Icon(Icons.upload_file_outlined),
-                      label: const Text('Subir factura'),
-                    ),
-                  ],
-                ),
-        ),
+        _invoiceFiltersHeader(isMobile: isMobile, resultCount: filtered.length),
         Expanded(
           child: filtered.isEmpty
               ? _EmptyPurchaseInvoices(onUpload: _uploadPurchaseInvoiceDialog)
@@ -1076,7 +1067,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                           final invoice = filtered[index];
                           return _purchaseInvoiceTile(
                             invoice,
-                            selected: invoice.id == _selectedInvoiceDetailId,
+                            selected: invoice.id == selected?.id,
                             inline: isWide,
                           );
                         },
@@ -1084,15 +1075,17 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                     ),
                     if (isWide)
                       SizedBox(
-                        width: (MediaQuery.sizeOf(context).width * .38).clamp(
-                          500.0,
-                          680.0,
+                        width: (MediaQuery.sizeOf(context).width * .44).clamp(
+                          620.0,
+                          840.0,
                         ),
                         child: _PurchaseInvoiceDetailPanel(
                           invoice: selected,
                           money: _money,
                           dateLabel: _dateLabel,
                           fileSizeLabel: _fileSizeLabel,
+                          isImage: _invoiceIsImage,
+                          isPdf: _invoiceIsPdf,
                           onOpen: selected == null
                               ? null
                               : () => _openInvoiceFile(selected!),
@@ -1105,6 +1098,99 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _invoiceFiltersHeader({
+    required bool isMobile,
+    required int resultCount,
+  }) {
+    final title = Text(
+      'Facturas de compra',
+      style: Theme.of(
+        context,
+      ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+    );
+    final search = TextField(
+      controller: _invoiceSearchCtrl,
+      decoration: _fieldDecoration('Buscar factura', icon: Icons.search),
+    );
+    final from = TextField(
+      controller: _invoiceFromCtrl,
+      keyboardType: TextInputType.datetime,
+      decoration: _fieldDecoration('Desde', icon: Icons.event_outlined),
+    );
+    final to = TextField(
+      controller: _invoiceToCtrl,
+      keyboardType: TextInputType.datetime,
+      decoration: _fieldDecoration('Hasta', icon: Icons.event_outlined),
+    );
+    final upload = FilledButton.icon(
+      onPressed: _uploadPurchaseInvoiceDialog,
+      icon: const Icon(Icons.upload_file_outlined),
+      label: const Text('Subir factura'),
+    );
+    final clear = IconButton.filledTonal(
+      tooltip: 'Limpiar filtros',
+      onPressed: () {
+        setState(() {
+          _invoiceSupplierFilterId = null;
+          _invoiceSearchCtrl.clear();
+          _invoiceFromCtrl.clear();
+          _invoiceToCtrl.clear();
+          _selectedInvoiceDetailId = null;
+        });
+      },
+      icon: const Icon(Icons.filter_alt_off_outlined),
+    );
+
+    return Padding(
+      padding: EdgeInsets.all(isMobile ? 10 : 12),
+      child: isMobile
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                title,
+                const SizedBox(height: 8),
+                _invoiceSupplierFilter(),
+                const SizedBox(height: 8),
+                search,
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(child: from),
+                    const SizedBox(width: 8),
+                    Expanded(child: to),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(child: upload),
+                    const SizedBox(width: 8),
+                    clear,
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text('$resultCount registros'),
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(child: title),
+                SizedBox(width: 260, child: _invoiceSupplierFilter()),
+                const SizedBox(width: 10),
+                SizedBox(width: 260, child: search),
+                const SizedBox(width: 10),
+                SizedBox(width: 130, child: from),
+                const SizedBox(width: 8),
+                SizedBox(width: 130, child: to),
+                const SizedBox(width: 8),
+                clear,
+                const SizedBox(width: 8),
+                upload,
+              ],
+            ),
     );
   }
 
@@ -1148,9 +1234,9 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         : invoice.fileName;
     final subtitle = [
       invoice.supplier.commercialName,
-      invoice.order?.orderNumber,
       _dateLabel(invoice.invoiceDate),
-    ].where((item) => (item ?? '').isNotEmpty).join(' · ');
+      _fileSizeLabel(invoice.fileSize),
+    ].where((item) => item.isNotEmpty).join(' · ');
     void open() {
       if (inline) {
         setState(() => _selectedInvoiceDetailId = invoice.id);
@@ -1193,9 +1279,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
       subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
       trailing: Text(
-        invoice.amount == null
-            ? _fileSizeLabel(invoice.fileSize)
-            : _money(invoice.amount!),
+        _dateLabel(invoice.invoiceDate),
         style: const TextStyle(fontWeight: FontWeight.w800),
       ),
       onTap: open,
@@ -2121,6 +2205,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
           money: _money,
           dateLabel: _dateLabel,
           fileSizeLabel: _fileSizeLabel,
+          isImage: _invoiceIsImage,
+          isPdf: _invoiceIsPdf,
           onOpen: () => _openInvoiceFile(invoice),
           onDelete: () => _confirmDeleteInvoice(invoice),
         ),
@@ -2392,6 +2478,28 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     return '${mb.toStringAsFixed(1)} MB';
   }
 
+  DateTime? _parseDateOnly(String value) {
+    final text = value.trim();
+    if (text.isEmpty) return null;
+    final parsed = DateTime.tryParse(text);
+    if (parsed == null) return null;
+    return DateTime(parsed.year, parsed.month, parsed.day);
+  }
+
+  bool _invoiceIsImage(PurchaseInvoiceModel invoice) {
+    final value = '${invoice.mimeType} ${invoice.fileName}'.toLowerCase();
+    return value.contains('image/') ||
+        value.endsWith('.png') ||
+        value.endsWith('.jpg') ||
+        value.endsWith('.jpeg') ||
+        value.endsWith('.webp');
+  }
+
+  bool _invoiceIsPdf(PurchaseInvoiceModel invoice) {
+    final value = '${invoice.mimeType} ${invoice.fileName}'.toLowerCase();
+    return value.contains('application/pdf') || value.endsWith('.pdf');
+  }
+
   void _scheduleDraftSave() {
     if (_restoringDraft) return;
     _draftSaveTimer?.cancel();
@@ -2478,6 +2586,8 @@ class _PurchaseInvoiceDetailPanel extends StatelessWidget {
     required this.money,
     required this.dateLabel,
     required this.fileSizeLabel,
+    required this.isImage,
+    required this.isPdf,
     this.onOpen,
     this.onDelete,
   });
@@ -2486,6 +2596,8 @@ class _PurchaseInvoiceDetailPanel extends StatelessWidget {
   final String Function(double value) money;
   final String Function(DateTime? value) dateLabel;
   final String Function(int bytes) fileSizeLabel;
+  final bool Function(PurchaseInvoiceModel invoice) isImage;
+  final bool Function(PurchaseInvoiceModel invoice) isPdf;
   final VoidCallback? onOpen;
   final VoidCallback? onDelete;
 
@@ -2560,44 +2672,51 @@ class _PurchaseInvoiceDetailPanel extends StatelessWidget {
           ),
           const Divider(height: 1),
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(18),
+            child: Column(
               children: [
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    _InfoPill(
-                      icon: Icons.event_outlined,
-                      label: 'Fecha',
-                      value: dateLabel(current.invoiceDate),
-                    ),
-                    _InfoPill(
-                      icon: Icons.insert_drive_file_outlined,
-                      label: 'Archivo',
-                      value: fileSizeLabel(current.fileSize),
-                    ),
-                  ],
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _InfoPill(
+                          icon: Icons.event_outlined,
+                          label: 'Fecha',
+                          value: dateLabel(current.invoiceDate),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _InfoPill(
+                          icon: Icons.insert_drive_file_outlined,
+                          label: 'Archivo',
+                          value: fileSizeLabel(current.fileSize),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 18),
-                _DetailRow(label: 'Nombre archivo', value: current.fileName),
-                _DetailRow(label: 'Tipo', value: current.mimeType),
-                if ((current.uploadedByName ?? '').isNotEmpty)
-                  _DetailRow(
-                    label: 'Subido por',
-                    value: current.uploadedByName!,
-                  ),
-                if ((current.notes ?? '').isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    'Notas',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: _InvoicePreview(
+                      invoice: current,
+                      isImage: isImage(current),
+                      isPdf: isPdf(current),
+                      onOpen: onOpen,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(current.notes!),
-                ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+                  child: Column(
+                    children: [
+                      _DetailRow(label: 'Archivo', value: current.fileName),
+                      if ((current.notes ?? '').isNotEmpty)
+                        _DetailRow(label: 'Notas', value: current.notes!),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -2653,6 +2772,106 @@ class _EmptyPurchaseInvoices extends StatelessWidget {
               onPressed: onUpload,
               icon: const Icon(Icons.upload_file_outlined),
               label: const Text('Subir primera factura'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InvoicePreview extends StatelessWidget {
+  const _InvoicePreview({
+    required this.invoice,
+    required this.isImage,
+    required this.isPdf,
+    this.onOpen,
+  });
+
+  final PurchaseInvoiceModel invoice;
+  final bool isImage;
+  final bool isPdf;
+  final VoidCallback? onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final url = invoice.fileUrl.trim();
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest.withValues(
+            alpha: .35,
+          ),
+          border: Border.all(color: theme.dividerColor.withValues(alpha: .7)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: url.isEmpty
+            ? const Center(child: Text('Archivo no disponible'))
+            : isImage
+            ? InteractiveViewer(
+                minScale: .8,
+                maxScale: 4,
+                child: Center(
+                  child: Image.network(
+                    url,
+                    fit: BoxFit.contain,
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return const Center(child: CircularProgressIndicator());
+                    },
+                    errorBuilder: (context, error, stack) => _PreviewFallback(
+                      icon: Icons.broken_image_outlined,
+                      message: 'No se pudo cargar la imagen.',
+                      onOpen: onOpen,
+                    ),
+                  ),
+                ),
+              )
+            : isPdf
+            ? SfPdfViewer.network(
+                url,
+                canShowScrollHead: true,
+                canShowPaginationDialog: true,
+              )
+            : _PreviewFallback(
+                icon: Icons.insert_drive_file_outlined,
+                message: 'Vista previa no disponible para este archivo.',
+                onOpen: onOpen,
+              ),
+      ),
+    );
+  }
+}
+
+class _PreviewFallback extends StatelessWidget {
+  const _PreviewFallback({
+    required this.icon,
+    required this.message,
+    this.onOpen,
+  });
+
+  final IconData icon;
+  final String message;
+  final VoidCallback? onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 42),
+            const SizedBox(height: 10),
+            Text(message, textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: onOpen,
+              icon: const Icon(Icons.open_in_new_outlined),
+              label: const Text('Abrir archivo'),
             ),
           ],
         ),
