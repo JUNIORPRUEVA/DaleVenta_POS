@@ -1248,25 +1248,75 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     if (MediaQuery.sizeOf(context).width < 720) {
       return Card(
         elevation: 0,
+        margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
           side: BorderSide(color: theme.dividerColor.withValues(alpha: .45)),
         ),
-        child: ListTile(
-          leading: const Icon(Icons.description_outlined),
-          title: Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w900),
-          ),
-          subtitle: Text(
-            subtitle,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          trailing: const Icon(Icons.chevron_right_rounded),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
           onTap: open,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    _invoiceIsImage(invoice)
+                        ? Icons.image_outlined
+                        : _invoiceIsPdf(invoice)
+                        ? Icons.picture_as_pdf_outlined
+                        : Icons.description_outlined,
+                    color: theme.colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        invoice.supplier.commercialName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Color(0xFF52657A)),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          _MiniMetaChip(
+                            icon: Icons.event_outlined,
+                            label: _dateLabel(invoice.invoiceDate),
+                          ),
+                          _MiniMetaChip(
+                            icon: Icons.insert_drive_file_outlined,
+                            label: _fileSizeLabel(invoice.fileSize),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Icon(Icons.chevron_right_rounded),
+              ],
+            ),
+          ),
         ),
       );
     }
@@ -2199,7 +2249,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       isScrollControlled: true,
       useSafeArea: true,
       builder: (context) => FractionallySizedBox(
-        heightFactor: .9,
+        heightFactor: .96,
         child: _PurchaseInvoiceDetailPanel(
           invoice: invoice,
           money: _money,
@@ -2605,6 +2655,7 @@ class _PurchaseInvoiceDetailPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final current = invoice;
     final theme = Theme.of(context);
+    final isMobile = MediaQuery.sizeOf(context).width < 720;
     if (current == null) {
       return Container(
         decoration: BoxDecoration(
@@ -2621,13 +2672,15 @@ class _PurchaseInvoiceDetailPanel extends StatelessWidget {
     }
     return Container(
       decoration: BoxDecoration(
-        border: Border(left: BorderSide(color: theme.dividerColor)),
+        border: isMobile
+            ? null
+            : Border(left: BorderSide(color: theme.dividerColor)),
         color: theme.colorScheme.surface,
       ),
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(18, 16, 12, 12),
+            padding: EdgeInsets.fromLTRB(18, isMobile ? 8 : 16, 12, 12),
             child: Row(
               children: [
                 Container(
@@ -2667,6 +2720,13 @@ class _PurchaseInvoiceDetailPanel extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (isMobile)
+                  IconButton(
+                    tooltip: 'Eliminar',
+                    color: theme.colorScheme.error,
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline_rounded),
+                  ),
               ],
             ),
           ),
@@ -2675,30 +2735,57 @@ class _PurchaseInvoiceDetailPanel extends StatelessWidget {
             child: Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _InfoPill(
-                          icon: Icons.event_outlined,
-                          label: 'Fecha',
-                          value: dateLabel(current.invoiceDate),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _InfoPill(
-                          icon: Icons.insert_drive_file_outlined,
-                          label: 'Archivo',
-                          value: fileSizeLabel(current.fileSize),
-                        ),
-                      ),
-                    ],
+                  padding: EdgeInsets.fromLTRB(
+                    isMobile ? 12 : 16,
+                    12,
+                    isMobile ? 12 : 16,
+                    10,
                   ),
+                  child: isMobile
+                      ? Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _InfoPill(
+                              icon: Icons.event_outlined,
+                              label: 'Fecha',
+                              value: dateLabel(current.invoiceDate),
+                            ),
+                            _InfoPill(
+                              icon: Icons.insert_drive_file_outlined,
+                              label: 'Archivo',
+                              value: fileSizeLabel(current.fileSize),
+                            ),
+                          ],
+                        )
+                      : Row(
+                          children: [
+                            Expanded(
+                              child: _InfoPill(
+                                icon: Icons.event_outlined,
+                                label: 'Fecha',
+                                value: dateLabel(current.invoiceDate),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _InfoPill(
+                                icon: Icons.insert_drive_file_outlined,
+                                label: 'Archivo',
+                                value: fileSizeLabel(current.fileSize),
+                              ),
+                            ),
+                          ],
+                        ),
                 ),
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    padding: EdgeInsets.fromLTRB(
+                      isMobile ? 12 : 16,
+                      0,
+                      isMobile ? 12 : 16,
+                      12,
+                    ),
                     child: _InvoicePreview(
                       invoice: current,
                       isImage: isImage(current),
@@ -2708,7 +2795,12 @@ class _PurchaseInvoiceDetailPanel extends StatelessWidget {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+                  padding: EdgeInsets.fromLTRB(
+                    isMobile ? 12 : 16,
+                    0,
+                    isMobile ? 12 : 16,
+                    6,
+                  ),
                   child: Column(
                     children: [
                       _DetailRow(label: 'Archivo', value: current.fileName),
@@ -2732,12 +2824,13 @@ class _PurchaseInvoiceDetailPanel extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-                IconButton.filledTonal(
-                  tooltip: 'Eliminar',
-                  color: theme.colorScheme.error,
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete_outline_rounded),
-                ),
+                if (!isMobile)
+                  IconButton.filledTonal(
+                    tooltip: 'Eliminar',
+                    color: theme.colorScheme.error,
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline_rounded),
+                  ),
               ],
             ),
           ),
@@ -2925,6 +3018,38 @@ class _InfoPill extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniMetaChip extends StatelessWidget {
+  const _MiniMetaChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = label.trim().isEmpty ? 'Sin fecha' : label.trim();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withValues(alpha: .7),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
           ),
         ],
       ),
