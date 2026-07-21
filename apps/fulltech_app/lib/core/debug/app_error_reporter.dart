@@ -286,10 +286,11 @@ class AppErrorReporter {
     final stack = details.stack ?? StackTrace.current;
     final exceptionMessage = details.exceptionAsString();
     final isRenderFlexOverflow = _isRenderFlexOverflowMessage(exceptionMessage);
-    final isKnownWindowsRawKeyboardStateIssue =
-        _isKnownWindowsRawKeyboardStateIssue(exceptionMessage);
+    final isKnownKeyboardStateIssue = _isKnownKeyboardStateIssue(
+      exceptionMessage,
+    );
 
-    if (isKnownWindowsRawKeyboardStateIssue) {
+    if (isKnownKeyboardStateIssue) {
       record(
         exception,
         stack,
@@ -299,7 +300,7 @@ class AppErrorReporter {
             'Se detectó una incidencia menor de teclado en Windows y fue manejada automáticamente.',
         technicalDetails: exceptionMessage,
         severity: AppErrorSeverity.warning,
-        dedupeKey: 'flutter-windows-raw-keyboard-alt-left',
+        dedupeKey: 'flutter-keyboard-state-assertion',
         notifyUser: false,
       );
       return;
@@ -337,13 +338,19 @@ class AppErrorReporter {
         .trim();
   }
 
-  bool _isKnownWindowsRawKeyboardStateIssue(String value) {
+  bool _isKnownKeyboardStateIssue(String value) {
     final normalized = value.toLowerCase();
-    return normalized.contains('raw_keyboard.dart') &&
+    final isLegacyRawKeyboardIssue =
+        normalized.contains('raw_keyboard.dart') &&
         normalized.contains(
           'attempted to send a key down event when no keys are in keyspressed',
-        ) &&
-        normalized.contains('alt left');
+        );
+    final isHardwareKeyboardPressedKeysIssue =
+        normalized.contains('hardware_keyboard.dart') &&
+        normalized.contains('_pressedkeys.containskey') &&
+        normalized.contains('keydownevent is dispatched') &&
+        normalized.contains('already pressed');
+    return isLegacyRawKeyboardIssue || isHardwareKeyboardPressedKeysIssue;
   }
 
   String _defaultTitleForSeverity(AppErrorSeverity severity) {

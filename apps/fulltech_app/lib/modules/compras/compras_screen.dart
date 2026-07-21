@@ -1953,22 +1953,14 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     if (supplierId == null || !_suppliers.any((s) => s.id == supplierId)) {
       supplierId = _suppliers.first.id;
     }
-    String? orderId;
     PlatformFile? pickedFile;
     final numberCtrl = TextEditingController();
-    final dateCtrl = TextEditingController(
-      text: DateTime.now().toIso8601String().substring(0, 10),
-    );
-    final amountCtrl = TextEditingController();
     final notesCtrl = TextEditingController();
 
     final ok = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) {
-          final supplierOrders = _orders
-              .where((order) => order.supplier?.id == supplierId)
-              .toList();
           return AlertDialog(
             title: const Text('Subir factura de compra'),
             content: SizedBox(
@@ -1996,58 +1988,14 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                       ],
                       onChanged: (value) => setDialogState(() {
                         supplierId = value;
-                        orderId = null;
                       }),
-                    ),
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
-                      initialValue: orderId,
-                      isExpanded: true,
-                      decoration: _fieldDecoration(
-                        'Orden relacionada',
-                        icon: Icons.receipt_long_outlined,
-                      ),
-                      items: [
-                        const DropdownMenuItem(
-                          value: null,
-                          child: Text('Sin orden relacionada'),
-                        ),
-                        for (final order in supplierOrders)
-                          DropdownMenuItem(
-                            value: order.id,
-                            child: Text(
-                              '${order.orderNumber} · ${_money(order.total)}',
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                      ],
-                      onChanged: (value) =>
-                          setDialogState(() => orderId = value),
                     ),
                     const SizedBox(height: 10),
                     TextField(
                       controller: numberCtrl,
                       decoration: _fieldDecoration(
-                        'Número de factura',
+                        'Número de factura (opcional)',
                         icon: Icons.tag_outlined,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: dateCtrl,
-                      keyboardType: TextInputType.datetime,
-                      decoration: _fieldDecoration(
-                        'Fecha de factura (AAAA-MM-DD)',
-                        icon: Icons.event_outlined,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: amountCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: _fieldDecoration(
-                        'Monto',
-                        icon: Icons.payments_outlined,
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -2088,6 +2036,15 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                             ? 'Seleccionar archivo'
                             : pickedFile!.name,
                         overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        'La fecha se guarda automáticamente al subir.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFF52657A),
+                        ),
                       ),
                     ),
                     if (pickedFile != null)
@@ -2134,12 +2091,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
           .uploadInvoice(
             file: file,
             supplierId: selectedSupplierId,
-            purchaseOrderId: orderId,
             invoiceNumber: numberCtrl.text,
-            invoiceDate: dateCtrl.text,
-            amount: amountCtrl.text.trim().isEmpty
-                ? null
-                : _parseAmount(amountCtrl.text),
             notes: notesCtrl.text,
           );
       setState(() {
