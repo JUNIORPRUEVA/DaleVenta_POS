@@ -2507,9 +2507,6 @@ class _PurchaseInvoiceDetailPanel extends StatelessWidget {
         ),
       );
     }
-    final amount = current.amount == null
-        ? 'Sin monto'
-        : money(current.amount!);
     return Container(
       decoration: BoxDecoration(
         border: Border(left: BorderSide(color: theme.dividerColor)),
@@ -2576,11 +2573,6 @@ class _PurchaseInvoiceDetailPanel extends StatelessWidget {
                       value: dateLabel(current.invoiceDate),
                     ),
                     _InfoPill(
-                      icon: Icons.payments_outlined,
-                      label: 'Monto',
-                      value: amount,
-                    ),
-                    _InfoPill(
                       icon: Icons.insert_drive_file_outlined,
                       label: 'Archivo',
                       value: fileSizeLabel(current.fileSize),
@@ -2588,10 +2580,6 @@ class _PurchaseInvoiceDetailPanel extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 18),
-                _DetailRow(
-                  label: 'Orden relacionada',
-                  value: current.order?.orderNumber ?? 'Sin orden relacionada',
-                ),
                 _DetailRow(label: 'Nombre archivo', value: current.fileName),
                 _DetailRow(label: 'Tipo', value: current.mimeType),
                 if ((current.uploadedByName ?? '').isNotEmpty)
