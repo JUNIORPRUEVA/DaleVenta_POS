@@ -3,12 +3,16 @@ export const FulltechStore = {
     name: "FULLTECH SRL",
     tradeName: "FULLTECH",
     rnc: "",
-    phone: "+1 829 477 0756",
-    whatsapp: "18294770756",
-    email: "ventas@fulltech.com.do",
-    address: "Calle Beller #9, Higuey, La Altagracia, Republica Dominicana",
-    hours: "Lunes a sabado de 8:00 a.m. a 6:00 p.m.",
-    updatedAt: "18 de julio de 2026"
+    phone: "+1 829 534 4286",
+    whatsapp: "18295344286",
+    email: "PENDIENTE_CONFIGURAR",
+    address: "Calle Beller num. 9, centro de Higuey, detras del Banco BHD principal, Higuey, La Altagracia, Republica Dominicana",
+    hours: "Lunes a sabado de 9:00 a.m. a 6:00 p.m.",
+    facebook: "https://www.facebook.com/fulltechs",
+    instagram: "https://www.instagram.com/fulltech_srl",
+    website: "https://fulltechrd.com/",
+    storeUrl: "https://fulltechrd.com/tienda.html",
+    updatedAt: "22 de julio de 2026"
   },
   categories: [
     "Seguridad",

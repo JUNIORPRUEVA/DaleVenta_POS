@@ -2,9 +2,15 @@ import { FulltechStore as fallbackStore } from "./data.js";
 
 (async function () {
   const companyOverride = {
-    phone: "+1 829 477 0756",
-    whatsapp: "18294770756",
-    address: "Calle Beller #9, Higuey, La Altagracia, Republica Dominicana"
+    phone: "+1 829 534 4286",
+    whatsapp: "18295344286",
+    email: "PENDIENTE_CONFIGURAR",
+    address: "Calle Beller num. 9, centro de Higuey, detras del Banco BHD principal, Higuey, La Altagracia, Republica Dominicana",
+    hours: "Lunes a sabado de 9:00 a.m. a 6:00 p.m.",
+    facebook: "https://www.facebook.com/fulltechs",
+    instagram: "https://www.instagram.com/fulltech_srl",
+    website: "https://fulltechrd.com/",
+    storeUrl: "https://fulltechrd.com/tienda.html"
   };
   let store = fallbackStore;
   let storeSource = "fallback";
@@ -636,7 +642,12 @@ import { FulltechStore as fallbackStore } from "./data.js";
       node.href = `https://wa.me/${store.company.whatsapp}`;
     });
     document.querySelectorAll("[data-email-link]").forEach((node) => {
-      node.href = `mailto:${store.company.email}`;
+      if (store.company.email && store.company.email !== "PENDIENTE_CONFIGURAR") {
+        node.href = `mailto:${store.company.email}`;
+      } else {
+        node.removeAttribute("href");
+        node.setAttribute("aria-disabled", "true");
+      }
     });
     if (!document.querySelector(".whatsapp-float")) {
       const link = document.createElement("a");
@@ -658,10 +669,11 @@ import { FulltechStore as fallbackStore } from "./data.js";
           <a href="index.html">Pagina principal</a>
           <a href="tienda.html">Tienda</a>
           <a href="servicios.html">Servicios</a>
+          <a href="sobre-nosotros.html">Sobre nosotros</a>
           <a href="contacto.html">Contacto</a>
           <a href="carrito.html">Carrito <span data-cart-count>0</span></a>
           <a class="drawer-cta" data-whatsapp-link>Cotizar por WhatsApp</a>
-          <div class="drawer-meta">829-477-0756<br>Higuey, La Altagracia</div>
+          <div class="drawer-meta">829-534-4286<br>Higuey, La Altagracia</div>
         </aside>
       `);
       document.querySelectorAll("[data-whatsapp-link]").forEach((node) => {
@@ -710,3 +722,4 @@ import { FulltechStore as fallbackStore } from "./data.js";
   hydrateQueryParams();
   wireEvents();
 })();
+

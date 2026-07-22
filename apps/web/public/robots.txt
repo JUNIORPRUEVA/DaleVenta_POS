@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://fulltech-tienda-fulltechwed.gcdndd.easypanel.host/sitemap.xml
+Sitemap: https://fulltechrd.com/sitemap.xml
