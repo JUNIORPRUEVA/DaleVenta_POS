@@ -16,6 +16,23 @@ Fecha: 2026-07-22
 | WhatsApp | Telefono actualizado a `18295344286` en configuracion y carrito |
 | Headers Nginx | Se agrego CSP moderada y headers de seguridad |
 
+## Pruebas en produccion
+
+Despliegue validado el 2026-07-22 despues del commit `73178bd`.
+
+| Prueba | Resultado |
+| --- | --- |
+| Servicio EasyPanel `fulltech_tienda_fulltechwed` | `1/1` replicas activas |
+| Commit activo en servidor | `73178bd Prepare public site for Meta verification` |
+| `https://fulltechrd.com/` | `200 OK` |
+| `https://fulltechrd.com/tienda.html` | `200 OK` |
+| `https://fulltechrd.com/politica-de-privacidad.html` | `200 OK` |
+| `https://fulltechrd.com/eliminacion-de-datos.html` | `200 OK` |
+| `https://fulltechrd.com/robots.txt` | `200 OK` |
+| `https://fulltechrd.com/sitemap.xml` | `200 OK` |
+| Dominio temporal EasyPanel | `200 OK` en inicio, tienda, privacidad, eliminacion de datos, robots y sitemap |
+| Cabeceras en produccion | CSP y `X-Frame-Options: SAMEORIGIN` presentes |
+
 ## Observaciones del build
 
 Vite muestra advertencias esperadas sobre `<script src="env.js">` sin `type="module"`. Este archivo se carga asi intencionalmente para permitir configuracion runtime antes de `app.js`.
