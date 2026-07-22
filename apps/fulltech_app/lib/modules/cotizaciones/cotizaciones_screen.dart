@@ -357,7 +357,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   void _applyClientPrefillFromRoute({bool force = false}) {
     if (!mounted) return;
-    final qp = GoRouterState.of(context).uri.queryParameters;
+    final qp = _safeRouteUri()?.queryParameters;
+    if (qp == null) return;
     final id = (qp['customerId'] ?? '').trim();
     final name = (qp['customerName'] ?? '').trim();
     final phone = (qp['customerPhone'] ?? '').trim();
@@ -392,7 +393,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   Future<void> _applyQuotationPrefillFromRoute() async {
     if (_loadingRouteQuotation) return;
 
-    final qp = GoRouterState.of(context).uri.queryParameters;
+    final qp = _safeRouteUri()?.queryParameters;
+    if (qp == null) return;
     final quotationId = (qp['quotationId'] ?? '').trim();
     final duplicate = (qp['duplicate'] ?? '').trim() == '1';
     if (quotationId.isEmpty) return;
@@ -1166,7 +1168,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final route = GoRouterState.of(context).uri.toString();
+      final route = _safeRouteUri()?.toString();
+      if (route == null) return;
       ref
           .read(desktopShellFooterContentProvider.notifier)
           .state = DesktopShellFooterContent(
@@ -1181,6 +1184,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         ),
       );
     });
+  }
+
+  Uri? _safeRouteUri() {
+    try {
+      return GoRouterState.of(context).uri;
+    } catch (_) {
+      return null;
+    }
   }
 
   String _desktopFooterSignature() {
@@ -1567,6 +1578,16 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     final editingId = (_editingId ?? '').trim();
 
     try {
+      if (widget.returnSavedQuotation) {
+        final savedQuotation = editingId.isNotEmpty && _isUuid(editingId)
+            ? await repository.update(editingId, draft)
+            : await repository.create(draft.copyWith(id: ''));
+
+        if (!mounted) return;
+        Navigator.of(context).pop(savedQuotation);
+        return;
+      }
+
       final wasQueued = editingId.isNotEmpty && _isUuid(editingId)
           ? await repository.updateOrQueue(editingId, draft)
           : await repository.createOrQueue(draft.copyWith(id: ''));
@@ -4622,9 +4643,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     if (!_validateCheckoutReady()) return;
 
     final popOnSave =
-        (GoRouterState.of(context).uri.queryParameters['popOnSave'] ?? '')
-            .trim() ==
-        '1';
+        (_safeRouteUri()?.queryParameters['popOnSave'] ?? '').trim() == '1';
 
     if (checkout != null) {
       final cashState = await ref.read(cashRepositoryProvider).state();
