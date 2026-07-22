@@ -1,4 +1,4 @@
-﻿import 'package:file_picker/file_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -52,22 +52,10 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
   String? _error;
 
   @override
-  void initState() {
-    super.initState();
-    _noteFocusNode.addListener(_handleNoteFocusChange);
-  }
-
-  @override
   void dispose() {
-    _noteFocusNode.removeListener(_handleNoteFocusChange);
     _noteFocusNode.dispose();
     _noteCtrl.dispose();
     super.dispose();
-  }
-
-  void _handleNoteFocusChange() {
-    if (_noteFocusNode.hasFocus || _selectedFile == null || _saving) return;
-    _saveSelectedInvoice();
   }
 
   IconData _kindIcon(FiscalInvoiceKind kind) {
@@ -119,6 +107,15 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
       if (mounted) {
         _noteFocusNode.requestFocus();
       }
+    });
+  }
+
+  void _clearSelectedInvoice() {
+    if (_saving) return;
+    setState(() {
+      _selectedFile = null;
+      _noteCtrl.clear();
+      _error = null;
     });
   }
 
@@ -361,6 +358,11 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
                             ),
                           ),
                         ),
+                        IconButton(
+                          tooltip: 'Quitar imagen',
+                          onPressed: _saving ? null : _clearSelectedInvoice,
+                          icon: const Icon(Icons.close_rounded),
+                        ),
                       ],
                     ),
                   ),
@@ -388,8 +390,53 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
                                 ),
                               ),
                             )
-                          : const Icon(Icons.subdirectory_arrow_left_outlined),
+                          : const Icon(Icons.notes_rounded),
                     ),
+                  ),
+                  const SizedBox(height: 12),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final narrow = constraints.maxWidth < 430;
+                      final saveButton = FilledButton.icon(
+                        onPressed: _saving ? null : _saveSelectedInvoice,
+                        icon: _saving
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.cloud_done_outlined),
+                        label: Text(
+                          _saving ? 'Guardando...' : 'Guardar factura',
+                        ),
+                      );
+                      final clearButton = OutlinedButton.icon(
+                        onPressed: _saving ? null : _clearSelectedInvoice,
+                        icon: const Icon(Icons.delete_outline_rounded),
+                        label: const Text('Quitar'),
+                      );
+
+                      if (narrow) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            saveButton,
+                            const SizedBox(height: 8),
+                            clearButton,
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        children: [
+                          Expanded(child: clearButton),
+                          const SizedBox(width: 10),
+                          Expanded(flex: 2, child: saveButton),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ],
@@ -411,7 +458,9 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
                         label: kinds[index].label,
                         icon: _kindIcon(kinds[index]),
                         selected: _kind == kinds[index],
-                        onTap: () => setState(() => _kind = kinds[index]),
+                        onTap: _saving
+                            ? null
+                            : () => setState(() => _kind = kinds[index]),
                       ),
                     ),
                     if (index != kinds.length - 1) const SizedBox(width: gap),
@@ -537,7 +586,7 @@ class _InvoiceKindOption extends StatelessWidget {
   final String label;
   final IconData icon;
   final bool selected;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
