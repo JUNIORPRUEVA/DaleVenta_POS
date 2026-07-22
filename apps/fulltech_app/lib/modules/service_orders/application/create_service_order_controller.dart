@@ -315,41 +315,10 @@ class CreateServiceOrderController
       clearQuotationMessage: true,
       loading: true,
     );
-    if (client.telefono.trim().isEmpty) {
-      if (normalizedPreserveQuotationId.isNotEmpty) {
-        try {
-          final preservedQuotation = await ref
-              .read(cotizacionesRepositoryProvider)
-              .getByIdAndCache(normalizedPreserveQuotationId);
-          state = state.copyWith(
-            loading: false,
-            quotations: [preservedQuotation],
-            selectedQuotation: preservedQuotation,
-            quotationMessage: 'Cotización seleccionada automáticamente',
-            clearActionError: true,
-          );
-          return;
-        } catch (error) {
-          final message = error is ApiException
-              ? error.message
-              : 'No se pudo cargar la cotización vinculada';
-          state = state.copyWith(loading: false, actionError: message);
-          return;
-        }
-      }
-      state = state.copyWith(
-        loading: false,
-        quotations: const [],
-        quotationMessage:
-            'El cliente no tiene teléfono. No se pueden cargar cotizaciones vinculadas.',
-      );
-      return;
-    }
-
     try {
       final quotations = await ref
           .read(cotizacionesRepositoryProvider)
-          .list(customerPhone: client.telefono.trim());
+          .listAndCache(take: 200);
       final nextQuotations = [...quotations];
       CotizacionModel? selectedQuotation;
       if (normalizedPreserveQuotationId.isNotEmpty) {
@@ -370,18 +339,26 @@ class CreateServiceOrderController
             // Keep the fetched list to avoid blocking order creation flow.
           }
         }
-      } else if (quotations.length == 1) {
-        selectedQuotation = quotations.first;
+      } else {
+        final phone = client.telefono.trim();
+        if (phone.isNotEmpty) {
+          for (final quotation in nextQuotations) {
+            if ((quotation.customerPhone ?? '').trim() == phone) {
+              selectedQuotation = quotation;
+              break;
+            }
+          }
+        }
       }
       state = state.copyWith(
         loading: false,
         quotations: nextQuotations,
         selectedQuotation: selectedQuotation,
         quotationMessage: nextQuotations.isEmpty
-            ? 'Este cliente no tiene cotizaciones'
+            ? 'No hay cotizaciones disponibles. Puedes crear una nueva o continuar sin cotización.'
             : selectedQuotation != null
             ? 'Cotización seleccionada automáticamente'
-            : 'Selecciona la cotización que deseas usar',
+            : 'La cotización es opcional. Puedes seleccionar una o continuar sin ella.',
       );
     } catch (error) {
       final message = error is ApiException
@@ -546,9 +523,6 @@ class CreateServiceOrderController
     if (client == null) {
       throw ApiException('Debes seleccionar un cliente');
     }
-    if (quotation == null && !state.isCloneMode && !state.isEditMode) {
-      throw ApiException('Debes seleccionar una cotización');
-    }
     if (serviceType == null) {
       throw ApiException('Debes seleccionar el tipo de servicio');
     }
@@ -556,10 +530,6 @@ class CreateServiceOrderController
         quotation?.id ??
         state.editSource?.quotationId ??
         state.cloneSource?.quotationId;
-    if ((effectiveQuotationId ?? '').trim().isEmpty) {
-      throw ApiException('Debes seleccionar una cotización');
-    }
-
     final technicalNoteValue = _canEditOperationalNotes
         ? technicalNote.trim()
         : '';
@@ -579,7 +549,7 @@ class CreateServiceOrderController
                   state.editSource!.id,
                   UpdateServiceOrderRequest(
                     clientId: client.id,
-                    quotationId: effectiveQuotationId!,
+                    quotationId: effectiveQuotationId,
                     category: state.category,
                     serviceType: serviceType,
                     technicalNote: technicalNoteValue,
@@ -596,7 +566,7 @@ class CreateServiceOrderController
                   CloneServiceOrderRequest(
                     serviceType: serviceType,
                     clientId: client.id,
-                    quotationId: effectiveQuotationId!,
+                    quotationId: effectiveQuotationId,
                     technicalNote: technicalNoteValue,
                     extraRequirements: extraRequirementsValue,
                     assignedToId: assignedToId,
@@ -607,7 +577,7 @@ class CreateServiceOrderController
                 .createOrder(
                   CreateServiceOrderRequest(
                     clientId: client.id,
-                    quotationId: quotation!.id,
+                    quotationId: quotation?.id,
                     category: state.category,
                     serviceType: serviceType,
                     technicalNote: technicalNoteValue,

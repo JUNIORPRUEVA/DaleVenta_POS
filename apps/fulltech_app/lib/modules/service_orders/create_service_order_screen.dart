@@ -543,7 +543,7 @@ class _CreateServiceOrderScreenState
                   child: _CompactSelectorField(
                     label: 'Cotización',
                     value: state.selectedQuotation == null
-                        ? 'Seleccionar cotización'
+                        ? 'Opcional'
                         : 'Cotización ${state.selectedQuotation!.id.substring(0, state.selectedQuotation!.id.length >= 6 ? 6 : state.selectedQuotation!.id.length).toUpperCase()}',
                     enabled: !_inlineFlowBusy && state.selectedClient != null,
                     onTap: state.selectedClient == null
@@ -807,6 +807,10 @@ class _CreateServiceOrderScreenState
       await _editQuotationInline(context, controller, outcome.quotation!);
       return;
     }
+    if (outcome.createRequested) {
+      await _createQuotationInline(context, state, controller);
+      return;
+    }
 
     controller.selectQuotation(outcome.quotation);
   }
@@ -967,11 +971,22 @@ class _CreateServiceOrderScreenState
                 ),
               ),
               const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.of(
+                    context,
+                  ).pop(const _QuotationPickerOutcome.create()),
+                  icon: const Icon(Icons.add_circle_outline_rounded),
+                  label: const Text('Crear cotización'),
+                ),
+              ),
+              const SizedBox(height: 14),
               Expanded(
                 child: filtered.isEmpty
                     ? const _EmptyInlineState(
-                        icon: Icons.search_off_rounded,
-                        label: 'No hay cotizaciones',
+                        icon: Icons.receipt_long_outlined,
+                        label: 'No hay cotizaciones para mostrar',
                       )
                     : ListView.separated(
                         itemCount: filtered.length,
@@ -1573,16 +1588,25 @@ class _QuotationPickerOutcome {
   const _QuotationPickerOutcome._({
     this.quotation,
     required this.editRequested,
+    required this.createRequested,
   });
 
   const _QuotationPickerOutcome.select(CotizacionModel quotation)
-    : this._(quotation: quotation, editRequested: false);
+    : this._(
+        quotation: quotation,
+        editRequested: false,
+        createRequested: false,
+      );
 
   const _QuotationPickerOutcome.edit(CotizacionModel quotation)
-    : this._(quotation: quotation, editRequested: true);
+    : this._(quotation: quotation, editRequested: true, createRequested: false);
+
+  const _QuotationPickerOutcome.create()
+    : this._(quotation: null, editRequested: false, createRequested: true);
 
   final CotizacionModel? quotation;
   final bool editRequested;
+  final bool createRequested;
 }
 
 class SectionCard extends StatelessWidget {

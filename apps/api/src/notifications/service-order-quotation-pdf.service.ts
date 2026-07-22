@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -38,6 +38,10 @@ export class ServiceOrderQuotationPdfService {
     });
 
     const quote = order.quotation;
+    if (!quote) {
+      throw new BadRequestException('La orden no tiene cotización vinculada para generar PDF');
+    }
+
     const createdAt = quote.createdAt;
     const fileName = `cotizacion_${createdAt.toISOString().slice(0, 10)}_${order.id.slice(0, 8)}.pdf`;
 

@@ -1363,8 +1363,8 @@ export class ServiceOrdersService {
   }
 
   private computeCommissionAmounts(order: ServiceCommissionOrder) {
-    const totalAmount = this.toNumber(order.quotation.total);
-    const totalProfit = this.toNumber(order.quotation.totalProfit);
+    const totalAmount = this.toNumber(order.quotation?.total);
+    const totalProfit = this.toNumber(order.quotation?.totalProfit);
     const { recipientSource, recipientUserId } = this.resolveCommissionRecipient({
       createdById: order.createdById,
       assignedToId: order.assignedToId,
@@ -1593,7 +1593,7 @@ export class ServiceOrdersService {
     dto: CreateServiceOrderDto,
   ): Promise<Prisma.ServiceOrderUncheckedCreateInput> {
     const clientId = this.requireAliasValue(dto.clientId, dto.client_id, 'client_id');
-    const quotationId = this.requireAliasValue(dto.quotationId, dto.quotation_id, 'quotation_id');
+    const quotationId = this.cleanOptionalText(dto.quotationId, dto.quotation_id);
     const category = this.requireDirectValue(dto.category, 'category') as ApiServiceOrderCategory;
     const serviceType = this.requireAliasValue(dto.serviceType, dto.service_type, 'service_type') as ApiServiceOrderType;
     const scheduledFor = this.parseScheduledDateAlias(dto, 'scheduled_for');
@@ -1623,6 +1623,9 @@ export class ServiceOrdersService {
 
   private evaluateServiceSalesOrder(order: ServiceSalesOrderWithRelations) {
     const quotation = order.quotation;
+    if (!quotation) {
+      return this.buildSkippedServiceSalesOrder(order, 'La orden no tiene cotización vinculada');
+    }
     const quotationItems = quotation.items ?? [];
     if (!quotationItems.length) {
       return this.buildSkippedServiceSalesOrder(order, 'La cotización no tiene líneas registradas');
@@ -1719,9 +1722,9 @@ export class ServiceOrdersService {
       technicianId: order.assignedToId,
       technicianName: order.assignedTo?.nombreCompleto ?? null,
       reason,
-      itemsCount: order.quotation.items.length,
+      itemsCount: order.quotation?.items.length ?? 0,
       missingCostItemsCount,
-      totalQuoted: this.toNumber(order.quotation.total),
+      totalQuoted: this.toNumber(order.quotation?.total),
     };
   }
 
@@ -2066,7 +2069,10 @@ export class ServiceOrdersService {
     if (!client) throw new NotFoundException('Cliente no encontrado');
   }
 
-  private async assertQuotationMatchesClient(quotationId: string, clientId: string) {
+  private async assertQuotationMatchesClient(quotationId: string | null | undefined, clientId: string) {
+    if (!quotationId?.trim()) {
+      return;
+    }
     const quotation = await this.prisma.cotizacion.findUnique({
       where: { id: quotationId },
       select: { id: true, customerId: true },

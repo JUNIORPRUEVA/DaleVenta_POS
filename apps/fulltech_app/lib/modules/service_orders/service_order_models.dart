@@ -864,7 +864,7 @@ class ServiceOrderModel {
 
 class CreateServiceOrderRequest {
   final String clientId;
-  final String quotationId;
+  final String? quotationId;
   final ServiceOrderCategory category;
   final ServiceOrderType serviceType;
   final String? technicalNote;
@@ -874,7 +874,7 @@ class CreateServiceOrderRequest {
 
   const CreateServiceOrderRequest({
     required this.clientId,
-    required this.quotationId,
+    this.quotationId,
     required this.category,
     required this.serviceType,
     this.technicalNote,
@@ -886,7 +886,8 @@ class CreateServiceOrderRequest {
   Map<String, dynamic> toJson() {
     return {
       'clientId': clientId,
-      'quotationId': quotationId,
+      if ((quotationId ?? '').trim().isNotEmpty)
+        'quotationId': quotationId!.trim(),
       'category': category.apiValue,
       'serviceType': serviceType.apiValue,
       if ((technicalNote ?? '').trim().isNotEmpty)
@@ -901,7 +902,7 @@ class CreateServiceOrderRequest {
 
 class UpdateServiceOrderRequest {
   final String clientId;
-  final String quotationId;
+  final String? quotationId;
   final ServiceOrderCategory category;
   final ServiceOrderType serviceType;
   final String? technicalNote;
@@ -911,7 +912,7 @@ class UpdateServiceOrderRequest {
 
   const UpdateServiceOrderRequest({
     required this.clientId,
-    required this.quotationId,
+    this.quotationId,
     required this.category,
     required this.serviceType,
     this.technicalNote,
@@ -923,7 +924,8 @@ class UpdateServiceOrderRequest {
   Map<String, dynamic> toJson() {
     return {
       'clientId': clientId,
-      'quotationId': quotationId,
+      if ((quotationId ?? '').trim().isNotEmpty)
+        'quotationId': quotationId!.trim(),
       'category': category.apiValue,
       'serviceType': serviceType.apiValue,
       'technicalNote': technicalNote?.trim().isEmpty == true

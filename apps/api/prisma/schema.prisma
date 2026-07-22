@@ -2869,7 +2869,7 @@ model ServiceFile {
 model ServiceOrder {
   id                        String               @id @default(uuid()) @db.Uuid
   clientId                  String               @map("client_id") @db.Uuid
-  quotationId               String               @map("quotation_id") @db.Uuid
+  quotationId               String?              @map("quotation_id") @db.Uuid
   category                  ServiceOrderCategory
   serviceType               ServiceOrderType     @map("service_type")
   status                    ServiceOrderStatus   @default(PENDIENTE)
@@ -2888,7 +2888,7 @@ model ServiceOrder {
   updatedAt                 DateTime             @updatedAt @map("updated_at")
 
   client                           Client                            @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  quotation                        Cotizacion                        @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  quotation                        Cotizacion?                       @relation(fields: [quotationId], references: [id], onDelete: Restrict)
   parentOrder                      ServiceOrder?                     @relation("ServiceOrderParent", fields: [parentOrderId], references: [id], onDelete: SetNull)
   childOrders                      ServiceOrder[]                    @relation("ServiceOrderParent")
   createdBy                        User                              @relation("ServiceOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
