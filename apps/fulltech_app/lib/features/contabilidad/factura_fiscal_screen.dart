@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -32,6 +33,17 @@ DateTimeRange _previousMonthRange([DateTime? reference]) {
   return DateTimeRange(start: previousMonthStart, end: previousMonthEnd);
 }
 
+DateTimeRange _currentMonthRange([DateTime? reference]) {
+  final now = reference ?? DateTime.now();
+  final start = DateTime(now.year, now.month, 1);
+  final end = DateTime(
+    now.year,
+    now.month + 1,
+    1,
+  ).subtract(const Duration(days: 1));
+  return DateTimeRange(start: start, end: end);
+}
+
 const String _fiscalAccountantPhone = '8295319442';
 
 class FacturaFiscalScreen extends ConsumerStatefulWidget {
@@ -47,7 +59,7 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
   final _noteFocusNode = FocusNode();
   DateTime _invoiceDate = DateTime.now();
   FiscalInvoiceKind _kind = FiscalInvoiceKind.purchase;
-  PlatformFile? _selectedFile;
+  List<PlatformFile> _selectedFiles = const [];
   bool _saving = false;
   String? _error;
 
@@ -70,14 +82,14 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
   }
 
   String _uploadButtonLabel(FiscalInvoiceKind kind, bool hasFile) {
-    if (hasFile) return 'Cambiar imagen';
+    if (hasFile) return 'Cambiar archivos';
     switch (kind) {
       case FiscalInvoiceKind.saleCard:
-        return 'Subir venta por tarjeta';
+        return 'Subir ventas por tarjeta';
       case FiscalInvoiceKind.sale:
-        return 'Subir venta';
+        return 'Subir ventas';
       case FiscalInvoiceKind.purchase:
-        return 'Subir compra';
+        return 'Subir compras';
     }
   }
 
@@ -95,13 +107,24 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
   Future<void> _pickInvoiceImage() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: const ['png', 'jpg', 'jpeg', 'webp'],
+      allowedExtensions: const ['png', 'jpg', 'jpeg', 'webp', 'pdf'],
+      allowMultiple: true,
       withData: true,
     );
     if (result == null || result.files.isEmpty) return;
+    final readableFiles = result.files
+        .where((file) => file.bytes != null && file.bytes!.isNotEmpty)
+        .toList(growable: false);
+    if (readableFiles.isEmpty) {
+      setState(() {
+        _error = 'No se pudo leer ninguno de los archivos seleccionados.';
+      });
+      return;
+    }
     setState(() {
-      _selectedFile = result.files.first;
+      _selectedFiles = readableFiles;
       _noteCtrl.clear();
+      _error = null;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -113,14 +136,14 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
   void _clearSelectedInvoice() {
     if (_saving) return;
     setState(() {
-      _selectedFile = null;
+      _selectedFiles = const [];
       _noteCtrl.clear();
       _error = null;
     });
   }
 
   Future<void> _openHistoryScreen(BuildContext context) async {
-    final defaultRange = _previousMonthRange();
+    final defaultRange = _currentMonthRange();
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
@@ -134,8 +157,8 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
   }
 
   Future<void> _saveSelectedInvoice() async {
-    final selectedFile = _selectedFile;
-    if (selectedFile == null || _saving) return;
+    final selectedFiles = _selectedFiles;
+    if (selectedFiles.isEmpty || _saving) return;
 
     if (mounted) {
       setState(() {
@@ -146,23 +169,35 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
 
     try {
       final repo = ref.read(contabilidadRepositoryProvider);
-      final imageUrl = await repo.uploadFiscalInvoiceImage(selectedFile);
-      await repo.createFiscalInvoice(
-        kind: _kind,
-        invoiceDate: _invoiceDate,
-        imageUrl: imageUrl,
-        note: _noteCtrl.text,
-      );
+      for (final selectedFile in selectedFiles) {
+        final imageUrl = await repo.uploadFiscalInvoiceImage(selectedFile);
+        await repo.createFiscalInvoice(
+          kind: _kind,
+          invoiceDate: _invoiceDate,
+          imageUrl: imageUrl,
+          note: _noteForFile(selectedFile, selectedFiles.length),
+        );
+      }
       if (!mounted) return;
 
       setState(() {
         _saving = false;
-        _selectedFile = null;
+        _selectedFiles = const [];
         _noteCtrl.clear();
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Factura fiscal guardada en la nube.')),
+        SnackBar(
+          content: Text(
+            selectedFiles.length == 1
+                ? 'Factura fiscal guardada en la nube.'
+                : '${selectedFiles.length} facturas fiscales guardadas en la nube.',
+          ),
+          action: SnackBarAction(
+            label: 'Ver',
+            onPressed: () => _openHistoryScreen(context),
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -173,6 +208,17 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
             : 'No se pudo guardar la factura fiscal';
       });
     }
+  }
+
+  String? _noteForFile(PlatformFile file, int totalFiles) {
+    final note = _noteCtrl.text.trim();
+    if (totalFiles <= 1) return note.isEmpty ? null : note;
+    final fileName = file.name.trim();
+    final parts = [
+      if (note.isNotEmpty) note,
+      if (fileName.isNotEmpty) 'Archivo: $fileName',
+    ];
+    return parts.isEmpty ? null : parts.join('\n');
   }
 
   @override
@@ -220,9 +266,9 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final isNarrow = MediaQuery.sizeOf(context).width < 460;
-    final selectedFile = _selectedFile;
+    final selectedFiles = _selectedFiles;
     final dateLabel = DateFormat('dd/MM/yyyy').format(_invoiceDate);
-    final hasFile = selectedFile != null;
+    final hasFile = selectedFiles.isNotEmpty;
 
     return AppCard(
       child: Column(
@@ -324,7 +370,7 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Sin imagen cargada',
+                          'Sin archivos cargados',
                           textAlign: TextAlign.center,
                           style: theme.textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.w800,
@@ -350,7 +396,9 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            selectedFile.name,
+                            selectedFiles.length == 1
+                                ? selectedFiles.first.name
+                                : '${selectedFiles.length} archivos seleccionados',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.bodySmall?.copyWith(
@@ -359,13 +407,22 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
                           ),
                         ),
                         IconButton(
-                          tooltip: 'Quitar imagen',
+                          tooltip: 'Quitar archivos',
                           onPressed: _saving ? null : _clearSelectedInvoice,
                           icon: const Icon(Icons.close_rounded),
                         ),
                       ],
                     ),
                   ),
+                  if (selectedFiles.length > 1) ...[
+                    const SizedBox(height: 8),
+                    ...selectedFiles.map(
+                      (file) => Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: _SelectedFiscalFileChip(file: file),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _noteCtrl,
@@ -647,6 +704,60 @@ class _InvoiceKindOption extends StatelessWidget {
   }
 }
 
+class _SelectedFiscalFileChip extends StatelessWidget {
+  const _SelectedFiscalFileChip({required this.file});
+
+  final PlatformFile file;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final ext = (file.extension ?? '').trim().toLowerCase();
+    final isPdf = ext == 'pdf';
+    final sizeKb = file.size <= 0 ? null : (file.size / 1024).ceil();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isPdf ? Icons.picture_as_pdf_outlined : Icons.image_outlined,
+            size: 18,
+            color: scheme.primary,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              file.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          if (sizeKb != null) ...[
+            const SizedBox(width: 8),
+            Text(
+              '${sizeKb}KB',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _ErrorBox extends StatelessWidget {
   final String message;
 
@@ -685,6 +796,7 @@ class _FiscalInvoiceImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = _resolvedUrl();
+    final isPdf = _isPdfUrl(imageUrl) || _isPdfUrl(url);
     final fallback = Container(
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
       alignment: Alignment.center,
@@ -707,6 +819,39 @@ class _FiscalInvoiceImage extends StatelessWidget {
 
     if (url.isEmpty) return fallback;
 
+    if (isPdf) {
+      return Material(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: InkWell(
+          onTap: () => _openExternalFile(context, url),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.picture_as_pdf_outlined,
+                  size: 44,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'PDF fiscal',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Tocar para abrir',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return CachedNetworkImage(
       imageUrl: url,
       fit: BoxFit.contain,
@@ -717,6 +862,22 @@ class _FiscalInvoiceImage extends StatelessWidget {
       ),
       errorWidget: (_, __, ___) => fallback,
     );
+  }
+
+  bool _isPdfUrl(String value) {
+    final lower = Uri.decodeFull(value).toLowerCase();
+    return lower.contains('.pdf') || lower.contains('%2epdf');
+  }
+
+  Future<void> _openExternalFile(BuildContext context, String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir el archivo.')),
+      );
+    }
   }
 }
 

@@ -141,6 +141,7 @@ export class ContabilidadPublicController {
     if (ext === '.png') return 'image/png';
     if (ext === '.webp') return 'image/webp';
     if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+    if (ext === '.pdf') return 'application/pdf';
     return 'application/octet-stream';
   }
 }

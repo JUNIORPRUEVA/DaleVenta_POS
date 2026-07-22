@@ -787,7 +787,9 @@ class ContabilidadRepository {
       }
 
       final ext = (file.extension ?? '').toLowerCase();
-      final mediaType = ext == 'png'
+      final mediaType = ext == 'pdf'
+          ? MediaType('application', 'pdf')
+          : ext == 'png'
           ? MediaType('image', 'png')
           : ext == 'webp'
           ? MediaType('image', 'webp')

@@ -515,16 +515,18 @@ export class ContabilidadController {
     FileInterceptor('file', {
       storage: memoryStorage(),
       fileFilter: (_req, file, cb) => {
-        const isImage = /^image\/(png|jpe?g|webp)$/.test(file.mimetype);
-        if (!isImage) {
+        const isAllowed =
+          /^image\/(png|jpe?g|webp)$/.test(file.mimetype) ||
+          file.mimetype === 'application/pdf';
+        if (!isAllowed) {
           return cb(
-            new BadRequestException('Solo se permiten imágenes PNG/JPG/WEBP'),
+            new BadRequestException('Solo se permiten imágenes PNG/JPG/WEBP o PDF'),
             false,
           );
         }
         cb(null, true);
       },
-      limits: { fileSize: 8 * 1024 * 1024 },
+      limits: { fileSize: 15 * 1024 * 1024 },
     }),
   )
   async uploadFiscalInvoiceImage(
@@ -538,8 +540,14 @@ export class ContabilidadController {
 
     const original = sanitizeFileName(file.originalname ?? 'factura');
     const ext = extname(original).toLowerCase();
-    const safeExt = ext && /\.(png|jpe?g|webp)$/.test(ext) ? ext : '.jpg';
-    const contentType = /^image\/(png|jpe?g|webp)$/.test(file.mimetype)
+    const safeExt = ext && /\.(png|jpe?g|webp|pdf)$/.test(ext)
+      ? ext
+      : file.mimetype === 'application/pdf'
+        ? '.pdf'
+        : '.jpg';
+    const contentType = file.mimetype === 'application/pdf'
+      ? 'application/pdf'
+      : /^image\/(png|jpe?g|webp)$/.test(file.mimetype)
       ? file.mimetype
       : safeExt === '.png'
         ? 'image/png'
