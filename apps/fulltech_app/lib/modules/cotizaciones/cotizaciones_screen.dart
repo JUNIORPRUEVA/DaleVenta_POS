@@ -5701,6 +5701,92 @@ class _QuotationTopbarMenu extends StatelessWidget {
   final VoidCallback onPdf;
   final VoidCallback onServiceOrder;
 
+  void _runAfterMenuCloses(VoidCallback action) {
+    Future<void>.delayed(const Duration(milliseconds: 120), action);
+  }
+
+  void _showHelp(BuildContext context, String title, String description) {
+    _runAfterMenuCloses(() {
+      if (!context.mounted) return;
+      showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          titlePadding: const EdgeInsets.fromLTRB(22, 20, 18, 8),
+          contentPadding: const EdgeInsets.fromLTRB(22, 0, 22, 20),
+          title: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF1FF),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFDDEAFF)),
+                ),
+                child: const Icon(
+                  Icons.help_outline_rounded,
+                  size: 18,
+                  color: Color(0xFF1957E6),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            description,
+            style: const TextStyle(
+              color: Color(0xFF52667C),
+              fontSize: 13,
+              height: 1.35,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF1957E6),
+                textStyle: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0,
+                ),
+              ),
+              child: const Text('Entendido'),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  void _activateMenuItem(BuildContext menuContext, VoidCallback action) {
+    Navigator.of(menuContext).pop();
+    _runAfterMenuCloses(action);
+  }
+
+  void _openHelpFromMenu(
+    BuildContext rootContext,
+    BuildContext menuContext, {
+    required String title,
+    required String description,
+  }) {
+    Navigator.of(menuContext).pop();
+    _showHelp(rootContext, title, description);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -5708,54 +5794,77 @@ class _QuotationTopbarMenu extends StatelessWidget {
       child: PopupMenuButton<String>(
         tooltip: 'Cotizaciones',
         offset: const Offset(0, 42),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        onSelected: (value) {
-          switch (value) {
-            case 'quote':
-              onQuote();
-              break;
-            case 'history':
-              onHistory();
-              break;
-            case 'pdf':
-              onPdf();
-              break;
-            case 'service_order':
-              onServiceOrder();
-              break;
-          }
-        },
-        itemBuilder: (context) => const [
+        elevation: 8,
+        color: Colors.white,
+        shadowColor: Colors.black.withValues(alpha: 0.10),
+        constraints: const BoxConstraints(minWidth: 282),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: Color(0xFFDDE7EE)),
+        ),
+        itemBuilder: (menuContext) => [
           PopupMenuItem(
-            value: 'quote',
+            enabled: false,
+            padding: EdgeInsets.zero,
             child: _QuotationMenuItem(
               icon: Icons.request_quote_outlined,
               title: 'Cotizar',
-              subtitle: 'Guardar ticket actual',
+              onTap: () => _activateMenuItem(menuContext, onQuote),
+              onHelp: () => _openHelpFromMenu(
+                context,
+                menuContext,
+                title: 'Cotizar',
+                description:
+                    'Guarda el ticket actual como cotización para poder retomarlo, compartirlo o convertirlo en una venta más adelante sin perder los productos agregados.',
+              ),
             ),
           ),
           PopupMenuItem(
-            value: 'history',
+            enabled: false,
+            padding: EdgeInsets.zero,
             child: _QuotationMenuItem(
               icon: Icons.history_edu_outlined,
               title: 'Lista de cotizaciones',
-              subtitle: 'Ver cotizaciones guardadas',
+              onTap: () => _activateMenuItem(menuContext, onHistory),
+              onHelp: () => _openHelpFromMenu(
+                context,
+                menuContext,
+                title: 'Lista de cotizaciones',
+                description:
+                    'Abre el historial de cotizaciones guardadas para buscar, revisar, reutilizar o dar seguimiento a propuestas anteriores.',
+              ),
             ),
           ),
           PopupMenuItem(
-            value: 'pdf',
+            enabled: false,
+            padding: EdgeInsets.zero,
             child: _QuotationMenuItem(
               icon: Icons.picture_as_pdf_outlined,
               title: 'Ver PDF',
-              subtitle: 'Vista previa o impresión',
+              onTap: () => _activateMenuItem(menuContext, onPdf),
+              onHelp: () => _openHelpFromMenu(
+                context,
+                menuContext,
+                title: 'Ver PDF',
+                description:
+                    'Genera una vista previa del documento PDF del ticket actual para revisarlo, imprimirlo o compartirlo con el cliente.',
+              ),
             ),
           ),
           PopupMenuItem(
-            value: 'service_order',
+            enabled: false,
+            padding: EdgeInsets.zero,
             child: _QuotationMenuItem(
               icon: Icons.assignment_turned_in_outlined,
               title: 'Pasar a orden de servicio',
-              subtitle: 'Crear orden desde el ticket',
+              onTap: () => _activateMenuItem(menuContext, onServiceOrder),
+              onHelp: () => _openHelpFromMenu(
+                context,
+                menuContext,
+                title: 'Pasar a orden de servicio',
+                description:
+                    'Convierte el ticket actual en una orden de servicio para gestionar instalación, seguimiento técnico o trabajo operativo relacionado.',
+              ),
             ),
           ),
         ],
@@ -5999,60 +6108,76 @@ class _QuotationMenuItem extends StatelessWidget {
   const _QuotationMenuItem({
     required this.icon,
     required this.title,
-    required this.subtitle,
+    required this.onTap,
+    required this.onHelp,
   });
 
   final IconData icon;
   final String title;
-  final String subtitle;
+  final VoidCallback onTap;
+  final VoidCallback onHelp;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 260,
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: const Color(0xFFEAF1FF),
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: const Color(0xFFCFE0FF)),
-            ),
-            child: Icon(icon, color: const Color(0xFF1957E6), size: 18),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+      width: 282,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+            child: Row(
               children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF0F172A),
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
+                Container(
+                  width: 31,
+                  height: 31,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF7FAFC),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFDDE7EE)),
+                  ),
+                  child: Icon(icon, color: const Color(0xFF1957E6), size: 16),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF183548),
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                      letterSpacing: 0,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF64748B),
-                    fontWeight: FontWeight.w600,
-                    fontSize: 11,
+                Tooltip(
+                  message: 'Ayuda',
+                  child: SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: IconButton(
+                      onPressed: onHelp,
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                      style: IconButton.styleFrom(
+                        foregroundColor: const Color(0xFF64748B),
+                        hoverColor: const Color(0xFFEFF4F8),
+                        highlightColor: const Color(0xFFDDE7EE),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                      icon: const Icon(Icons.help_outline_rounded, size: 17),
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
