@@ -5702,86 +5702,9 @@ class _QuotationTopbarMenu extends StatelessWidget {
     Future<void>.delayed(const Duration(milliseconds: 120), action);
   }
 
-  void _showHelp(BuildContext context, String title, String description) {
-    _runAfterMenuCloses(() {
-      if (!context.mounted) return;
-      showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          titlePadding: const EdgeInsets.fromLTRB(22, 20, 18, 8),
-          contentPadding: const EdgeInsets.fromLTRB(22, 0, 22, 20),
-          title: Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEAF1FF),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFFDDEAFF)),
-                ),
-                child: const Icon(
-                  Icons.help_outline_rounded,
-                  size: 18,
-                  color: Color(0xFF1957E6),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    color: Color(0xFF0F172A),
-                    fontSize: 17,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          content: Text(
-            description,
-            style: const TextStyle(
-              color: Color(0xFF52667C),
-              fontSize: 13,
-              height: 1.35,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF1957E6),
-                textStyle: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0,
-                ),
-              ),
-              child: const Text('Entendido'),
-            ),
-          ],
-        ),
-      );
-    });
-  }
-
   void _activateMenuItem(BuildContext menuContext, VoidCallback action) {
     Navigator.of(menuContext).pop();
     _runAfterMenuCloses(action);
-  }
-
-  void _openHelpFromMenu(
-    BuildContext rootContext,
-    BuildContext menuContext, {
-    required String title,
-    required String description,
-  }) {
-    Navigator.of(menuContext).pop();
-    _showHelp(rootContext, title, description);
   }
 
   @override
@@ -5807,13 +5730,8 @@ class _QuotationTopbarMenu extends StatelessWidget {
               icon: Icons.request_quote_outlined,
               title: 'Cotizar',
               onTap: () => _activateMenuItem(menuContext, onQuote),
-              onHelp: () => _openHelpFromMenu(
-                context,
-                menuContext,
-                title: 'Cotizar',
-                description:
-                    'Guarda el ticket actual como cotización para poder retomarlo, compartirlo o convertirlo en una venta más adelante sin perder los productos agregados.',
-              ),
+              helpText:
+                  'Guarda el ticket actual como cotización para poder retomarlo, compartirlo o convertirlo en una venta más adelante sin perder los productos agregados.',
             ),
           ),
           PopupMenuItem(
@@ -5823,13 +5741,8 @@ class _QuotationTopbarMenu extends StatelessWidget {
               icon: Icons.history_edu_outlined,
               title: 'Lista de cotizaciones',
               onTap: () => _activateMenuItem(menuContext, onHistory),
-              onHelp: () => _openHelpFromMenu(
-                context,
-                menuContext,
-                title: 'Lista de cotizaciones',
-                description:
-                    'Abre el historial de cotizaciones guardadas para buscar, revisar, reutilizar o dar seguimiento a propuestas anteriores.',
-              ),
+              helpText:
+                  'Abre el historial de cotizaciones guardadas para buscar, revisar, reutilizar o dar seguimiento a propuestas anteriores.',
             ),
           ),
           PopupMenuItem(
@@ -5839,13 +5752,8 @@ class _QuotationTopbarMenu extends StatelessWidget {
               icon: Icons.picture_as_pdf_outlined,
               title: 'Ver PDF',
               onTap: () => _activateMenuItem(menuContext, onPdf),
-              onHelp: () => _openHelpFromMenu(
-                context,
-                menuContext,
-                title: 'Ver PDF',
-                description:
-                    'Genera una vista previa del documento PDF del ticket actual para revisarlo, imprimirlo o compartirlo con el cliente.',
-              ),
+              helpText:
+                  'Genera una vista previa del documento PDF del ticket actual para revisarlo, imprimirlo o compartirlo con el cliente.',
             ),
           ),
         ],
@@ -5895,86 +5803,9 @@ class _CompanyAccountMenu extends ConsumerWidget {
     Future<void>.delayed(const Duration(milliseconds: 120), action);
   }
 
-  void _showHelp(BuildContext context, String title, String description) {
-    _runAfterMenuCloses(() {
-      if (!context.mounted) return;
-      showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          titlePadding: const EdgeInsets.fromLTRB(22, 20, 18, 8),
-          contentPadding: const EdgeInsets.fromLTRB(22, 0, 22, 20),
-          title: Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEAF1FF),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFFDDEAFF)),
-                ),
-                child: const Icon(
-                  Icons.help_outline_rounded,
-                  size: 18,
-                  color: Color(0xFF1957E6),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    color: Color(0xFF0F172A),
-                    fontSize: 17,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          content: Text(
-            description,
-            style: const TextStyle(
-              color: Color(0xFF52667C),
-              fontSize: 13,
-              height: 1.35,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF1957E6),
-                textStyle: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0,
-                ),
-              ),
-              child: const Text('Entendido'),
-            ),
-          ],
-        ),
-      );
-    });
-  }
-
   void _activateMenuItem(BuildContext menuContext, VoidCallback action) {
     Navigator.of(menuContext).pop();
     _runAfterMenuCloses(action);
-  }
-
-  void _openHelpFromMenu(
-    BuildContext rootContext,
-    BuildContext menuContext, {
-    required String title,
-    required String description,
-  }) {
-    Navigator.of(menuContext).pop();
-    _showHelp(rootContext, title, description);
   }
 
   void _logout(BuildContext context, WidgetRef ref) {
@@ -6023,13 +5854,8 @@ class _CompanyAccountMenu extends ConsumerWidget {
                 menuContext,
                 () => context.go(Routes.profile),
               ),
-              onHelp: () => _openHelpFromMenu(
-                context,
-                menuContext,
-                title: 'Perfil',
-                description:
-                    'Muestra la información del usuario conectado, sus datos principales y el acceso para revisar su cuenta dentro de DaleVenta POS.',
-              ),
+              helpText:
+                  'Muestra la información del usuario conectado, sus datos principales y el acceso para revisar su cuenta dentro de DaleVenta POS.',
             ),
           ),
           PopupMenuItem(
@@ -6042,13 +5868,8 @@ class _CompanyAccountMenu extends ConsumerWidget {
                 menuContext,
                 () => context.go(Routes.users),
               ),
-              onHelp: () => _openHelpFromMenu(
-                context,
-                menuContext,
-                title: 'Equipos',
-                description:
-                    'Administra los usuarios de la empresa, sus roles y permisos para controlar quién puede vender, configurar o consultar información.',
-              ),
+              helpText:
+                  'Administra los usuarios de la empresa, sus roles y permisos para controlar quién puede vender, configurar o consultar información.',
             ),
           ),
           const PopupMenuDivider(height: 8),
@@ -6060,13 +5881,8 @@ class _CompanyAccountMenu extends ConsumerWidget {
               label: 'Apps',
               onTap: () =>
                   _activateMenuItem(menuContext, () => context.go(Routes.apps)),
-              onHelp: () => _openHelpFromMenu(
-                context,
-                menuContext,
-                title: 'Apps',
-                description:
-                    'Centraliza los accesos para usar la cuenta desde Android, web y escritorio, manteniendo la misma empresa y permisos del usuario.',
-              ),
+              helpText:
+                  'Centraliza los accesos para usar la cuenta desde Android, web y escritorio, manteniendo la misma empresa y permisos del usuario.',
             ),
           ),
           PopupMenuItem(
@@ -6079,13 +5895,8 @@ class _CompanyAccountMenu extends ConsumerWidget {
                 menuContext,
                 () => context.go(Routes.licencias),
               ),
-              onHelp: () => _openHelpFromMenu(
-                context,
-                menuContext,
-                title: 'Licencias',
-                description:
-                    'Resume el estado de la empresa activa, el plan disponible y la preparación del sistema para trabajo multiempresa.',
-              ),
+              helpText:
+                  'Resume el estado de la empresa activa, el plan disponible y la preparación del sistema para trabajo multiempresa.',
             ),
           ),
           PopupMenuItem(
@@ -6098,13 +5909,8 @@ class _CompanyAccountMenu extends ConsumerWidget {
                 menuContext,
                 () => context.go(Routes.actualizaciones),
               ),
-              onHelp: () => _openHelpFromMenu(
-                context,
-                menuContext,
-                title: 'Actualizaciones',
-                description:
-                    'Permite revisar la versión instalada, buscar nuevas versiones y confirmar si hay releases disponibles para este equipo.',
-              ),
+              helpText:
+                  'Permite revisar la versión instalada, buscar nuevas versiones y confirmar si hay releases disponibles para este equipo.',
             ),
           ),
           PopupMenuItem(
@@ -6117,13 +5923,8 @@ class _CompanyAccountMenu extends ConsumerWidget {
                 menuContext,
                 () => context.go(Routes.configuracion),
               ),
-              onHelp: () => _openHelpFromMenu(
-                context,
-                menuContext,
-                title: 'Configuración',
-                description:
-                    'Abre el centro de control de la empresa con datos comerciales, documentos, impresión, backend y parámetros operativos.',
-              ),
+              helpText:
+                  'Abre el centro de control de la empresa con datos comerciales, documentos, impresión, backend y parámetros operativos.',
             ),
           ),
           const PopupMenuDivider(height: 8),
@@ -6138,13 +5939,8 @@ class _CompanyAccountMenu extends ConsumerWidget {
                 Navigator.of(menuContext).pop();
                 _logout(context, ref);
               },
-              onHelp: () => _openHelpFromMenu(
-                context,
-                menuContext,
-                title: 'Cerrar sesión',
-                description:
-                    'Cierra la sesión del usuario actual en este equipo y vuelve a la pantalla de inicio para proteger el acceso de la empresa.',
-              ),
+              helpText:
+                  'Cierra la sesión del usuario actual en este equipo y vuelve a la pantalla de inicio para proteger el acceso de la empresa.',
             ),
           ),
         ],
@@ -6235,88 +6031,229 @@ class _CompanyLogoBox extends StatelessWidget {
   }
 }
 
-class _CompanyMenuItem extends StatelessWidget {
+class _CompanyMenuItem extends StatefulWidget {
   const _CompanyMenuItem({
     required this.icon,
     required this.label,
     required this.onTap,
-    required this.onHelp,
+    required this.helpText,
     this.danger = false,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final VoidCallback onHelp;
+  final String helpText;
   final bool danger;
 
   @override
+  State<_CompanyMenuItem> createState() => _CompanyMenuItemState();
+}
+
+class _CompanyMenuItemState extends State<_CompanyMenuItem> {
+  bool _showHelp = false;
+
+  @override
   Widget build(BuildContext context) {
-    final accent = danger ? const Color(0xFFDC2626) : const Color(0xFF1957E6);
-    final textColor = danger
+    final accent = widget.danger
+        ? const Color(0xFFDC2626)
+        : const Color(0xFF1957E6);
+    final textColor = widget.danger
         ? const Color(0xFFB91C1C)
         : const Color(0xFF27364A);
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
-        child: SizedBox(
-          height: 48,
+        onTap: widget.onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: 48,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: widget.danger
+                            ? const Color(0xFFFFF1F1)
+                            : const Color(0xFFF3F7FF),
+                        borderRadius: BorderRadius.circular(7),
+                        border: Border.all(
+                          color: widget.danger
+                              ? const Color(0xFFFECACA)
+                              : const Color(0xFFDDEAFF),
+                        ),
+                      ),
+                      child: Icon(widget.icon, size: 17, color: accent),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        widget.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: textColor,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 13,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: _showHelp ? 'Ocultar ayuda' : 'Ayuda',
+                      onPressed: () => setState(() => _showHelp = !_showHelp),
+                      icon: Icon(
+                        _showHelp
+                            ? Icons.help_rounded
+                            : Icons.help_outline_rounded,
+                      ),
+                      iconSize: 17,
+                      color: _showHelp
+                          ? const Color(0xFF1957E6)
+                          : const Color(0xFF7C8DA1),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 30,
+                        height: 30,
+                      ),
+                      splashRadius: 17,
+                    ),
+                    const SizedBox(width: 2),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 18,
+                      color: widget.danger
+                          ? const Color(0xFFF87171)
+                          : const Color(0xFF9AA8B6),
+                    ),
+                  ],
+                ),
+              ),
+              AnimatedCrossFade(
+                firstChild: const SizedBox.shrink(),
+                secondChild: _InlineMenuHelp(text: widget.helpText),
+                crossFadeState: _showHelp
+                    ? CrossFadeState.showSecond
+                    : CrossFadeState.showFirst,
+                duration: const Duration(milliseconds: 150),
+                sizeCurve: Curves.easeOutCubic,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuotationMenuItem extends StatefulWidget {
+  const _QuotationMenuItem({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    required this.helpText,
+  });
+
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+  final String helpText;
+
+  @override
+  State<_QuotationMenuItem> createState() => _QuotationMenuItemState();
+}
+
+class _QuotationMenuItemState extends State<_QuotationMenuItem> {
+  bool _showHelp = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 282,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: widget.onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Row(
+            padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: danger
-                        ? const Color(0xFFFFF1F1)
-                        : const Color(0xFFF3F7FF),
-                    borderRadius: BorderRadius.circular(7),
-                    border: Border.all(
-                      color: danger
-                          ? const Color(0xFFFECACA)
-                          : const Color(0xFFDDEAFF),
+                Row(
+                  children: [
+                    Container(
+                      width: 31,
+                      height: 31,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF7FAFC),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFDDE7EE)),
+                      ),
+                      child: Icon(
+                        widget.icon,
+                        color: const Color(0xFF1957E6),
+                        size: 16,
+                      ),
                     ),
-                  ),
-                  child: Icon(icon, size: 17, color: accent),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: textColor,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13,
-                      letterSpacing: 0,
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Text(
+                        widget.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF183548),
+                          fontWeight: FontWeight.w900,
+                          fontSize: 13,
+                          letterSpacing: 0,
+                        ),
+                      ),
                     ),
-                  ),
+                    Tooltip(
+                      message: _showHelp ? 'Ocultar ayuda' : 'Ayuda',
+                      child: SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: IconButton(
+                          onPressed: () =>
+                              setState(() => _showHelp = !_showHelp),
+                          padding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.compact,
+                          style: IconButton.styleFrom(
+                            foregroundColor: _showHelp
+                                ? const Color(0xFF1957E6)
+                                : const Color(0xFF64748B),
+                            hoverColor: const Color(0xFFEFF4F8),
+                            highlightColor: const Color(0xFFDDE7EE),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                          ),
+                          icon: Icon(
+                            _showHelp
+                                ? Icons.help_rounded
+                                : Icons.help_outline_rounded,
+                            size: 17,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                IconButton(
-                  tooltip: 'Ayuda',
-                  onPressed: onHelp,
-                  icon: const Icon(Icons.help_outline_rounded),
-                  iconSize: 17,
-                  color: const Color(0xFF7C8DA1),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 30,
-                    height: 30,
-                  ),
-                  splashRadius: 17,
-                ),
-                const SizedBox(width: 2),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  size: 18,
-                  color: danger
-                      ? const Color(0xFFF87171)
-                      : const Color(0xFF9AA8B6),
+                AnimatedCrossFade(
+                  firstChild: const SizedBox.shrink(),
+                  secondChild: _InlineMenuHelp(text: widget.helpText),
+                  crossFadeState: _showHelp
+                      ? CrossFadeState.showSecond
+                      : CrossFadeState.showFirst,
+                  duration: const Duration(milliseconds: 150),
+                  sizeCurve: Curves.easeOutCubic,
                 ),
               ],
             ),
@@ -6327,79 +6264,30 @@ class _CompanyMenuItem extends StatelessWidget {
   }
 }
 
-class _QuotationMenuItem extends StatelessWidget {
-  const _QuotationMenuItem({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-    required this.onHelp,
-  });
+class _InlineMenuHelp extends StatelessWidget {
+  const _InlineMenuHelp({required this.text});
 
-  final IconData icon;
-  final String title;
-  final VoidCallback onTap;
-  final VoidCallback onHelp;
+  final String text;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 282,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-            child: Row(
-              children: [
-                Container(
-                  width: 31,
-                  height: 31,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF7FAFC),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: const Color(0xFFDDE7EE)),
-                  ),
-                  child: Icon(icon, color: const Color(0xFF1957E6), size: 16),
-                ),
-                const SizedBox(width: 11),
-                Expanded(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF183548),
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                ),
-                Tooltip(
-                  message: 'Ayuda',
-                  child: SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: IconButton(
-                      onPressed: onHelp,
-                      padding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
-                      style: IconButton.styleFrom(
-                        foregroundColor: const Color(0xFF64748B),
-                        hoverColor: const Color(0xFFEFF4F8),
-                        highlightColor: const Color(0xFFDDE7EE),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-                      icon: const Icon(Icons.help_outline_rounded, size: 17),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(42, 0, 4, 8),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F8FF),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: const Color(0xFFDDEAFF)),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Color(0xFF52667C),
+          fontSize: 11.6,
+          height: 1.25,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0,
         ),
       ),
     );
