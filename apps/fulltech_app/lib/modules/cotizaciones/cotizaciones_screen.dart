@@ -4736,7 +4736,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           onQuote: _saveCurrentAsQuotation,
           onHistory: () => context.go(Routes.cotizacionesHistorial),
           onPdf: _openPdfPreview,
-          onServiceOrder: _sendQuotationToServiceOrder,
         ),
         _ClientTopbarAction(
           hasClient:
@@ -5693,13 +5692,11 @@ class _QuotationTopbarMenu extends StatelessWidget {
     required this.onQuote,
     required this.onHistory,
     required this.onPdf,
-    required this.onServiceOrder,
   });
 
   final VoidCallback onQuote;
   final VoidCallback onHistory;
   final VoidCallback onPdf;
-  final VoidCallback onServiceOrder;
 
   void _runAfterMenuCloses(VoidCallback action) {
     Future<void>.delayed(const Duration(milliseconds: 120), action);
@@ -5851,22 +5848,6 @@ class _QuotationTopbarMenu extends StatelessWidget {
               ),
             ),
           ),
-          PopupMenuItem(
-            enabled: false,
-            padding: EdgeInsets.zero,
-            child: _QuotationMenuItem(
-              icon: Icons.assignment_turned_in_outlined,
-              title: 'Pasar a orden de servicio',
-              onTap: () => _activateMenuItem(menuContext, onServiceOrder),
-              onHelp: () => _openHelpFromMenu(
-                context,
-                menuContext,
-                title: 'Pasar a orden de servicio',
-                description:
-                    'Convierte el ticket actual en una orden de servicio para gestionar instalación, seguimiento técnico o trabajo operativo relacionado.',
-              ),
-            ),
-          ),
         ],
         child: Container(
           height: 38,
@@ -5910,6 +5891,99 @@ class _QuotationTopbarMenu extends StatelessWidget {
 class _CompanyAccountMenu extends ConsumerWidget {
   const _CompanyAccountMenu();
 
+  void _runAfterMenuCloses(VoidCallback action) {
+    Future<void>.delayed(const Duration(milliseconds: 120), action);
+  }
+
+  void _showHelp(BuildContext context, String title, String description) {
+    _runAfterMenuCloses(() {
+      if (!context.mounted) return;
+      showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          titlePadding: const EdgeInsets.fromLTRB(22, 20, 18, 8),
+          contentPadding: const EdgeInsets.fromLTRB(22, 0, 22, 20),
+          title: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF1FF),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFDDEAFF)),
+                ),
+                child: const Icon(
+                  Icons.help_outline_rounded,
+                  size: 18,
+                  color: Color(0xFF1957E6),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            description,
+            style: const TextStyle(
+              color: Color(0xFF52667C),
+              fontSize: 13,
+              height: 1.35,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF1957E6),
+                textStyle: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0,
+                ),
+              ),
+              child: const Text('Entendido'),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  void _activateMenuItem(BuildContext menuContext, VoidCallback action) {
+    Navigator.of(menuContext).pop();
+    _runAfterMenuCloses(action);
+  }
+
+  void _openHelpFromMenu(
+    BuildContext rootContext,
+    BuildContext menuContext, {
+    required String title,
+    required String description,
+  }) {
+    Navigator.of(menuContext).pop();
+    _showHelp(rootContext, title, description);
+  }
+
+  void _logout(BuildContext context, WidgetRef ref) {
+    _runAfterMenuCloses(() async {
+      await ref.read(authStateProvider.notifier).logout();
+      if (context.mounted) context.go(Routes.login);
+    });
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final company = ref.watch(companySettingsProvider);
@@ -5929,47 +6003,148 @@ class _CompanyAccountMenu extends ConsumerWidget {
       child: PopupMenuButton<String>(
         tooltip: 'Cuenta y empresa',
         offset: const Offset(0, 44),
-        elevation: 0,
+        elevation: 8,
         color: Colors.white,
         surfaceTintColor: Colors.white,
+        shadowColor: Colors.black.withValues(alpha: 0.10),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: Color(0xFFD8E5F3)),
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: Color(0xFFDDE7EE)),
         ),
-        constraints: const BoxConstraints(minWidth: 268),
-        onSelected: (value) {
-          switch (value) {
-            case 'profile':
-              context.go(Routes.profile);
-              break;
-            case 'teams':
-              context.go(Routes.users);
-              break;
-            case 'settings':
-              context.go(Routes.configuracion);
-              break;
-          }
-        },
-        itemBuilder: (context) => const [
+        constraints: const BoxConstraints(minWidth: 302),
+        itemBuilder: (menuContext) => [
           PopupMenuItem(
-            value: 'profile',
+            enabled: false,
+            padding: EdgeInsets.zero,
             child: _CompanyMenuItem(
               icon: Icons.person_outline_rounded,
               label: 'Perfil',
+              onTap: () => _activateMenuItem(
+                menuContext,
+                () => context.go(Routes.profile),
+              ),
+              onHelp: () => _openHelpFromMenu(
+                context,
+                menuContext,
+                title: 'Perfil',
+                description:
+                    'Muestra la información del usuario conectado, sus datos principales y el acceso para revisar su cuenta dentro de DaleVenta POS.',
+              ),
             ),
           ),
           PopupMenuItem(
-            value: 'teams',
+            enabled: false,
+            padding: EdgeInsets.zero,
             child: _CompanyMenuItem(
               icon: Icons.groups_2_outlined,
               label: 'Equipos',
+              onTap: () => _activateMenuItem(
+                menuContext,
+                () => context.go(Routes.users),
+              ),
+              onHelp: () => _openHelpFromMenu(
+                context,
+                menuContext,
+                title: 'Equipos',
+                description:
+                    'Administra los usuarios de la empresa, sus roles y permisos para controlar quién puede vender, configurar o consultar información.',
+              ),
+            ),
+          ),
+          const PopupMenuDivider(height: 8),
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: _CompanyMenuItem(
+              icon: Icons.apps_rounded,
+              label: 'Apps',
+              onTap: () =>
+                  _activateMenuItem(menuContext, () => context.go(Routes.apps)),
+              onHelp: () => _openHelpFromMenu(
+                context,
+                menuContext,
+                title: 'Apps',
+                description:
+                    'Centraliza los accesos para usar la cuenta desde Android, web y escritorio, manteniendo la misma empresa y permisos del usuario.',
+              ),
             ),
           ),
           PopupMenuItem(
-            value: 'settings',
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: _CompanyMenuItem(
+              icon: Icons.verified_user_outlined,
+              label: 'Licencias',
+              onTap: () => _activateMenuItem(
+                menuContext,
+                () => context.go(Routes.licencias),
+              ),
+              onHelp: () => _openHelpFromMenu(
+                context,
+                menuContext,
+                title: 'Licencias',
+                description:
+                    'Resume el estado de la empresa activa, el plan disponible y la preparación del sistema para trabajo multiempresa.',
+              ),
+            ),
+          ),
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: _CompanyMenuItem(
+              icon: Icons.system_update_alt_rounded,
+              label: 'Actualizaciones',
+              onTap: () => _activateMenuItem(
+                menuContext,
+                () => context.go(Routes.actualizaciones),
+              ),
+              onHelp: () => _openHelpFromMenu(
+                context,
+                menuContext,
+                title: 'Actualizaciones',
+                description:
+                    'Permite revisar la versión instalada, buscar nuevas versiones y confirmar si hay releases disponibles para este equipo.',
+              ),
+            ),
+          ),
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
             child: _CompanyMenuItem(
               icon: Icons.settings_outlined,
               label: 'Configuración',
+              onTap: () => _activateMenuItem(
+                menuContext,
+                () => context.go(Routes.configuracion),
+              ),
+              onHelp: () => _openHelpFromMenu(
+                context,
+                menuContext,
+                title: 'Configuración',
+                description:
+                    'Abre el centro de control de la empresa con datos comerciales, documentos, impresión, backend y parámetros operativos.',
+              ),
+            ),
+          ),
+          const PopupMenuDivider(height: 8),
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: _CompanyMenuItem(
+              icon: Icons.logout_rounded,
+              label: 'Cerrar sesión',
+              danger: true,
+              onTap: () {
+                Navigator.of(menuContext).pop();
+                _logout(context, ref);
+              },
+              onHelp: () => _openHelpFromMenu(
+                context,
+                menuContext,
+                title: 'Cerrar sesión',
+                description:
+                    'Cierra la sesión del usuario actual en este equipo y vuelve a la pantalla de inicio para proteger el acceso de la empresa.',
+              ),
             ),
           ),
         ],
@@ -6061,44 +6236,92 @@ class _CompanyLogoBox extends StatelessWidget {
 }
 
 class _CompanyMenuItem extends StatelessWidget {
-  const _CompanyMenuItem({required this.icon, required this.label});
+  const _CompanyMenuItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    required this.onHelp,
+    this.danger = false,
+  });
 
   final IconData icon;
   final String label;
+  final VoidCallback onTap;
+  final VoidCallback onHelp;
+  final bool danger;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 44,
-      child: Row(
-        children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF3F7FB),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFD5E2EC)),
+    final accent = danger ? const Color(0xFFDC2626) : const Color(0xFF1957E6);
+    final textColor = danger
+        ? const Color(0xFFB91C1C)
+        : const Color(0xFF27364A);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox(
+          height: 48,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: danger
+                        ? const Color(0xFFFFF1F1)
+                        : const Color(0xFFF3F7FF),
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(
+                      color: danger
+                          ? const Color(0xFFFECACA)
+                          : const Color(0xFFDDEAFF),
+                    ),
+                  ),
+                  child: Icon(icon, size: 17, color: accent),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Ayuda',
+                  onPressed: onHelp,
+                  icon: const Icon(Icons.help_outline_rounded),
+                  iconSize: 17,
+                  color: const Color(0xFF7C8DA1),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 30,
+                    height: 30,
+                  ),
+                  splashRadius: 17,
+                ),
+                const SizedBox(width: 2),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: danger
+                      ? const Color(0xFFF87171)
+                      : const Color(0xFF9AA8B6),
+                ),
+              ],
             ),
-            child: Icon(icon, size: 17, color: const Color(0xFF34475A)),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Color(0xFF27364A),
-                fontWeight: FontWeight.w900,
-                fontSize: 13,
-              ),
-            ),
-          ),
-          const Icon(
-            Icons.chevron_right_rounded,
-            size: 18,
-            color: Color(0xFF9AA8B6),
-          ),
-        ],
+        ),
       ),
     );
   }

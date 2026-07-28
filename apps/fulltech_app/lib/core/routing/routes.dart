@@ -45,6 +45,9 @@ class Routes {
   static const nomina = '/nomina';
   static const misPagos = '/mis-pagos';
   static const manualInterno = '/manual-interno';
+  static const apps = '/apps';
+  static const licencias = '/licencias';
+  static const actualizaciones = '/actualizaciones';
   static const configuracion = '/configuracion';
   static const whatsapp = '/whatsapp';
   static const publicidad = '/publicidad';

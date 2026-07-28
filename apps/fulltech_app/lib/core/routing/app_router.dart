@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/account/account_menu_screens.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/home/home_shell.dart';
 import '../../features/user/profile_screen.dart';
@@ -103,6 +104,22 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: Routes.profile,
             builder: (context, state) => const ProfileScreen(),
+          ),
+          GoRoute(
+            path: Routes.apps,
+            builder: (context, state) => const AccountAppsScreen(),
+          ),
+          GoRoute(
+            path: Routes.licencias,
+            builder: (context, state) => const AccountLicensesScreen(),
+          ),
+          GoRoute(
+            path: Routes.actualizaciones,
+            builder: (context, state) => const AccountUpdatesScreen(),
+          ),
+          GoRoute(
+            path: Routes.configuracion,
+            builder: (context, state) => const AccountSettingsScreen(),
           ),
           GoRoute(
             path: Routes.users,
