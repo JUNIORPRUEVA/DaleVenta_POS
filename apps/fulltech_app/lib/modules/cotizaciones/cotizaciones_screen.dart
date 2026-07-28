@@ -9985,12 +9985,12 @@ class _DesktopTicketRemoveButton extends StatelessWidget {
           visualDensity: VisualDensity.compact,
           style: IconButton.styleFrom(
             backgroundColor: Colors.transparent,
-            foregroundColor: const Color(0xFFB42318),
-            hoverColor: const Color(0xFFFFEAEA),
-            highlightColor: const Color(0xFFFFDCDC),
+            foregroundColor: const Color(0xFF111827),
+            hoverColor: const Color(0xFFEFF4F8),
+            highlightColor: const Color(0xFFDDE7EE),
             shape: const CircleBorder(),
           ),
-          icon: const AppIcon(AppIcons.delete, size: 24, strokeWidth: 2.6),
+          icon: const AppIcon(AppIcons.delete, size: 19, strokeWidth: 2.3),
         ),
       ),
     );
