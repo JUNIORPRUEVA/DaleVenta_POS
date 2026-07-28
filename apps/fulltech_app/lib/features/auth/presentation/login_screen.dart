@@ -10,6 +10,7 @@ import '../../../core/errors/api_exception.dart';
 import '../../../core/routing/route_access.dart';
 import '../../../core/utils/app_feedback.dart';
 import '../../../core/widgets/primary_button.dart';
+import 'register_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -331,6 +332,35 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             label: 'Iniciar sesion',
                             loading: loading,
                             onPressed: _submit,
+                          ),
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: loading
+                                ? null
+                                : () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const RegisterScreen(),
+                                    ),
+                                  ),
+                            icon: const Icon(Icons.storefront_rounded),
+                            label: const Text('Crear mi negocio'),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(48),
+                              foregroundColor: const Color(0xFF123A75),
+                              side: const BorderSide(color: Color(0xFFCFE0FF)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              textStyle: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: loading ? null : () {},
+                            child: const Text('¿Olvidaste tu contraseña?'),
                           ),
                         ],
                       ),

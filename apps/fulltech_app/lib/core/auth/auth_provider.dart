@@ -261,6 +261,35 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
+  Future<bool> registerBusiness(Map<String, dynamic> payload) async {
+    if (state.loading) return false;
+    state = state.copyWith(loading: true);
+    final repo = ref.read(authRepositoryProvider);
+    try {
+      final user = await repo.registerBusiness(payload);
+      _markSessionHealthy();
+      state = AuthState(
+        initialized: true,
+        isAuthenticated: true,
+        user: user,
+        loading: false,
+        restoringSession: false,
+        hasSessionHint: true,
+      );
+      return true;
+    } catch (_) {
+      state = AuthState(
+        initialized: true,
+        isAuthenticated: false,
+        user: null,
+        loading: false,
+        restoringSession: false,
+        hasSessionHint: false,
+      );
+      rethrow;
+    }
+  }
+
   Future<void> logout() async {
     _markSessionHealthy();
     final storage = ref.read(tokenStorageProvider);

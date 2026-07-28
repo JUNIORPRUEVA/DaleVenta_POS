@@ -373,6 +373,35 @@ class AuthRepository {
     }
   }
 
+  Future<UserModel> registerBusiness(Map<String, dynamic> payload) async {
+    try {
+      final res = await _dio
+          .post(ApiRoutes.registerBusiness, data: payload)
+          .timeout(_loginTimeout);
+      final access = res.data['accessToken'] as String?;
+      final refresh = res.data['refreshToken'] as String?;
+      if (access != null && access.isNotEmpty) {
+        await _storage.saveTokens(access, refresh);
+      }
+      final fallbackUser = _userFromLoginResponse(res.data);
+      if (fallbackUser == null) {
+        throw ApiException('No se recibio la sesion creada');
+      }
+      await _storage.saveUserSnapshot(fallbackUser);
+      return fallbackUser;
+    } on TimeoutException {
+      throw const ApiException.detailed(
+        message:
+            'El servidor tardó demasiado creando tu negocio. Inténtalo de nuevo.',
+        type: ApiErrorType.timeout,
+        displayCode: 'NETWORK_TIMEOUT',
+        retryable: true,
+      );
+    } on DioException catch (e) {
+      throw _mapDioError(e, 'No se pudo crear el negocio');
+    }
+  }
+
   Future<UserModel?> getMeOrNull({bool silent = false}) async {
     // Widget tests (smoke test) should not block on secure storage/network.
     // Those calls can hang in tests and leave pending timeout timers.
