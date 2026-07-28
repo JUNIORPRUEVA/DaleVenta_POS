@@ -5443,6 +5443,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                               utilityAmount: _utilityAmount,
                               money: _money,
                               onPickClient: _openClientDialog,
+                              onClearClient: () => _commitEditorChange(() {
+                                _selectedClientId = null;
+                                _selectedClientName = 'Sin cliente';
+                                _selectedClientPhone = null;
+                              }),
                               onOpenHistory: _openRecentSalesPanel,
                               onToggleItbis: (value) => _commitEditorChange(
                                 () => _setItbisEnabled(value),
@@ -7937,6 +7942,7 @@ class _DesktopQuotePanel extends StatelessWidget {
     required this.utilityAmount,
     required this.money,
     required this.onPickClient,
+    required this.onClearClient,
     required this.onOpenHistory,
     required this.onToggleItbis,
     required this.hasNote,
@@ -7966,6 +7972,7 @@ class _DesktopQuotePanel extends StatelessWidget {
   final double utilityAmount;
   final String Function(double) money;
   final VoidCallback onPickClient;
+  final VoidCallback onClearClient;
   final VoidCallback onOpenHistory;
   final ValueChanged<bool> onToggleItbis;
   final bool hasNote;
@@ -8011,19 +8018,19 @@ class _DesktopQuotePanel extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Material(
-                  color: const Color(0xFFF7FAFC),
+                  color: const Color(0xFFFCFEFF),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: const BorderSide(color: Color(0xFFD8E5EC)),
+                    borderRadius: BorderRadius.circular(6),
+                    side: const BorderSide(color: Color(0xFFEAF0F4)),
                   ),
                   child: InkWell(
                     onTap: onPickClient,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(6),
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
+                        horizontal: 10,
+                        vertical: 7,
                       ),
                       child: Row(
                         children: [
@@ -8031,10 +8038,10 @@ class _DesktopQuotePanel extends StatelessWidget {
                             width: 34,
                             height: 34,
                             decoration: BoxDecoration(
-                              color: const Color(0xFFEAF1FF),
-                              borderRadius: BorderRadius.circular(6),
+                              color: const Color(0xFFF2F7FF),
+                              borderRadius: BorderRadius.circular(5),
                               border: Border.all(
-                                color: const Color(0xFFCFE0FF),
+                                color: const Color(0xFFDDEAFF),
                               ),
                             ),
                             child: const Icon(
@@ -8105,6 +8112,29 @@ class _DesktopQuotePanel extends StatelessWidget {
                                   ],
                                 );
                               },
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Tooltip(
+                            message: 'Quitar cliente',
+                            child: SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: IconButton(
+                                onPressed: onClearClient,
+                                padding: EdgeInsets.zero,
+                                visualDensity: VisualDensity.compact,
+                                style: IconButton.styleFrom(
+                                  backgroundColor: Colors.transparent,
+                                  foregroundColor: const Color(0xFF64748B),
+                                  hoverColor: const Color(0xFFEFF4F8),
+                                  highlightColor: const Color(0xFFDDE7EE),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.close_rounded, size: 17),
+                              ),
                             ),
                           ),
                         ],
