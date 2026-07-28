@@ -6,4 +6,9 @@ dist/
 # env files (keep local only)
 .env
 apps/api/.env
+apps/api/.env.docker
 
+# local/generated artifacts
+fulltech-pwa/
+apps/fulltech_app/release_artifacts/
+apps/fulltech_app/emulator-*.png

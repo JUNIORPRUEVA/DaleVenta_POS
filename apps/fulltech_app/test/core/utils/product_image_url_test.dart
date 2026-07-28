@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fulltech_app/core/utils/product_image_url.dart';
+import 'package:daleventa_pos/core/utils/product_image_url.dart';
 
 void main() {
   group('normalizeProductImageUrl', () {

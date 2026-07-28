@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:fulltech_app/core/app_update/app_update_controller.dart';
-import 'package:fulltech_app/core/app_update/app_update_installer_contract.dart';
-import 'package:fulltech_app/core/app_update/app_update_models.dart';
-import 'package:fulltech_app/core/app_update/app_update_repository.dart';
+import 'package:daleventa_pos/core/app_update/app_update_controller.dart';
+import 'package:daleventa_pos/core/app_update/app_update_installer_contract.dart';
+import 'package:daleventa_pos/core/app_update/app_update_models.dart';
+import 'package:daleventa_pos/core/app_update/app_update_repository.dart';
 
 void main() {
   group('AppUpdateController', () {

@@ -2,17 +2,17 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:fulltech_app/core/offline/offline_store.dart';
-import 'package:fulltech_app/core/offline/sync_queue_service.dart';
-import 'package:fulltech_app/core/realtime/operations_realtime_service.dart';
-import 'package:fulltech_app/core/auth/token_storage.dart';
-import 'package:fulltech_app/modules/clientes/application/clientes_controller.dart';
-import 'package:fulltech_app/modules/clientes/cliente_detail_screen.dart';
-import 'package:fulltech_app/modules/clientes/cliente_model.dart';
-import 'package:fulltech_app/modules/clientes/cliente_profile_model.dart';
-import 'package:fulltech_app/modules/clientes/cliente_timeline_model.dart';
-import 'package:fulltech_app/modules/clientes/data/cliente_detail_local_repository.dart';
-import 'package:fulltech_app/modules/clientes/data/clientes_repository.dart';
+import 'package:daleventa_pos/core/offline/offline_store.dart';
+import 'package:daleventa_pos/core/offline/sync_queue_service.dart';
+import 'package:daleventa_pos/core/realtime/operations_realtime_service.dart';
+import 'package:daleventa_pos/core/auth/token_storage.dart';
+import 'package:daleventa_pos/modules/clientes/application/clientes_controller.dart';
+import 'package:daleventa_pos/modules/clientes/cliente_detail_screen.dart';
+import 'package:daleventa_pos/modules/clientes/cliente_model.dart';
+import 'package:daleventa_pos/modules/clientes/cliente_profile_model.dart';
+import 'package:daleventa_pos/modules/clientes/cliente_timeline_model.dart';
+import 'package:daleventa_pos/modules/clientes/data/cliente_detail_local_repository.dart';
+import 'package:daleventa_pos/modules/clientes/data/clientes_repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

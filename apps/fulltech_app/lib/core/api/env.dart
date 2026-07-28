@@ -5,9 +5,9 @@ import 'runtime_env.dart';
 
 class Env {
   static const String _defaultApiBaseUrl =
-      'https://fulltech-tienda-fulltechapppwa.gcdndd.easypanel.host';
+      'http://localhost:4000';
   static const String _defaultAppBaseUrl =
-      'https://fulltech-tienda-fulltechapppwa.gcdndd.easypanel.host';
+      'http://localhost:4000';
   static const int _defaultApiTimeoutMs = 15000;
   static const int _minApiTimeoutMs = 1000;
 

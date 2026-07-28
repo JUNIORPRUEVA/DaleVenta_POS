@@ -6,21 +6,14 @@ import '../../features/auth/presentation/login_screen.dart';
 import '../../features/home/home_shell.dart';
 import '../../features/user/profile_screen.dart';
 import '../../features/user/users_screen.dart';
-import '../../features/ponche/ponche_screen.dart';
 import '../../features/splash/splash_screen.dart';
 import '../../features/contabilidad/contabilidad_screen.dart';
 import '../../features/contabilidad/cierres_diarios_screen.dart';
 import '../../features/contabilidad/depositos_bancarios_screen.dart';
 import '../../features/contabilidad/factura_fiscal_screen.dart';
 import '../../features/contabilidad/pagos_pendientes_screen.dart';
-import '../../features/administracion/admin_punch_registry_screen.dart';
-import '../../features/administracion/admin_service_commissions_screen.dart';
-import '../../features/administracion/admin_sales_registry_screen.dart';
-import '../../features/administracion/admin_quotes_registry_screen.dart';
-import '../../features/administracion/administracion_screen.dart';
 import '../../features/products/ui/inventory_module_pages.dart';
 import '../../features/reports/ui/reports_page.dart';
-import '../../features/media_gallery/presentation/media_gallery_screen.dart';
 import '../../modules/clientes/cliente_detail_screen.dart';
 import '../../modules/clientes/clientes_screen.dart';
 import '../../modules/cash/cash_box_screen.dart';
@@ -28,29 +21,9 @@ import '../../modules/cash/cash_management_screens.dart';
 import '../../modules/clientes/clientes_map_screen.dart';
 import '../../modules/clientes/cliente_form_screen.dart';
 import '../../modules/nomina/nomina_screen.dart';
-import '../../modules/publicidad/publicidad_hub_screen.dart';
-import '../../modules/publicidad/publicidad_campanas_screen_v2.dart';
-import '../../modules/publicidad/publicidad_placeholder_screens.dart';
-import '../../modules/publicidad/publicidad_screen.dart';
-import '../../modules/red_tecnica/red_tecnica_screen.dart';
-import '../../features/media_gallery/presentation/galeria_publicidad_screen.dart';
 import '../../modules/nomina/mis_pagos_screen.dart';
-import '../../modules/configuracion/configuracion_screen.dart';
-import '../../modules/whatsapp/whatsapp_screen.dart';
-import '../../modules/crm_comercial/crm_comercial_screen.dart';
-import '../../modules/whatsapp_crm/whatsapp_crm_screen.dart';
-import '../../features/amonestaciones/presentation/amonestaciones_screen.dart';
-import '../../features/amonestaciones/presentation/warning_detail_screen.dart';
-import '../../features/amonestaciones/presentation/mis_amonestaciones_pendientes_screen.dart';
-import '../../modules/manual_interno/manual_interno_screen.dart';
 import '../../modules/cotizaciones/cotizaciones_historial_screen.dart';
 import '../../modules/cotizaciones/cotizaciones_screen.dart';
-import '../../modules/service_orders/create_service_order_screen.dart';
-import '../../modules/service_orders/service_order_commissions_screen.dart';
-import '../../modules/service_orders/service_order_detail_screen.dart';
-import '../../modules/service_orders/service_order_models.dart';
-import '../../modules/service_orders/service_orders_list_screen.dart';
-import '../../modules/sitio_web/sitio_web_screen.dart';
 import '../../modules/ventas/tpv_sales_history_screen.dart';
 import '../../modules/ventas/registrar_venta_screen.dart';
 import '../../modules/ventas/sales_credit_screen.dart';
@@ -65,37 +38,6 @@ import 'routes.dart';
 
 final GlobalKey<NavigatorState> appRootNavigatorKey =
     GlobalKey<NavigatorState>();
-
-CustomTransitionPage<void> _buildPublicidadTransitionPage({
-  required GoRouterState state,
-  required Widget child,
-}) {
-  return CustomTransitionPage<void>(
-    key: state.pageKey,
-    child: child,
-    transitionDuration: const Duration(milliseconds: 220),
-    reverseTransitionDuration: const Duration(milliseconds: 180),
-    transitionsBuilder: (context, animation, secondaryAnimation, pageChild) {
-      final curved = CurvedAnimation(
-        parent: animation,
-        curve: Curves.easeOutCubic,
-        reverseCurve: Curves.easeInCubic,
-      );
-      final offsetTween = Tween<Offset>(
-        begin: const Offset(0.016, 0),
-        end: Offset.zero,
-      );
-
-      return FadeTransition(
-        opacity: curved,
-        child: SlideTransition(
-          position: offsetTween.animate(curved),
-          child: pageChild,
-        ),
-      );
-    },
-  );
-}
 
 final _routerRefreshProvider = Provider<_RouterRefreshNotifier>((ref) {
   final notifier = _RouterRefreshNotifier();
@@ -124,10 +66,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: Routes.login,
         builder: (context, state) => const LoginScreen(),
-      ),
-      GoRoute(
-        path: Routes.redTecnicaPublicForm,
-        builder: (context, state) => const RedTecnicaPublicFormScreen(),
       ),
       GoRoute(
         path: Routes.register,
@@ -171,14 +109,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const UsersScreen(),
           ),
           GoRoute(
-            path: Routes.ponche,
-            builder: (context, state) => const PoncheScreen(),
-          ),
-          GoRoute(
-            path: Routes.poncheHistorial,
-            builder: (context, state) => const PunchHistoryScreen(),
-          ),
-          GoRoute(
             path: Routes.catalogo,
             builder: (context, state) => const InventoryModulePages(),
           ),
@@ -201,26 +131,6 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: Routes.contabilidadPagosPendientes,
             builder: (context, state) => const PagosPendientesScreen(),
-          ),
-          GoRoute(
-            path: Routes.administracion,
-            builder: (context, state) => const AdministracionScreen(),
-          ),
-          GoRoute(
-            path: Routes.administracionPonches,
-            builder: (context, state) => const AdminPunchRegistryScreen(),
-          ),
-          GoRoute(
-            path: Routes.administracionVentas,
-            builder: (context, state) => const AdminSalesRegistryScreen(),
-          ),
-          GoRoute(
-            path: Routes.administracionComisiones,
-            builder: (context, state) => const AdminServiceCommissionsScreen(),
-          ),
-          GoRoute(
-            path: Routes.administracionCotizaciones,
-            builder: (context, state) => const AdminQuotesRegistryScreen(),
           ),
           GoRoute(
             path: Routes.clientes,
@@ -271,34 +181,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const CotizacionesScreen(),
           ),
           GoRoute(
-            path: Routes.serviceOrders,
-            builder: (context, state) => const ServiceOrdersListScreen(),
-          ),
-          GoRoute(
-            path: Routes.serviceOrderCommissions,
-            builder: (context, state) => const ServiceOrderCommissionsScreen(),
-          ),
-          GoRoute(
-            path: Routes.mediaGallery,
-            builder: (context, state) => const MediaGalleryScreen(),
-          ),
-          GoRoute(
-            path: Routes.serviceOrderCreate,
-            builder: (context, state) {
-              final args = state.extra is ServiceOrderCreateArgs
-                  ? state.extra as ServiceOrderCreateArgs
-                  : null;
-              return CreateServiceOrderScreen(args: args);
-            },
-          ),
-          GoRoute(
-            path: Routes.serviceOrderDetail,
-            builder: (context, state) {
-              final id = state.pathParameters['id'] ?? '';
-              return ServiceOrderDetailScreen(orderId: id);
-            },
-          ),
-          GoRoute(
             path: Routes.cotizacionesHistorial,
             builder: (context, state) {
               final phone = (state.uri.queryParameters['customerPhone'] ?? '')
@@ -315,95 +197,8 @@ final routerProvider = Provider<GoRouter>((ref) {
             },
           ),
           GoRoute(
-            path: Routes.manualInterno,
-            builder: (context, state) => const ManualInternoScreen(),
-          ),
-          GoRoute(
             path: Routes.ai,
             builder: (context, state) => const AiScreen(),
-          ),
-          GoRoute(
-            path: Routes.configuracion,
-            builder: (context, state) => const ConfiguracionScreen(),
-          ),
-          GoRoute(
-            path: Routes.whatsapp,
-            builder: (context, state) => const WhatsappScreen(),
-          ),
-          GoRoute(
-            path: Routes.publicidad,
-            builder: (context, state) => const PublicidadHubScreen(),
-          ),
-          GoRoute(
-            path: Routes.publicidadInvestigacion,
-            pageBuilder: (context, state) => _buildPublicidadTransitionPage(
-              state: state,
-              child: const PublicidadScreen.investigacion(),
-            ),
-          ),
-          GoRoute(
-            path: Routes.publicidadEstados,
-            pageBuilder: (context, state) => _buildPublicidadTransitionPage(
-              state: state,
-              child: const PublicidadScreen.estados(),
-            ),
-          ),
-          GoRoute(
-            path: Routes.publicidadCampanas,
-            pageBuilder: (context, state) => _buildPublicidadTransitionPage(
-              state: state,
-              child: const PublicidadCampanasScreenV2(),
-            ),
-          ),
-          GoRoute(
-            path: Routes.publicidadMarketplace,
-            pageBuilder: (context, state) => _buildPublicidadTransitionPage(
-              state: state,
-              child: const PublicidadMarketplaceScreen(),
-            ),
-          ),
-          GoRoute(
-            path: Routes.galeriaPublicidad,
-            builder: (context, state) => const GaleriaPublicidadScreen(),
-          ),
-          GoRoute(
-            path: Routes.publicidadGaleria,
-            pageBuilder: (context, state) => _buildPublicidadTransitionPage(
-              state: state,
-              child: const GaleriaPublicidadScreen(),
-            ),
-          ),
-          GoRoute(
-            path: Routes.whatsappCrm,
-            builder: (context, state) => const WhatsappCrmScreen(),
-          ),
-          GoRoute(
-            path: Routes.crmComercial,
-            builder: (context, state) => const CrmComercialScreen(),
-          ),
-          GoRoute(
-            path: Routes.sitioWeb,
-            builder: (context, state) => const SitioWebScreen(),
-          ),
-          GoRoute(
-            path: Routes.redTecnica,
-            builder: (context, state) => const RedTecnicaScreen(),
-          ),
-          GoRoute(
-            path: Routes.amonestaciones,
-            builder: (context, state) => const AmonestacionesScreen(),
-          ),
-          GoRoute(
-            path: Routes.amonestacionDetail,
-            builder: (context, state) {
-              final id = state.pathParameters['id'] ?? '';
-              return WarningDetailScreen(warningId: id);
-            },
-          ),
-          GoRoute(
-            path: Routes.misAmonestacionesPendientes,
-            builder: (context, state) =>
-                const MisAmonestacionesPendientesScreen(),
           ),
           GoRoute(
             path: Routes.clienteNuevo,
@@ -434,14 +229,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       final path = state.uri.path;
       final isAuthRoute = path == Routes.login;
       final isSplashRoute = path == Routes.splash;
-      final isPublicRoute = path == Routes.redTecnicaPublicForm;
 
       String defaultAuthedRoute() {
         return RouteAccess.defaultHomeForRole(role);
-      }
-
-      if (isPublicRoute) {
-        return null;
       }
 
       if (!auth.initialized || auth.restoringSession) {

@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fulltech_app/core/printing/unified_ticket_printer.dart';
-import 'package:fulltech_app/modules/cash/cash_dialogs.dart';
+import 'package:daleventa_pos/core/printing/unified_ticket_printer.dart';
+import 'package:daleventa_pos/modules/cash/cash_dialogs.dart';
 
 void main() {
   group('parseDominicanAmount', () {

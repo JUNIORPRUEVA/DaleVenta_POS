@@ -181,7 +181,7 @@ class DesktopShellFooter extends ConsumerWidget {
             children: [
               Expanded(
                 child: Text(
-                  '© 2026 FULLTECH, SRL — Todos los derechos reservados',
+                  '© 2026 DaleVenta POS — Todos los derechos reservados',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelMedium?.copyWith(
@@ -472,7 +472,6 @@ class _SidebarMenuGroup {
 }
 
 const List<String> _desktopSidebarFooterRoutes = <String>[
-  Routes.configuracion,
   Routes.users,
 ];
 
@@ -523,7 +522,7 @@ List<_SidebarMenuGroup> _buildDesktopSidebarGroups(
       key: 'principal',
       title: 'Principal',
       icon: Icons.dashboard_outlined,
-      items: pick([Routes.serviceOrders, Routes.clientes]),
+      items: pick([Routes.clientes]),
     ),
     _SidebarMenuGroup(
       key: 'ventas_tpv',
@@ -553,12 +552,8 @@ List<_SidebarMenuGroup> _buildDesktopSidebarGroups(
       title: 'Administración',
       icon: Icons.admin_panel_settings_outlined,
       items: pick([
-        Routes.ponche,
         Routes.nomina,
-        Routes.serviceOrderCommissions,
         Routes.misPagos,
-        Routes.amonestaciones,
-        Routes.administracion,
       ]),
     ),
     _SidebarMenuGroup(
@@ -568,16 +563,10 @@ List<_SidebarMenuGroup> _buildDesktopSidebarGroups(
       items: pick([Routes.contabilidad]),
     ),
     _SidebarMenuGroup(
-      key: 'comunicacion',
-      title: 'Comunicación',
-      icon: Icons.chat_bubble_outline_rounded,
-      items: pick([Routes.whatsapp, Routes.whatsappCrm, Routes.mediaGallery]),
-    ),
-    _SidebarMenuGroup(
-      key: 'sistema',
-      title: 'Sistema',
-      icon: Icons.settings_suggest_outlined,
-      items: pick([Routes.ai, Routes.manualInterno]),
+      key: 'herramientas',
+      title: 'Herramientas',
+      icon: Icons.smart_toy_outlined,
+      items: pick([Routes.ai]),
     ),
   ];
 
@@ -590,16 +579,14 @@ List<_SidebarMenuGroup> _buildDesktopSidebarGroups(
       .where((item) => !knownRoutes.contains(item.route))
       .toList(growable: false);
   if (extras.isNotEmpty) {
-    final sistemaIndex = groups.indexWhere((group) => group.key == 'sistema');
-    if (sistemaIndex >= 0) {
-      final sistema = groups[sistemaIndex];
-      groups[sistemaIndex] = _SidebarMenuGroup(
-        key: sistema.key,
-        title: sistema.title,
-        icon: sistema.icon,
-        items: [...sistema.items, ...extras],
-      );
-    }
+    groups.add(
+      _SidebarMenuGroup(
+        key: 'otros',
+        title: 'Otros',
+        icon: Icons.apps_outlined,
+        items: extras,
+      ),
+    );
   }
 
   return groups

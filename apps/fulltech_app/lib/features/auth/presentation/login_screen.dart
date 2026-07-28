@@ -240,7 +240,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Bienvenido a FullTech',
+                                'Bienvenido a DaleVenta POS',
                                 style: Theme.of(context).textTheme.headlineSmall
                                     ?.copyWith(
                                       color: Colors.black87,

@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fulltech_app/core/startup/initial_release_check.dart';
+import 'package:daleventa_pos/core/startup/initial_release_check.dart';
 
 void main() {
   test('waits for startup readiness before checking updates', () async {

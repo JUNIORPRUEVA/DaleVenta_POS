@@ -1,5 +1,5 @@
 {
-  "name": "fulltech",
+  "name": "daleventa-pos",
   "private": true,
   "workspaces": [
     "apps/*"

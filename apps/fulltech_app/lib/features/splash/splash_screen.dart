@@ -74,7 +74,7 @@ class SplashScreen extends ConsumerWidget {
                                 Text(
                                   auth.restoringSession
                                       ? 'Restaurando sesión...'
-                                      : 'Abriendo FullTech...',
+                                      : 'Abriendo DaleVenta POS...',
                                   style: theme.textTheme.titleMedium?.copyWith(
                                     fontWeight: FontWeight.w800,
                                     color: scheme.onSurface,

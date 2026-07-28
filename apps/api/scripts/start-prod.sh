@@ -2,6 +2,7 @@
 set -eu
 
 RUN_MIGRATIONS="${RUN_MIGRATIONS:-true}"
+PRISMA_SYNC_MODE="${PRISMA_SYNC_MODE:-migrate}"
 MIGRATION_MAX_RETRIES="${MIGRATION_MAX_RETRIES:-10}"
 MIGRATION_RETRY_DELAY_SECONDS="${MIGRATION_RETRY_DELAY_SECONDS:-5}"
 MIGRATION_STRICT="${MIGRATION_STRICT:-false}"
@@ -89,7 +90,7 @@ preflight() {
     fi
   fi
 
-  echo "[startup] PORT=${PORT:-4000} NODE_ENV=${NODE_ENV:-production} RUN_MIGRATIONS=${RUN_MIGRATIONS}"
+  echo "[startup] PORT=${PORT:-4000} NODE_ENV=${NODE_ENV:-production} RUN_MIGRATIONS=${RUN_MIGRATIONS} PRISMA_SYNC_MODE=${PRISMA_SYNC_MODE}"
 }
 
 run_prisma_migrate_deploy() {
@@ -127,30 +128,35 @@ run_prisma_migrate_deploy() {
 preflight
 
 if [ "$RUN_MIGRATIONS" = "true" ] || [ "$RUN_MIGRATIONS" = "1" ]; then
-  echo "[startup] prisma migrate deploy (retries: ${MIGRATION_MAX_RETRIES})"
-  attempt=1
-  while [ "$attempt" -le "$MIGRATION_MAX_RETRIES" ]; do
-    if run_prisma_migrate_deploy "$attempt"; then
-      echo "[startup] migrations applied"
-      break
-    fi
-
-    if [ "$attempt" -eq "$MIGRATION_MAX_RETRIES" ]; then
-      echo "[startup] migrations failed after ${MIGRATION_MAX_RETRIES} attempts"
-      if [ "$MIGRATION_STRICT" = "true" ] || [ "$MIGRATION_STRICT" = "1" ]; then
-        echo "[startup] MIGRATION_STRICT enabled -> exiting"
-        exit 1
+  if [ "$PRISMA_SYNC_MODE" = "push" ]; then
+    echo "[startup] prisma db push for initial managed deployment"
+    npx prisma db push --accept-data-loss
+  else
+    echo "[startup] prisma migrate deploy (retries: ${MIGRATION_MAX_RETRIES})"
+    attempt=1
+    while [ "$attempt" -le "$MIGRATION_MAX_RETRIES" ]; do
+      if run_prisma_migrate_deploy "$attempt"; then
+        echo "[startup] migrations applied"
+        break
       fi
-      echo "[startup] MIGRATION_STRICT disabled -> continuing startup without successful migrations"
-      break
-    fi
 
-    echo "[startup] migrate failed (attempt ${attempt}/${MIGRATION_MAX_RETRIES}), retrying in ${MIGRATION_RETRY_DELAY_SECONDS}s..."
-    attempt=$((attempt + 1))
-    sleep "$MIGRATION_RETRY_DELAY_SECONDS"
-  done
+      if [ "$attempt" -eq "$MIGRATION_MAX_RETRIES" ]; then
+        echo "[startup] migrations failed after ${MIGRATION_MAX_RETRIES} attempts"
+        if [ "$MIGRATION_STRICT" = "true" ] || [ "$MIGRATION_STRICT" = "1" ]; then
+          echo "[startup] MIGRATION_STRICT enabled -> exiting"
+          exit 1
+        fi
+        echo "[startup] MIGRATION_STRICT disabled -> continuing startup without successful migrations"
+        break
+      fi
+
+      echo "[startup] migrate failed (attempt ${attempt}/${MIGRATION_MAX_RETRIES}), retrying in ${MIGRATION_RETRY_DELAY_SECONDS}s..."
+      attempt=$((attempt + 1))
+      sleep "$MIGRATION_RETRY_DELAY_SECONDS"
+    done
+  fi
 else
-  echo "[startup] RUN_MIGRATIONS disabled -> skipping prisma migrate deploy"
+  echo "[startup] RUN_MIGRATIONS disabled -> skipping prisma schema sync"
 fi
 
 if [ "${RUN_SEED:-}" = "true" ] || [ "${RUN_SEED:-}" = "1" ]; then

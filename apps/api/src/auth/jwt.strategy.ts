@@ -27,7 +27,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
     const user = await this.findUserForJwt(payload.sub);
     if (!user || user.blocked === true) throw new UnauthorizedException('User blocked');
-    return { id: user.id, email: user.email, role: user.role };
+    return { id: user.id, email: user.email, role: user.role, companyId: user.companyId ?? null };
   }
 
   private isMissingUserTable(error: unknown) {
@@ -68,13 +68,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     try {
       return await this.prisma.user.findUnique({
         where: { id: userId },
-        select: { id: true, email: true, role: true, blocked: true },
+        select: { id: true, email: true, role: true, blocked: true, companyId: true },
       });
     } catch (error) {
       if (this.isMissingBlockedColumn(error)) {
         const row = await this.prisma.user.findUnique({
           where: { id: userId },
-          select: { id: true, email: true, role: true },
+          select: { id: true, email: true, role: true, companyId: true },
         });
         if (!row) return null;
         return { ...row, blocked: false };
@@ -83,9 +83,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       if (!this.isMissingUserTable(error)) throw error;
 
       const rows = await this.prisma.$queryRaw<
-        Array<{ id: string; email: string; role: string }>
+        Array<{ id: string; email: string; role: string; companyId: string | null }>
       >(Prisma.sql`
-        SELECT id, email, role
+        SELECT id, email, role, NULL AS "companyId"
         FROM users
         WHERE id::text = ${userId}
         LIMIT 1
@@ -97,6 +97,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         id: row.id,
         email: row.email,
         role: row.role,
+        companyId: row.companyId,
         blocked: false,
       };
     }

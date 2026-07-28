@@ -15,6 +15,21 @@ enum Role {
   TECNICO
 }
 
+enum CompanyStatus {
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+
+  @@map("company_status")
+}
+
+enum CompanyPlan {
+  STANDARD
+  ENTERPRISE
+
+  @@map("company_plan")
+}
+
 enum PurchaseOrderStatus {
   DRAFT
   PENDING_APPROVAL
@@ -548,8 +563,26 @@ enum EmployeeWarningSignatureType {
   @@map("employee_warning_signature_type")
 }
 
+model Company {
+  id        String        @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String        @unique
+  status    CompanyStatus @default(ACTIVE)
+  plan      CompanyPlan   @default(STANDARD)
+  maxUsers  Int           @default(1000) @map("max_users")
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  users      User[]
+  appConfigs AppConfig[]
+
+  @@index([status])
+  @@map("companies")
+}
+
 model User {
   id                           String    @id @default(uuid()) @db.Uuid
+  companyId                    String?   @map("company_id") @db.Uuid
   email                        String    @unique
   passwordHash                 String
   nombreCompleto               String
@@ -587,6 +620,7 @@ model User {
   createdAt                    DateTime  @default(now())
   updatedAt                    DateTime  @updatedAt
 
+  company                                  Company?                         @relation(fields: [companyId], references: [id], onDelete: SetNull)
   clients                                  Client[]
   payrollEmployees                         PayrollEmployee[]                 @relation("PayrollOwner")
   confirmedServiceOrders                   ServiceOrder[]                    @relation("ServiceOrderConfirmedBy")
@@ -672,6 +706,8 @@ model User {
   warrantyProductConfigs WarrantyProductConfig[]
   whatsappInstance       UserWhatsappInstance?
 
+  @@index([companyId])
+  @@index([companyId, role])
   @@map("users")
 }
 
@@ -1281,6 +1317,7 @@ model UserLocation {
 
 model AppConfig {
   id                               String   @id @default("global")
+  companyId                        String?  @unique @map("company_id") @db.Uuid
   companyName                      String   @default("")
   rnc                              String   @default("")
   phone                            String   @default("")
@@ -1309,6 +1346,9 @@ model AppConfig {
   createdAt                        DateTime @default(now())
   updatedAt                        DateTime @updatedAt
 
+  company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
   @@map("app_config")
 }
 

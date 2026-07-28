@@ -1,4 +1,4 @@
-package com.fulltech.fulltech_app
+package com.daleventa.pos
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -25,6 +25,7 @@ export class AuthService {
 
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
+      companyId: user.companyId,
       email: user.email,
       role: user.role,
       tokenType: 'access',
@@ -35,7 +36,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      user: { id: user.id, email: user.email, role: user.role },
+      user: this.toAuthUser(user),
     };
   }
 
@@ -57,6 +58,7 @@ export class AuthService {
 
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
+      companyId: user.companyId,
       email: user.email,
       role: user.role,
       tokenType: 'access',
@@ -67,7 +69,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken: newRefreshToken,
-      user: { id: user.id, email: user.email, role: user.role },
+      user: this.toAuthUser(user),
     };
   }
 
@@ -86,6 +88,28 @@ export class AuthService {
       { sub: userId, tokenType: 'refresh' },
       { expiresIn: this.refreshExpiresIn() }
     );
+  }
+
+  private toAuthUser(user: {
+    id: string;
+    email: string;
+    role: any;
+    companyId?: string | null;
+    company?: { id: string; name: string; slug: string } | null;
+  }) {
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      companyId: user.companyId ?? null,
+      company: user.company
+        ? {
+            id: user.company.id,
+            name: user.company.name,
+            slug: user.company.slug,
+          }
+        : null,
+    };
   }
 
   private isMissingUserTable(error: unknown) {
@@ -133,6 +157,10 @@ export class AuthService {
           passwordHash: true,
           role: true,
           blocked: true,
+          companyId: true,
+          company: {
+            select: { id: true, name: true, slug: true },
+          },
         },
       });
     } catch (error) {
@@ -144,6 +172,7 @@ export class AuthService {
             email: true,
             passwordHash: true,
             role: true,
+            companyId: true,
           },
         });
         if (!row) return null;
@@ -162,9 +191,10 @@ export class AuthService {
           passwordHash: string;
           role: string;
           blocked: boolean | null;
+          companyId: string | null;
         }>
       >(Prisma.sql`
-        SELECT id, email, "passwordHash", role, COALESCE(blocked, false) AS blocked
+        SELECT id, email, "passwordHash", role, COALESCE(blocked, false) AS blocked, NULL AS "companyId"
         FROM users
         WHERE email = ${email}
         LIMIT 1
@@ -178,6 +208,8 @@ export class AuthService {
         passwordHash: row.passwordHash,
         role: row.role,
         blocked: row.blocked ?? false,
+        companyId: row.companyId,
+        company: null,
       };
     }
   }
@@ -190,6 +222,10 @@ export class AuthService {
           id: true,
           email: true,
           role: true,
+          companyId: true,
+          company: {
+            select: { id: true, name: true, slug: true },
+          },
         },
       });
     } catch (error) {
@@ -200,9 +236,10 @@ export class AuthService {
           id: string;
           email: string;
           role: string;
+          companyId: string | null;
         }>
       >(Prisma.sql`
-        SELECT id, email, role
+        SELECT id, email, role, NULL AS "companyId"
         FROM users
         WHERE id::text = ${userId}
         LIMIT 1
@@ -214,6 +251,8 @@ export class AuthService {
         id: row.id,
         email: row.email,
         role: row.role,
+        companyId: row.companyId,
+        company: null,
       };
     }
   }
@@ -227,13 +266,17 @@ export class AuthService {
           email: true,
           role: true,
           blocked: true,
+          companyId: true,
+          company: {
+            select: { id: true, name: true, slug: true },
+          },
         },
       });
     } catch (error) {
       if (this.isMissingBlockedColumn(error)) {
         const row = await this.prisma.user.findUnique({
           where: { id: userId },
-          select: { id: true, email: true, role: true },
+          select: { id: true, email: true, role: true, companyId: true },
         });
         if (!row) return null;
         return { ...row, blocked: false };
@@ -246,9 +289,10 @@ export class AuthService {
           id: string;
           email: string;
           role: string;
+          companyId: string | null;
         }>
       >(Prisma.sql`
-        SELECT id, email, role
+        SELECT id, email, role, NULL AS "companyId"
         FROM users
         WHERE id::text = ${userId}
         LIMIT 1
@@ -260,6 +304,8 @@ export class AuthService {
         id: row.id,
         email: row.email,
         role: row.role as any,
+        companyId: row.companyId,
+        company: null,
         blocked: false,
       };
     }

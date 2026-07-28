@@ -51,7 +51,7 @@ async function upsertUser({ email, password, nombreCompleto, telefono, role }: {
 }
 
 async function main() {
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@fulltech.local';
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@daleventa.local';
   const adminPassword = process.env.ADMIN_PASSWORD;
   if (!adminPassword) throw new Error('ADMIN_PASSWORD is required to run seed');
 

@@ -21,7 +21,7 @@ Future<void> main(List<String> args) async {
       Platform.environment['ADMIN_EMAIL'] ??
       _readEnvFromDotEnv('../api/.env', 'ADMIN_EMAIL') ??
       _readEnvFromDotEnv('apps/api/.env', 'ADMIN_EMAIL') ??
-      'admin@fulltech.local';
+      'admin@daleventa.local';
   final password =
       Platform.environment['ADMIN_PASSWORD'] ??
       _readEnvFromDotEnv('../api/.env', 'ADMIN_PASSWORD') ??

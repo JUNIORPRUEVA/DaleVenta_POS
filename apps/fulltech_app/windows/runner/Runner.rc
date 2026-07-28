@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "FullTech" "\0"
-            VALUE "FileDescription", "FullTech - Sistema POS Administrativo" "\0"
+            VALUE "CompanyName", "DaleVenta POS" "\0"
+            VALUE "FileDescription", "DaleVenta POS" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "FullTech" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 FullTech. All rights reserved." "\0"
-            VALUE "OriginalFilename", "fulltech_app.exe" "\0"
-            VALUE "ProductName", "FullTech - Sistema POS Administrativo" "\0"
+            VALUE "InternalName", "DaleVenta POS" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 DaleVenta POS. All rights reserved." "\0"
+            VALUE "OriginalFilename", "daleventa_pos.exe" "\0"
+            VALUE "ProductName", "DaleVenta POS" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

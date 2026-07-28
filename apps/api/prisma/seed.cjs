@@ -12,13 +12,48 @@ function isMissingUserTable(error) {
   return false;
 }
 
-async function upsertUser({ email, password, nombreCompleto, telefono, role }) {
+async function upsertDefaultCompany() {
+  return prisma.company.upsert({
+    where: { slug: 'daleventa-pos' },
+    update: {
+      name: 'DaleVenta POS',
+      status: 'ACTIVE',
+      plan: 'ENTERPRISE',
+      maxUsers: 1000,
+    },
+    create: {
+      name: 'DaleVenta POS',
+      slug: 'daleventa-pos',
+      status: 'ACTIVE',
+      plan: 'ENTERPRISE',
+      maxUsers: 1000,
+    },
+  });
+}
+
+async function upsertAppConfig(company) {
+  return prisma.appConfig.upsert({
+    where: { id: 'global' },
+    update: {
+      companyId: company.id,
+      companyName: company.name,
+    },
+    create: {
+      id: 'global',
+      companyId: company.id,
+      companyName: company.name,
+    },
+  });
+}
+
+async function upsertUser({ companyId, email, password, nombreCompleto, telefono, role }) {
   const passwordHash = await bcrypt.hash(password, 10);
   try {
     const user = await prisma.user.upsert({
       where: { email },
-      update: { nombreCompleto, telefono, role, passwordHash, blocked: false },
+      update: { companyId, nombreCompleto, telefono, role, passwordHash, blocked: false },
       create: {
+        companyId,
         email,
         passwordHash,
         nombreCompleto,
@@ -63,13 +98,15 @@ async function upsertUser({ email, password, nombreCompleto, telefono, role }) {
 }
 
 async function main() {
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@fulltech.local';
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@daleventa.local';
   const adminPassword = process.env.ADMIN_PASSWORD;
   if (!adminPassword) throw new Error('ADMIN_PASSWORD is required to run seed');
 
-  const sellerPassword = process.env.SELLER_PASSWORD || adminPassword;
+  const company = await upsertDefaultCompany();
+  await upsertAppConfig(company);
 
   const admin = await upsertUser({
+    companyId: company.id,
     email: adminEmail,
     password: adminPassword,
     nombreCompleto: 'Administrador',
@@ -79,6 +116,7 @@ async function main() {
 
   console.log('Seed completed (admin enforced):', {
     admin: admin.email,
+    company: company.slug,
     role: 'ADMIN',
     mode: admin.fallback ? 'users-table-fallback' : 'prisma-user-model',
   });

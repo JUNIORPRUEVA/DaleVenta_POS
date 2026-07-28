@@ -121,7 +121,7 @@ class AppNavigator {
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Salir de la app'),
-          content: const Text('¿Deseas cerrar FULLTECH?'),
+          content: const Text('¿Deseas cerrar DaleVenta POS?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),

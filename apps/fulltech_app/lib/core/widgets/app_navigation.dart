@@ -2,10 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../modules/manual_interno/company_manual_repository.dart';
-import '../../modules/whatsapp/application/whatsapp_visibility_provider.dart';
 import '../auth/app_permissions.dart';
-import '../auth/app_role.dart';
 import '../models/user_model.dart';
 import '../routing/routes.dart';
 
@@ -33,7 +30,7 @@ class AppNavigationSection {
 }
 
 List<AppNavigationSection> buildAppNavigationSections(
-  WidgetRef ref,
+  WidgetRef _,
   UserModel? currentUser,
 ) {
   final role = currentUser?.appRole;
@@ -43,40 +40,10 @@ List<AppNavigationSection> buildAppNavigationSections(
     return hasPermission(role, permission);
   }
 
-  final manualSummary = can(AppPermission.viewCompanyManual)
-      ? ref.watch(companyManualSummaryProvider)
-      : null;
-  final showManualIndicator =
-      manualSummary?.maybeWhen(
-        data: (value) => value.unreadCount > 0,
-        orElse: () => false,
-      ) ??
-      false;
-  final showWhatsappEntry = can(AppPermission.viewWhatsapp)
-      ? ref
-            .watch(whatsappNavigationVisibilityProvider)
-            .maybeWhen(
-              data: (value) => value,
-              orElse: () => role == null ? false : role == AppRole.admin,
-            )
-      : false;
-
   final sections = <AppNavigationSection>[
     AppNavigationSection(
       title: 'Principal',
       items: [
-        if (can(AppPermission.viewOperations))
-          const AppNavigationItem(
-            icon: Icons.assignment_outlined,
-            title: 'Operaciones',
-            route: Routes.serviceOrders,
-          ),
-        if (can(AppPermission.viewMediaGallery))
-          const AppNavigationItem(
-            icon: Icons.perm_media_outlined,
-            title: 'Galería media',
-            route: Routes.mediaGallery,
-          ),
         if (can(AppPermission.viewClients))
           const AppNavigationItem(
             icon: Icons.group_outlined,
@@ -119,12 +86,6 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Créditos',
             route: Routes.ventasCreditos,
           ),
-        if (can(AppPermission.viewPunch))
-          const AppNavigationItem(
-            icon: Icons.access_time_rounded,
-            title: 'Ponche',
-            route: Routes.ponche,
-          ),
         if (can(AppPermission.viewCatalog))
           const AppNavigationItem(
             icon: Icons.inventory_2_outlined,
@@ -149,33 +110,8 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Contabilidad',
             route: Routes.contabilidad,
           ),
-        if (can(AppPermission.viewAdminPanel))
-          const AppNavigationItem(
-            icon: Icons.admin_panel_settings_outlined,
-            title: 'Administración',
-            route: Routes.administracion,
-          ),
-        if (can(AppPermission.viewPublicidad))
-          const AppNavigationItem(
-            icon: Icons.campaign_outlined,
-            title: 'Publicidad',
-            route: Routes.publicidad,
-          ),
-        if (can(AppPermission.manageWebsite))
-          const AppNavigationItem(
-            icon: Icons.language_rounded,
-            title: 'Sitio web',
-            route: Routes.sitioWeb,
-          ),
-        if (can(AppPermission.viewTechnicalNetwork))
-          const AppNavigationItem(
-            icon: Icons.handyman_outlined,
-            title: 'Red Técnicos',
-            route: Routes.redTecnica,
-          ),
       ],
     ),
-    AppNavigationSection(title: 'Administración', items: const []),
     AppNavigationSection(
       title: 'Nómina',
       items: [
@@ -184,12 +120,6 @@ List<AppNavigationSection> buildAppNavigationSections(
             icon: Icons.payments_outlined,
             title: 'Nómina',
             route: Routes.nomina,
-          ),
-        if (can(AppPermission.viewOperations))
-          const AppNavigationItem(
-            icon: Icons.stacked_line_chart_rounded,
-            title: 'Comisiones',
-            route: Routes.serviceOrderCommissions,
           ),
         if (can(AppPermission.viewMyPayments))
           const AppNavigationItem(
@@ -207,48 +137,11 @@ List<AppNavigationSection> buildAppNavigationSections(
           title: 'IA',
           route: Routes.ai,
         ),
-        if (showWhatsappEntry)
-          const AppNavigationItem(
-            icon: Icons.chat_rounded,
-            title: 'WhatsApp',
-            route: Routes.whatsapp,
-          ),
-        if (can(AppPermission.viewWhatsappCrm))
-          const AppNavigationItem(
-            icon: Icons.support_agent_rounded,
-            title: 'CRM WhatsApp',
-            route: Routes.whatsappCrm,
-          ),
-        if (can(AppPermission.viewCrmComercial))
-          const AppNavigationItem(
-            icon: Icons.badge_outlined,
-            title: 'CRM Comercial',
-            route: Routes.crmComercial,
-          ),
-        if (can(AppPermission.viewWarnings))
-          const AppNavigationItem(
-            icon: Icons.warning_amber_rounded,
-            title: 'Amonestaciones',
-            route: Routes.amonestaciones,
-          ),
-        if (can(AppPermission.viewCompanyManual))
-          AppNavigationItem(
-            icon: Icons.menu_book_outlined,
-            title: 'Manual Interno',
-            route: Routes.manualInterno,
-            showIndicator: showManualIndicator,
-          ),
         if (can(AppPermission.manageUsers))
           const AppNavigationItem(
             icon: Icons.groups_outlined,
             title: 'Equipo',
             route: Routes.users,
-          ),
-        if (can(AppPermission.manageSettings))
-          const AppNavigationItem(
-            icon: Icons.settings_outlined,
-            title: 'Configuración',
-            route: Routes.configuracion,
           ),
       ],
     ),
@@ -311,10 +204,6 @@ String resolveNavigationTitle(
   }
 
   if (path == Routes.registrarVenta) return 'Nueva venta';
-  if (path == Routes.serviceOrders) return 'Operaciones';
-  if (path == Routes.serviceOrderCommissions) return 'Comisiones';
-  if (path == Routes.mediaGallery) return 'Galería media';
-  if (path == Routes.serviceOrderCreate) return 'Crear orden';
   if (path == Routes.cotizacionesHistorial) return 'Cotizaciones';
   if (path == Routes.ventasLista) return 'Lista de ventas';
   if (path == Routes.compras) return 'Compras';
@@ -325,29 +214,7 @@ String resolveNavigationTitle(
   if (path == Routes.cajaTurnosHistorial) return 'Historial de turnos';
   if (path == Routes.clienteNuevo) return 'Nuevo cliente';
   if (path == Routes.ai) return 'IA';
-  if (path == Routes.publicidad) return 'Publicidad';
-  if (path == Routes.publicidadInvestigacion) {
-    return 'Publicidad / Investigación';
-  }
-  if (path == Routes.publicidadEstados) return 'Publicidad / Estados';
-  if (path == Routes.publicidadCampanas) return 'Publicidad / Campañas';
-  if (path == Routes.publicidadMarketplace) return 'Publicidad / Marketplace';
-  if (path == Routes.publicidadGaleria) {
-    return 'Publicidad / Galería de Contenido';
-  }
-  if (path == Routes.galeriaPublicidad) return 'Galería de Publicidad';
-  if (path == Routes.whatsappCrm) return 'CRM WhatsApp';
-  if (path == Routes.crmComercial) return 'CRM Comercial';
-  if (path == Routes.sitioWeb) return 'Sitio web';
-  if (path == Routes.redTecnica) return 'Red Técnicos';
-  if (path == Routes.redTecnicaPublicForm) return 'Formulario Red Técnica';
-  if (path == Routes.amonestaciones) return 'Amonestaciones';
-  if (path == Routes.misAmonestacionesPendientes) {
-    return 'Mis pendientes de firma';
-  }
-  if (path.startsWith('/amonestaciones/')) return 'Detalle amonestación';
   if (path == Routes.profile) return 'Perfil';
-  if (path.startsWith('${Routes.serviceOrders}/')) return 'Detalle de orden';
   if (path.startsWith('/clientes/') && path.endsWith('/editar')) {
     return 'Editar cliente';
   }
@@ -355,17 +222,16 @@ String resolveNavigationTitle(
   if (path.startsWith('/users/')) return 'Detalle de usuario';
 
   final segments = path.split('/').where((part) => part.trim().isNotEmpty);
-  if (segments.isEmpty) return 'FullTech';
+  if (segments.isEmpty) return 'DaleVenta POS';
   final last = segments.last.replaceAll('-', ' ');
   return last.isEmpty
-      ? 'FullTech'
+      ? 'DaleVenta POS'
       : '${last[0].toUpperCase()}${last.substring(1)}';
 }
 
 bool desktopShellShouldShowOwnAppBar(String location) {
   final path = Uri.tryParse(location)?.path ?? location;
   const routesWithOwnAppBar = <String>[
-    Routes.ponche,
     Routes.catalogo,
     Routes.contabilidad,
     Routes.clientes,
@@ -373,20 +239,10 @@ bool desktopShellShouldShowOwnAppBar(String location) {
     Routes.ventasLista,
     Routes.compras,
     Routes.caja,
-    Routes.serviceOrders,
-    Routes.serviceOrderCommissions,
-    Routes.mediaGallery,
-    Routes.galeriaPublicidad,
     Routes.cotizaciones,
     Routes.nomina,
     Routes.misPagos,
-    Routes.manualInterno,
     Routes.ai,
-    Routes.configuracion,
-    Routes.administracion,
-    Routes.publicidad,
-    Routes.sitioWeb,
-    Routes.redTecnica,
     Routes.users,
     Routes.profile,
   ];
@@ -399,9 +255,7 @@ bool desktopShellShouldShowOwnAppBar(String location) {
 
   if (path == Routes.cotizacionesHistorial) return false;
   if (path == Routes.registrarVenta) return false;
-  if (path == Routes.serviceOrderCreate) return false;
   if (path == Routes.clienteNuevo) return false;
-  if (path.startsWith('${Routes.serviceOrders}/')) return false;
   if (path.startsWith('/clientes/')) return false;
   if (path.startsWith('/users/')) return false;
 
@@ -410,12 +264,12 @@ bool desktopShellShouldShowOwnAppBar(String location) {
 
 String userInitials(UserModel? user) {
   final value = (user?.nombreCompleto ?? '').trim();
-  if (value.isEmpty) return 'FT';
+  if (value.isEmpty) return 'DV';
   final parts = value
       .split(RegExp(r'\s+'))
       .where((part) => part.isNotEmpty)
       .toList();
-  if (parts.isEmpty) return 'FT';
+  if (parts.isEmpty) return 'DV';
   if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
   return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
 }

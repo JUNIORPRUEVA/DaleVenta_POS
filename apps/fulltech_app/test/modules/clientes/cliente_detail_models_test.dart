@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fulltech_app/modules/clientes/client_location_utils.dart';
-import 'package:fulltech_app/modules/clientes/cliente_model.dart';
-import 'package:fulltech_app/modules/clientes/cliente_profile_model.dart';
-import 'package:fulltech_app/modules/clientes/cliente_timeline_model.dart';
+import 'package:daleventa_pos/modules/clientes/client_location_utils.dart';
+import 'package:daleventa_pos/modules/clientes/cliente_model.dart';
+import 'package:daleventa_pos/modules/clientes/cliente_profile_model.dart';
+import 'package:daleventa_pos/modules/clientes/cliente_timeline_model.dart';
 
 void main() {
   group('ClienteModel.fromJson', () {

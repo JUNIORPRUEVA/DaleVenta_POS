@@ -5,9 +5,9 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: fulltech
-      POSTGRES_USER: fulltech
-      POSTGRES_PASSWORD: fulltech
+      POSTGRES_DB: daleventa_pos
+      POSTGRES_USER: daleventa
+      POSTGRES_PASSWORD: daleventa
     volumes:
       - db_data:/var/lib/postgresql/data
     ports:

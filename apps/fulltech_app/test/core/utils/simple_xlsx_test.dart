@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fulltech_app/core/utils/simple_xlsx.dart';
+import 'package:daleventa_pos/core/utils/simple_xlsx.dart';
 
 void main() {
   test('readSimpleXlsx reads shared string cells from Excel workbooks', () {

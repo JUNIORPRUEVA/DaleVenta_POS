@@ -2,9 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fulltech_app/core/models/product_model.dart';
-import 'package:fulltech_app/features/catalogo/data/catalog_repository.dart';
-import 'package:fulltech_app/features/products/ui/inventory_module_pages.dart';
+import 'package:daleventa_pos/core/models/product_model.dart';
+import 'package:daleventa_pos/features/catalogo/data/catalog_repository.dart';
+import 'package:daleventa_pos/features/products/ui/inventory_module_pages.dart';
 
 class _FakeCatalogRepository extends CatalogRepository {
   _FakeCatalogRepository() : super(Dio());

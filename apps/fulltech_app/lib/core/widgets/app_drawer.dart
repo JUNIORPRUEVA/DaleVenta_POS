@@ -172,7 +172,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                           Expanded(
                             child: Text.rich(
                               TextSpan(
-                                text: 'FullTech POS',
+                                text: 'DaleVenta POS',
                                 style: AppTextStyles.title.copyWith(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w900,

@@ -1,17 +1,17 @@
 #ifndef MyAppName
-#define MyAppName "FullTech"
+#define MyAppName "DaleVenta POS"
 #endif
 #ifndef MyAppPublisher
-#define MyAppPublisher "FULLTECH"
+#define MyAppPublisher "DaleVenta POS"
 #endif
 #ifndef MyAppPublisherURL
-#define MyAppPublisherURL "https://fulltech.com"
+#define MyAppPublisherURL "https://daleventa-pos.local"
 #endif
 #ifndef MyAppSupportURL
-#define MyAppSupportURL "https://fulltech.com"
+#define MyAppSupportURL "https://daleventa-pos.local"
 #endif
 #ifndef MyAppExeName
-#define MyAppExeName "fulltech_app.exe"
+#define MyAppExeName "daleventa_pos.exe"
 #endif
 #ifndef MyAppVersion
 #define MyAppVersion "1.0.0+1"
@@ -37,7 +37,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=output
-OutputBaseFilename=FullTech-Setup-{#StringChange(MyAppVersion, "+", "-")}
+OutputBaseFilename=DaleVenta-POS-Setup-{#StringChange(MyAppVersion, "+", "-")}
 Compression=lzma
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible

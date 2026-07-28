@@ -18,9 +18,8 @@ class RouteAccess {
         return AppPermission.viewMyPayments;
       case Routes.ponche:
       case Routes.poncheHistorial:
-        return AppPermission.viewPunch;
       case Routes.publicidadGaleria:
-        return AppPermission.viewPublicidad;
+        return null;
       case Routes.catalogo:
         return AppPermission.viewCatalog;
       case Routes.ventas:
@@ -41,11 +40,9 @@ class RouteAccess {
       case Routes.serviceOrders:
       case Routes.serviceOrderCommissions:
       case Routes.serviceOrderCreate:
-        return AppPermission.viewOperations;
       case Routes.mediaGallery:
-        return AppPermission.viewMediaGallery;
       case Routes.galeriaPublicidad:
-        return AppPermission.viewGaleriaPublicidad;
+        return null;
       case Routes.cotizaciones:
       case Routes.cotizacionesHistorial:
         return AppPermission.viewQuotes;
@@ -55,7 +52,7 @@ class RouteAccess {
       case Routes.nomina:
         return AppPermission.managePayroll;
       case Routes.manualInterno:
-        return AppPermission.viewCompanyManual;
+        return null;
       case Routes.contabilidad:
       case Routes.contabilidadCierresDiarios:
       case Routes.contabilidadDepositos:
@@ -67,29 +64,29 @@ class RouteAccess {
       case Routes.administracionVentas:
       case Routes.administracionComisiones:
       case Routes.administracionCotizaciones:
-        return AppPermission.viewAdminPanel;
+        return null;
       case Routes.configuracion:
-        return AppPermission.manageSettings;
+        return null;
       case Routes.whatsapp:
-        return AppPermission.viewWhatsapp;
+        return null;
       case Routes.publicidad:
       case Routes.publicidadInvestigacion:
       case Routes.publicidadEstados:
       case Routes.publicidadCampanas:
       case Routes.publicidadMarketplace:
-        return AppPermission.viewPublicidad;
+        return null;
       case Routes.whatsappCrm:
-        return AppPermission.viewWhatsappCrm;
+        return null;
       case Routes.crmComercial:
-        return AppPermission.viewCrmComercial;
+        return null;
       case Routes.sitioWeb:
-        return AppPermission.manageWebsite;
+        return null;
       case Routes.redTecnica:
-        return AppPermission.viewTechnicalNetwork;
+        return null;
       case Routes.redTecnicaPublicForm:
         return null;
       case Routes.amonestaciones:
-        return AppPermission.viewWarnings;
+        return null;
       case Routes.misAmonestacionesPendientes:
         return null;
       case Routes.users:
@@ -102,10 +99,10 @@ class RouteAccess {
       return AppPermission.viewClients;
     }
     if (path.startsWith('${Routes.ponche}/')) {
-      return AppPermission.viewPunch;
+      return null;
     }
     if (path.startsWith('${Routes.serviceOrders}/')) {
-      return AppPermission.viewOperations;
+      return null;
     }
     if (path.startsWith('/users/')) {
       return AppPermission.manageUsers;
@@ -114,20 +111,20 @@ class RouteAccess {
       return AppPermission.viewAccounting;
     }
     if (path.startsWith('/amonestaciones/')) {
-      return AppPermission.viewWarnings;
+      return null;
     }
     if (path.startsWith('${Routes.administracion}/')) {
-      return AppPermission.viewAdminPanel;
+      return null;
     }
     if (path.startsWith('${Routes.publicidad}/')) {
-      return AppPermission.viewPublicidad;
+      return null;
     }
     if (path.startsWith('${Routes.sitioWeb}/')) {
-      return AppPermission.manageWebsite;
+      return null;
     }
     if (path.startsWith('${Routes.redTecnica}/') &&
         path != Routes.redTecnicaPublicForm) {
-      return AppPermission.viewTechnicalNetwork;
+      return null;
     }
     return null;
   }
@@ -135,9 +132,6 @@ class RouteAccess {
   static String defaultHomeForRole(AppRole role) {
     if (hasPermission(role, AppPermission.viewQuotes)) {
       return Routes.cotizaciones;
-    }
-    if (hasPermission(role, AppPermission.viewOperations)) {
-      return Routes.serviceOrders;
     }
     if (hasPermission(role, AppPermission.viewClients)) {
       return Routes.clientes;

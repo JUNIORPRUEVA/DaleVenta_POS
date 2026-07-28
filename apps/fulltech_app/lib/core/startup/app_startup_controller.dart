@@ -34,7 +34,7 @@ class AppStartupState {
   factory AppStartupState.initial() {
     return const AppStartupState(
       phase: AppStartupPhase.critical,
-      title: 'Iniciando FullTech…',
+      title: 'Iniciando DaleVenta POS...',
       subtitle:
           'Preparando la configuración básica para abrir la app sin bloquear la interfaz.',
       statusLabel: 'Primer render',
@@ -140,7 +140,7 @@ class AppStartupController extends StateNotifier<AppStartupState> {
       stopwatch.stop();
       state = state.copyWith(
         phase: AppStartupPhase.ready,
-        title: 'FullTech listo',
+        title: 'DaleVenta POS listo',
         subtitle:
             'La aplicación ya puede mostrarse. Las verificaciones secundarias siguen en background.',
         statusLabel: 'OK',
@@ -156,7 +156,7 @@ class AppStartupController extends StateNotifier<AppStartupState> {
       stopwatch.stop();
       state = state.copyWith(
         phase: AppStartupPhase.failed,
-        title: 'No se pudo iniciar FullTech',
+        title: 'No se pudo iniciar DaleVenta POS',
         subtitle:
             'La configuración crítica falló antes de abrir la app. Puedes reintentar sin recargar manualmente.',
         statusLabel: 'Error de startup',

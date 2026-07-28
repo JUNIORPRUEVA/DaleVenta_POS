@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fulltech_app/core/utils/geo_utils.dart';
+import 'package:daleventa_pos/core/utils/geo_utils.dart';
 
 void main() {
   group('parseLatLngFromText', () {

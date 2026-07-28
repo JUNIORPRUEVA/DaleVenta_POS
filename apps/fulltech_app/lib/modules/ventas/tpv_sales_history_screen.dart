@@ -25,6 +25,8 @@ enum _InvoiceFilter { active, all, returned }
 
 enum _PaymentFilter { all, cash, transfer, mixed, credit }
 
+enum _DateQuickFilter { today, yesterday, interval }
+
 class TpvSalesHistoryScreen extends ConsumerStatefulWidget {
   const TpvSalesHistoryScreen({super.key});
 
@@ -988,6 +990,7 @@ class _SalesFilterPanel extends StatefulWidget {
 class _SalesFilterPanelState extends State<_SalesFilterPanel> {
   late DateTime _fromDate;
   late DateTime _toDate;
+  late _DateQuickFilter _dateQuickFilter;
   late _InvoiceFilter _invoiceFilter;
   late _PaymentFilter _paymentFilter;
   String? _cashierFilter;
@@ -997,9 +1000,46 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
     super.initState();
     _fromDate = widget.fromDate;
     _toDate = widget.toDate;
+    _dateQuickFilter = _initialDateQuickFilter(_fromDate, _toDate);
     _invoiceFilter = widget.invoiceFilter;
     _paymentFilter = widget.paymentFilter;
     _cashierFilter = widget.cashierFilter;
+  }
+
+  _DateQuickFilter _initialDateQuickFilter(DateTime from, DateTime to) {
+    final today = _calendarDay(DateTime.now());
+    final yesterday = today.subtract(const Duration(days: 1));
+    if (_sameCalendarDay(from, today) && _sameCalendarDay(to, today)) {
+      return _DateQuickFilter.today;
+    }
+    if (_sameCalendarDay(from, yesterday) && _sameCalendarDay(to, yesterday)) {
+      return _DateQuickFilter.yesterday;
+    }
+    return _DateQuickFilter.interval;
+  }
+
+  DateTime _calendarDay(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  void _setQuickFilter(_DateQuickFilter value) {
+    final today = _calendarDay(DateTime.now());
+    setState(() {
+      _dateQuickFilter = value;
+      switch (value) {
+        case _DateQuickFilter.today:
+          _fromDate = today;
+          _toDate = today;
+          break;
+        case _DateQuickFilter.yesterday:
+          final yesterday = today.subtract(const Duration(days: 1));
+          _fromDate = yesterday;
+          _toDate = yesterday;
+          break;
+        case _DateQuickFilter.interval:
+          break;
+      }
+    });
   }
 
   Future<void> _pickDate({required bool from}) async {
@@ -1015,6 +1055,7 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
     );
     if (selected == null || !mounted) return;
     setState(() {
+      _dateQuickFilter = _DateQuickFilter.interval;
       if (from) {
         _fromDate = selected;
         if (_fromDate.isAfter(_toDate)) _toDate = selected;
@@ -1111,6 +1152,26 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
                   padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
                   children: [
                     _FilterSectionTitle('Intervalo de fecha'),
+                    SegmentedButton<_DateQuickFilter>(
+                      segments: const [
+                        ButtonSegment(
+                          value: _DateQuickFilter.today,
+                          label: Text('Hoy'),
+                        ),
+                        ButtonSegment(
+                          value: _DateQuickFilter.yesterday,
+                          label: Text('Ayer'),
+                        ),
+                        ButtonSegment(
+                          value: _DateQuickFilter.interval,
+                          label: Text('Intervalo'),
+                        ),
+                      ],
+                      selected: {_dateQuickFilter},
+                      onSelectionChanged: (value) =>
+                          _setQuickFilter(value.first),
+                    ),
+                    const SizedBox(height: 10),
                     Row(
                       children: [
                         Expanded(
