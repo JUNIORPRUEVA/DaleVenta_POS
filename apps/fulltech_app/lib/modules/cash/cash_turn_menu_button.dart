@@ -152,12 +152,12 @@ class CashTurnMenuButton extends ConsumerWidget {
       tooltip: 'Turno',
       offset: const Offset(0, 44),
       color: Colors.white,
-      elevation: 12,
-      shadowColor: Colors.black.withValues(alpha: 0.14),
-      constraints: const BoxConstraints(minWidth: 248),
+      elevation: 8,
+      shadowColor: Colors.black.withValues(alpha: 0.10),
+      constraints: const BoxConstraints(minWidth: 258),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: Color(0xFFDDE7EE)),
       ),
       onSelected: (value) {
         debugPrint('[TurnMenu] action selected=$value');
@@ -229,9 +229,9 @@ class CashTurnMenuButton extends ConsumerWidget {
           border: Border.all(color: const Color(0xFFDCE8FF)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
+              color: Colors.black.withValues(alpha: 0.025),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
           ],
         ),
@@ -243,7 +243,7 @@ class CashTurnMenuButton extends ConsumerWidget {
               height: 26,
               decoration: BoxDecoration(
                 color: const Color(0xFFEAF1FF),
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: BorderRadius.circular(6),
               ),
               child: Icon(
                 active == null
@@ -261,6 +261,7 @@ class CashTurnMenuButton extends ConsumerWidget {
                   color: Color(0xFF1E3A8A),
                   fontWeight: FontWeight.w900,
                   fontSize: 13,
+                  letterSpacing: 0,
                 ),
               ),
             ],
@@ -290,23 +291,24 @@ class _TurnMenuItem extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 31,
-            height: 31,
+            width: 30,
+            height: 30,
             decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFD6E0EA)),
+              color: const Color(0xFFF7FAFC),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: const Color(0xFFDDE7EE)),
             ),
-            child: Icon(icon, color: const Color(0xFF334155), size: 17),
+            child: Icon(icon, color: const Color(0xFF1957E6), size: 16),
           ),
-          const SizedBox(width: 11),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               label,
               style: const TextStyle(
-                color: Color(0xFF243244),
+                color: Color(0xFF183548),
                 fontWeight: FontWeight.w900,
                 fontSize: 13,
+                letterSpacing: 0,
               ),
             ),
           ),
@@ -344,18 +346,19 @@ class _CurrentTurnDialog extends StatelessWidget {
         ? active?.businessDate ?? ''
         : DateFormat('dd/MM HH:mm', 'es_DO').format(openedAt);
 
+    final media = MediaQuery.sizeOf(context);
+    final panelWidth = media.width < 720 ? media.width : 620.0;
+
     return Dialog(
       alignment: Alignment.centerRight,
-      insetPadding: const EdgeInsets.fromLTRB(20, 20, 0, 20),
-      backgroundColor: const Color(0xFFEAF2FF),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.horizontal(left: Radius.circular(18)),
-      ),
+      insetPadding: EdgeInsets.zero,
+      backgroundColor: const Color(0xFFF8FAFC),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       child: SizedBox(
-        width: 540,
-        height: MediaQuery.sizeOf(context).height - 40,
+        width: panelWidth,
+        height: media.height,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -367,11 +370,13 @@ class _CurrentTurnDialog extends StatelessWidget {
                     height: 40,
                     decoration: BoxDecoration(
                       color: const Color(0xFFEAF1FF),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(color: const Color(0xFFDDEAFF)),
                     ),
                     child: const Icon(
                       Icons.account_balance_wallet_outlined,
                       color: Color(0xFF1957E6),
+                      size: 21,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -385,6 +390,7 @@ class _CurrentTurnDialog extends StatelessWidget {
                             fontSize: 20,
                             fontWeight: FontWeight.w900,
                             color: Color(0xFF0F172A),
+                            letterSpacing: 0,
                           ),
                         ),
                         Text(
@@ -460,8 +466,8 @@ class _CurrentTurnDialog extends StatelessWidget {
                 child: Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFD6E3F5)),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFDDE7EE)),
                   ),
                   child: movements.isEmpty
                       ? const _EmptyMovements()
@@ -478,9 +484,14 @@ class _CurrentTurnDialog extends StatelessWidget {
                                 height: 30,
                                 decoration: BoxDecoration(
                                   color: item.isIn
-                                      ? const Color(0xFFE8F8EF)
-                                      : const Color(0xFFFFEEF0),
-                                  borderRadius: BorderRadius.circular(9),
+                                      ? const Color(0xFFF1FAF5)
+                                      : const Color(0xFFFFF5F5),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: item.isIn
+                                        ? const Color(0xFFD8F3E2)
+                                        : const Color(0xFFFFDEDE),
+                                  ),
                                 ),
                                 child: Icon(
                                   item.isIn
@@ -540,9 +551,9 @@ class _TurnChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7FAFF),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFD6E3F5)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: const Color(0xFFDDE7EE)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -554,7 +565,8 @@ class _TurnChip extends StatelessWidget {
             style: const TextStyle(
               color: Color(0xFF475569),
               fontSize: 12,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0,
             ),
           ),
         ],
@@ -580,8 +592,8 @@ class _MiniTurnCard extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFD6E3F5)),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDDE7EE)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -595,6 +607,7 @@ class _MiniTurnCard extends StatelessWidget {
             style: const TextStyle(
               color: Color(0xFF0F172A),
               fontWeight: FontWeight.w900,
+              letterSpacing: 0,
             ),
           ),
           const SizedBox(height: 3),
@@ -621,8 +634,8 @@ class _CloseTurnCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFD6E3F5)),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDDE7EE)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -647,8 +660,15 @@ class _CloseTurnCard extends StatelessWidget {
               ),
               OutlinedButton.icon(
                 onPressed: () {},
-                icon: const Icon(Icons.visibility_outlined, size: 17),
+                icon: const Icon(Icons.visibility_outlined, size: 16),
                 label: const Text('Solo vista'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF1957E6),
+                  side: const BorderSide(color: Color(0xFF9DB9F8)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
               ),
             ],
           ),
@@ -660,6 +680,13 @@ class _CloseTurnCard extends StatelessWidget {
                   onPressed: () {},
                   icon: const Icon(Icons.receipt_long_outlined),
                   label: const Text('Ver corte actual'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF1957E6),
+                    side: const BorderSide(color: Color(0xFF9DB9F8)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -670,6 +697,9 @@ class _CloseTurnCard extends StatelessWidget {
                   label: const Text('Cerrar turno'),
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF1957E6),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
               ),
@@ -695,7 +725,7 @@ class _EmptyMovements extends StatelessWidget {
             height: 44,
             decoration: BoxDecoration(
               color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(13),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(
               Icons.inventory_2_outlined,
@@ -729,8 +759,8 @@ class _TurnHero extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FBFF),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFD6E3F5)),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDDE7EE)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -769,8 +799,8 @@ class _TurnComposition extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFD6E3F5)),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDDE7EE)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -797,7 +827,7 @@ class _TurnComposition extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: BorderRadius.circular(7),
                 ),
                 child: const Text(
                   '6',
@@ -1046,7 +1076,7 @@ class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.sizeOf(context);
-    final panelWidth = (media.width * 0.34).clamp(420.0, 560.0).toDouble();
+    final panelWidth = (media.width * 0.38).clamp(520.0, 660.0).toDouble();
     final rows = _filteredRows;
 
     return Dialog(
@@ -1057,7 +1087,7 @@ class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
         width: panelWidth,
         height: media.height,
         child: Material(
-          color: const Color(0xFFF8FBFF),
+          color: const Color(0xFFF8FAFC),
           child: SafeArea(
             left: false,
             child: Column(
@@ -1185,7 +1215,7 @@ class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
                     ],
                   ),
                 ),
-                const Divider(height: 1, color: Color(0xFFDDE8F6)),
+                const Divider(height: 1, color: Color(0xFFDDE7EE)),
                 Expanded(
                   child: rows.isEmpty
                       ? const _HistoryEmptyState()
@@ -1228,7 +1258,7 @@ class _HistoryPanelHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 14, 10, 12),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(bottom: BorderSide(color: Color(0xFFDDE8F6))),
+        border: Border(bottom: BorderSide(color: Color(0xFFDDE7EE))),
       ),
       child: Row(
         children: [
@@ -1237,7 +1267,8 @@ class _HistoryPanelHeader extends StatelessWidget {
             height: 38,
             decoration: BoxDecoration(
               color: const Color(0xFFEAF1FF),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(7),
+              border: Border.all(color: Color(0xFFDDEAFF)),
             ),
             child: const Icon(Icons.history_rounded, color: Color(0xFF1957E6)),
           ),
@@ -1252,6 +1283,7 @@ class _HistoryPanelHeader extends StatelessWidget {
                     color: Color(0xFF0F172A),
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
+                    letterSpacing: 0,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -1307,12 +1339,12 @@ class _HistoryFilterDropdown extends StatelessWidget {
             vertical: 7,
           ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFD6E3F5)),
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFFDDE7EE)),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFD6E3F5)),
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFFDDE7EE)),
           ),
         ),
         items: [
@@ -1353,15 +1385,8 @@ class _HistoryTurnCard extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFD6E3F5)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.025),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDDE7EE)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1373,7 +1398,8 @@ class _HistoryTurnCard extends StatelessWidget {
                 height: 32,
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(9),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Color(0xFFE2E8F0)),
                 ),
                 child: const Icon(
                   Icons.point_of_sale_rounded,
