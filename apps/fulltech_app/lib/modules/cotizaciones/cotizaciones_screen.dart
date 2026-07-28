@@ -8100,7 +8100,7 @@ class _DesktopQuotePanel extends StatelessWidget {
                       padding: EdgeInsets.zero,
                       itemCount: items.length,
                       separatorBuilder: (context, index) =>
-                          const SizedBox(height: 8),
+                          const SizedBox.shrink(),
                       itemBuilder: (context, index) {
                         final item = items[index];
                         return _DesktopTicketItem(
@@ -8120,17 +8120,16 @@ class _DesktopQuotePanel extends StatelessWidget {
             ),
             if (hasItems) ...[
               if (shouldShowTotalsBreakdown) ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 3),
                 Container(
                   width: double.infinity,
-                  margin: const EdgeInsets.symmetric(horizontal: 8),
-                  padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
+                  margin: EdgeInsets.zero,
+                  padding: const EdgeInsets.fromLTRB(6, 3, 6, 3),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: const Color(0xFFD3E0E7),
-                      width: 1.1,
+                    border: Border(
+                      top: BorderSide(color: const Color(0xFFE2EAF0)),
+                      bottom: BorderSide(color: const Color(0xFFE2EAF0)),
                     ),
                   ),
                   child: Column(
@@ -8166,10 +8165,9 @@ class _DesktopQuotePanel extends StatelessWidget {
                   ),
                 ),
               ],
-              const SizedBox(height: 10),
+              const SizedBox(height: 4),
               Row(
                 children: [
-                  const SizedBox(width: 8),
                   Expanded(
                     child: GestureDetector(
                       onDoubleTap: onApplyGeneralDiscount,
@@ -8178,9 +8176,9 @@ class _DesktopQuotePanel extends StatelessWidget {
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF1957E6),
                           foregroundColor: Colors.white,
-                          minimumSize: const Size.fromHeight(70),
+                          minimumSize: const Size.fromHeight(64),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(7),
+                            borderRadius: BorderRadius.circular(3),
                           ),
                         ),
                         child: Row(
@@ -8208,22 +8206,22 @@ class _DesktopQuotePanel extends StatelessWidget {
                   const SizedBox(width: 8),
                   SizedBox(
                     width: 70,
-                    height: 70,
+                    height: 64,
                     child: OutlinedButton(
                       onPressed: onOpenHistory,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: const Color(0xFF1957E6),
                         side: const BorderSide(color: Color(0xFFD3E0E7)),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(7),
+                          borderRadius: BorderRadius.circular(3),
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
                       ),
                       child: const Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.receipt_long_outlined),
-                          SizedBox(height: 4),
+                          SizedBox(height: 2),
                           Text(
                             'Ventas',
                             style: TextStyle(
@@ -8235,23 +8233,18 @@ class _DesktopQuotePanel extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 3),
               Container(
                 width: double.infinity,
-                margin: const EdgeInsets.symmetric(horizontal: 8),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 7,
-                ),
+                margin: EdgeInsets.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: const Color(0xFFD3E0E7),
-                    width: 1.1,
+                  border: Border(
+                    top: BorderSide(color: const Color(0xFFE2EAF0)),
+                    bottom: BorderSide(color: const Color(0xFFE2EAF0)),
                   ),
                 ),
                 child: Row(
@@ -8259,11 +8252,11 @@ class _DesktopQuotePanel extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
-                        vertical: 5,
+                        vertical: 3,
                       ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFEAF1FF),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(3),
                       ),
                       child: Text(
                         itemCountText,
@@ -9697,30 +9690,6 @@ class _DesktopTicketItem extends StatefulWidget {
 }
 
 class _DesktopTicketItemState extends State<_DesktopTicketItem> {
-  late final TextEditingController _priceCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _priceCtrl = TextEditingController(
-      text: _formatAccountingInput(widget.item.unitPrice),
-    );
-  }
-
-  @override
-  void didUpdateWidget(covariant _DesktopTicketItem oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.item.unitPrice != widget.item.unitPrice) {
-      _priceCtrl.text = _formatAccountingInput(widget.item.unitPrice);
-    }
-  }
-
-  @override
-  void dispose() {
-    _priceCtrl.dispose();
-    super.dispose();
-  }
-
   Future<void> _showFullProductName() async {
     final name = widget.item.nombre.trim();
     if (name.isEmpty) return;
@@ -9752,20 +9721,13 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(8),
         onDoubleTap: widget.onEditLine,
         child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
-          decoration: BoxDecoration(
-            color: item.isExternal
-                ? const Color(0xFFEAF1FF)
-                : const Color(0xFFF8FBFC),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: item.isExternal
-                  ? const Color(0xFF8FB3FF)
-                  : const Color(0xFFD7E4EB),
-              width: 1.05,
+          padding: const EdgeInsets.fromLTRB(5, 7, 2, 7),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(
+              bottom: BorderSide(color: Color(0xFFE2EAF0), width: 1),
             ),
           ),
           child: Row(
@@ -9879,30 +9841,17 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
               ),
               const SizedBox(width: 5),
               SizedBox(
-                width: 76,
-                child: TextField(
-                  controller: _priceCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+                width: 72,
+                child: Text(
+                  _formatAccountingInput(item.unitPrice),
+                  textAlign: TextAlign.right,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: const Color(0xFF52677C),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 11,
                   ),
-                  style: const TextStyle(fontSize: 11),
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    hintText: 'Precio',
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 8,
-                    ),
-                    border: OutlineInputBorder(),
-                  ),
-                  onTap: () {},
-                  onSubmitted: (value) {
-                    final parsed = _parseAccountingInput(value);
-                    if (parsed != null) {
-                      widget.onChangePrice(parsed);
-                      _priceCtrl.text = _formatAccountingInput(parsed);
-                    }
-                  },
                 ),
               ),
               if (hasDiscount)
@@ -9924,25 +9873,18 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                 icon: AppIcons.remove,
               ),
               SizedBox(
-                width: 34,
-                height: 32,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFC7D7FF)),
-                  ),
-                  child: Center(
-                    child: Text(
-                      qtyText,
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: const Color(0xFF183548),
-                        fontWeight: FontWeight.w900,
-                        fontSize: 13,
-                      ),
+                width: 38,
+                height: 34,
+                child: Center(
+                  child: Text(
+                    qtyText,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: const Color(0xFF183548),
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
                     ),
                   ),
                 ),
@@ -9954,7 +9896,7 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
               ),
               const SizedBox(width: 4),
               SizedBox(
-                width: 84,
+                width: 88,
                 child: Text(
                   widget.money(item.total),
                   textAlign: TextAlign.right,
@@ -9962,7 +9904,7 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w900,
-                    fontSize: 11.6,
+                    fontSize: 12,
                   ),
                 ),
               ),
@@ -10001,21 +9943,20 @@ class _DesktopTicketQtyButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: SizedBox(
-        width: 31,
-        height: 32,
+        width: 34,
+        height: 34,
         child: IconButton(
           onPressed: onPressed,
           padding: EdgeInsets.zero,
           visualDensity: VisualDensity.compact,
           style: IconButton.styleFrom(
-            backgroundColor: const Color(0xFFEAF1FF),
+            backgroundColor: Colors.transparent,
             foregroundColor: const Color(0xFF1957E6),
-            side: const BorderSide(color: Color(0xFFB9CCFF), width: 1.1),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            hoverColor: const Color(0xFFEAF1FF),
+            highlightColor: const Color(0xFFDCE8FF),
+            shape: const CircleBorder(),
           ),
-          icon: AppIcon(icon, size: 18, strokeWidth: 2.3),
+          icon: AppIcon(icon, size: 24, strokeWidth: 2.6),
         ),
       ),
     );
@@ -10036,21 +9977,20 @@ class _DesktopTicketRemoveButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: SizedBox(
-        width: 31,
-        height: 32,
+        width: 34,
+        height: 34,
         child: IconButton(
           onPressed: onPressed,
           padding: EdgeInsets.zero,
           visualDensity: VisualDensity.compact,
           style: IconButton.styleFrom(
-            backgroundColor: const Color(0xFFFFEAEA),
+            backgroundColor: Colors.transparent,
             foregroundColor: const Color(0xFFB42318),
-            side: const BorderSide(color: Color(0xFFFFB8B8), width: 1.1),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            hoverColor: const Color(0xFFFFEAEA),
+            highlightColor: const Color(0xFFFFDCDC),
+            shape: const CircleBorder(),
           ),
-          icon: const AppIcon(AppIcons.close, size: 17.5, strokeWidth: 2.4),
+          icon: const AppIcon(AppIcons.close, size: 24, strokeWidth: 2.8),
         ),
       ),
     );
