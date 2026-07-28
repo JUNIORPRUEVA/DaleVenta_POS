@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 
+import '../../core/api/env.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/cache/fulltech_cache_manager.dart';
@@ -5808,6 +5809,34 @@ class _CompanyAccountMenu extends ConsumerWidget {
     _runAfterMenuCloses(action);
   }
 
+  void _openSidePanel(BuildContext context, Widget child) {
+    _runAfterMenuCloses(() {
+      if (!context.mounted) return;
+      showGeneralDialog<void>(
+        context: context,
+        barrierDismissible: true,
+        barrierLabel: 'Cerrar panel',
+        barrierColor: Colors.black.withValues(alpha: 0.18),
+        transitionDuration: const Duration(milliseconds: 230),
+        pageBuilder: (context, animation, secondaryAnimation) => child,
+        transitionBuilder: (context, animation, secondaryAnimation, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(1, 0),
+              end: Offset.zero,
+            ).animate(curved),
+            child: FadeTransition(opacity: curved, child: child),
+          );
+        },
+      );
+    });
+  }
+
   void _logout(BuildContext context, WidgetRef ref) {
     _runAfterMenuCloses(() async {
       await ref.read(authStateProvider.notifier).logout();
@@ -5879,8 +5908,10 @@ class _CompanyAccountMenu extends ConsumerWidget {
             child: _CompanyMenuItem(
               icon: Icons.apps_rounded,
               label: 'Apps',
-              onTap: () =>
-                  _activateMenuItem(menuContext, () => context.go(Routes.apps)),
+              onTap: () {
+                Navigator.of(menuContext).pop();
+                _openSidePanel(context, const _CompanyAppsSidePanel());
+              },
               helpText:
                   'Centraliza los accesos para usar la cuenta desde Android, web y escritorio, manteniendo la misma empresa y permisos del usuario.',
             ),
@@ -5891,10 +5922,10 @@ class _CompanyAccountMenu extends ConsumerWidget {
             child: _CompanyMenuItem(
               icon: Icons.verified_user_outlined,
               label: 'Licencias',
-              onTap: () => _activateMenuItem(
-                menuContext,
-                () => context.go(Routes.licencias),
-              ),
+              onTap: () {
+                Navigator.of(menuContext).pop();
+                _openSidePanel(context, const _CompanyLicensesSidePanel());
+              },
               helpText:
                   'Resume el estado de la empresa activa, el plan disponible y la preparación del sistema para trabajo multiempresa.',
             ),
@@ -5990,6 +6021,420 @@ class _CompanyAccountMenu extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _CompanyAppsSidePanel extends StatelessWidget {
+  const _CompanyAppsSidePanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return _CompanySidePanelScaffold(
+      icon: Icons.apps_rounded,
+      title: 'Apps',
+      subtitle: 'Accesos para trabajar desde distintos dispositivos.',
+      children: [
+        _CompanySideActionTile(
+          icon: Icons.android_rounded,
+          title: 'App Android',
+          status: 'Preparada para móviles y tablets',
+          description:
+              'Permite entrar a la cuenta de la empresa desde Android para consultar ventas, clientes, inventario y operaciones autorizadas.',
+          actionLabel: 'Ver acceso',
+          onPressed: () => safeOpenUrl(context, Uri.parse(Env.appBaseUrl)),
+        ),
+        _CompanySideActionTile(
+          icon: Icons.language_rounded,
+          title: 'App web',
+          status: 'Acceso desde navegador',
+          description:
+              'Abre la versión web para trabajar desde cualquier computador autorizado usando las mismas credenciales de la empresa.',
+          actionLabel: 'Abrir web',
+          onPressed: () => safeOpenUrl(context, Uri.parse(Env.appBaseUrl)),
+        ),
+        _CompanySideActionTile(
+          icon: Icons.desktop_windows_rounded,
+          title: 'Windows POS',
+          status: 'Punto de venta instalado',
+          description:
+              'Aplicación de escritorio para caja, facturación, impresión y trabajo diario del punto de venta.',
+          actionLabel: 'Actualizaciones',
+          onPressed: () {
+            Navigator.of(context).maybePop();
+            context.go(Routes.actualizaciones);
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _CompanyLicensesSidePanel extends ConsumerWidget {
+  const _CompanyLicensesSidePanel();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final company = ref.watch(companySettingsProvider);
+    final user = ref.watch(authStateProvider).user;
+    final companyName = company.maybeWhen(
+      data: (settings) => settings.companyName.trim().isEmpty
+          ? 'DaleVenta POS'
+          : settings.companyName.trim(),
+      orElse: () => 'DaleVenta POS',
+    );
+
+    return _CompanySidePanelScaffold(
+      icon: Icons.verified_user_outlined,
+      title: 'Licencias',
+      subtitle: 'Estado de uso, empresa activa y alcance contratado.',
+      children: [
+        _CompanySideInfoTile(
+          icon: Icons.business_rounded,
+          title: 'Empresa activa',
+          value: companyName,
+        ),
+        _CompanySideInfoTile(
+          icon: Icons.person_outline_rounded,
+          title: 'Usuario actual',
+          value: user?.email ?? 'Usuario conectado',
+        ),
+        _CompanySideInfoTile(
+          icon: Icons.workspace_premium_outlined,
+          title: 'Plan profesional POS',
+          value: 'Activo',
+          highlighted: true,
+        ),
+        const _CompanySideDetailsCard(
+          title: 'Alcance de la licencia',
+          rows: [
+            ('Empresas preparadas', 'Multiempresa'),
+            ('Usuarios', 'Según permisos de la empresa'),
+            ('Módulos incluidos', 'Ventas, clientes, inventario y caja'),
+            ('Soporte', 'Operación y actualizaciones del sistema'),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _CompanySidePanelScaffold extends StatelessWidget {
+  const _CompanySidePanelScaffold({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.children,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final width = screenWidth < 620 ? screenWidth : 560.0;
+
+    return Material(
+      color: Colors.transparent,
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Container(
+          width: width,
+          height: double.infinity,
+          decoration: const BoxDecoration(
+            color: Color(0xFFF8FAFC),
+            border: Border(left: BorderSide(color: Color(0xFFD3E0E7))),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x1F0F172A),
+                blurRadius: 24,
+                offset: Offset(-8, 0),
+              ),
+            ],
+          ),
+          child: SafeArea(
+            left: false,
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 10, 13),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    border: Border(
+                      bottom: BorderSide(color: Color(0xFFDDE7EE)),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      _CompanySideIcon(icon: icon, size: 40),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              style: const TextStyle(
+                                color: Color(0xFF0F172A),
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              subtitle,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xFF52667C),
+                                fontSize: 12.5,
+                                height: 1.25,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Cerrar',
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        icon: const Icon(Icons.close_rounded),
+                        color: const Color(0xFF334155),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemBuilder: (context, index) => children[index],
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemCount: children.length,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CompanySideActionTile extends StatelessWidget {
+  const _CompanySideActionTile({
+    required this.icon,
+    required this.title,
+    required this.status,
+    required this.description,
+    required this.actionLabel,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String title;
+  final String status;
+  final String description;
+  final String actionLabel;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return _CompanySideSurface(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _CompanySideIcon(icon: icon),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: _companySideTitleStyle(15)),
+                const SizedBox(height: 3),
+                Text(status, style: _companySideStrongStyle()),
+                const SizedBox(height: 8),
+                Text(description, style: _companySideBodyStyle()),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: onPressed,
+                  icon: const Icon(Icons.open_in_new_rounded, size: 17),
+                  label: Text(actionLabel),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF1957E6),
+                    side: const BorderSide(color: Color(0xFF9DB9F8)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    textStyle: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompanySideInfoTile extends StatelessWidget {
+  const _CompanySideInfoTile({
+    required this.icon,
+    required this.title,
+    required this.value,
+    this.highlighted = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final String value;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    return _CompanySideSurface(
+      child: Row(
+        children: [
+          _CompanySideIcon(
+            icon: icon,
+            color: highlighted
+                ? const Color(0xFF16A34A)
+                : const Color(0xFF1957E6),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: _companySideBodyStyle()),
+                const SizedBox(height: 3),
+                Text(value, style: _companySideTitleStyle(15)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompanySideDetailsCard extends StatelessWidget {
+  const _CompanySideDetailsCard({required this.title, required this.rows});
+
+  final String title;
+  final List<(String, String)> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return _CompanySideSurface(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: _companySideTitleStyle(15)),
+          const SizedBox(height: 10),
+          for (final row in rows)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 5),
+              child: Row(
+                children: [
+                  Expanded(child: Text(row.$1, style: _companySideBodyStyle())),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Text(
+                      row.$2,
+                      textAlign: TextAlign.end,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: _companySideStrongStyle(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompanySideSurface extends StatelessWidget {
+  const _CompanySideSurface({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDDE7EE)),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _CompanySideIcon extends StatelessWidget {
+  const _CompanySideIcon({
+    required this.icon,
+    this.color = const Color(0xFF1957E6),
+    this.size = 34,
+  });
+
+  final IconData icon;
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF2F7FF),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFFDDEAFF)),
+      ),
+      child: Icon(icon, size: size * 0.48, color: color),
+    );
+  }
+}
+
+TextStyle _companySideTitleStyle(double size) {
+  return TextStyle(
+    color: const Color(0xFF0F172A),
+    fontSize: size,
+    fontWeight: FontWeight.w900,
+    letterSpacing: 0,
+  );
+}
+
+TextStyle _companySideBodyStyle() {
+  return const TextStyle(
+    color: Color(0xFF52667C),
+    fontSize: 13,
+    height: 1.3,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0,
+  );
+}
+
+TextStyle _companySideStrongStyle() {
+  return const TextStyle(
+    color: Color(0xFF183548),
+    fontSize: 13,
+    fontWeight: FontWeight.w900,
+    letterSpacing: 0,
+  );
 }
 
 class _CompanyLogoBox extends StatelessWidget {
