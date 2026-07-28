@@ -9956,7 +9956,7 @@ class _DesktopTicketQtyButton extends StatelessWidget {
             highlightColor: const Color(0xFFDCE8FF),
             shape: const CircleBorder(),
           ),
-          icon: AppIcon(icon, size: 24, strokeWidth: 2.6),
+          icon: AppIcon(icon, size: 22, strokeWidth: 2.5),
         ),
       ),
     );
@@ -9990,7 +9990,7 @@ class _DesktopTicketRemoveButton extends StatelessWidget {
             highlightColor: const Color(0xFFFFDCDC),
             shape: const CircleBorder(),
           ),
-          icon: const AppIcon(AppIcons.close, size: 24, strokeWidth: 2.8),
+          icon: const AppIcon(AppIcons.delete, size: 24, strokeWidth: 2.6),
         ),
       ),
     );

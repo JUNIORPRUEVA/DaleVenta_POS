@@ -276,14 +276,27 @@ class DesktopShellAppBar extends ConsumerWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
+                    RichText(
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0,
-                        color: const Color(0xFF111827),
+                      text: TextSpan(
+                        text: title,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0,
+                          color: const Color(0xFF111827),
+                        ),
+                        children: [
+                          if (title == 'DaleVenta POS')
+                            TextSpan(
+                              text: ' - Sistema de facturacion',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                color: const Color(0xFF5A6F7D),
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     if (showUserMeta) const SizedBox(height: 2),
