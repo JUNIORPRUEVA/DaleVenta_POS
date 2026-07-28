@@ -2,11 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/debug/app_error_reporter.dart';
-import '../../core/routing/routes.dart';
 import '../../core/utils/money_formatters.dart';
 import 'cash_close_ticket_printer.dart';
 import 'cash_dialogs.dart';
@@ -143,6 +141,15 @@ class CashTurnMenuButton extends ConsumerWidget {
     );
   }
 
+  void _activateMenuItem(
+    BuildContext rootContext,
+    BuildContext menuContext,
+    Future<void> Function() action,
+  ) {
+    Navigator.of(menuContext).pop();
+    _runAfterNavigatorSettles(rootContext, action);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(activeCashSessionControllerProvider);
@@ -159,64 +166,66 @@ class CashTurnMenuButton extends ConsumerWidget {
         borderRadius: BorderRadius.circular(8),
         side: const BorderSide(color: Color(0xFFDDE7EE)),
       ),
-      onSelected: (value) {
-        debugPrint('[TurnMenu] action selected=$value');
-        _runAfterNavigatorSettles(context, () async {
-          debugPrint('[TurnMenu] popup closed');
-          switch (value) {
-            case 'open':
-              await _openCash(context, ref);
-              break;
-            case 'current':
-              if (active == null) {
-                context.go(Routes.caja);
-              } else {
-                await _showCurrentTurn(context, ref);
-              }
-              break;
-            case 'history':
-              await _showHistory(context, ref);
-              break;
-            case 'close':
-              debugPrint('[TurnMenu] opening close dialog');
-              await _closeCash(context, ref);
-              break;
-            case 'cash':
-              context.go(Routes.caja);
-              break;
-          }
-        });
-      },
-      itemBuilder: (context) => [
+      itemBuilder: (menuContext) => [
         if (active == null)
-          const PopupMenuItem(
-            value: 'open',
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
             child: _TurnMenuItem(
               icon: Icons.lock_open_rounded,
               label: 'Abrir caja',
+              helpText:
+                  'Inicia un turno de caja registrando la base inicial de efectivo. Esto habilita el control de ventas, entradas, salidas y cierre del día.',
+              onTap: () => _activateMenuItem(
+                context,
+                menuContext,
+                () => _openCash(context, ref),
+              ),
             ),
           )
         else ...[
-          const PopupMenuItem(
-            value: 'current',
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
             child: _TurnMenuItem(
               icon: Icons.receipt_long_outlined,
               label: 'Turno actual',
+              helpText:
+                  'Muestra el resumen del turno activo, total vendido, efectivo esperado, tickets y composición del corte sin salir de la pantalla de ventas.',
+              onTap: () => _activateMenuItem(context, menuContext, () async {
+                await _showCurrentTurn(context, ref);
+              }),
             ),
           ),
-          const PopupMenuItem(
-            value: 'close',
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
             child: _TurnMenuItem(
               icon: Icons.point_of_sale_rounded,
               label: 'Hacer corte de turno',
+              helpText:
+                  'Cierra el turno activo confirmando el efectivo real de caja. Al finalizar queda registrado el corte y puede imprimirse el comprobante.',
+              onTap: () => _activateMenuItem(
+                context,
+                menuContext,
+                () => _closeCash(context, ref),
+              ),
             ),
           ),
         ],
-        const PopupMenuItem(
-          value: 'history',
+        PopupMenuItem(
+          enabled: false,
+          padding: EdgeInsets.zero,
           child: _TurnMenuItem(
             icon: Icons.history_rounded,
             label: 'Historial de turnos',
+            helpText:
+                'Consulta los turnos cerrados anteriormente, revisa sus montos y reimprime el ticket de cierre cuando sea necesario.',
+            onTap: () => _activateMenuItem(
+              context,
+              menuContext,
+              () => _showHistory(context, ref),
+            ),
           ),
         ),
       ],
@@ -278,46 +287,141 @@ class CashTurnMenuButton extends ConsumerWidget {
   }
 }
 
-class _TurnMenuItem extends StatelessWidget {
-  const _TurnMenuItem({required this.icon, required this.label});
+class _TurnMenuItem extends StatefulWidget {
+  const _TurnMenuItem({
+    required this.icon,
+    required this.label,
+    required this.helpText,
+    required this.onTap,
+  });
 
   final IconData icon;
   final String label;
+  final String helpText;
+  final VoidCallback onTap;
+
+  @override
+  State<_TurnMenuItem> createState() => _TurnMenuItemState();
+}
+
+class _TurnMenuItemState extends State<_TurnMenuItem> {
+  bool _showHelp = false;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 44,
-      child: Row(
-        children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF7FAFC),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFFDDE7EE)),
+      width: 258,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: widget.onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  height: 48,
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF7FAFC),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFDDE7EE)),
+                        ),
+                        child: Icon(
+                          widget.icon,
+                          color: const Color(0xFF1957E6),
+                          size: 16,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          widget.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF183548),
+                            fontWeight: FontWeight.w900,
+                            fontSize: 13,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: _showHelp ? 'Ocultar ayuda' : 'Ayuda',
+                        onPressed: () => setState(() => _showHelp = !_showHelp),
+                        icon: Icon(
+                          _showHelp
+                              ? Icons.help_rounded
+                              : Icons.help_outline_rounded,
+                        ),
+                        iconSize: 17,
+                        color: _showHelp
+                            ? const Color(0xFF1957E6)
+                            : const Color(0xFF7C8DA1),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 30,
+                          height: 30,
+                        ),
+                        splashRadius: 17,
+                      ),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        color: Color(0xFF94A3B8),
+                        size: 18,
+                      ),
+                    ],
+                  ),
+                ),
+                AnimatedCrossFade(
+                  firstChild: const SizedBox.shrink(),
+                  secondChild: _TurnInlineMenuHelp(text: widget.helpText),
+                  crossFadeState: _showHelp
+                      ? CrossFadeState.showSecond
+                      : CrossFadeState.showFirst,
+                  duration: const Duration(milliseconds: 150),
+                  sizeCurve: Curves.easeOutCubic,
+                ),
+              ],
             ),
-            child: Icon(icon, color: const Color(0xFF1957E6), size: 16),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Color(0xFF183548),
-                fontWeight: FontWeight.w900,
-                fontSize: 13,
-                letterSpacing: 0,
-              ),
-            ),
-          ),
-          const Icon(
-            Icons.chevron_right_rounded,
-            color: Color(0xFF94A3B8),
-            size: 18,
-          ),
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TurnInlineMenuHelp extends StatelessWidget {
+  const _TurnInlineMenuHelp({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(42, 0, 4, 8),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F8FF),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: const Color(0xFFDDEAFF)),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Color(0xFF52667C),
+          fontSize: 11.6,
+          height: 1.25,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0,
+        ),
       ),
     );
   }
