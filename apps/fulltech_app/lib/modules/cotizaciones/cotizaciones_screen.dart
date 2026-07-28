@@ -6311,12 +6311,14 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
             horizontal: isMobile ? 12 : 24,
             vertical: isMobile ? 10 : 20,
           ),
+          backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
+            side: const BorderSide(color: Color(0xFFDDE7EE)),
           ),
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxWidth: 760,
+              maxWidth: 780,
               maxHeight: media.height - (isMobile ? 24 : 40),
             ),
             child: Column(
@@ -6325,22 +6327,24 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                 Padding(
                   padding: EdgeInsets.fromLTRB(
                     isMobile ? 16 : 24,
-                    18,
-                    isMobile ? 10 : 18,
                     16,
+                    isMobile ? 10 : 16,
+                    14,
                   ),
                   child: Row(
                     children: [
                       Container(
-                        width: 42,
-                        height: 42,
+                        width: 40,
+                        height: 40,
                         decoration: BoxDecoration(
                           color: const Color(0xFFEAF1FF),
-                          borderRadius: BorderRadius.circular(11),
+                          borderRadius: BorderRadius.circular(7),
+                          border: Border.all(color: const Color(0xFFDDEAFF)),
                         ),
                         child: const Icon(
                           Icons.point_of_sale_rounded,
                           color: Color(0xFF1957E6),
+                          size: 20,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -6351,15 +6355,20 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                             Text(
                               'Cobrar venta',
                               style: TextStyle(
-                                fontSize: 19,
+                                fontSize: 18,
                                 fontWeight: FontWeight.w900,
                                 color: Color(0xFF0F172A),
+                                letterSpacing: 0,
                               ),
                             ),
                             SizedBox(height: 2),
                             Text(
                               'Confirma el pago y genera la factura',
-                              style: TextStyle(color: Color(0xFF64748B)),
+                              style: TextStyle(
+                                color: Color(0xFF64748B),
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0,
+                              ),
                             ),
                           ],
                         ),
@@ -6377,19 +6386,19 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                   child: SingleChildScrollView(
                     padding: EdgeInsets.fromLTRB(
                       isMobile ? 16 : 24,
-                      18,
+                      16,
                       isMobile ? 16 : 24,
-                      18,
+                      16,
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Container(
-                          padding: EdgeInsets.all(isMobile ? 14 : 18),
+                          padding: EdgeInsets.all(isMobile ? 14 : 16),
                           decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFD6E3ED)),
+                            color: const Color(0xFFFCFEFF),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFDDE7EE)),
                           ),
                           child: Column(
                             children: [
@@ -6403,15 +6412,17 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                                           style: TextStyle(
                                             color: Color(0xFF475569),
                                             fontWeight: FontWeight.w900,
+                                            letterSpacing: 0,
                                           ),
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
                                           widget.money(widget.total),
                                           style: const TextStyle(
-                                            fontSize: 28,
+                                            fontSize: 30,
                                             fontWeight: FontWeight.w900,
                                             color: Color(0xFF0F172A),
+                                            letterSpacing: 0,
                                           ),
                                         ),
                                       ],
@@ -6423,15 +6434,17 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                                           style: TextStyle(
                                             color: Color(0xFF475569),
                                             fontWeight: FontWeight.w900,
+                                            letterSpacing: 0,
                                           ),
                                         ),
                                         const Spacer(),
                                         Text(
                                           widget.money(widget.total),
                                           style: const TextStyle(
-                                            fontSize: 30,
+                                            fontSize: 31,
                                             fontWeight: FontWeight.w900,
                                             color: Color(0xFF0F172A),
+                                            letterSpacing: 0,
                                           ),
                                         ),
                                       ],
@@ -6497,6 +6510,7 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                           style: theme.textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.w900,
                             color: const Color(0xFF0F172A),
+                            letterSpacing: 0,
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -6541,13 +6555,13 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                 Container(
                   padding: EdgeInsets.fromLTRB(
                     isMobile ? 16 : 24,
-                    14,
+                    12,
                     isMobile ? 16 : 24,
-                    18,
+                    16,
                   ),
                   decoration: const BoxDecoration(
-                    color: Color(0xFFF8FBFD),
-                    border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+                    color: Color(0xFFF8FAFC),
+                    border: Border(top: BorderSide(color: Color(0xFFDDE7EE))),
                   ),
                   child: isMobile
                       ? Column(
@@ -6563,7 +6577,8 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                                 color: _canConfirm
                                     ? const Color(0xFF64748B)
                                     : theme.colorScheme.error,
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0,
                               ),
                             ),
                             const SizedBox(height: 10),
@@ -6582,15 +6597,23 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                                   vertical: 15,
                                 ),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(9),
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
                                 textStyle: const TextStyle(
                                   fontWeight: FontWeight.w900,
+                                  letterSpacing: 0,
                                 ),
                               ),
                             ),
                             TextButton(
                               onPressed: () => Navigator.of(context).pop(),
+                              style: TextButton.styleFrom(
+                                foregroundColor: const Color(0xFF1957E6),
+                                textStyle: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0,
+                                ),
+                              ),
                               child: const Text('Cancelar'),
                             ),
                           ],
@@ -6608,12 +6631,20 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                                   color: _canConfirm
                                       ? const Color(0xFF64748B)
                                       : theme.colorScheme.error,
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0,
                                 ),
                               ),
                             ),
                             TextButton(
                               onPressed: () => Navigator.of(context).pop(),
+                              style: TextButton.styleFrom(
+                                foregroundColor: const Color(0xFF1957E6),
+                                textStyle: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0,
+                                ),
+                              ),
                               child: const Text('Cancelar'),
                             ),
                             const SizedBox(width: 10),
@@ -6630,13 +6661,14 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 22,
-                                  vertical: 16,
+                                  vertical: 15,
                                 ),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(9),
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
                                 textStyle: const TextStyle(
                                   fontWeight: FontWeight.w900,
+                                  letterSpacing: 0,
                                 ),
                               ),
                             ),
@@ -6676,6 +6708,7 @@ class _PaymentAmountInput extends StatelessWidget {
             style: const TextStyle(
               fontWeight: FontWeight.w900,
               color: Color(0xFF0F172A),
+              letterSpacing: 0,
             ),
           ),
           const SizedBox(height: 6),
@@ -6691,6 +6724,7 @@ class _PaymentAmountInput extends StatelessWidget {
             style: const TextStyle(
               fontWeight: FontWeight.w900,
               color: Color(0xFF0F172A),
+              letterSpacing: 0,
             ),
           ),
         ),
@@ -6708,23 +6742,30 @@ class _PaymentAmountInput extends StatelessWidget {
       style: const TextStyle(
         color: Color(0xFF1957E6),
         fontWeight: FontWeight.w900,
+        fontSize: 14,
+        letterSpacing: 0,
       ),
       decoration: InputDecoration(
         prefixText: r'RD$  ',
         filled: true,
-        fillColor: const Color(0xFFF8FBFD),
+        fillColor: Colors.white,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(9),
-          borderSide: const BorderSide(color: Color(0xFFC9D8EA)),
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFFD5E2EC)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(9),
-          borderSide: const BorderSide(color: Color(0xFFC9D8EA)),
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFFD5E2EC)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: Color(0xFF1957E6), width: 1.4),
+        ),
+        prefixStyle: const TextStyle(
+          color: Color(0xFF64748B),
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0,
         ),
       ),
     );
@@ -6748,20 +6789,22 @@ class _ReadonlyPaymentLine extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 42,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 13),
       decoration: BoxDecoration(
-        color: const Color(0xFFF2F6FA),
-        borderRadius: BorderRadius.circular(8),
+        color: const Color(0xFFF6F9FC),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: const Color(0xFFE3EBF2)),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: const Color(0xFF64748B)),
+          Icon(icon, size: 17, color: const Color(0xFF64748B)),
           const SizedBox(width: 10),
           Text(
             label,
             style: const TextStyle(
               color: Color(0xFF64748B),
               fontWeight: FontWeight.w900,
+              letterSpacing: 0,
             ),
           ),
           const Spacer(),
@@ -6769,8 +6812,9 @@ class _ReadonlyPaymentLine extends StatelessWidget {
             value,
             style: TextStyle(
               color: strong ? const Color(0xFF1957E6) : const Color(0xFF64748B),
-              fontSize: 18,
+              fontSize: 17,
               fontWeight: FontWeight.w900,
+              letterSpacing: 0,
             ),
           ),
         ],
@@ -6793,20 +6837,20 @@ class _PaymentMethodTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? const Color(0xFF1957E6) : Colors.white,
-      borderRadius: BorderRadius.circular(10),
+      color: selected ? const Color(0xFF1957E6) : const Color(0xFFFFFFFF),
+      borderRadius: BorderRadius.circular(8),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         child: Container(
-          height: 54,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          height: 52,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: selected
                   ? const Color(0xFF1957E6)
-                  : const Color(0xFFD4E0EA),
+                  : const Color(0xFFD5E2EC),
             ),
           ),
           child: Row(
@@ -6822,6 +6866,7 @@ class _PaymentMethodTile extends StatelessWidget {
                 style: TextStyle(
                   color: selected ? Colors.white : const Color(0xFF0F172A),
                   fontWeight: FontWeight.w900,
+                  letterSpacing: 0,
                 ),
               ),
             ],
