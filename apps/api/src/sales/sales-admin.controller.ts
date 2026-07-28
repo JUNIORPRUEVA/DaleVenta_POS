@@ -1,8 +1,10 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@prisma/client';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
+import type { TenantUser } from '../auth/tenant-context';
+import { Request } from 'express';
 import { SalesRangeQueryDto } from './dto/sales-range-query.dto';
 import { SalesService } from './sales.service';
 
@@ -13,12 +15,12 @@ export class SalesAdminController {
   constructor(private readonly sales: SalesService) {}
 
   @Get()
-  listByUser(@Query() query: SalesRangeQueryDto) {
-    return this.sales.listByUser(query.userId ?? '', query.from, query.to, query.customerId, query.includeDeleted === 'true');
+  listByUser(@Req() req: Request, @Query() query: SalesRangeQueryDto) {
+    return this.sales.listByUser(req.user as TenantUser, query.userId ?? '', query.from, query.to, query.customerId, query.includeDeleted === 'true');
   }
 
   @Get('summary')
-  summaryByUser(@Query() query: SalesRangeQueryDto) {
-    return this.sales.summaryByUser(query.from, query.to, query.userId);
+  summaryByUser(@Req() req: Request, @Query() query: SalesRangeQueryDto) {
+    return this.sales.summaryByUser(req.user as TenantUser, query.from, query.to, query.userId);
   }
 }

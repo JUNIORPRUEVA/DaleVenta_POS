@@ -10,6 +10,7 @@ import * as fs from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { PrismaService } from "../prisma/prisma.service";
+import { isAdminLike, requireTenant, type TenantUser } from "../auth/tenant-context";
 import { CreateSaleDto, CreateSaleItemDto } from "./dto/create-sale.dto";
 import { CreateSalePdfShareLinkDto } from "./dto/create-sale-pdf-share-link.dto";
 
@@ -152,15 +153,17 @@ export class SalesService {
   }
 
   async listMine(
-    userId: string,
+    user: TenantUser,
     from?: string,
     to?: string,
     customerId?: string,
     includeDeleted = false,
   ) {
+    const companyId = requireTenant(user);
     const normalizedCustomerId = customerId?.trim();
     const where: Prisma.SaleWhereInput = {
-      userId,
+      companyId,
+      userId: user.id,
       ...(includeDeleted ? {} : { isDeleted: false }),
       ...(normalizedCustomerId ? { customerId: normalizedCustomerId } : {}),
       ...this.buildDateRange(from, to),
@@ -183,15 +186,17 @@ export class SalesService {
   }
 
   async listInvoices(
-    user: { id: string; role: Role },
+    user: TenantUser,
     from?: string,
     to?: string,
     customerId?: string,
     includeDeleted = false,
   ) {
+    const companyId = requireTenant(user);
     const normalizedCustomerId = customerId?.trim();
     const where: Prisma.SaleWhereInput = {
-      ...(user.role === Role.ADMIN || user.role === Role.ASISTENTE
+      companyId,
+      ...(isAdminLike(user)
         ? {}
         : { userId: user.id }),
       ...(includeDeleted ? {} : { isDeleted: false }),
@@ -212,24 +217,42 @@ export class SalesService {
   }
 
   async listByUser(
+    user: TenantUser,
     userId: string,
     from?: string,
     to?: string,
     customerId?: string,
     includeDeleted = false,
   ) {
-    return this.listMine(userId, from, to, customerId, includeDeleted);
+    const companyId = requireTenant(user);
+    const normalizedUserId = userId?.trim();
+    const normalizedCustomerId = customerId?.trim();
+    const where: Prisma.SaleWhereInput = {
+      companyId,
+      ...(normalizedUserId ? { userId: normalizedUserId } : {}),
+      ...(includeDeleted ? {} : { isDeleted: false }),
+      ...(normalizedCustomerId ? { customerId: normalizedCustomerId } : {}),
+      ...this.buildDateRange(from, to),
+    };
+
+    return this.prisma.sale.findMany({
+      where,
+      orderBy: { saleDate: "desc" },
+      include: this.saleInclude(),
+    });
   }
 
   async summaryMine(
-    userId: string,
+    user: TenantUser,
     from?: string,
     to?: string,
     customerId?: string,
   ) {
+    const companyId = requireTenant(user);
     const normalizedCustomerId = customerId?.trim();
     const where: Prisma.SaleWhereInput = {
-      userId,
+      companyId,
+      userId: user.id,
       isDeleted: false,
       ...(normalizedCustomerId ? { customerId: normalizedCustomerId } : {}),
       ...this.buildDateRange(from, to),
@@ -279,8 +302,10 @@ export class SalesService {
     };
   }
 
-  async summaryByUser(from?: string, to?: string, userId?: string) {
+  async summaryByUser(user: TenantUser, from?: string, to?: string, userId?: string) {
+    const companyId = requireTenant(user);
     const where: Prisma.SaleWhereInput = {
+      companyId,
       isDeleted: false,
       ...(userId ? { userId } : {}),
       ...this.buildDateRange(from, to),
@@ -359,7 +384,8 @@ export class SalesService {
     return { items, totals, commissionRate: 0.1 };
   }
 
-  async create(userId: string, dto: CreateSaleDto) {
+  async create(user: TenantUser, dto: CreateSaleDto) {
+    const companyId = requireTenant(user);
     if (!dto.items.length) {
       throw new BadRequestException("La venta requiere al menos 1 item");
     }
@@ -370,7 +396,7 @@ export class SalesService {
 
     try {
       const customer = await this.prisma.client.findFirst({
-        where: { id: dto.customerId, isDeleted: false },
+        where: { id: dto.customerId, companyId, isDeleted: false },
       });
       if (!customer) {
         throw new BadRequestException("Cliente inválido");
@@ -397,7 +423,7 @@ export class SalesService {
     if (productIds.length) {
       try {
         products = await this.prisma.product.findMany({
-          where: { id: { in: productIds } },
+          where: { id: { in: productIds }, companyId },
           select: {
             id: true,
             nombre: true,
@@ -481,7 +507,7 @@ export class SalesService {
       ? totalProfit.mul(commissionRate)
       : new Prisma.Decimal(0);
     const activeSession = await this.prisma.cashSession.findFirst({
-      where: { openedByUserId: userId, status: "OPEN", closedAt: null },
+      where: { openedByUserId: user.id, companyId, status: "OPEN", closedAt: null },
       orderBy: { openedAt: "desc" },
     });
     if (!activeSession) {
@@ -526,6 +552,7 @@ export class SalesService {
           const updated = await tx.product.updateMany({
             where: {
               id: item.productId,
+              companyId,
               stock: { gte: item.qty },
             },
             data: {
@@ -541,7 +568,8 @@ export class SalesService {
 
         const sale = await tx.sale.create({
           data: {
-            userId,
+            userId: user.id,
+            companyId,
             customerId: dto.customerId,
             cashSessionId: activeSession.id,
             saleDate: new Date(),
@@ -610,13 +638,14 @@ export class SalesService {
   }
 
   async createInvoicePdfShareLink(
-    user: { id: string; role: Role },
+    user: TenantUser,
     dto: CreateSalePdfShareLinkDto,
     requestBaseUrl?: string,
   ) {
+    const companyId = requireTenant(user);
     const saleId = dto.saleId.trim();
-    const sale = await this.prisma.sale.findUnique({
-      where: { id: saleId },
+    const sale = await this.prisma.sale.findFirst({
+      where: { id: saleId, companyId },
       select: {
         id: true,
         userId: true,
@@ -667,12 +696,13 @@ export class SalesService {
   }
 
   async remove(
-    requestUser: { id: string; role: Role | string },
+    requestUser: TenantUser,
     saleId: string,
   ) {
+    const companyId = requireTenant(requestUser);
     let sale: { id: string; isDeleted: boolean; userId: string } | null = null;
     try {
-      sale = await this.prisma.sale.findUnique({ where: { id: saleId } });
+      sale = await this.prisma.sale.findFirst({ where: { id: saleId, companyId } });
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
       throw new NotFoundException("Venta no encontrada");
@@ -703,7 +733,8 @@ export class SalesService {
     return { ok: true };
   }
 
-  async returnSale(requestUser: { id: string; role: Role }, saleId: string) {
+  async returnSale(requestUser: TenantUser, saleId: string) {
+    const companyId = requireTenant(requestUser);
     if (requestUser.role !== Role.ADMIN) {
       throw new ForbiddenException(
         "Solo un administrador puede devolver ventas",
@@ -715,8 +746,8 @@ export class SalesService {
     }> | null = null;
 
     try {
-      sale = await this.prisma.sale.findUnique({
-        where: { id: saleId },
+      sale = await this.prisma.sale.findFirst({
+        where: { id: saleId, companyId },
         include: { items: true },
       });
     } catch (error) {
@@ -757,11 +788,13 @@ export class SalesService {
     }
   }
 
-  async listCredits(user: { id: string; role: Role }, includePaid = false) {
+  async listCredits(user: TenantUser, includePaid = false) {
+    const companyId = requireTenant(user);
     const where: Prisma.SaleWhereInput = {
+      companyId,
       isDeleted: false,
       creditStatus: includePaid ? { in: ["open", "paid"] } : "open",
-      ...(user.role === Role.ADMIN || user.role === Role.ASISTENTE
+      ...(isAdminLike(user)
         ? {}
         : { userId: user.id }),
     };
@@ -779,12 +812,13 @@ export class SalesService {
   }
 
   async addCreditPayment(
-    user: { id: string; role: Role },
+    user: TenantUser,
     saleId: string,
     dto: { cashAmount?: number; transferAmount?: number; note?: string },
   ) {
-    const sale = await this.prisma.sale.findUnique({
-      where: { id: saleId },
+    const companyId = requireTenant(user);
+    const sale = await this.prisma.sale.findFirst({
+      where: { id: saleId, companyId },
       include: { customer: true },
     });
     if (!sale || sale.isDeleted || sale.creditStatus === "none") {
@@ -792,14 +826,13 @@ export class SalesService {
     }
     if (
       sale.userId !== user.id &&
-      user.role !== Role.ADMIN &&
-      user.role !== Role.ASISTENTE
+      !isAdminLike(user)
     ) {
       throw new ForbiddenException("No puedes modificar este crédito");
     }
 
     const activeSession = await this.prisma.cashSession.findFirst({
-      where: { openedByUserId: user.id, status: "OPEN", closedAt: null },
+      where: { openedByUserId: user.id, companyId, status: "OPEN", closedAt: null },
       orderBy: { openedAt: "desc" },
     });
     if (!activeSession) {
@@ -824,6 +857,7 @@ export class SalesService {
       const payment = await tx.saleCreditPayment.create({
         data: {
           saleId,
+          companyId,
           userId: user.id,
           cashSessionId: activeSession.id,
           amount,
@@ -852,14 +886,15 @@ export class SalesService {
     });
   }
 
-  async purgeAllForDebug(user: { id: string; role: string }) {
+  async purgeAllForDebug(user: TenantUser) {
     if (`${user.role}`.trim().toUpperCase() !== "ADMIN") {
       throw new ForbiddenException(
         "Solo un administrador puede limpiar ventas.",
       );
     }
 
-    const deleted = await this.prisma.sale.deleteMany();
+    const companyId = requireTenant(user);
+    const deleted = await this.prisma.sale.deleteMany({ where: { companyId } });
     return {
       ok: true,
       deletedSales: deleted.count,

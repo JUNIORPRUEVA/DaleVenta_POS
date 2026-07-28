@@ -1,8 +1,9 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { isAdminLike, requireTenant, type TenantUser } from '../auth/tenant-context';
 
-type RequestUser = { id: string; role: Role };
+type RequestUser = TenantUser;
 
 type MoneyLike = Prisma.Decimal | number | string | null | undefined;
 
@@ -11,17 +12,20 @@ export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async salesOverview(user: RequestUser, query: Record<string, string>) {
+    const companyId = requireTenant(user);
     const range = this.buildDateRange(query.from, query.to);
-    const canSeeAll = user.role === Role.ADMIN || user.role === Role.ASISTENTE;
+    const canSeeAll = isAdminLike(user);
     const userFilter = canSeeAll ? {} : { userId: user.id };
 
     const saleWhere: Prisma.SaleWhereInput = {
+      companyId,
       ...userFilter,
       kind: 'invoice',
       isDeleted: false,
       saleDate: range,
     };
     const returnedWhere: Prisma.SaleWhereInput = {
+      companyId,
       ...userFilter,
       kind: 'invoice',
       isDeleted: true,
@@ -43,6 +47,7 @@ export class ReportsService {
         orderBy: { deletedAt: 'asc' },
       }),
       this.prisma.product.findMany({
+        where: { companyId },
         select: {
           id: true,
           nombre: true,
@@ -55,6 +60,7 @@ export class ReportsService {
       this.prisma.cashMovement.findMany({
         where: {
           createdAt: range,
+          companyId,
           ...(canSeeAll ? {} : { userId: user.id }),
         },
       }),

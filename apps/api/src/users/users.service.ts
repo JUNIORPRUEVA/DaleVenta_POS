@@ -8,6 +8,7 @@ import { AiEditWorkContractDto } from './dto/ai-edit-work-contract.dto';
 import * as bcrypt from 'bcryptjs';
 import { SelfUpdateUserDto } from './dto/self-update-user.dto';
 import { ConfigService } from '@nestjs/config';
+import { requireTenant, type TenantUser } from '../auth/tenant-context';
 
 @Injectable()
 export class UsersService {
@@ -558,7 +559,8 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     return user;
   }
 
-  async create(dto: CreateUserDto) {
+  async create(requestUser: TenantUser, dto: CreateUserDto) {
+    const companyId = requireTenant(requestUser);
     const email = this.normalizeEmail(dto.email);
     const cedula = this.normalizeOptionalString(dto.cedula);
 
@@ -574,6 +576,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     return this.prisma.user.create({
       data: {
         email,
+        companyId,
         passwordHash,
         nombreCompleto: dto.nombreCompleto.trim(),
         telefono: dto.telefono.trim(),
@@ -649,8 +652,10 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     });
   }
 
-  findAll() {
+  findAll(requestUser: TenantUser) {
+    const companyId = requireTenant(requestUser);
     return this.prisma.user.findMany({
+      where: { companyId },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,

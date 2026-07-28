@@ -97,6 +97,67 @@ async function upsertUser({ companyId, email, password, nombreCompleto, telefono
   }
 }
 
+async function safeBackfill(modelName, companyId) {
+  const model = prisma[modelName];
+  if (!model?.updateMany) return { modelName, count: 0, skipped: true };
+
+  try {
+    const result = await model.updateMany({
+      where: { companyId: null },
+      data: { companyId },
+    });
+    return { modelName, count: result.count, skipped: false };
+  } catch (error) {
+    return {
+      modelName,
+      count: 0,
+      skipped: true,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function backfillDefaultCompany(companyId) {
+  const models = [
+    'user',
+    'product',
+    'supplier',
+    'purchaseInvoice',
+    'purchaseOrder',
+    'client',
+    'sale',
+    'saleCreditPayment',
+    'cashboxDaily',
+    'cashSession',
+    'cashMovement',
+    'close',
+    'depositOrder',
+    'fiscalInvoice',
+    'payableService',
+    'payablePayment',
+    'payrollEmployee',
+    'payrollPeriod',
+    'payrollEmployeeConfig',
+    'payrollEntry',
+    'payrollEmployeePeriodStatus',
+    'payrollServiceCommissionRequest',
+    'warrantyProductConfig',
+    'cotizacion',
+    'workScheduleProfile',
+    'workCoverageRule',
+    'workWeekSchedule',
+    'workScheduleAuditLog',
+    'aiAssistantConversationTurn',
+    'aiAssistantMemory',
+  ];
+
+  const results = [];
+  for (const modelName of models) {
+    results.push(await safeBackfill(modelName, companyId));
+  }
+  return results;
+}
+
 async function main() {
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@daleventa.local';
   const adminPassword = process.env.ADMIN_PASSWORD;
@@ -104,6 +165,7 @@ async function main() {
 
   const company = await upsertDefaultCompany();
   await upsertAppConfig(company);
+  const backfill = await backfillDefaultCompany(company.id);
 
   const admin = await upsertUser({
     companyId: company.id,
@@ -119,6 +181,9 @@ async function main() {
     company: company.slug,
     role: 'ADMIN',
     mode: admin.fallback ? 'users-table-fallback' : 'prisma-user-model',
+    backfill: backfill
+      .filter((item) => !item.skipped && item.count > 0)
+      .map((item) => `${item.modelName}:${item.count}`),
   });
 }
 

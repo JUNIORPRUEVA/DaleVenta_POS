@@ -7,6 +7,7 @@ import { extname, join } from 'node:path';
 import type { Express, Request, Response } from 'express';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
+import type { TenantUser } from '../auth/tenant-context';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductCostInterceptor } from './product-cost.interceptor';
@@ -52,8 +53,8 @@ export class ProductsController {
   @Header('Expires', '0')
   @Header('Surrogate-Control', 'no-store')
   @Get()
-  findAll() {
-    return this.products.findAll();
+  findAll(@Req() req: Request) {
+    return this.products.findAll(req.user as TenantUser);
   }
 
   @UseGuards(AuthGuard('jwt'))
@@ -129,15 +130,15 @@ export class ProductsController {
   @Header('Expires', '0')
   @Header('Surrogate-Control', 'no-store')
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.products.findOne(id);
+  findOne(@Req() req: Request, @Param('id') id: string) {
+    return this.products.findOne(req.user as TenantUser, id);
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN, Role.ASISTENTE)
   @Post()
-  create(@Body() dto: CreateProductDto) {
-    return this.products.create(dto);
+  create(@Req() req: Request, @Body() dto: CreateProductDto) {
+    return this.products.create(req.user as TenantUser, dto);
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -188,22 +189,21 @@ export class ProductsController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN, Role.ASISTENTE)
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateProductDto) {
-    return this.products.update(id, dto);
+  update(@Req() req: Request, @Param('id') id: string, @Body() dto: UpdateProductDto) {
+    return this.products.update(req.user as TenantUser, id, dto);
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN)
   @Delete('debug/purge')
-  purgeAllForDebug() {
-    return this.products.purgeAllForDebug();
+  purgeAllForDebug(@Req() req: Request) {
+    return this.products.purgeAllForDebug(req.user as TenantUser);
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN, Role.ASISTENTE)
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.products.remove(id);
+  remove(@Req() req: Request, @Param('id') id: string) {
+    return this.products.remove(req.user as TenantUser, id);
   }
 }
-

@@ -16,8 +16,9 @@ import { ClientsQueryDto } from './dto/clients-query.dto';
 import { UpdateClientLocationDto } from './dto/update-client-location.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { CatalogRealtimeRelayService } from '../products/catalog-realtime-relay.service';
+import { requireTenant } from '../auth/tenant-context';
 
-type AuthUser = { id: string; role: Role };
+type AuthUser = { id: string; role: Role; companyId?: string | null };
 
 @Injectable()
 export class ClientsService {
@@ -60,11 +61,11 @@ export class ClientsService {
     return { AND: filters };
   }
 
-  private async findClientOrThrow(id: string) {
+  private async findClientOrThrow(companyId: string, id: string) {
     this.ensureValidClientId(id);
 
-    const client = await this.prisma.client.findUnique({
-      where: { id },
+    const client = await this.prisma.client.findFirst({
+      where: { id, companyId },
     });
 
     if (!client) {
@@ -75,7 +76,8 @@ export class ClientsService {
   }
 
   private async findAccessibleClientOrThrow(user: AuthUser, id: string) {
-    const client = await this.findClientOrThrow(id);
+    const companyId = requireTenant(user);
+    const client = await this.findClientOrThrow(companyId, id);
 
     if (this.isAdminLike(user)) {
       return client;
@@ -285,6 +287,7 @@ export class ClientsService {
   }
 
   private async assertNoActiveDuplicatePhoneNormalized(
+    companyId: string,
     phoneNormalized: string,
     excludeClientId?: string,
   ) {
@@ -293,6 +296,7 @@ export class ClientsService {
     const existing = await this.prisma.client.findFirst({
       where: {
         isDeleted: false,
+        companyId,
         phoneNormalized,
         ...(excludeClientId ? { id: { not: excludeClientId } } : {}),
       },
@@ -307,9 +311,10 @@ export class ClientsService {
   }
 
   async create(user: AuthUser, dto: CreateClientDto) {
+    const companyId = requireTenant(user);
     const phoneNormalized = normalizePhone(dto.telefono);
     const locationData = this.resolveLocationPayload(dto);
-    await this.assertNoActiveDuplicatePhoneNormalized(phoneNormalized);
+    await this.assertNoActiveDuplicatePhoneNormalized(companyId, phoneNormalized);
     try {
       const client = await this.prisma.client.create({
         data: {
@@ -319,6 +324,7 @@ export class ClientsService {
           direccion: dto.direccion,
           notas: dto.notas,
           ownerId: user.id,
+          companyId,
           phoneNormalized,
           lastActivityAt: new Date(),
           ...(locationData ?? {}),
@@ -335,6 +341,7 @@ export class ClientsService {
   }
 
   async findAll(user: AuthUser, query: ClientsQueryDto) {
+    const companyId = requireTenant(user);
     const page = query.page && query.page > 0 ? query.page : 1;
     const pageSize = query.pageSize && query.pageSize > 0 ? query.pageSize : 20;
     const skip = (page - 1) * pageSize;
@@ -344,6 +351,7 @@ export class ClientsService {
     const phoneCandidate = phone || search;
     const phoneNormalizedSearch = normalizePhone(phoneCandidate);
     const baseWhere: Prisma.ClientWhereInput = {
+      companyId,
       ...(query.onlyDeleted === true
         ? { isDeleted: true }
         : query.includeDeleted === true
@@ -384,7 +392,7 @@ export class ClientsService {
   }
 
   async findOne(user: AuthUser, id: string) {
-    const client = await this.findClientOrThrow(id);
+    const client = await this.findAccessibleClientOrThrow(user, id);
     return this.serializeClient(client);
   }
 
@@ -394,7 +402,7 @@ export class ClientsService {
     const phoneNormalized = telefonoWasProvided ? normalizePhone(dto.telefono) : undefined;
     const locationData = this.resolveLocationPayload(dto, true);
     if (telefonoWasProvided) {
-      await this.assertNoActiveDuplicatePhoneNormalized(phoneNormalized ?? '', id);
+      await this.assertNoActiveDuplicatePhoneNormalized(requireTenant(user), phoneNormalized ?? '', id);
     }
 
     try {
@@ -448,8 +456,10 @@ export class ClientsService {
 
   async purgeAllForDebug(user: AuthUser) {
     this.assertAdmin(user, 'Only admin can purge clients');
+    const companyId = requireTenant(user);
 
     const clients = await this.prisma.client.findMany({
+      where: { companyId },
       select: { id: true },
     });
     const clientIds = clients.map((item) => item.id);
@@ -465,7 +475,7 @@ export class ClientsService {
     }
 
     const quotations = await this.prisma.cotizacion.findMany({
-      where: { customerId: { in: clientIds } },
+      where: { customerId: { in: clientIds }, companyId },
       select: { id: true },
     });
     const quotationIds = quotations.map((item) => item.id);
@@ -487,10 +497,10 @@ export class ClientsService {
         where: { customerId: { in: clientIds } },
       });
       const deletedQuotations = await tx.cotizacion.deleteMany({
-        where: { customerId: { in: clientIds } },
+        where: { customerId: { in: clientIds }, companyId },
       });
       const deletedClients = await tx.client.deleteMany({
-        where: { id: { in: clientIds } },
+        where: { id: { in: clientIds }, companyId },
       });
 
       return {
@@ -508,6 +518,7 @@ export class ClientsService {
 
   async getProfile(user: AuthUser, id: string) {
     const client = await this.findAccessibleClientOrThrow(user, id);
+    const companyId = requireTenant(user);
 
     const [createdBy, salesAgg, serviceOrdersAgg, legacyServicesAgg, serviceEvidenceAgg, serviceReportsAgg, cotizacionesAgg] = await this.prisma.$transaction([
       this.prisma.user.findUnique({
@@ -515,7 +526,7 @@ export class ClientsService {
         select: { id: true, nombreCompleto: true, email: true, role: true },
       }),
       this.prisma.sale.aggregate({
-        where: { customerId: id, isDeleted: false },
+        where: { customerId: id, companyId, isDeleted: false },
         _count: { _all: true },
         _sum: { totalSold: true },
         _max: { saleDate: true },
@@ -542,7 +553,7 @@ export class ClientsService {
         _max: { createdAt: true },
       }),
       this.prisma.cotizacion.aggregate({
-        where: { customerId: id },
+        where: { customerId: id, companyId },
         _count: { _all: true },
         _sum: { total: true },
         _max: { updatedAt: true },

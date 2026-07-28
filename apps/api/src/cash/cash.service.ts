@@ -7,13 +7,14 @@ import {
 } from "@nestjs/common";
 import { Prisma, Role } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { isAdminLike, requireTenant, type TenantUser } from "../auth/tenant-context";
 import {
   CloseCashSessionDto,
   CreateCashMovementDto,
   OpenCashSessionDto,
 } from "./dto/cash.dto";
 
-type RequestUser = { id: string; role: Role };
+type RequestUser = TenantUser;
 
 @Injectable()
 export class CashService {
@@ -41,11 +42,12 @@ export class CashService {
   }
 
   async gateState(user: RequestUser) {
+    const companyId = requireTenant(user);
     const businessDate = this.businessDate();
     const [cashboxToday, userOpenShift] = await Promise.all([
-      this.prisma.cashboxDaily.findUnique({ where: { businessDate } }),
+      this.prisma.cashboxDaily.findFirst({ where: { companyId, businessDate } }),
       this.prisma.cashSession.findFirst({
-        where: { openedByUserId: user.id, status: "OPEN", closedAt: null },
+        where: { openedByUserId: user.id, companyId, status: "OPEN", closedAt: null },
         orderBy: { openedAt: "desc" },
       }),
     ]);
@@ -62,35 +64,46 @@ export class CashService {
   }
 
   async startSession(user: RequestUser, dto: OpenCashSessionDto) {
+    const companyId = requireTenant(user);
     const userName = await this.currentUserName(user.id);
     const businessDate = this.businessDate();
     const openingAmount = new Prisma.Decimal(dto.openingAmount);
 
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.cashSession.findFirst({
-        where: { openedByUserId: user.id, status: "OPEN", closedAt: null },
+        where: { openedByUserId: user.id, companyId, status: "OPEN", closedAt: null },
         orderBy: { openedAt: "desc" },
       });
       if (existing) return this.mapActiveSession(existing);
 
-      const cashbox = await tx.cashboxDaily.upsert({
-        where: { businessDate },
-        create: {
-          businessDate,
-          openedByUserId: user.id,
-          initialAmount: openingAmount,
-          currentAmount: openingAmount,
-          note: dto.note,
-        },
-        update: {
-          status: "OPEN",
-          closedAt: null,
-          closedByUserId: null,
-        },
+      let cashbox = await tx.cashboxDaily.findFirst({
+        where: { companyId, businessDate },
       });
+      if (!cashbox) {
+        cashbox = await tx.cashboxDaily.create({
+          data: {
+            companyId,
+            businessDate,
+            openedByUserId: user.id,
+            initialAmount: openingAmount,
+            currentAmount: openingAmount,
+            note: dto.note,
+          },
+        });
+      } else {
+        cashbox = await tx.cashboxDaily.update({
+          where: { id: cashbox.id },
+          data: {
+            status: "OPEN",
+            closedAt: null,
+            closedByUserId: null,
+          },
+        });
+      }
 
       const session = await tx.cashSession.create({
         data: {
+          companyId,
           openedByUserId: user.id,
           userName,
           initialAmount: openingAmount,
@@ -105,7 +118,8 @@ export class CashService {
   }
 
   async addMovement(user: RequestUser, dto: CreateCashMovementDto) {
-    const session = await this.requireOpenSession(user.id);
+    const companyId = requireTenant(user);
+    const session = await this.requireOpenSession(user.id, companyId);
     const amount = new Prisma.Decimal(dto.amount);
     if (dto.type === "OUT") {
       const summary = await this.buildSummaryForSession(session.id);
@@ -123,6 +137,7 @@ export class CashService {
     return this.prisma.cashMovement.create({
       data: {
         sessionId: session.id,
+        companyId,
         type: dto.type,
         amount,
         reason: dto.reason,
@@ -134,7 +149,8 @@ export class CashService {
   }
 
   async closeSession(user: RequestUser, dto: CloseCashSessionDto) {
-    const session = await this.requireOpenSession(user.id);
+    const companyId = requireTenant(user);
+    const session = await this.requireOpenSession(user.id, companyId);
     const summary = await this.buildSummaryForSession(session.id);
     const closingAmount = new Prisma.Decimal(dto.closingAmount);
     const expectedAmount = new Prisma.Decimal(summary.expectedCash);
@@ -144,6 +160,7 @@ export class CashService {
       const closeResult = await tx.cashSession.updateMany({
         where: {
           id: session.id,
+          companyId,
           openedByUserId: user.id,
           status: "OPEN",
           closedAt: null,
@@ -200,12 +217,12 @@ export class CashService {
   }
 
   async summary(user: RequestUser) {
-    const session = await this.requireOpenSession(user.id);
+    const session = await this.requireOpenSession(user.id, requireTenant(user));
     return this.buildSummaryForSession(session.id);
   }
 
   async movements(user: RequestUser) {
-    const session = await this.requireOpenSession(user.id);
+    const session = await this.requireOpenSession(user.id, requireTenant(user));
     return this.prisma.cashMovement.findMany({
       where: { sessionId: session.id },
       orderBy: { createdAt: "desc" },
@@ -213,6 +230,7 @@ export class CashService {
   }
 
   async movementHistory(user: RequestUser, query: Record<string, string> = {}) {
+    const companyId = requireTenant(user);
     const takeParam = Number(query.take ?? 160);
     const take = Number.isFinite(takeParam)
       ? Math.min(Math.max(takeParam, 1), 250)
@@ -229,8 +247,9 @@ export class CashService {
     const where: Prisma.CashMovementWhereInput = {
       ...(type ? { type } : {}),
       ...(movementType ? { movementType } : {}),
+      companyId,
       ...this.movementDateRange(query.from, query.to),
-      ...(user.role === Role.ADMIN || user.role === Role.ASISTENTE
+      ...(isAdminLike(user)
         ? {}
         : { session: { openedByUserId: user.id } }),
     };
@@ -296,19 +315,20 @@ export class CashService {
   }
 
   async closedSessions(user: RequestUser) {
+    const companyId = requireTenant(user);
     return this.prisma.cashSession.findMany({
       where:
-        user.role === Role.ADMIN || user.role === Role.ASISTENTE
-          ? { status: "CLOSED" }
-          : { status: "CLOSED", openedByUserId: user.id },
+        isAdminLike(user)
+          ? { companyId, status: "CLOSED" }
+          : { companyId, status: "CLOSED", openedByUserId: user.id },
       orderBy: { closedAt: "desc" },
       take: 60,
     });
   }
 
-  async requireOpenSession(userId: string) {
+  async requireOpenSession(userId: string, companyId: string) {
     const session = await this.prisma.cashSession.findFirst({
-      where: { openedByUserId: userId, status: "OPEN", closedAt: null },
+      where: { openedByUserId: userId, companyId, status: "OPEN", closedAt: null },
       orderBy: { openedAt: "desc" },
     });
     if (!session) {

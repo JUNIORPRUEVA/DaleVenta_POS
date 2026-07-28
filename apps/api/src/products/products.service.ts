@@ -2,6 +2,7 @@ import { ConflictException, Injectable, Logger, NotFoundException } from '@nestj
 import { ConfigService } from '@nestjs/config';
 import { Prisma, Product } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { requireTenant, type TenantUser } from '../auth/tenant-context';
 import { CatalogProductsService } from './catalog-products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -71,8 +72,9 @@ export class ProductsService {
     return false;
   }
 
-  create(dto: CreateProductDto): Promise<any> {
+  create(user: TenantUser, dto: CreateProductDto): Promise<any> {
     this.assertWritable();
+    const companyId = requireTenant(user);
     return this.prisma.$transaction(async (tx) => {
       const normalizedImagePath = this.normalizeImagePathForStorage(dto.fotoUrl);
       const data = {
@@ -82,6 +84,7 @@ export class ProductsService {
         costo: new Prisma.Decimal(dto.costo),
         stock: new Prisma.Decimal(dto.stock ?? 0),
         imagen: normalizedImagePath,
+        companyId,
       };
 
       if (dto.fotoUrl !== normalizedImagePath) {
@@ -99,7 +102,8 @@ export class ProductsService {
     });
   }
 
-  async findAll(): Promise<any[]> {
+  async findAll(user: TenantUser): Promise<any[]> {
+    const companyId = requireTenant(user);
     if (this.productsSource === 'FULLPOS' || this.productsSource === 'FULLPOS_DIRECT') {
       try {
         const response = await this.catalogProducts.findAll();
@@ -118,16 +122,17 @@ export class ProductsService {
     }
 
     try {
-      const products = await this.prisma.product.findMany({ orderBy: { nombre: 'asc' } });
+      const products = await this.prisma.product.findMany({ where: { companyId }, orderBy: { nombre: 'asc' } });
       return products.map((p) => this.mapProduct(p));
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
-      const products = await this.prisma.product.findMany({ orderBy: { nombre: 'asc' } });
+      const products = await this.prisma.product.findMany({ where: { companyId }, orderBy: { nombre: 'asc' } });
       return products.map((p) => this.mapProduct(p));
     }
   }
 
-  async findOne(id: string): Promise<any> {
+  async findOne(user: TenantUser, id: string): Promise<any> {
+    const companyId = requireTenant(user);
     if (this.productsSource === 'FULLPOS') {
       try {
         return await this.catalogProducts.findOne(id);
@@ -146,18 +151,19 @@ export class ProductsService {
 
     let product: Product | null = null;
     try {
-      product = await this.prisma.product.findUnique({ where: { id } });
+      product = await this.prisma.product.findFirst({ where: { id, companyId } });
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
-      product = await this.prisma.product.findUnique({ where: { id } });
+      product = await this.prisma.product.findFirst({ where: { id, companyId } });
     }
     if (!product) throw new NotFoundException('Product not found');
     return this.mapProduct(product);
   }
 
-  async update(id: string, dto: UpdateProductDto): Promise<any> {
+  async update(user: TenantUser, id: string, dto: UpdateProductDto): Promise<any> {
     this.assertWritable();
-    await this.findOne(id);
+    const companyId = requireTenant(user);
+    await this.findOne(user, id);
     return this.prisma.$transaction(async (tx) => {
       const normalizedImagePath = dto.fotoUrl === undefined
         ? undefined
@@ -186,16 +192,17 @@ export class ProductsService {
     });
   }
 
-  async remove(id: string) {
+  async remove(user: TenantUser, id: string) {
     this.assertWritable();
-    await this.findOne(id);
+    await this.findOne(user, id);
     await this.prisma.product.delete({ where: { id } });
     return { ok: true };
   }
 
-  async purgeAllForDebug() {
+  async purgeAllForDebug(user: TenantUser) {
     this.assertWritable();
-    const deleted = await this.prisma.product.deleteMany();
+    const companyId = requireTenant(user);
+    const deleted = await this.prisma.product.deleteMany({ where: { companyId } });
     return {
       ok: true,
       deletedProducts: deleted.count,

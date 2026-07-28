@@ -21,6 +21,7 @@ import * as fs from 'node:fs';
 import { R2Service } from '../storage/r2.service';
 import { sanitizeFileName } from '../storage/helpers/storage_helpers';
 import { ConfigService } from '@nestjs/config';
+import type { TenantUser } from '../auth/tenant-context';
 
 @UseGuards(AuthGuard('jwt'), RolesGuard)
 @Controller('users')
@@ -163,14 +164,14 @@ export class UsersController {
 
   @Post()
   @Roles(Role.ADMIN)
-  create(@Body() dto: CreateUserDto) {
-    return this.users.create(dto);
+  create(@Req() req: Request, @Body() dto: CreateUserDto) {
+    return this.users.create(req.user as TenantUser, dto);
   }
 
   @Get()
   @Roles(Role.ADMIN, Role.ASISTENTE, Role.VENDEDOR, Role.TECNICO, Role.MARKETING)
-  findAll() {
-    return this.users.findAll();
+  findAll(@Req() req: Request) {
+    return this.users.findAll(req.user as TenantUser);
   }
 
   @Get(':id/birthday-greeting')
@@ -236,4 +237,3 @@ export class UsersController {
     return this.users.remove(id);
   }
 }
-

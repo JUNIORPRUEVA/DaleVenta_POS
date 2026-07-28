@@ -14,6 +14,7 @@ import { Role } from "@prisma/client";
 import { Request } from "express";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
+import type { TenantUser } from "../auth/tenant-context";
 import { SalesService } from "./sales.service";
 import { CreateSaleDto } from "./dto/create-sale.dto";
 import { CreateSalePdfShareLinkDto } from "./dto/create-sale-pdf-share-link.dto";
@@ -26,9 +27,9 @@ export class SalesController {
 
   @Get()
   listMine(@Req() req: Request, @Query() query: SalesRangeQueryDto) {
-    const user = req.user as { id: string; role: string };
+    const user = req.user as TenantUser;
     return this.sales.listMine(
-      user.id,
+      user,
       query.from,
       query.to,
       query.customerId,
@@ -38,7 +39,7 @@ export class SalesController {
 
   @Get("invoices")
   listInvoices(@Req() req: Request, @Query() query: SalesRangeQueryDto) {
-    const user = req.user as { id: string; role: Role };
+    const user = req.user as TenantUser;
     return this.sales.listInvoices(
       user,
       query.from,
@@ -50,15 +51,15 @@ export class SalesController {
 
   @Get("credits")
   listCredits(@Req() req: Request, @Query("includePaid") includePaid?: string) {
-    const user = req.user as { id: string; role: Role };
+    const user = req.user as TenantUser;
     return this.sales.listCredits(user, includePaid === "true");
   }
 
   @Get("summary")
   summaryMine(@Req() req: Request, @Query() query: SalesRangeQueryDto) {
-    const user = req.user as { id: string; role: string };
+    const user = req.user as TenantUser;
     return this.sales.summaryMine(
-      user.id,
+      user,
       query.from,
       query.to,
       query.customerId,
@@ -67,8 +68,8 @@ export class SalesController {
 
   @Post()
   create(@Req() req: Request, @Body() dto: CreateSaleDto) {
-    const user = req.user as { id: string; role: string };
-    return this.sales.create(user.id, dto);
+    const user = req.user as TenantUser;
+    return this.sales.create(user, dto);
   }
 
   @Post("pdf-share-link")
@@ -76,7 +77,7 @@ export class SalesController {
     @Req() req: Request,
     @Body() dto: CreateSalePdfShareLinkDto,
   ) {
-    const user = req.user as { id: string; role: Role };
+    const user = req.user as TenantUser;
     const forwardedProto = `${req.headers["x-forwarded-proto"] ?? ""}`
       .split(",")[0]
       .trim();
@@ -89,13 +90,13 @@ export class SalesController {
   @Delete("debug/purge")
   @Roles(Role.ADMIN)
   purgeAllForDebug(@Req() req: Request) {
-    const user = req.user as { id: string; role: string };
+    const user = req.user as TenantUser;
     return this.sales.purgeAllForDebug(user);
   }
 
   @Delete(":id")
   remove(@Req() req: Request, @Param("id") id: string) {
-    const user = req.user as { id: string; role: Role };
+    const user = req.user as TenantUser;
     return this.sales.remove(user, id);
   }
 
@@ -106,13 +107,13 @@ export class SalesController {
     @Body()
     dto: { cashAmount?: number; transferAmount?: number; note?: string },
   ) {
-    const user = req.user as { id: string; role: Role };
+    const user = req.user as TenantUser;
     return this.sales.addCreditPayment(user, id, dto);
   }
 
   @Post(":id/return")
   returnSale(@Req() req: Request, @Param("id") id: string) {
-    const user = req.user as { id: string; role: Role };
+    const user = req.user as TenantUser;
     return this.sales.returnSale(user, id);
   }
 }
