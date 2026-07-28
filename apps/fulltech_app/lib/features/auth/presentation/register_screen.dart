@@ -143,45 +143,68 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFEFF5F8),
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1040),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFDDE7EE)),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x140F172A),
-                      blurRadius: 22,
-                      offset: Offset(0, 10),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final panelHeight = compact
+                ? (constraints.maxHeight - 40).clamp(720.0, 920.0)
+                : (constraints.maxHeight - 40).clamp(620.0, 780.0);
+
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1040),
+                  child: SizedBox(
+                    height: panelHeight,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFDDE7EE)),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x140F172A),
+                            blurRadius: 22,
+                            offset: Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: Form(
+                        key: _formKey,
+                        child: compact
+                            ? _buildContent(context, loading, compact)
+                            : Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Expanded(child: _buildBrandPanel()),
+                                  SizedBox(
+                                    width: 610,
+                                    child: _buildContent(
+                                      context,
+                                      loading,
+                                      compact,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                      ),
                     ),
-                  ],
-                ),
-                child: Form(
-                  key: _formKey,
-                  child: compact
-                      ? _buildContent(context, loading, compact)
-                      : Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Expanded(child: _buildBrandPanel()),
-                            SizedBox(
-                              width: 610,
-                              child: _buildContent(context, loading, compact),
-                            ),
-                          ],
-                        ),
+                  ),
                 ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
+  }
+
+  void _closeToLogin() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+      return;
+    }
+    context.go(Routes.login);
   }
 
   Widget _buildBrandPanel() {
@@ -269,7 +292,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 ),
               ),
               TextButton(
-                onPressed: loading ? null : () => context.go(Routes.login),
+                onPressed: loading ? null : _closeToLogin,
                 child: const Text('Iniciar sesión'),
               ),
             ],
