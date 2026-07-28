@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
-import { Prisma } from '@prisma/client';
+import { CompanyMemberRole, CompanyMemberStatus, Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { ConfigService } from '@nestjs/config';
 import { JwtUser } from './jwt-user.type';
@@ -23,11 +23,13 @@ export class AuthService {
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) throw new UnauthorizedException('Invalid credentials');
 
+    const session = this.resolveCompanySession(user);
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
-      companyId: user.companyId,
+      companyId: session.activeCompany?.id ?? user.companyId,
       email: user.email,
-      role: user.role,
+      role: session.legacyRole,
+      memberRole: session.activeMembership?.role ?? null,
       tokenType: 'access',
     });
 
@@ -36,7 +38,13 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      user: this.toAuthUser(user),
+      user: this.toAuthUser(user, session),
+      companies: session.companies,
+      activeCompany: session.activeCompany,
+      activeMembership: session.activeMembership,
+      requiresCompanyCreation: session.companies.length === 0,
+      requiresCompanySelection: session.companies.length > 1 && !session.activeCompany,
+      requiresOnboarding: session.activeCompany?.onboardingCompleted === false,
     };
   }
 
@@ -56,11 +64,13 @@ export class AuthService {
     const user = await this.findUserForRefresh(payload.sub);
     if (!user || user.blocked === true) throw new UnauthorizedException('User blocked');
 
+    const session = this.resolveCompanySession(user);
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
-      companyId: user.companyId,
+      companyId: session.activeCompany?.id ?? user.companyId,
       email: user.email,
-      role: user.role,
+      role: session.legacyRole,
+      memberRole: session.activeMembership?.role ?? null,
       tokenType: 'access',
     });
 
@@ -69,7 +79,13 @@ export class AuthService {
     return {
       accessToken,
       refreshToken: newRefreshToken,
-      user: this.toAuthUser(user),
+      user: this.toAuthUser(user, session),
+      companies: session.companies,
+      activeCompany: session.activeCompany,
+      activeMembership: session.activeMembership,
+      requiresCompanyCreation: session.companies.length === 0,
+      requiresCompanySelection: session.companies.length > 1 && !session.activeCompany,
+      requiresOnboarding: session.activeCompany?.onboardingCompleted === false,
     };
   }
 
@@ -90,25 +106,109 @@ export class AuthService {
     );
   }
 
-  private toAuthUser(user: {
+  private mapMemberRoleToLegacyRole(role?: CompanyMemberRole | string | null): Role {
+    switch (`${role ?? ''}`.toUpperCase()) {
+      case CompanyMemberRole.OWNER:
+      case CompanyMemberRole.ADMIN:
+      case CompanyMemberRole.MANAGER:
+      case CompanyMemberRole.ACCOUNTANT:
+      case CompanyMemberRole.WAREHOUSE:
+        return Role.ADMIN;
+      case CompanyMemberRole.CASHIER:
+        return Role.CAJERO;
+      case CompanyMemberRole.SELLER:
+        return Role.VENDEDOR;
+      default:
+        return Role.CAJERO;
+    }
+  }
+
+  private resolveCompanySession(user: {
     id: string;
-    email: string;
-    role: any;
+    role: Role | string;
     companyId?: string | null;
     company?: { id: string; name: string; slug: string } | null;
+    companyMemberships?: Array<{
+      id: string;
+      role: CompanyMemberRole;
+      status: CompanyMemberStatus;
+      company: {
+        id: string;
+        name: string;
+        slug: string;
+        status: string;
+        plan: string;
+        maxUsers: number;
+      };
+    }>;
   }) {
-    return {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      companyId: user.companyId ?? null,
-      company: user.company
+    const memberships = (user.companyMemberships ?? []).filter(
+      (membership) => membership.status === CompanyMemberStatus.ACTIVE,
+    );
+    const activeMembership =
+      memberships.find((membership) => membership.company.id === user.companyId) ??
+      memberships[0] ??
+      null;
+    const activeCompany = activeMembership
+      ? {
+          id: activeMembership.company.id,
+          name: activeMembership.company.name,
+          slug: activeMembership.company.slug,
+          status: activeMembership.company.status,
+          plan: activeMembership.company.plan,
+          onboardingCompleted: true,
+        }
+      : user.company
         ? {
             id: user.company.id,
             name: user.company.name,
             slug: user.company.slug,
+            status: 'ACTIVE',
+            plan: 'STANDARD',
+            onboardingCompleted: true,
+          }
+        : null;
+    const companies = memberships.map((membership) => ({
+      id: membership.company.id,
+      name: membership.company.name,
+      slug: membership.company.slug,
+      role: membership.role,
+      status: membership.status,
+      logoUrl: null,
+      onboardingCompleted: true,
+    }));
+
+    return {
+      companies,
+      activeCompany,
+      activeMembership: activeMembership
+        ? {
+            id: activeMembership.id,
+            role: activeMembership.role,
+            status: activeMembership.status,
+            companyId: activeMembership.company.id,
           }
         : null,
+      legacyRole: activeMembership
+        ? this.mapMemberRoleToLegacyRole(activeMembership.role)
+        : (user.role as Role),
+    };
+  }
+
+  private toAuthUser(user: {
+    id: string;
+    email: string;
+    role: Role | string;
+    companyId?: string | null;
+    company?: { id: string; name: string; slug: string } | null;
+  }, session = this.resolveCompanySession(user)) {
+    return {
+      id: user.id,
+      email: user.email,
+      role: session.legacyRole,
+      companyRole: session.activeMembership?.role ?? null,
+      companyId: session.activeCompany?.id ?? user.companyId ?? null,
+      company: session.activeCompany,
     };
   }
 
@@ -160,6 +260,15 @@ export class AuthService {
           companyId: true,
           company: {
             select: { id: true, name: true, slug: true },
+          },
+          companyMemberships: {
+            where: { status: CompanyMemberStatus.ACTIVE },
+            include: {
+              company: {
+                select: { id: true, name: true, slug: true, status: true, plan: true, maxUsers: true },
+              },
+            },
+            orderBy: { joinedAt: 'asc' },
           },
         },
       });
@@ -226,6 +335,15 @@ export class AuthService {
           company: {
             select: { id: true, name: true, slug: true },
           },
+          companyMemberships: {
+            where: { status: CompanyMemberStatus.ACTIVE },
+            include: {
+              company: {
+                select: { id: true, name: true, slug: true, status: true, plan: true, maxUsers: true },
+              },
+            },
+            orderBy: { joinedAt: 'asc' },
+          },
         },
       });
     } catch (error) {
@@ -269,6 +387,15 @@ export class AuthService {
           companyId: true,
           company: {
             select: { id: true, name: true, slug: true },
+          },
+          companyMemberships: {
+            where: { status: CompanyMemberStatus.ACTIVE },
+            include: {
+              company: {
+                select: { id: true, name: true, slug: true, status: true, plan: true, maxUsers: true },
+              },
+            },
+            orderBy: { joinedAt: 'asc' },
           },
         },
       });

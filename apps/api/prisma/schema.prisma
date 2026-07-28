@@ -31,6 +31,28 @@ enum CompanyPlan {
   @@map("company_plan")
 }
 
+enum CompanyMemberRole {
+  OWNER
+  ADMIN
+  MANAGER
+  CASHIER
+  SELLER
+  WAREHOUSE
+  ACCOUNTANT
+  VIEWER
+
+  @@map("company_member_role")
+}
+
+enum CompanyMemberStatus {
+  ACTIVE
+  INVITED
+  DISABLED
+  REMOVED
+
+  @@map("company_member_status")
+}
+
 enum PurchaseOrderStatus {
   DRAFT
   PENDING_APPROVAL
@@ -576,9 +598,32 @@ model Company {
 
   users      User[]
   appConfigs AppConfig[]
+  members    CompanyMember[]
 
   @@index([status])
   @@map("companies")
+}
+
+model CompanyMember {
+  id        String              @id @default(uuid()) @db.Uuid
+  userId    String              @map("user_id") @db.Uuid
+  companyId String              @map("company_id") @db.Uuid
+  role      CompanyMemberRole   @default(VIEWER)
+  status    CompanyMemberStatus @default(ACTIVE)
+  invitedBy String?             @map("invited_by") @db.Uuid
+  joinedAt  DateTime?           @default(now()) @map("joined_at")
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @updatedAt @map("updated_at")
+
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inviter   User?   @relation("CompanyMemberInvitedBy", fields: [invitedBy], references: [id], onDelete: SetNull)
+
+  @@unique([userId, companyId])
+  @@index([companyId, status])
+  @@index([userId, status])
+  @@index([companyId, role])
+  @@map("company_members")
 }
 
 model User {
@@ -623,6 +668,8 @@ model User {
   updatedAt                    DateTime  @updatedAt
 
   company                                  Company?                         @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  companyMemberships                       CompanyMember[]
+  companyMembersInvited                    CompanyMember[]                  @relation("CompanyMemberInvitedBy")
   clients                                  Client[]
   payrollEmployees                         PayrollEmployee[]                 @relation("PayrollOwner")
   confirmedServiceOrders                   ServiceOrder[]                    @relation("ServiceOrderConfirmedBy")

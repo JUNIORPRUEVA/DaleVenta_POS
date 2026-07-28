@@ -5,5 +5,6 @@ export type JwtUser = {
   companyId?: string | null;
   email?: string;
   role?: Role;
+  memberRole?: string | null;
   tokenType?: 'access' | 'refresh';
 };

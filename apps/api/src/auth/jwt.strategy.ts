@@ -4,8 +4,22 @@ import { ConfigService } from '@nestjs/config';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtUser } from './jwt-user.type';
-import { Prisma } from '@prisma/client';
+import { CompanyMemberRole, CompanyMemberStatus, Prisma, Role } from '@prisma/client';
 import { normalizeJwtSecret } from './jwt.util';
+
+type JwtLookupUser = {
+  id: string;
+  email: string;
+  role: Role | string;
+  blocked: boolean;
+  companyId: string | null;
+  companyMemberships?: Array<{
+    id: string;
+    companyId: string;
+    role: CompanyMemberRole;
+    status: CompanyMemberStatus;
+  }>;
+};
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -27,7 +41,40 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
     const user = await this.findUserForJwt(payload.sub);
     if (!user || user.blocked === true) throw new UnauthorizedException('User blocked');
-    return { id: user.id, email: user.email, role: user.role, companyId: user.companyId ?? null };
+    const membership = this.resolveActiveMembership(user, payload.companyId);
+    const companyId = membership?.companyId ?? user.companyId ?? null;
+    const role = membership ? this.mapMemberRoleToLegacyRole(membership.role) : user.role;
+    return { id: user.id, email: user.email, role, memberRole: membership?.role ?? null, companyId };
+  }
+
+  private mapMemberRoleToLegacyRole(role?: CompanyMemberRole | string | null): Role {
+    switch (`${role ?? ''}`.toUpperCase()) {
+      case CompanyMemberRole.OWNER:
+      case CompanyMemberRole.ADMIN:
+      case CompanyMemberRole.MANAGER:
+      case CompanyMemberRole.ACCOUNTANT:
+      case CompanyMemberRole.WAREHOUSE:
+        return Role.ADMIN;
+      case CompanyMemberRole.CASHIER:
+        return Role.CAJERO;
+      case CompanyMemberRole.SELLER:
+        return Role.VENDEDOR;
+      default:
+        return Role.CAJERO;
+    }
+  }
+
+  private resolveActiveMembership(
+    user: JwtLookupUser | null,
+    requestedCompanyId?: string | null,
+  ) {
+    const memberships = user?.companyMemberships ?? [];
+    if (!memberships.length) return null;
+    return (
+      memberships.find((membership) => membership.companyId === requestedCompanyId) ??
+      memberships.find((membership) => membership.companyId === user?.companyId) ??
+      memberships[0]
+    );
   }
 
   private isMissingUserTable(error: unknown) {
@@ -68,13 +115,32 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     try {
       return await this.prisma.user.findUnique({
         where: { id: userId },
-        select: { id: true, email: true, role: true, blocked: true, companyId: true },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          blocked: true,
+          companyId: true,
+          companyMemberships: {
+            where: { status: CompanyMemberStatus.ACTIVE },
+            select: { id: true, companyId: true, role: true, status: true },
+          },
+        },
       });
     } catch (error) {
       if (this.isMissingBlockedColumn(error)) {
         const row = await this.prisma.user.findUnique({
           where: { id: userId },
-          select: { id: true, email: true, role: true, companyId: true },
+          select: {
+            id: true,
+            email: true,
+            role: true,
+            companyId: true,
+            companyMemberships: {
+              where: { status: CompanyMemberStatus.ACTIVE },
+              select: { id: true, companyId: true, role: true, status: true },
+            },
+          },
         });
         if (!row) return null;
         return { ...row, blocked: false };

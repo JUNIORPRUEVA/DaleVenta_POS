@@ -1,4 +1,4 @@
-const { Prisma, PrismaClient, Role } = require('@prisma/client');
+const { Prisma, PrismaClient, Role, CompanyMemberRole, CompanyMemberStatus } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 
 const prisma = new PrismaClient();
@@ -97,6 +97,33 @@ async function upsertUser({ companyId, email, password, nombreCompleto, telefono
   }
 }
 
+function companyMemberRoleFromLegacyRole(role) {
+  if (role === Role.ADMIN) return CompanyMemberRole?.OWNER ?? 'OWNER';
+  if (role === Role.ASISTENTE) return CompanyMemberRole?.ADMIN ?? 'ADMIN';
+  if (role === Role.CAJERO) return CompanyMemberRole?.CASHIER ?? 'CASHIER';
+  if (role === Role.VENDEDOR) return CompanyMemberRole?.SELLER ?? 'SELLER';
+  return CompanyMemberRole?.VIEWER ?? 'VIEWER';
+}
+
+async function upsertCompanyMember({ userId, companyId, role }) {
+  if (!prisma.companyMember?.upsert) return { skipped: true };
+  return prisma.companyMember.upsert({
+    where: { userId_companyId: { userId, companyId } },
+    update: {
+      role: companyMemberRoleFromLegacyRole(role),
+      status: CompanyMemberStatus?.ACTIVE ?? 'ACTIVE',
+      joinedAt: new Date(),
+    },
+    create: {
+      userId,
+      companyId,
+      role: companyMemberRoleFromLegacyRole(role),
+      status: CompanyMemberStatus?.ACTIVE ?? 'ACTIVE',
+      joinedAt: new Date(),
+    },
+  });
+}
+
 async function safeBackfill(modelName, companyId) {
   const model = prisma[modelName];
   if (!model?.updateMany) return { modelName, count: 0, skipped: true };
@@ -173,6 +200,11 @@ async function main() {
     password: adminPassword,
     nombreCompleto: 'Administrador',
     telefono: '0000000000',
+    role: Role.ADMIN,
+  });
+  await upsertCompanyMember({
+    userId: admin.id,
+    companyId: company.id,
     role: Role.ADMIN,
   });
 
