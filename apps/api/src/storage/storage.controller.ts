@@ -206,6 +206,38 @@ export class StorageController {
       extension: safeExt,
     });
 
+    const r2ObjectKey = `uploads/${objectKey}`;
+    const mediaUrl = this.buildMediaObjectUrl(req, r2ObjectKey);
+
+    try {
+      await this.r2.putObject({
+        objectKey: r2ObjectKey,
+        body: file.buffer,
+        contentType,
+      });
+      // eslint-disable-next-line no-console
+      console.log(`[upload] R2 saved companyId=${companyId} key=${r2ObjectKey}`);
+      return {
+        url: mediaUrl,
+        path: mediaUrl,
+        publicUrl: mediaUrl,
+        objectKey: r2ObjectKey,
+        relativePath: mediaUrl,
+        fileName: original,
+        originalFileName: original,
+        storageProvider: 'r2',
+        kind,
+        contentType,
+        mimeType: contentType,
+        mediaType: inferMediaType(contentType),
+        size: file.size,
+        companyId,
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn('[upload] R2 primary upload failed, falling back to local storage', error);
+    }
+
     const uploadDir = this.resolveUploadDir();
     const absoluteFilePath = join(uploadDir, ...objectKey.split('/'));
     const absoluteDir = join(uploadDir, ...objectKey.split('/').slice(0, -1));
@@ -218,33 +250,31 @@ export class StorageController {
       throw new BadRequestException('No se pudo persistir el archivo en disco');
     }
 
-    // Optional mirror to R2; local file is source of truth for /uploads serving.
-    try {
-      await this.r2.putObject({
-        objectKey: `uploads/${objectKey}`,
-        body: file.buffer,
-        contentType,
-      });
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.warn('[upload] R2 mirror failed, continuing with local storage only', error);
-    }
-
     const relativePath = `/${posix.join('uploads', objectKey)}`;
     const url = this.buildAbsoluteUrl(req, relativePath);
     // eslint-disable-next-line no-console
-    console.log(`[upload] saved file=${absoluteFilePath} url=${url}`);
+    console.warn(`[upload] legacy local fallback saved file=${absoluteFilePath} url=${url}`);
 
     return {
       url,
-      objectKey: `uploads/${objectKey}`,
+      path: url,
+      publicUrl: url,
+      objectKey: r2ObjectKey,
       relativePath,
       fileName: original,
+      originalFileName: original,
+      storageProvider: 'local',
       kind,
       contentType,
+      mimeType: contentType,
       mediaType: inferMediaType(contentType),
       size: file.size,
       companyId,
     };
+  }
+
+  private buildMediaObjectUrl(req: Request, objectKey: string): string {
+    const path = `/media/object?key=${encodeURIComponent(objectKey)}`;
+    return this.buildAbsoluteUrl(req, path);
   }
 }
