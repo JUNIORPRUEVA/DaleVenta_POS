@@ -10,6 +10,7 @@ import {
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import type { Readable } from 'node:stream';
 
 @Injectable()
 export class R2Service {
@@ -148,6 +149,31 @@ export class R2Service {
       body: bytes,
       contentType: typeof res.ContentType === 'string' ? res.ContentType : null,
       contentLength: typeof res.ContentLength === 'number' ? res.ContentLength : bytes.length,
+    };
+  }
+
+  async getObjectStream(objectKey: string) {
+    if (!this.bucket) {
+      throw new InternalServerErrorException('R2 bucket no configurado');
+    }
+
+    const res = (await this.s3.send(
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: objectKey,
+      }),
+    )) as GetObjectCommandOutput;
+
+    if (!res.Body) {
+      throw new InternalServerErrorException('R2 no devolvió contenido');
+    }
+
+    return {
+      body: res.Body as Readable,
+      contentType: typeof res.ContentType === 'string' ? res.ContentType : null,
+      contentLength: typeof res.ContentLength === 'number' ? res.ContentLength : null,
+      etag: typeof res.ETag === 'string' ? res.ETag : null,
+      lastModified: res.LastModified ?? null,
     };
   }
 

@@ -48,7 +48,7 @@ export class ProductsController {
     const dir = this.resolveUploadDir(config);
     this.uploadDir = dir.trim();
     const base = config.get<string>('PUBLIC_BASE_URL') ?? config.get<string>('API_BASE_URL') ?? '';
-    this.publicBaseUrl = base.trim().replace(/\/$/, '');
+    this.publicBaseUrl = this.normalizePublicBaseUrl(base);
     this.fullposBaseUrl = (config.get<string>('FULLPOS_INTEGRATION_BASE_URL') ?? '').trim().replace(/\/$/, '');
     fs.mkdirSync(this.uploadDir, { recursive: true });
   }
@@ -87,17 +87,22 @@ export class ProductsController {
       throw new BadRequestException('url es requerido');
     }
 
-    if (!this.fullposBaseUrl) {
-      throw new BadRequestException('FULLPOS_INTEGRATION_BASE_URL no está configurado');
-    }
-
     let parsedUrl: URL;
-    let fullposUrl: URL;
     try {
       parsedUrl = new URL(url);
-      fullposUrl = new URL(this.fullposBaseUrl);
     } catch {
       throw new BadRequestException('url inválida');
+    }
+
+    if (!this.fullposBaseUrl) {
+      throw new BadRequestException('image-proxy solo está disponible para imágenes heredadas de FullPOS');
+    }
+
+    let fullposUrl: URL;
+    try {
+      fullposUrl = new URL(this.fullposBaseUrl);
+    } catch {
+      throw new BadRequestException('Origen FullPOS inválido');
     }
 
     const sameFullposHost = parsedUrl.host.toLowerCase() == fullposUrl.host.toLowerCase();
@@ -127,6 +132,9 @@ export class ProductsController {
     if (contentLength) {
       res.setHeader('Content-Length', contentLength);
     }
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    // eslint-disable-next-line no-console
+    console.log(`[media] FullPOS external proxy used host=${parsedUrl.host}`);
     res.send(body);
   }
 
@@ -191,37 +199,78 @@ export class ProductsController {
       extension: safeExt,
     });
 
+    const r2Key = `uploads/${objectKey}`;
+
+    try {
+      await this.r2.putObject({
+        objectKey: r2Key,
+        body: file.buffer,
+        contentType,
+      });
+      const url = this.buildMediaObjectUrl(r2Key);
+      // eslint-disable-next-line no-console
+      console.log(`[products/upload] R2 upload successful bucket=daleventa-media companyId=${companyId} key=${r2Key}`);
+      // eslint-disable-next-line no-console
+      console.log(`[R2] PutObject successful key=${r2Key}`);
+      return {
+        filename: original,
+        originalFileName: original,
+        storageProvider: 'r2',
+        key: r2Key,
+        objectKey: r2Key,
+        path: url,
+        url,
+        mimeType: contentType,
+        companyId,
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn('[products/upload] R2 upload failed fallback=local', error);
+    }
+
     const absoluteFilePath = join(this.uploadDir, ...objectKey.split('/'));
     const absoluteDir = join(this.uploadDir, ...objectKey.split('/').slice(0, -1));
     fs.mkdirSync(absoluteDir, { recursive: true });
     fs.writeFileSync(absoluteFilePath, file.buffer);
 
-    try {
-      await this.r2.putObject({
-        objectKey: `uploads/${objectKey}`,
-        body: file.buffer,
-        contentType,
-      });
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.warn('[products/upload] R2 mirror failed, local file is used:', error);
-    }
-
     const relativePath = `/${posix.join('uploads', objectKey)}`;
-    const proto = (req.get('x-forwarded-proto') ?? req.protocol ?? 'http').split(',')[0].trim();
-    const host = (req.get('x-forwarded-host') ?? req.get('host') ?? '').split(',')[0].trim();
-    const requestBase = host ? `${proto}://${host}` : '';
-    const baseUrl = this.publicBaseUrl || requestBase;
+    const baseUrl = this.publicBaseUrl;
     const url = baseUrl ? `${baseUrl}${relativePath}` : relativePath;
     // eslint-disable-next-line no-console
-    console.log(`[products/upload] saved file=${absoluteFilePath} path=${relativePath} url=${url}`);
+    console.warn(`[products/upload] legacy local fallback used file=${absoluteFilePath} path=${relativePath}`);
     return {
       filename: original,
-      objectKey: `uploads/${objectKey}`,
+      originalFileName: original,
+      storageProvider: 'local',
+      objectKey: r2Key,
       path: relativePath,
       url,
+      mimeType: contentType,
       companyId,
     };
+  }
+
+  private buildMediaObjectUrl(objectKey: string) {
+    const path = `/media/object?key=${encodeURIComponent(objectKey)}`;
+    return this.publicBaseUrl ? `${this.publicBaseUrl}${path}` : path;
+  }
+
+  private normalizePublicBaseUrl(raw: string) {
+    const value = raw.trim().replace(/\/$/, '');
+    if (!value) return '';
+    if (value.includes(' ') || value.includes('"') || value.includes("'")) {
+      console.warn('[config] PUBLIC_BASE_URL/API_BASE_URL contiene caracteres inválidos; no se usará para media');
+      return '';
+    }
+    if (/localhost|31\.97\.99\.70/i.test(value)) {
+      console.warn('[config] PUBLIC_BASE_URL/API_BASE_URL apunta a localhost/IP antigua; no se usará para media');
+      return '';
+    }
+    if (process.env.NODE_ENV === 'production' && !value.startsWith('https://')) {
+      console.warn('[config] PUBLIC_BASE_URL/API_BASE_URL debe usar https:// en producción; no se usará para media');
+      return '';
+    }
+    return value;
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)

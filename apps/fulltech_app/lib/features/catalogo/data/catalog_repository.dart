@@ -99,11 +99,11 @@ class CatalogRepository {
       });
       final res = await _dio.post(ApiRoutes.productsUpload, data: formData);
       final data = res.data;
-      if (data is Map && data['path'] is String) {
-        return data['path'] as String;
-      }
       if (data is Map && data['url'] is String) {
         return data['url'] as String;
+      }
+      if (data is Map && data['path'] is String) {
+        return data['path'] as String;
       }
       throw ApiException('No se recibió la ruta de la imagen');
     } on DioException catch (e) {

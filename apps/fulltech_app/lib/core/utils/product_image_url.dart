@@ -107,15 +107,10 @@ String normalizeProductImageUrl({
   if (_isAbsoluteUrl(raw)) {
     final absolute = _stringifyUri(raw);
     final uploadsPath = _extractUploadsPath(raw);
-    final shouldProxyUploads =
+    if (uploadsPath != null &&
         normalizedBase.isNotEmpty &&
-        uploadsPath != null &&
-        (proxyUploadsOnWeb || _hasDifferentHost(absolute, normalizedBase));
-    if (shouldProxyUploads) {
-      final encodedUrl = Uri.encodeQueryComponent(absolute);
-      return _stringifyUri(
-        '$normalizedBase/products/image-proxy?url=$encodedUrl',
-      );
+        _hasDifferentHost(absolute, normalizedBase)) {
+      return _joinBaseAndPath(normalizedBase, uploadsPath);
     }
     return absolute;
   }

@@ -26,5 +26,21 @@ export class UpdateProductDto {
 
   @IsOptional()
   @IsString()
+  imageKey?: string;
+
+  @IsOptional()
+  @IsString()
+  storageProvider?: string;
+
+  @IsOptional()
+  @IsString()
+  imageMimeType?: string;
+
+  @IsOptional()
+  @IsString()
+  imageOriginalFileName?: string;
+
+  @IsOptional()
+  @IsString()
   categoria?: string;
 }

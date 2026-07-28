@@ -22,7 +22,7 @@ export class ProductsService {
     private readonly config: ConfigService,
   ) {
     const base = this.config.get<string>('PUBLIC_BASE_URL') ?? this.config.get<string>('API_BASE_URL') ?? '';
-    this.publicBaseUrl = base.trim().replace(/\/$/, '');
+    this.publicBaseUrl = this.normalizePublicBaseUrl(base);
 
     const rawFallback = (this.config.get<string>('PRODUCTS_ALLOW_LOCAL_FALLBACK') ?? '').trim().toLowerCase();
     this.allowLocalFallback = rawFallback === '1' || rawFallback === 'true' || rawFallback === 'yes';
@@ -76,7 +76,10 @@ export class ProductsService {
     this.assertWritable();
     const companyId = requireTenant(user);
     return this.prisma.$transaction(async (tx) => {
-      const normalizedImagePath = this.normalizeImagePathForStorage(dto.fotoUrl);
+      const imageKey = this.extractR2Key(dto.imageKey ?? dto.fotoUrl);
+      const normalizedImagePath = imageKey
+        ? this.buildObjectMediaUrl(imageKey)
+        : this.normalizeImagePathForStorage(dto.fotoUrl);
       const data = {
         nombre: dto.nombre,
         categoria: dto.categoria,
@@ -84,6 +87,11 @@ export class ProductsService {
         costo: new Prisma.Decimal(dto.costo),
         stock: new Prisma.Decimal(dto.stock ?? 0),
         imagen: normalizedImagePath,
+        imageStorageProvider: imageKey ? 'r2' : undefined,
+        imageKey: imageKey ?? undefined,
+        imageMimeType: imageKey ? (dto.imageMimeType?.trim() || undefined) : undefined,
+        imageOriginalFileName: imageKey ? (dto.imageOriginalFileName?.trim() || undefined) : undefined,
+        imageUpdatedAt: imageKey ? new Date() : undefined,
         companyId,
       };
 
@@ -165,9 +173,14 @@ export class ProductsService {
     const companyId = requireTenant(user);
     await this.findOne(user, id);
     return this.prisma.$transaction(async (tx) => {
+      const imageKey = dto.fotoUrl === undefined && dto.imageKey === undefined
+        ? undefined
+        : this.extractR2Key(dto.imageKey ?? dto.fotoUrl);
       const normalizedImagePath = dto.fotoUrl === undefined
         ? undefined
-        : this.normalizeImagePathForStorage(dto.fotoUrl);
+        : imageKey
+          ? this.buildObjectMediaUrl(imageKey)
+          : this.normalizeImagePathForStorage(dto.fotoUrl);
       const data = {
         nombre: dto.nombre,
         categoria: dto.categoria,
@@ -175,6 +188,11 @@ export class ProductsService {
         costo: dto.costo === undefined ? undefined : new Prisma.Decimal(dto.costo),
         stock: dto.stock === undefined ? undefined : new Prisma.Decimal(dto.stock),
         imagen: normalizedImagePath,
+        imageStorageProvider: imageKey === undefined ? undefined : imageKey ? 'r2' : null,
+        imageKey: imageKey === undefined ? undefined : imageKey,
+        imageMimeType: imageKey === undefined ? undefined : dto.imageMimeType?.trim() || null,
+        imageOriginalFileName: imageKey === undefined ? undefined : dto.imageOriginalFileName?.trim() || null,
+        imageUpdatedAt: imageKey === undefined ? undefined : imageKey ? new Date() : null,
       };
 
       if (dto.fotoUrl !== undefined && dto.fotoUrl !== normalizedImagePath) {
@@ -210,10 +228,19 @@ export class ProductsService {
   }
 
   private mapProduct(product: Product) {
-    const fotoUrl = this.resolveUrl(product.imagen ?? null);
+    const productAny = product as any;
+    const imageKey = typeof productAny.imageKey === 'string' ? productAny.imageKey : null;
+    const fotoUrl = imageKey
+      ? this.buildProductMediaUrl(product.id)
+      : this.resolveUrl(product.imagen ?? null);
     return {
       ...product,
       fotoUrl,
+      imageKey,
+      storageProvider: imageKey ? 'r2' : productAny.imageStorageProvider ?? null,
+      imageMimeType: productAny.imageMimeType ?? null,
+      imageOriginalFileName: productAny.imageOriginalFileName ?? null,
+      imageUpdatedAt: productAny.imageUpdatedAt ?? null,
       stock: Number(product.stock ?? 0),
       cantidadDisponible: Number(product.stock ?? 0),
       categoria: product.categoria ?? null,
@@ -315,6 +342,71 @@ export class ProductsService {
     if (uploadsPath) return uploadsPath;
 
     return null;
+  }
+
+  private extractR2Key(raw?: string | null): string | null {
+    const value = (raw ?? '').trim().replace(/\\/g, '/');
+    if (!value || value.includes('..')) return null;
+
+    const normalizeKey = (candidate: string): string | null => {
+      const key = candidate.trim().replace(/^\/+/, '');
+      if (!key || key.includes('..') || key.includes('\\')) return null;
+      return key.startsWith('uploads/companies/') ? key : null;
+    };
+
+    const direct = normalizeKey(value);
+    if (direct) return direct;
+
+    try {
+      const parsed = new URL(value);
+      const queryKey = parsed.searchParams.get('key');
+      const fromQuery = normalizeKey(queryKey ?? '');
+      if (fromQuery) return fromQuery;
+
+      const marker = '/uploads/companies/';
+      const markerIndex = parsed.pathname.indexOf(marker);
+      if (markerIndex >= 0) {
+        return normalizeKey(parsed.pathname.substring(markerIndex + 1));
+      }
+    } catch {
+      // Keep falling through to path-style checks.
+    }
+
+    const marker = '/uploads/companies/';
+    const markerIndex = value.indexOf(marker);
+    if (markerIndex >= 0) {
+      return normalizeKey(value.substring(markerIndex + 1));
+    }
+
+    return null;
+  }
+
+  private buildObjectMediaUrl(imageKey: string) {
+    const path = `/media/object?key=${encodeURIComponent(imageKey)}`;
+    return this.publicBaseUrl ? `${this.publicBaseUrl}${path}` : path;
+  }
+
+  private buildProductMediaUrl(productId: string) {
+    const path = `/media/products/${encodeURIComponent(productId)}`;
+    return this.publicBaseUrl ? `${this.publicBaseUrl}${path}` : path;
+  }
+
+  private normalizePublicBaseUrl(raw: string) {
+    const value = raw.trim().replace(/\/$/, '');
+    if (!value) return '';
+    if (value.includes(' ') || value.includes('"') || value.includes("'")) {
+      this.logger.warn('PUBLIC_BASE_URL/API_BASE_URL inválido para construir URLs públicas de media');
+      return '';
+    }
+    if (/localhost|31\.97\.99\.70/i.test(value)) {
+      this.logger.warn('PUBLIC_BASE_URL/API_BASE_URL apunta a localhost/IP antigua; se usarán rutas relativas de media');
+      return '';
+    }
+    if (process.env.NODE_ENV === 'production' && !value.startsWith('https://')) {
+      this.logger.warn('PUBLIC_BASE_URL/API_BASE_URL debe usar https:// en producción para media');
+      return '';
+    }
+    return value;
   }
 
 }

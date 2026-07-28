@@ -21,6 +21,22 @@ export class CreateProductDto {
   @IsString()
   fotoUrl?: string;
 
+  @IsOptional()
+  @IsString()
+  imageKey?: string;
+
+  @IsOptional()
+  @IsString()
+  storageProvider?: string;
+
+  @IsOptional()
+  @IsString()
+  imageMimeType?: string;
+
+  @IsOptional()
+  @IsString()
+  imageOriginalFileName?: string;
+
   @IsString()
   categoria!: string;
 }

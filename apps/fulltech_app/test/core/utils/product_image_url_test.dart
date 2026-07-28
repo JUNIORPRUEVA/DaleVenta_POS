@@ -3,7 +3,7 @@ import 'package:daleventa_pos/core/utils/product_image_url.dart';
 
 void main() {
   group('normalizeProductImageUrl', () {
-    test('proxies external absolute upload URLs even outside web', () {
+    test('rewrites legacy external upload URLs to the API host', () {
       const imageUrl =
           'https://legacy.example.com/uploads/products/demo-image.jpg?v=123';
       const baseUrl = 'https://api.example.com';
@@ -16,7 +16,7 @@ void main() {
 
       expect(
         result,
-        'https://api.example.com/products/image-proxy?url=https%3A%2F%2Flegacy.example.com%2Fuploads%2Fproducts%2Fdemo-image.jpg%3Fv%3D123',
+        'https://api.example.com/uploads/products/demo-image.jpg?v=123',
       );
     });
 

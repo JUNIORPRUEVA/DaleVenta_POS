@@ -27,6 +27,8 @@
     "whatsapp:media:audit": "ts-node scripts/audit-whatsapp-media.ts",
     "whatsapp:media:repair": "ts-node scripts/audit-whatsapp-media.ts --execute",
     "whatsapp:media:debug": "ts-node scripts/debug-whatsapp-media.ts",
+    "media:migrate:r2": "ts-node scripts/migrate-local-media-to-r2.ts",
+    "media:migrate:r2:dry-run": "ts-node scripts/migrate-local-media-to-r2.ts --dry-run",
     "reset-whatsapp-inbox-data": "ts-node scripts/reset-whatsapp-inbox-data.ts"
   },
   "prisma": {
