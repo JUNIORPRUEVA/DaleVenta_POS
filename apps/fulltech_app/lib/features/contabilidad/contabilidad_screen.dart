@@ -57,20 +57,6 @@ class _AccountingExecutivePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final modules = [
       const _AccountingModuleData(
-        title: 'Cierres diarios',
-        description: 'Caja diaria, arqueos y control operativo del cierre.',
-        icon: Icons.inventory_2_outlined,
-        accent: Color(0xFF0F766E),
-        route: Routes.contabilidadCierresDiarios,
-      ),
-      const _AccountingModuleData(
-        title: 'Factura fiscal',
-        description: 'Comprobantes, cargas y seguimiento fiscal.',
-        icon: Icons.receipt_long_outlined,
-        accent: Color(0xFF7C3AED),
-        route: Routes.contabilidadFacturaFiscal,
-      ),
-      const _AccountingModuleData(
         title: 'Depósitos bancarios',
         description: 'Registro, voucher y carta PDF de depósitos.',
         icon: Icons.account_balance_outlined,

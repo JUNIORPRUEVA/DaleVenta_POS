@@ -55,6 +55,17 @@ class UsersRepository {
     return UserModel.fromJson(res.data as Map<String, dynamic>);
   }
 
+  Future<UserModel> updateUserPermissions(
+    String id,
+    Map<String, bool> permissions,
+  ) async {
+    final res = await _dio.patch(
+      ApiRoutes.updateUserPermissions(id),
+      data: {'userPermissions': permissions},
+    );
+    return UserModel.fromJson(res.data as Map<String, dynamic>);
+  }
+
   Future<void> deleteUser(String id) async {
     await _dio.delete(ApiRoutes.deleteUser(id));
   }

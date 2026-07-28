@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 /// Backend uses Prisma enum-like roles (e.g. `ADMIN`, `TECNICO`).
 /// Some legacy payloads may contain synonyms (e.g. `technician`, `técnico`).
 /// We normalize those here so the rest of the app never compares raw strings.
-enum AppRole { admin, asistente, vendedor, marketing, tecnico, unknown }
+enum AppRole { admin, cajero, asistente, vendedor, marketing, tecnico, unknown }
 
 String _stripDiacritics(String input) {
   // Minimal normalization without extra deps.
@@ -37,6 +37,9 @@ AppRole parseAppRole(String? raw) {
   switch (key) {
     case 'admin':
       return AppRole.admin;
+    case 'cajero':
+    case 'cashier':
+      return AppRole.cajero;
     case 'asistente':
     case 'assistant':
       return AppRole.asistente;
@@ -60,6 +63,8 @@ String toApiRole(AppRole role) {
   switch (role) {
     case AppRole.admin:
       return 'ADMIN';
+    case AppRole.cajero:
+      return 'CAJERO';
     case AppRole.asistente:
       return 'ASISTENTE';
     case AppRole.vendedor:
@@ -81,6 +86,8 @@ extension AppRoleX on AppRole {
     switch (this) {
       case AppRole.admin:
         return 'Administrador';
+      case AppRole.cajero:
+        return 'Cajero';
       case AppRole.asistente:
         return 'Asistente';
       case AppRole.vendedor:

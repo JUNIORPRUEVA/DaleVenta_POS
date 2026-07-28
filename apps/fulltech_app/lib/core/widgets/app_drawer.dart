@@ -14,7 +14,6 @@ import '../design_system/icons/app_icons.dart';
 import '../routing/routes.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
-import '../theme/role_branding.dart';
 import 'app_navigation.dart';
 
 class AppDrawer extends ConsumerStatefulWidget {
@@ -27,7 +26,7 @@ class AppDrawer extends ConsumerStatefulWidget {
 }
 
 class _AppDrawerState extends ConsumerState<AppDrawer> {
-  int? _openGroupIndex;
+  int? _openGroupIndex = 0;
 
   void _openGroup(int index) {
     if (_openGroupIndex == index) return;
@@ -100,11 +99,6 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
       role: role,
     );
     final location = safeCurrentLocation(context);
-    final branding = resolveRoleBranding(role);
-    final userDisplayName =
-        currentUser?.nombreCompleto.trim().isNotEmpty == true
-        ? currentUser!.nombreCompleto
-        : branding.departmentName;
     final panelShadow = BoxShadow(
       color: AppColors.primary.withValues(alpha: 0.08),
       blurRadius: 24,
@@ -133,122 +127,43 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                 ),
                 child: Container(
                   width: double.infinity,
-                  padding: EdgeInsets.fromLTRB(
-                    isCompactMobile ? 10 : 12,
-                    isCompactMobile ? 10 : 11,
-                    isCompactMobile ? 10 : 12,
-                    isCompactMobile ? 9 : 10,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isCompactMobile ? 12 : 14,
+                    vertical: isCompactMobile ? 12 : 14,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.surfaceMuted,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: AppColors.border),
+                    color: const Color(0xFFF8FBFD),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFD8E5EC)),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 42,
-                            height: 42,
-                            decoration: BoxDecoration(
-                              color: AppColors.primary,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.primary.withValues(
-                                    alpha: 0.22,
-                                  ),
-                                  blurRadius: 14,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                            child: const AppIcon(
-                              AppIcons.receipt,
-                              color: Colors.white,
-                              size: 22,
-                              semanticLabel: 'DaleVenta POS',
-                            ),
+                      Expanded(
+                        child: Text(
+                          'DaleVenta POS',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.title.copyWith(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF102436),
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text.rich(
-                              TextSpan(
-                                text: 'DaleVenta POS',
-                                style: AppTextStyles.title.copyWith(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w900,
-                                  color: AppColors.textPrimary,
-                                ),
-                                children: [
-                                  TextSpan(
-                                    text: '  Sistema de facturación',
-                                    style: AppTextStyles.small.copyWith(
-                                      color: AppColors.textSecondary,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: 'Cerrar menú',
-                            onPressed: () => Navigator.pop(context),
-                            icon: AppIcon(
-                              AppIcons.close,
-                              size: AppIconSizes.button,
-                              color: AppColors.textSecondary,
-                              semanticLabel: 'Cerrar menú',
-                            ),
-                            style: IconButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                      const SizedBox(height: 8),
-                      Container(
-                        constraints: BoxConstraints(
-                          maxWidth: isCompactMobile ? 210 : 240,
+                      IconButton(
+                        tooltip: 'Cerrar menú',
+                        onPressed: () => Navigator.pop(context),
+                        icon: AppIcon(
+                          AppIcons.close,
+                          size: AppIconSizes.button,
+                          color: AppColors.textSecondary,
+                          semanticLabel: 'Cerrar menú',
                         ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 9,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            AppIcon(
-                              AppIcons.user,
-                              size: 14,
-                              color: AppColors.textSecondary,
-                              semanticLabel: 'Usuario',
-                            ),
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                userDisplayName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppTextStyles.body.copyWith(
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ],
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
                     ],
@@ -304,26 +219,6 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                 ),
                 child: Column(
                   children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceMuted,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Text(
-                        branding.departmentName,
-                        textAlign: TextAlign.center,
-                        style: AppTextStyles.small.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
                     Row(
                       children: [
                         Expanded(
@@ -356,6 +251,22 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                         ),
                       ],
                     ),
+                    if (hasPermission(role, AppPermission.manageUsers)) ...[
+                      const SizedBox(height: 4),
+                      _DrawerMenuItem(
+                        icon: Icons.manage_accounts_outlined,
+                        title: 'Usuario',
+                        compact: isCompactMobile,
+                        selected: isNavigationRouteActive(
+                          location,
+                          Routes.users,
+                        ),
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.go(Routes.users);
+                        },
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -380,6 +291,11 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
   }
 
   AppNavigationItem? pick(String route) => itemsByRoute.remove(route);
+  void discard(List<String> routes) {
+    for (final route in routes) {
+      itemsByRoute.remove(route);
+    }
+  }
 
   final groups = <_DrawerMenuGroup>[];
   void addGroup(String title, IconData icon, List<String> routes) {
@@ -389,6 +305,19 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     ];
     if (items.isEmpty) return;
     groups.add(_DrawerMenuGroup(title: title, icon: icon, items: items));
+  }
+
+  void addDirectItems(List<AppNavigationItem> items) {
+    if (items.isEmpty) return;
+    groups.add(
+      _DrawerMenuGroup(
+        title: '',
+        icon: Icons.circle_outlined,
+        items: items,
+        headerVisible: false,
+        openOnHover: false,
+      ),
+    );
   }
 
   List<AppNavigationItem> pickItems(List<String> routes) {
@@ -405,43 +334,69 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     Routes.cajaRegistrarSalida,
     Routes.cajaMovimientos,
   ]);
-  final salesCreditItem = pick(Routes.ventasCreditos);
+  final rawClientItem = pick(Routes.clientes);
+  final clientItem = rawClientItem == null
+      ? null
+      : AppNavigationItem(
+          icon: rawClientItem.icon,
+          appIcon: rawClientItem.appIcon,
+          title: 'Cliente',
+          route: rawClientItem.route,
+          showIndicator: rawClientItem.showIndicator,
+        );
+  final cotizacionesItem =
+      pick(Routes.cotizacionesHistorial) ??
+      (hasPermission(role, AppPermission.viewSales)
+          ? const AppNavigationItem(
+              icon: Icons.edit_note_outlined,
+              title: 'Cotizaciones',
+              route: Routes.cotizacionesHistorial,
+            )
+          : null);
+  final creditosItem = pick(Routes.ventasCreditos);
+  final clientItems = <AppNavigationItem>[
+    if (clientItem != null) clientItem,
+    if (cotizacionesItem != null) cotizacionesItem,
+    if (creditosItem != null) creditosItem,
+  ];
   final purchasesItem = pick(Routes.compras);
   final reportsItem = pick(Routes.ventas);
-  if (ventasItems.isNotEmpty ||
-      inventoryItems.isNotEmpty ||
-      cashItems.isNotEmpty) {
+  final directSalesModuleItems = <AppNavigationItem>[
+    ...inventoryItems,
+    if (purchasesItem != null) purchasesItem,
+    if (reportsItem != null) reportsItem,
+  ];
+  if (ventasItems.isNotEmpty) {
     groups.add(
       _DrawerMenuGroup(
-        title: 'Ventas POS',
+        title: 'Ventas',
         icon: Icons.point_of_sale_rounded,
-        items: const [],
+        items: ventasItems,
         openOnHover: false,
-        trailingItems: [
-          ...inventoryItems,
-          if (salesCreditItem != null) salesCreditItem,
-          if (purchasesItem != null) purchasesItem,
-          if (reportsItem != null) reportsItem,
-        ],
-        subgroups: [
-          if (ventasItems.isNotEmpty)
-            _DrawerMenuSubgroup(
-              title: 'Ventas',
-              icon: Icons.receipt_long_outlined,
-              items: ventasItems,
-              openOnHover: false,
-            ),
-          if (cashItems.isNotEmpty)
-            _DrawerMenuSubgroup(
-              title: 'Movimiento efectivo',
-              icon: Icons.account_balance_wallet_outlined,
-              items: cashItems,
-              openOnHover: false,
-            ),
-        ],
       ),
     );
   }
+  if (cashItems.isNotEmpty) {
+    groups.add(
+      _DrawerMenuGroup(
+        title: 'Movimiento efectivo',
+        icon: Icons.account_balance_wallet_outlined,
+        items: cashItems,
+        openOnHover: false,
+      ),
+    );
+  }
+  if (clientItems.isNotEmpty) {
+    groups.add(
+      _DrawerMenuGroup(
+        title: 'Cliente',
+        icon: Icons.groups_2_outlined,
+        items: clientItems,
+        openOnHover: false,
+      ),
+    );
+  }
+  addDirectItems(directSalesModuleItems);
 
   if (includeMobileAdminShortcuts) {
     final turnosItem =
@@ -453,11 +408,9 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
                 route: Routes.cajaTurnosHistorial,
               )
             : null);
-    final equipoItem = pick(Routes.users);
     final configuracionItem = pick(Routes.configuracion);
     final mobileItems = <AppNavigationItem>[
       if (turnosItem != null) turnosItem,
-      if (equipoItem != null) equipoItem,
       if (configuracionItem != null) configuracionItem,
     ];
 
@@ -473,37 +426,32 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     }
   }
 
-  addGroup('Operaciones', Icons.work_outline_rounded, [
-    Routes.serviceOrders,
-    Routes.mediaGallery,
-    Routes.redTecnica,
-  ]);
-  addGroup('Clientes', Icons.groups_2_outlined, [
-    Routes.clientes,
-    Routes.crmComercial,
-  ]);
-  addGroup('Administración', Icons.admin_panel_settings_outlined, [
-    Routes.contabilidad,
+  discard([
+    Routes.ai,
     Routes.administracion,
-  ]);
-  addGroup('Nómina y equipo', Icons.payments_outlined, [
-    Routes.nomina,
-    Routes.serviceOrderCommissions,
-    Routes.misPagos,
-    Routes.ponche,
+    Routes.contabilidadCierresDiarios,
+    Routes.contabilidadFacturaFiscal,
     Routes.users,
-  ]);
-  addGroup('Comunicación', Icons.campaign_outlined, [
+    Routes.ponche,
+    Routes.serviceOrderCommissions,
     Routes.publicidad,
     Routes.sitioWeb,
     Routes.whatsapp,
     Routes.whatsappCrm,
-    Routes.ai,
-  ]);
-  addGroup('Sistema', Icons.tune_rounded, [
+    Routes.crmComercial,
     Routes.manualInterno,
     Routes.amonestaciones,
     Routes.configuracion,
+  ]);
+  addGroup('Contabilidad', Icons.account_balance_outlined, [
+    Routes.contabilidad,
+    Routes.nomina,
+    Routes.misPagos,
+  ]);
+  addGroup('Operaciones', Icons.work_outline_rounded, [
+    Routes.serviceOrders,
+    Routes.mediaGallery,
+    Routes.redTecnica,
   ]);
 
   if (itemsByRoute.isNotEmpty) {
@@ -525,45 +473,22 @@ class _DrawerMenuGroup {
     required this.icon,
     required this.items,
     this.openOnHover = true,
-    this.trailingItems = const [],
-    this.subgroups = const [],
+    this.headerVisible = true,
   });
 
   final String title;
   final IconData icon;
   final List<AppNavigationItem> items;
   final bool openOnHover;
-  final List<AppNavigationItem> trailingItems;
-  final List<_DrawerMenuSubgroup> subgroups;
-
-  int get count =>
-      items.length +
-      trailingItems.length +
-      subgroups.fold<int>(0, (sum, subgroup) => sum + subgroup.items.length);
+  final bool headerVisible;
 
   bool containsActiveRoute(String location) {
     bool active(AppNavigationItem item) {
       return isNavigationRouteActive(location, item.route);
     }
 
-    return items.any(active) ||
-        trailingItems.any(active) ||
-        subgroups.any((subgroup) => subgroup.items.any(active));
+    return items.any(active);
   }
-}
-
-class _DrawerMenuSubgroup {
-  const _DrawerMenuSubgroup({
-    required this.title,
-    required this.icon,
-    required this.items,
-    this.openOnHover = true,
-  });
-
-  final String title;
-  final IconData icon;
-  final List<AppNavigationItem> items;
-  final bool openOnHover;
 }
 
 Widget? buildAdaptiveDrawer(
@@ -603,9 +528,21 @@ class _DrawerMenuGroupTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = selected || expanded
-        ? AppColors.primary
-        : AppColors.textPrimary;
+    if (!group.headerVisible) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(
+          compact ? 4 : 6,
+          compact ? 4 : 6,
+          compact ? 4 : 6,
+          compact ? 8 : 10,
+        ),
+        child: Column(
+          children: [for (final item in group.items) itemBuilder(item)],
+        ),
+      );
+    }
+
+    final foreground = AppColors.textPrimary;
     final headerBg = selected || expanded
         ? AppColors.primary.withValues(alpha: 0.09)
         : Colors.transparent;
@@ -663,42 +600,15 @@ class _DrawerMenuGroupTile extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: AppTextStyles.body.copyWith(
                               color: foreground,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w600,
                               fontSize: compact ? 13.8 : 14.6,
                             ),
                           ),
                         ),
-                        Container(
-                          constraints: const BoxConstraints(minWidth: 26),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: (selected || expanded)
-                                ? Colors.white.withValues(alpha: 0.82)
-                                : AppColors.surfaceMuted,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            '${group.count}',
-                            textAlign: TextAlign.center,
-                            style: AppTextStyles.small.copyWith(
-                              color: AppColors.textSecondary,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 10.5,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        AnimatedRotation(
-                          turns: expanded ? 0.25 : 0,
-                          duration: const Duration(milliseconds: 180),
-                          curve: Curves.easeOut,
-                          child: Icon(
-                            Icons.chevron_right_rounded,
-                            color: foreground,
-                          ),
+                        Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: AppColors.textSecondary,
+                          size: compact ? 20 : 22,
                         ),
                       ],
                     ),
@@ -717,13 +627,6 @@ class _DrawerMenuGroupTile extends StatelessWidget {
                   child: Column(
                     children: [
                       for (final item in group.items) itemBuilder(item),
-                      for (final subgroup in group.subgroups)
-                        _DrawerMenuSubgroupSection(
-                          subgroup: subgroup,
-                          compact: compact,
-                          itemBuilder: itemBuilder,
-                        ),
-                      for (final item in group.trailingItems) itemBuilder(item),
                     ],
                   ),
                 ),
@@ -735,119 +638,6 @@ class _DrawerMenuGroupTile extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DrawerMenuSubgroupSection extends StatefulWidget {
-  const _DrawerMenuSubgroupSection({
-    required this.subgroup,
-    required this.compact,
-    required this.itemBuilder,
-  });
-
-  final _DrawerMenuSubgroup subgroup;
-  final bool compact;
-  final Widget Function(AppNavigationItem item) itemBuilder;
-
-  @override
-  State<_DrawerMenuSubgroupSection> createState() =>
-      _DrawerMenuSubgroupSectionState();
-}
-
-class _DrawerMenuSubgroupSectionState
-    extends State<_DrawerMenuSubgroupSection> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final compact = widget.compact;
-    final subgroup = widget.subgroup;
-    return Padding(
-      padding: EdgeInsets.only(top: compact ? 5 : 6, bottom: compact ? 2 : 3),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) {
-          if (!subgroup.openOnHover) return;
-          if (!_expanded) setState(() => _expanded = true);
-        },
-        onExit: (_) {
-          if (!subgroup.openOnHover) return;
-          if (_expanded) setState(() => _expanded = false);
-        },
-        child: Column(
-          children: [
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () => setState(() => _expanded = !_expanded),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 160),
-                  height: compact ? 38 : 40,
-                  padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12),
-                  decoration: BoxDecoration(
-                    color: _expanded
-                        ? AppColors.primary.withValues(alpha: 0.07)
-                        : AppColors.surfaceMuted.withValues(alpha: 0.56),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: AppColors.border.withValues(alpha: 0.9),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        subgroup.icon,
-                        size: compact ? 17 : 18,
-                        color: AppColors.primary,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          subgroup.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.small.copyWith(
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.w700,
-                            fontSize: compact ? 12.2 : 12.8,
-                          ),
-                        ),
-                      ),
-                      AnimatedRotation(
-                        turns: _expanded ? 0.5 : 0,
-                        duration: const Duration(milliseconds: 160),
-                        child: Icon(
-                          Icons.keyboard_arrow_down_rounded,
-                          size: 18,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            AnimatedCrossFade(
-              firstChild: const SizedBox(width: double.infinity),
-              secondChild: Padding(
-                padding: EdgeInsets.only(left: compact ? 8 : 10, top: 3),
-                child: Column(
-                  children: [
-                    for (final item in subgroup.items) widget.itemBuilder(item),
-                  ],
-                ),
-              ),
-              crossFadeState: _expanded
-                  ? CrossFadeState.showSecond
-                  : CrossFadeState.showFirst,
-              duration: const Duration(milliseconds: 160),
-              sizeCurve: Curves.easeOut,
-            ),
-          ],
         ),
       ),
     );
@@ -987,11 +777,7 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTextStyles.body.copyWith(
-                            fontWeight: selected
-                                ? FontWeight.w700
-                                : (_hovered
-                                      ? FontWeight.w600
-                                      : FontWeight.w500),
+                            fontWeight: FontWeight.w500,
                             fontSize: widget.compact ? 13.8 : 14.4,
                             color: foreground,
                           ),

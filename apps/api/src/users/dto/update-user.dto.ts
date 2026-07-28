@@ -102,6 +102,10 @@ export class UpdateUserDto {
   habilidades?: string[];
 
   @IsOptional()
+  @IsObject()
+  userPermissions?: Record<string, boolean>;
+
+  @IsOptional()
   @IsBoolean()
   tieneHijos?: boolean;
 

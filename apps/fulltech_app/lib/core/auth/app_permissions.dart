@@ -1,4 +1,5 @@
 import 'app_role.dart';
+import '../models/user_model.dart';
 
 /// Central permission list used by routing, navigation and UI actions.
 /// Keep this small and meaningful (module/screen/action-level capabilities).
@@ -18,8 +19,11 @@ enum AppPermission {
 
   // Sales/CRM
   viewCatalog,
+  addStock,
+  editProducts,
   viewSales,
   viewSalesReports,
+  refundSales,
   viewPurchases,
   createPurchases,
   editPurchases,
@@ -81,8 +85,11 @@ const Map<AppRole, Set<AppPermission>> rolePermissions = {
     AppPermission.viewProfile,
     AppPermission.viewMyPayments,
     AppPermission.viewCatalog,
+    AppPermission.addStock,
+    AppPermission.editProducts,
     AppPermission.viewSales,
     AppPermission.viewSalesReports,
+    AppPermission.refundSales,
     AppPermission.viewPurchases,
     AppPermission.createPurchases,
     AppPermission.editPurchases,
@@ -100,6 +107,13 @@ const Map<AppRole, Set<AppPermission>> rolePermissions = {
     AppPermission.manageUsers,
     AppPermission.managePayroll,
     AppPermission.viewMyWarnings,
+  },
+  AppRole.cajero: {
+    AppPermission.viewProfile,
+    AppPermission.viewCatalog,
+    AppPermission.viewSales,
+    AppPermission.viewQuotes,
+    AppPermission.viewClients,
   },
   AppRole.asistente: {
     AppPermission.viewProfile,
@@ -141,4 +155,12 @@ bool hasPermission(AppRole role, AppPermission permission) {
   final set = rolePermissions[role];
   if (set == null) return false;
   return set.contains(permission);
+}
+
+bool hasUserPermission(UserModel? user, AppPermission permission) {
+  if (user == null) return false;
+  if (user.appRole == AppRole.admin) return true;
+  final override = user.userPermissions[permission.name];
+  if (override != null) return override;
+  return hasPermission(user.appRole, permission);
 }

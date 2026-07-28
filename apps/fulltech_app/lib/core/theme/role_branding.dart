@@ -75,11 +75,12 @@ class RoleBranding {
 
 RoleBranding resolveRoleBranding(AppRole role) {
   switch (role) {
+    case AppRole.cajero:
     case AppRole.vendedor:
       return const RoleBranding(
-        role: AppRole.vendedor,
-        departmentName: 'Departamento de Ventas',
-        departmentAccentLabel: 'Conversion y relacion comercial',
+        role: AppRole.cajero,
+        departmentName: 'Punto de venta',
+        departmentAccentLabel: 'Facturacion, caja y atencion al cliente',
         primary: Color(0xFF0D6F86),
         secondary: Color(0xFF24A69A),
         tertiary: Color(0xFF0B2A3A),
@@ -93,8 +94,8 @@ RoleBranding resolveRoleBranding(AppRole role) {
         glowA: Color(0x3324A69A),
         glowB: Color(0x220D6F86),
         glowC: Color(0x260B2A3A),
-        watermarkTitle: 'VENTAS',
-        watermarkSubtitle: 'Experiencia comercial clara y confiable',
+        watermarkTitle: 'POS',
+        watermarkSubtitle: 'Operaciones de venta claras y confiables',
       );
     case AppRole.tecnico:
       return const RoleBranding(

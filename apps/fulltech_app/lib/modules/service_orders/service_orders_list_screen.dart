@@ -1352,6 +1352,8 @@ class _FilterUserOption {
     switch (role) {
       case AppRole.admin:
         return 'Administrador';
+      case AppRole.cajero:
+        return 'Cajero';
       case AppRole.asistente:
         return 'Asistente';
       case AppRole.vendedor:

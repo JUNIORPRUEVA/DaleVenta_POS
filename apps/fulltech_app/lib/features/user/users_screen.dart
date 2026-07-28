@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/env.dart';
+import '../../core/auth/app_permissions.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/models/user_model.dart';
@@ -41,16 +42,13 @@ class UsersScreen extends ConsumerWidget {
 
 enum _UserStatusFilter { todos, activos, bloqueados }
 
-enum _UserRoleFilter {
-  todos,
-  administradores,
-  tecnicos,
-  vendedores,
-  asistentes,
-  marketing,
-}
+enum _UserRoleFilter { todos, administradores, cajeros }
 
 enum _UserSortOption { nombre, fechaCreacion, rol, estado }
+
+AppRole _managementRole(UserModel user) {
+  return user.appRole == AppRole.admin ? AppRole.admin : AppRole.cajero;
+}
 
 class _UsersScreenBody extends ConsumerStatefulWidget {
   const _UsersScreenBody();
@@ -93,14 +91,9 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
               : switch (_roleFilter) {
                   _UserRoleFilter.todos => true,
                   _UserRoleFilter.administradores =>
-                    user.appRole == AppRole.admin,
-                  _UserRoleFilter.tecnicos => user.appRole == AppRole.tecnico,
-                  _UserRoleFilter.vendedores =>
-                    user.appRole == AppRole.vendedor,
-                  _UserRoleFilter.asistentes =>
-                    user.appRole == AppRole.asistente,
-                  _UserRoleFilter.marketing =>
-                    user.appRole == AppRole.marketing,
+                    _managementRole(user) == AppRole.admin,
+                  _UserRoleFilter.cajeros =>
+                    _managementRole(user) == AppRole.cajero,
                 };
 
           final q = _searchQuery.trim().toLowerCase();
@@ -111,7 +104,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                         '${user.telefono} '
                         '${user.cedula ?? ''} '
                         '${user.role ?? ''} '
-                        '${user.appRole.label}')
+                        '${_managementRole(user).label}')
                     .toLowerCase()
                     .contains(q);
 
@@ -135,7 +128,9 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
               right.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
           return rightDate.compareTo(leftDate);
         case _UserSortOption.rol:
-          return left.appRole.label.compareTo(right.appRole.label);
+          return _managementRole(
+            left,
+          ).label.compareTo(_managementRole(right).label);
         case _UserSortOption.estado:
           if (left.blocked == right.blocked) {
             return left.nombreCompleto.toLowerCase().compareTo(
@@ -174,7 +169,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
     final auth = ref.watch(authStateProvider);
     final currentUser = auth.user;
 
-    if (currentUser?.role != 'ADMIN') {
+    if (currentUser?.appRole != AppRole.admin) {
       return Scaffold(
         appBar: CustomAppBar(
           title: 'FullTech',
@@ -246,7 +241,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
   ) {
     return Scaffold(
       appBar: CustomAppBar(
-        title: 'Gestión de Usuarios',
+        title: 'Usuarios y permisos',
         showLogo: false,
         trailing: currentUser == null
             ? null
@@ -389,7 +384,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
 
     return Scaffold(
       appBar: CustomAppBar(
-        title: 'Empleados',
+        title: 'Usuarios y permisos',
         showLogo: false,
         trailing: currentUser == null
             ? null
@@ -449,52 +444,86 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
             ),
           ),
           data: (users) {
-            final desktopUsers = [...users]
+            final desktopUsers = _filterUsers(users, desktop: true)
               ..sort(
                 (left, right) => left.nombreCompleto.toLowerCase().compareTo(
                   right.nombreCompleto.toLowerCase(),
                 ),
               );
+            final selectedUser = desktopUsers.isEmpty
+                ? null
+                : desktopUsers.firstWhere(
+                    (user) => user.id == _selectedDesktopUserId,
+                    orElse: () => desktopUsers.first,
+                  );
 
             return Padding(
               padding: const EdgeInsets.fromLTRB(28, 22, 28, 28),
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final preferredWidth = constraints.maxWidth >= 1320
-                      ? 980.0
-                      : constraints.maxWidth >= 1120
-                      ? 920.0
-                      : 860.0;
-                  final listWidth = constraints.maxWidth < preferredWidth
-                      ? constraints.maxWidth
-                      : preferredWidth;
+                  final listWidth = constraints.maxWidth >= 1380
+                      ? 600.0
+                      : 540.0;
 
-                  return Align(
-                    alignment: Alignment.topCenter,
-                    child: SizedBox(
-                      width: listWidth,
-                      height: constraints.maxHeight,
-                      child: _UsersTable(
-                        users: desktopUsers,
-                        selectedUserId: _selectedDesktopUserId,
-                        onSelectUser: (user) {
-                          setState(() => _selectedDesktopUserId = user.id);
-                          _openUserDetailsScreen(context, user);
-                        },
-                        onViewUser: (user) {
-                          setState(() => _selectedDesktopUserId = user.id);
-                          _openUserDetailsScreen(context, user);
-                        },
-                        onEditUser: (user) =>
-                            _showUserDialog(context, ref, user),
-                        onDeleteUser: (user) =>
-                            _showDeleteDialog(context, ref, user),
-                        onToggleBlock: (user) =>
-                            _toggleBlock(context, ref, user),
-                        onOpenContract: (user) =>
-                            _openWorkContractPreview(context, user),
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(
+                        width: listWidth,
+                        child: _UsersTable(
+                          users: desktopUsers,
+                          selectedUserId: selectedUser?.id,
+                          onSelectUser: (user) {
+                            setState(() => _selectedDesktopUserId = user.id);
+                          },
+                          onViewUser: (user) {
+                            setState(() => _selectedDesktopUserId = user.id);
+                          },
+                          onEditUser: (user) =>
+                              _showUserDialog(context, ref, user),
+                          onDeleteUser: (user) =>
+                              _showDeleteDialog(context, ref, user),
+                          onToggleBlock: (user) =>
+                              _toggleBlock(context, ref, user),
+                          onOpenContract: (user) =>
+                              _openWorkContractPreview(context, user),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 18),
+                      Expanded(
+                        child: SizedBox(
+                          height: constraints.maxHeight,
+                          child: _UserPermissionDetailsPanel(
+                            user: selectedUser,
+                            onEdit: selectedUser == null
+                                ? null
+                                : () => _showUserDialog(
+                                    context,
+                                    ref,
+                                    selectedUser,
+                                  ),
+                            onToggleBlock: selectedUser == null
+                                ? null
+                                : () =>
+                                      _toggleBlock(context, ref, selectedUser),
+                            onOpenContract: selectedUser == null
+                                ? null
+                                : () => _openWorkContractPreview(
+                                    context,
+                                    selectedUser,
+                                  ),
+                            onEditPermissions:
+                                selectedUser == null ||
+                                    _managementRole(selectedUser) ==
+                                        AppRole.admin
+                                ? null
+                                : () => context.go(
+                                    Routes.userPermissionsById(selectedUser.id),
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ],
                   );
                 },
               ),
@@ -625,7 +654,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
     );
     final passwordCtrl = TextEditingController();
     final habilidadCtrl = TextEditingController();
-    String selectedRole = user?.role ?? 'ASISTENTE';
+    String selectedRole = user?.appRole == AppRole.admin ? 'ADMIN' : 'CAJERO';
     bool blocked = user?.blocked ?? false;
     bool tieneHijos = user?.tieneHijos ?? false;
     bool estaCasado = user?.estaCasado ?? false;
@@ -672,11 +701,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
     }
 
     Future<void> submitUser(BuildContext modalContext) async {
-      final edad = int.tryParse(edadCtrl.text.trim());
-      if (edad == null) {
-        showSnack(const SnackBar(content: Text('Edad inválida')));
-        return;
-      }
+      final edad = int.tryParse(edadCtrl.text.trim()) ?? user?.edad ?? 0;
 
       final payload = <String, dynamic>{
         'email': emailCtrl.text.trim(),
@@ -731,23 +756,9 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
 
       if (!payload.containsKey('numeroFlota')) {
         showSnack(
-          const SnackBar(content: Text('El número de flota es obligatorio')),
-        );
-        return;
-      }
-
-      if (!payload.containsKey('telefonoFamiliar')) {
-        showSnack(
           const SnackBar(
-            content: Text('El teléfono de familiar es obligatorio'),
+            content: Text('El código de seguridad es obligatorio'),
           ),
-        );
-        return;
-      }
-
-      if (user == null && !payload.containsKey('fotoCedulaUrl')) {
-        showSnack(
-          const SnackBar(content: Text('Debes subir la foto de la cédula')),
         );
         return;
       }
@@ -788,7 +799,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
               modalContext,
               'Información principal',
               subtitle:
-                  'Completa los datos básicos y de acceso del usuario en una sola columna.',
+                  'Solo los campos importantes para alta, acceso y permisos.',
             ),
             TextField(
               controller: nameCtrl,
@@ -808,7 +819,9 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
             const SizedBox(height: 12),
             TextField(
               controller: numeroFlotaCtrl,
-              decoration: const InputDecoration(labelText: 'Número de flota'),
+              decoration: const InputDecoration(
+                labelText: 'Código de seguridad',
+              ),
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             ),
@@ -816,7 +829,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
             TextField(
               controller: familiarPhoneCtrl,
               decoration: const InputDecoration(
-                labelText: 'Teléfono de familiar',
+                labelText: 'Teléfono adicional (opcional)',
               ),
             ),
             const SizedBox(height: 12),
@@ -943,7 +956,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
             const SizedBox(height: 12),
             TextField(
               controller: edadCtrl,
-              decoration: const InputDecoration(labelText: 'Edad'),
+              decoration: const InputDecoration(labelText: 'Edad (opcional)'),
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 12),
@@ -952,12 +965,9 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
               decoration: const InputDecoration(labelText: 'Rol'),
               items: const [
                 DropdownMenuItem(value: 'ADMIN', child: Text('Administrador')),
-                DropdownMenuItem(value: 'ASISTENTE', child: Text('Asistente')),
-                DropdownMenuItem(value: 'VENDEDOR', child: Text('Vendedor')),
-                DropdownMenuItem(value: 'MARKETING', child: Text('Marketing')),
-                DropdownMenuItem(value: 'TECNICO', child: Text('Técnico')),
+                DropdownMenuItem(value: 'CAJERO', child: Text('Cajero')),
               ],
-              onChanged: (val) => selectedRole = val ?? 'ASISTENTE',
+              onChanged: (val) => selectedRole = val ?? 'CAJERO',
             ),
             const SizedBox(height: 12),
             TextField(
@@ -972,9 +982,9 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
             const SizedBox(height: 24),
             sectionHeader(
               modalContext,
-              'Datos personales y laborales',
+              'Datos de ingreso',
               subtitle:
-                  'Mantén juntos los datos de nómina, fechas y configuración del contrato.',
+                  'Datos opcionales para dejar el expediente más completo.',
             ),
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -1119,12 +1129,11 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
             const SizedBox(height: 24),
             sectionHeader(
               modalContext,
-              'Documentos y archivos',
-              subtitle:
-                  'Carga aquí toda la documentación requerida para completar el alta.',
+              'Foto y documentos',
+              subtitle: 'Agrega la foto del usuario o de la cédula si aplica.',
             ),
             _UploadTile(
-              title: 'Foto de cédula *',
+              title: 'Foto de cédula (opcional)',
               isUploaded: fotoCedulaUrl != null && fotoCedulaUrl!.isNotEmpty,
               onTap: () async {
                 final uploaded = await _pickAndUploadImage(
@@ -1641,7 +1650,7 @@ class _UserDetailsScreen extends StatelessWidget {
                     children: [
                       _DetailRow('Nombre', user.nombreCompleto),
                       _DetailRow('Email', user.email),
-                      _DetailRow('Rol', user.role ?? '—'),
+                      _DetailRow('Rol', _managementRole(user).label),
                       _DetailRow('Teléfono', user.telefono),
                       _DetailRow(
                         'Teléfono familiar',
@@ -1723,6 +1732,697 @@ class _UserDetailsScreen extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _UserPermissionDetailsPanel extends StatelessWidget {
+  const _UserPermissionDetailsPanel({
+    required this.user,
+    required this.onEdit,
+    required this.onToggleBlock,
+    required this.onOpenContract,
+    required this.onEditPermissions,
+  });
+
+  final UserModel? user;
+  final VoidCallback? onEdit;
+  final VoidCallback? onToggleBlock;
+  final VoidCallback? onOpenContract;
+  final VoidCallback? onEditPermissions;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final selectedUser = user;
+
+    return Container(
+      height: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.zero,
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: selectedUser == null
+          ? _DesktopUsersEmptyState(
+              icon: Icons.manage_accounts_outlined,
+              title: 'Selecciona un usuario',
+              message:
+                  'El detalle y los permisos por pantalla se muestran aquí.',
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    _UserAvatar(user: selectedUser, radius: 28),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            selectedUser.nombreCompleto,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            selectedUser.email,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _UserRoleBadge(role: _managementRole(selectedUser)),
+                    _UserStatusBadge(blocked: selectedUser.blocked),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _DetailRow('Teléfono', selectedUser.telefono),
+                _DetailRow('Cédula', selectedUser.cedula ?? '—'),
+                _DetailRow(
+                  'Ingreso',
+                  selectedUser.fechaIngreso == null
+                      ? '—'
+                      : DateFormat(
+                          'dd/MM/yyyy',
+                        ).format(selectedUser.fechaIngreso!),
+                ),
+                _DetailRow(
+                  'Código',
+                  (selectedUser.numeroFlota ?? '').trim().isEmpty
+                      ? '—'
+                      : selectedUser.numeroFlota!.trim(),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: onEdit,
+                        icon: const Icon(Icons.edit_outlined),
+                        label: const Text('Editar'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(
+                      tooltip: selectedUser.blocked
+                          ? 'Desbloquear'
+                          : 'Bloquear',
+                      onPressed: onToggleBlock,
+                      icon: Icon(
+                        selectedUser.blocked
+                            ? Icons.lock_open_outlined
+                            : Icons.lock_outline,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(
+                      tooltip: 'Contrato',
+                      onPressed: onOpenContract,
+                      icon: const Icon(Icons.picture_as_pdf_outlined),
+                    ),
+                  ],
+                ),
+                if (onEditPermissions != null) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: onEditPermissions,
+                      icon: const Icon(Icons.fact_check_outlined),
+                      label: const Text('Editar permisos'),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 18),
+                Text(
+                  'Permisos por pantalla',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: _userScreenPermissions.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final item = _userScreenPermissions[index];
+                      final allowed = hasUserPermission(
+                        selectedUser,
+                        item.permission,
+                      );
+                      return _PermissionScreenTile(
+                        icon: item.icon,
+                        title: item.title,
+                        allowed: allowed,
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+class _PermissionScreenItem {
+  const _PermissionScreenItem({
+    required this.title,
+    required this.icon,
+    required this.permission,
+  });
+
+  final String title;
+  final IconData icon;
+  final AppPermission permission;
+}
+
+const _userScreenPermissions = <_PermissionScreenItem>[
+  _PermissionScreenItem(
+    title: 'Facturación',
+    icon: Icons.point_of_sale_outlined,
+    permission: AppPermission.viewSales,
+  ),
+  _PermissionScreenItem(
+    title: 'Clientes',
+    icon: Icons.group_outlined,
+    permission: AppPermission.viewClients,
+  ),
+  _PermissionScreenItem(
+    title: 'Inventario',
+    icon: Icons.inventory_2_outlined,
+    permission: AppPermission.viewCatalog,
+  ),
+  _PermissionScreenItem(
+    title: 'Reportes',
+    icon: Icons.bar_chart_rounded,
+    permission: AppPermission.viewSalesReports,
+  ),
+  _PermissionScreenItem(
+    title: 'Compras',
+    icon: Icons.shopping_cart_checkout_outlined,
+    permission: AppPermission.viewPurchases,
+  ),
+  _PermissionScreenItem(
+    title: 'Contabilidad',
+    icon: Icons.account_balance_outlined,
+    permission: AppPermission.viewAccounting,
+  ),
+  _PermissionScreenItem(
+    title: 'Nómina',
+    icon: Icons.payments_outlined,
+    permission: AppPermission.managePayroll,
+  ),
+  _PermissionScreenItem(
+    title: 'Usuarios',
+    icon: Icons.manage_accounts_outlined,
+    permission: AppPermission.manageUsers,
+  ),
+];
+
+class _PermissionActionItem {
+  const _PermissionActionItem({
+    required this.title,
+    required this.permission,
+    required this.description,
+  });
+
+  final String title;
+  final AppPermission permission;
+  final String description;
+}
+
+class _PermissionModuleItem {
+  const _PermissionModuleItem({
+    required this.title,
+    required this.icon,
+    required this.viewPermission,
+    required this.actions,
+  });
+
+  final String title;
+  final IconData icon;
+  final AppPermission viewPermission;
+  final List<_PermissionActionItem> actions;
+}
+
+const _permissionModules = <_PermissionModuleItem>[
+  _PermissionModuleItem(
+    title: 'Facturación',
+    icon: Icons.point_of_sale_outlined,
+    viewPermission: AppPermission.viewSales,
+    actions: [
+      _PermissionActionItem(
+        title: 'Crear ventas y cotizaciones',
+        permission: AppPermission.viewQuotes,
+        description: 'Permite registrar ventas, cotizar y trabajar en el POS.',
+      ),
+      _PermissionActionItem(
+        title: 'Reembolsar o devolver ventas',
+        permission: AppPermission.refundSales,
+        description: 'Autoriza acciones de devolución y reembolso.',
+      ),
+      _PermissionActionItem(
+        title: 'Ver reportes de ventas',
+        permission: AppPermission.viewSalesReports,
+        description: 'Muestra reportes, totales e histórico comercial.',
+      ),
+    ],
+  ),
+  _PermissionModuleItem(
+    title: 'Clientes',
+    icon: Icons.group_outlined,
+    viewPermission: AppPermission.viewClients,
+    actions: [
+      _PermissionActionItem(
+        title: 'Ver y trabajar clientes',
+        permission: AppPermission.viewClients,
+        description: 'Permite abrir la cartera de clientes y sus datos.',
+      ),
+    ],
+  ),
+  _PermissionModuleItem(
+    title: 'Inventario',
+    icon: Icons.inventory_2_outlined,
+    viewPermission: AppPermission.viewCatalog,
+    actions: [
+      _PermissionActionItem(
+        title: 'Agregar stock',
+        permission: AppPermission.addStock,
+        description: 'Autoriza entradas o ajustes de inventario.',
+      ),
+      _PermissionActionItem(
+        title: 'Editar productos',
+        permission: AppPermission.editProducts,
+        description: 'Permite modificar fichas, precios y datos de producto.',
+      ),
+    ],
+  ),
+  _PermissionModuleItem(
+    title: 'Compras',
+    icon: Icons.shopping_cart_checkout_outlined,
+    viewPermission: AppPermission.viewPurchases,
+    actions: [
+      _PermissionActionItem(
+        title: 'Crear compras',
+        permission: AppPermission.createPurchases,
+        description: 'Permite registrar órdenes de compra.',
+      ),
+      _PermissionActionItem(
+        title: 'Editar compras',
+        permission: AppPermission.editPurchases,
+        description: 'Permite cambiar órdenes antes de cerrarlas.',
+      ),
+      _PermissionActionItem(
+        title: 'Aprobar compras',
+        permission: AppPermission.approvePurchases,
+        description: 'Autoriza aprobar órdenes y decisiones de compra.',
+      ),
+      _PermissionActionItem(
+        title: 'Recibir mercancía',
+        permission: AppPermission.receivePurchases,
+        description: 'Permite recibir artículos y afectar inventario.',
+      ),
+    ],
+  ),
+  _PermissionModuleItem(
+    title: 'Contabilidad',
+    icon: Icons.account_balance_outlined,
+    viewPermission: AppPermission.viewAccounting,
+    actions: [
+      _PermissionActionItem(
+        title: 'Ver contabilidad',
+        permission: AppPermission.viewAccounting,
+        description: 'Acceso a cierres, depósitos y facturas fiscales.',
+      ),
+    ],
+  ),
+  _PermissionModuleItem(
+    title: 'Nómina',
+    icon: Icons.payments_outlined,
+    viewPermission: AppPermission.managePayroll,
+    actions: [
+      _PermissionActionItem(
+        title: 'Administrar nómina',
+        permission: AppPermission.managePayroll,
+        description: 'Permite crear, revisar y cerrar pagos de nómina.',
+      ),
+    ],
+  ),
+  _PermissionModuleItem(
+    title: 'Usuarios',
+    icon: Icons.manage_accounts_outlined,
+    viewPermission: AppPermission.manageUsers,
+    actions: [
+      _PermissionActionItem(
+        title: 'Crear y editar usuarios',
+        permission: AppPermission.manageUsers,
+        description: 'Control total sobre usuarios y permisos.',
+      ),
+    ],
+  ),
+];
+
+class UserPermissionsScreen extends ConsumerStatefulWidget {
+  const UserPermissionsScreen({super.key, required this.userId});
+
+  final String userId;
+
+  @override
+  ConsumerState<UserPermissionsScreen> createState() =>
+      _UserPermissionsScreenState();
+}
+
+class _UserPermissionsScreenState extends ConsumerState<UserPermissionsScreen> {
+  Map<String, bool>? _draft;
+  bool _saving = false;
+
+  UserModel? _findUser(List<UserModel> users) {
+    for (final user in users) {
+      if (user.id == widget.userId) return user;
+    }
+    return null;
+  }
+
+  Map<String, bool> _buildInitialDraft(UserModel user) {
+    final map = <String, bool>{};
+    for (final module in _permissionModules) {
+      map[module.viewPermission.name] = hasUserPermission(
+        user,
+        module.viewPermission,
+      );
+      for (final action in module.actions) {
+        map[action.permission.name] = hasUserPermission(
+          user,
+          action.permission,
+        );
+      }
+    }
+    return map;
+  }
+
+  void _setPermission(AppPermission permission, bool value) {
+    setState(() {
+      final draft = _draft ?? <String, bool>{};
+      draft[permission.name] = value;
+      _draft = draft;
+    });
+  }
+
+  Future<void> _save(UserModel user) async {
+    final draft = _draft ?? _buildInitialDraft(user);
+    setState(() => _saving = true);
+    try {
+      await ref
+          .read(usersControllerProvider.notifier)
+          .updatePermissions(user.id, draft);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Permisos actualizados')));
+      context.go(Routes.users);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('No se pudo guardar: $e')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final usersState = ref.watch(usersControllerProvider);
+    final currentUser = ref.watch(authStateProvider).user;
+
+    return Scaffold(
+      appBar: CustomAppBar(
+        title: 'Editar permisos',
+        showLogo: false,
+        trailing: currentUser == null
+            ? null
+            : Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: UserAvatar(
+                  radius: 16,
+                  backgroundColor: Colors.white24,
+                  imageUrl: currentUser.fotoPersonalUrl,
+                  child: Text(
+                    getInitials(currentUser.nombreCompleto),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+      ),
+      drawer: buildAdaptiveDrawer(context, currentUser: currentUser),
+      body: usersState.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('No se pudo cargar: $e')),
+        data: (users) {
+          final user = _findUser(users);
+          if (user == null) {
+            return const Center(child: Text('Usuario no encontrado'));
+          }
+          if (_managementRole(user) == AppRole.admin) {
+            return const Center(
+              child: Text('El administrador siempre tiene todos los permisos'),
+            );
+          }
+
+          final draft = _draft ??= _buildInitialDraft(user);
+          return Container(
+            color: theme.colorScheme.surfaceContainerLowest,
+            child: Column(
+              children: [
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(28, 22, 28, 24),
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          border: Border.all(
+                            color: theme.colorScheme.outlineVariant,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            _UserAvatar(user: user, radius: 28),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    user.nombreCompleto,
+                                    style: theme.textTheme.titleLarge?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${user.email}  •  Cajero',
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      for (final module in _permissionModules) ...[
+                        _PermissionModuleEditor(
+                          module: module,
+                          draft: draft,
+                          onChanged: _setPermission,
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                    ],
+                  ),
+                ),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
+                    border: Border(
+                      top: BorderSide(color: theme.colorScheme.outlineVariant),
+                    ),
+                  ),
+                  child: SafeArea(
+                    top: false,
+                    minimum: const EdgeInsets.fromLTRB(28, 12, 28, 16),
+                    child: Row(
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _saving
+                              ? null
+                              : () => context.go(Routes.users),
+                          icon: const Icon(Icons.arrow_back_outlined),
+                          label: const Text('Volver'),
+                        ),
+                        const Spacer(),
+                        FilledButton.icon(
+                          onPressed: _saving ? null : () => _save(user),
+                          icon: _saving
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.save_outlined),
+                          label: Text(_saving ? 'Guardando' : 'Guardar'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _PermissionModuleEditor extends StatelessWidget {
+  const _PermissionModuleEditor({
+    required this.module,
+    required this.draft,
+    required this.onChanged,
+  });
+
+  final _PermissionModuleItem module;
+  final Map<String, bool> draft;
+  final void Function(AppPermission permission, bool value) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final moduleEnabled = draft[module.viewPermission.name] ?? false;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Column(
+        children: [
+          CheckboxListTile(
+            value: moduleEnabled,
+            onChanged: (value) =>
+                onChanged(module.viewPermission, value ?? false),
+            secondary: Icon(module.icon),
+            title: Text(
+              module.title,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+            subtitle: const Text('Permiso para ver este módulo'),
+            controlAffinity: ListTileControlAffinity.trailing,
+          ),
+          const Divider(height: 1),
+          for (final action in module.actions)
+            CheckboxListTile(
+              value: draft[action.permission.name] ?? false,
+              onChanged: moduleEnabled
+                  ? (value) => onChanged(action.permission, value ?? false)
+                  : null,
+              title: Text(action.title),
+              subtitle: Text(action.description),
+              controlAffinity: ListTileControlAffinity.trailing,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PermissionScreenTile extends StatelessWidget {
+  const _PermissionScreenTile({
+    required this.icon,
+    required this.title,
+    required this.allowed,
+  });
+
+  final IconData icon;
+  final String title;
+  final bool allowed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final foreground = allowed
+        ? const Color(0xFF166534)
+        : const Color(0xFF64748B);
+    final background = allowed
+        ? const Color(0xFFDCFCE7)
+        : const Color(0xFFF1F5F9);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: allowed ? const Color(0xFFBBF7D0) : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: foreground, size: 19),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              title,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: foreground,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Icon(
+            allowed ? Icons.check_circle : Icons.remove_circle_outline,
+            color: foreground,
+            size: 18,
+          ),
+        ],
       ),
     );
   }
@@ -1836,15 +2536,15 @@ class _UserRowCardState extends State<_UserRowCard> {
       onExit: (_) => _setHovered(false),
       child: Material(
         color: surfaceColor,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.zero,
         child: InkWell(
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.zero,
           onTap: widget.onSelect,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 160),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.zero,
               border: Border.all(
                 color: widget.selected
                     ? const Color(0xFF93C5FD)
@@ -1903,7 +2603,7 @@ class _UserRowCardState extends State<_UserRowCard> {
                   flex: 14,
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: _UserRoleBadge(role: widget.user.appRole),
+                    child: _UserRoleBadge(role: _managementRole(widget.user)),
                   ),
                 ),
                 Expanded(
@@ -2129,6 +2829,7 @@ class _UserRoleBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = switch (role) {
       AppRole.admin => (const Color(0xFFFCE7F3), const Color(0xFF9D174D)),
+      AppRole.cajero => (const Color(0xFFE0F2FE), const Color(0xFF0369A1)),
       AppRole.asistente => (const Color(0xFFECFDF5), const Color(0xFF047857)),
       AppRole.vendedor => (const Color(0xFFEFF6FF), const Color(0xFF1D4ED8)),
       AppRole.marketing => (const Color(0xFFF5F3FF), const Color(0xFF6D28D9)),
@@ -2161,9 +2862,10 @@ class _UserAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final role = user.appRole;
+    final role = _managementRole(user);
     final background = switch (role) {
       AppRole.admin => const Color(0xFF9D174D),
+      AppRole.cajero => const Color(0xFF0369A1),
       AppRole.asistente => const Color(0xFF047857),
       AppRole.vendedor => const Color(0xFF1D4ED8),
       AppRole.marketing => const Color(0xFF6D28D9),
@@ -2278,7 +2980,7 @@ class _UserCard extends StatelessWidget {
         onTap: onView,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         leading: CircleAvatar(
-          backgroundColor: _getRoleColor(user.role),
+          backgroundColor: _getRoleColor(_managementRole(user)),
           child: Text(
             getInitials(user.nombreCompleto),
             style: const TextStyle(
@@ -2288,7 +2990,7 @@ class _UserCard extends StatelessWidget {
           ),
         ),
         title: Text(
-          '${user.nombreCompleto} • ${user.role ?? 'Sin rol'} • $statusText',
+          '${user.nombreCompleto} • ${_managementRole(user).label} • $statusText',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
@@ -2333,19 +3035,17 @@ class _UserCard extends StatelessWidget {
     );
   }
 
-  Color _getRoleColor(String? role) {
+  Color _getRoleColor(AppRole role) {
     switch (role) {
-      case 'ADMIN':
+      case AppRole.admin:
         return Colors.red;
-      case 'VENDEDOR':
-        return Colors.blue;
-      case 'ASISTENTE':
-        return Colors.green;
-      case 'MARKETING':
-        return Colors.purple;
-      case 'TECNICO':
-        return Colors.orange;
-      default:
+      case AppRole.cajero:
+        return Colors.lightBlue;
+      case AppRole.asistente:
+      case AppRole.vendedor:
+      case AppRole.marketing:
+      case AppRole.tecnico:
+      case AppRole.unknown:
         return Colors.grey;
     }
   }

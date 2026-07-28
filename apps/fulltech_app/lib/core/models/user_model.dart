@@ -28,6 +28,7 @@ class UserModel {
   final DateTime? fechaNacimiento;
   final String? cuentaNominaPreferencial;
   final List<String> habilidades;
+  final Map<String, bool> userPermissions;
   final String? role;
   final bool blocked;
   final int? edad;
@@ -66,6 +67,7 @@ class UserModel {
     this.fechaNacimiento,
     this.cuentaNominaPreferencial,
     this.habilidades = const [],
+    this.userPermissions = const {},
     this.role,
     this.blocked = false,
     this.edad,
@@ -109,6 +111,12 @@ class UserModel {
                 return map;
               })
         : <String, String>{};
+    final permissionsRaw = json['userPermissions'];
+    final permissions = permissionsRaw is Map
+        ? permissionsRaw.map(
+            (key, value) => MapEntry(key.toString(), value == true),
+          )
+        : <String, bool>{};
 
     return UserModel(
       id: json['id'] ?? '',
@@ -146,7 +154,8 @@ class UserModel {
           : null,
       cuentaNominaPreferencial: json['cuentaNominaPreferencial'],
       habilidades: habilidades,
-      role: json['role'] ?? json['rol'] ?? 'ASISTENTE',
+      userPermissions: permissions,
+      role: json['role'] ?? json['rol'] ?? 'CAJERO',
       blocked: json['blocked'] ?? false,
       edad: json['edad'],
       tieneHijos: json['tieneHijos'] ?? false,
@@ -202,6 +211,7 @@ class UserModel {
       'fechaNacimiento': fechaNacimiento?.toIso8601String(),
       'cuentaNominaPreferencial': cuentaNominaPreferencial,
       'habilidades': habilidades,
+      'userPermissions': userPermissions,
       'role': role,
       'blocked': blocked,
       'edad': edad,

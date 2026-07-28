@@ -53,6 +53,21 @@ class UsersController extends StateNotifier<AsyncValue<List<UserModel>>> {
     }
   }
 
+  Future<void> updatePermissions(
+    String id,
+    Map<String, bool> permissions,
+  ) async {
+    final previous = state;
+    state = const AsyncLoading();
+    try {
+      await repo.updateUserPermissions(id, permissions);
+      await load();
+    } catch (e) {
+      state = previous;
+      rethrow;
+    }
+  }
+
   Future<void> delete(String id) async {
     final previous = state;
     state = const AsyncLoading();

@@ -39,8 +39,8 @@ List<AppNavigationSection> buildAppNavigationSections(
   final role = currentUser?.appRole;
 
   bool can(AppPermission permission) {
-    if (role == null) return false;
-    return hasPermission(role, permission);
+    if (currentUser == null || role == null) return false;
+    return hasUserPermission(currentUser, permission);
   }
 
   final sections = <AppNavigationSection>[
@@ -148,17 +148,11 @@ List<AppNavigationSection> buildAppNavigationSections(
     AppNavigationSection(
       title: 'Cuenta',
       items: [
-        const AppNavigationItem(
-          icon: Icons.smart_toy_outlined,
-          appIcon: AppIcons.analytics,
-          title: 'IA',
-          route: Routes.ai,
-        ),
         if (can(AppPermission.manageUsers))
           const AppNavigationItem(
             icon: Icons.groups_outlined,
             appIcon: AppIcons.users,
-            title: 'Equipo',
+            title: 'Usuario',
             route: Routes.users,
           ),
       ],

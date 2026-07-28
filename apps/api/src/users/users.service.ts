@@ -113,6 +113,22 @@ export class UsersService {
     return output;
   }
 
+  private normalizeBooleanMap(value: unknown) {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return {} as Record<string, boolean>;
+    }
+
+    const output: Record<string, boolean> = {};
+    for (const [rawKey, rawValue] of Object.entries(value as Record<string, unknown>)) {
+      const key = rawKey.trim();
+      if (!key) continue;
+      if (typeof rawValue === 'boolean') {
+        output[key] = rawValue;
+      }
+    }
+    return output;
+  }
+
   private parseAiFieldUpdates(value: unknown) {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) {
       return {} as Record<string, unknown>;
@@ -346,6 +362,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
       fechaNacimiento: row.fechaNacimiento ?? null,
       cuentaNominaPreferencial: row.cuentaNominaPreferencial ?? null,
       habilidades: row.habilidades ?? null,
+      userPermissions: row.userPermissions ?? {},
       role: row.role ?? 'ASISTENTE',
       blocked: row.blocked ?? false,
       createdAt: row.createdAt,
@@ -387,6 +404,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
         "fechaNacimiento",
         "cuentaNominaPreferencial",
         habilidades,
+        COALESCE(user_permissions, '{}'::jsonb) AS "userPermissions",
         COALESCE(role::text, 'ASISTENTE') AS role,
         COALESCE(blocked, false) AS blocked,
         "createdAt",
@@ -432,6 +450,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
         "fechaNacimiento",
         "cuentaNominaPreferencial",
         habilidades,
+        COALESCE(user_permissions, '{}'::jsonb) AS "userPermissions",
         COALESCE(role::text, 'ASISTENTE') AS role,
         COALESCE(blocked, false) AS blocked,
         "createdAt",
@@ -485,6 +504,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
       fechaNacimiento: null,
       cuentaNominaPreferencial: null,
       habilidades: null,
+      userPermissions: {},
       role: row.role,
       blocked: false,
       createdAt: row.createdAt,
@@ -531,6 +551,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
           fechaNacimiento: true,
           cuentaNominaPreferencial: true,
           habilidades: true,
+          userPermissions: true,
           role: true,
           blocked: true,
           createdAt: true,
@@ -608,6 +629,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
         fechaNacimiento: dto.fechaNacimiento ? new Date(dto.fechaNacimiento) : undefined,
         cuentaNominaPreferencial: this.normalizeOptionalString(dto.cuentaNominaPreferencial),
         habilidades: dto.habilidades,
+        userPermissions: this.normalizeBooleanMap(dto.userPermissions),
         role: dto.role,
         blocked: dto.blocked ?? false
       },
@@ -644,6 +666,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
         fechaNacimiento: true,
         cuentaNominaPreferencial: true,
         habilidades: true,
+        userPermissions: true,
         role: true,
         blocked: true,
         createdAt: true,
@@ -690,6 +713,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
         fechaNacimiento: true,
         cuentaNominaPreferencial: true,
         habilidades: true,
+        userPermissions: true,
         role: true,
         blocked: true,
         createdAt: true,
@@ -818,6 +842,9 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
       data.cuentaNominaPreferencial = this.normalizeOptionalString(dto.cuentaNominaPreferencial) ?? null;
     }
     if (this.hasValue(dto.habilidades)) data.habilidades = dto.habilidades as any;
+    if (this.hasValue(dto.userPermissions)) {
+      data.userPermissions = this.normalizeBooleanMap(dto.userPermissions) as Prisma.InputJsonValue;
+    }
     if (this.hasValue(dto.role)) data.role = dto.role;
     if (this.hasValue(dto.blocked)) data.blocked = dto.blocked;
 
@@ -834,6 +861,27 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
       where: { id },
       data,
       select: { id: true }
+    });
+
+    return this.findById(id);
+  }
+
+  async updatePermissions(id: string, permissions: Record<string, boolean>) {
+    const existing = await this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true, role: true },
+    });
+    if (!existing) throw new NotFoundException('User not found');
+    if (existing.role === 'ADMIN') {
+      throw new BadRequestException('El administrador mantiene todos los permisos.');
+    }
+
+    await this.prisma.user.update({
+      where: { id },
+      data: {
+        userPermissions: this.normalizeBooleanMap(permissions) as Prisma.InputJsonValue,
+      },
+      select: { id: true },
     });
 
     return this.findById(id);

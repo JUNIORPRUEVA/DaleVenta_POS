@@ -96,6 +96,10 @@ export class CreateUserDto {
   habilidades?: string[];
 
   @IsOptional()
+  @IsObject()
+  userPermissions?: Record<string, boolean>;
+
+  @IsOptional()
   @IsBoolean()
   tieneHijos?: boolean;
 

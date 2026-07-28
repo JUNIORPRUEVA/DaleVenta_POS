@@ -109,6 +109,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const UsersScreen(),
           ),
           GoRoute(
+            path: Routes.userPermissions,
+            builder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return UserPermissionsScreen(userId: id);
+            },
+          ),
+          GoRoute(
             path: Routes.catalogo,
             builder: (context, state) => const InventoryModulePages(),
           ),
@@ -251,14 +258,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       final required = RouteAccess.permissionForLocation(loc);
-      if (required != null && !hasPermission(role, required)) {
+      if (required != null && !hasUserPermission(auth.user, required)) {
         final fallback = RouteAccess.defaultHomeForRole(role);
         if (path != fallback) {
           return fallback;
         }
 
         if (path != Routes.profile &&
-            hasPermission(role, AppPermission.viewProfile)) {
+            hasUserPermission(auth.user, AppPermission.viewProfile)) {
           return Routes.profile;
         }
 

@@ -9,6 +9,7 @@ datasource db {
 
 enum Role {
   ADMIN
+  CAJERO
   ASISTENTE
   MARKETING
   VENDEDOR
@@ -615,6 +616,7 @@ model User {
   fechaNacimiento              DateTime?
   cuentaNominaPreferencial     String?
   habilidades                  Json?
+  userPermissions              Json?     @map("user_permissions")
   role                         Role
   blocked                      Boolean   @default(false)
   createdAt                    DateTime  @default(now())

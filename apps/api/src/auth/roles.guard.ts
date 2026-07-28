@@ -9,6 +9,7 @@ export class RolesGuard implements CanActivate {
 
   private readonly roleAliases: Record<string, Role> = {
     ADMINISTRADOR: Role.ADMIN,
+    CASHIER: Role.CAJERO,
     ASSISTANT: Role.ASISTENTE,
     ASSISTENTE: Role.ASISTENTE,
   };

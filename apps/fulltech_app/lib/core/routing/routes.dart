@@ -7,6 +7,7 @@ class Routes {
   static const profile = '/profile';
   static const users = '/users';
   static const userDetail = '/users/:id';
+  static const userPermissions = '/users/:id/permissions';
   static const ponche = '/ponche';
   static const poncheHistorial = '/ponche/historial';
   static const catalogo = '/catalogo';
@@ -73,4 +74,5 @@ class Routes {
   static String clienteDetail(String id) => '/clientes/$id';
   static String clienteEdit(String id) => '/clientes/$id/editar';
   static String serviceOrderById(String id) => '/service-orders/$id';
+  static String userPermissionsById(String id) => '/users/$id/permissions';
 }

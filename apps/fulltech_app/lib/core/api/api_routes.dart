@@ -11,6 +11,7 @@ class ApiRoutes {
   static const usersMe = '/users/me';
   static String userDetail(String id) => '/users/$id';
   static String updateUser(String id) => '/users/$id';
+  static String updateUserPermissions(String id) => '/users/$id/permissions';
   static String deleteUser(String id) => '/users/$id';
   static String blockUser(String id) => '/users/$id/block';
   static String unblockUser(String id) => '/users/$id/unblock';

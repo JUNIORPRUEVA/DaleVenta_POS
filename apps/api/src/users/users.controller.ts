@@ -68,7 +68,7 @@ export class UsersController {
 
   @Post('upload')
   // Any authenticated user can upload a profile/document image.
-  @Roles(Role.ADMIN, Role.ASISTENTE, Role.MARKETING, Role.VENDEDOR, Role.TECNICO)
+  @Roles(Role.ADMIN, Role.CAJERO, Role.ASISTENTE, Role.MARKETING, Role.VENDEDOR, Role.TECNICO)
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -175,7 +175,7 @@ export class UsersController {
   }
 
   @Get()
-  @Roles(Role.ADMIN, Role.ASISTENTE, Role.VENDEDOR, Role.TECNICO, Role.MARKETING)
+  @Roles(Role.ADMIN, Role.CAJERO, Role.ASISTENTE, Role.VENDEDOR, Role.TECNICO, Role.MARKETING)
   findAll(@Req() req: Request) {
     return this.users.findAll(req.user as TenantUser);
   }
@@ -223,6 +223,15 @@ export class UsersController {
       throw new UnauthorizedException('Usuario no autenticado');
     }
     return this.users.updateSelf(user.id, dto);
+  }
+
+  @Patch(':id/permissions')
+  @Roles(Role.ADMIN)
+  updatePermissions(
+    @Param('id') id: string,
+    @Body() body: { userPermissions?: Record<string, boolean> },
+  ) {
+    return this.users.updatePermissions(id, body.userPermissions ?? {});
   }
 
   @Patch(':id')

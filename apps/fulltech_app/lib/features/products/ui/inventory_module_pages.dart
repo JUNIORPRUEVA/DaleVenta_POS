@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/api/env.dart';
+import '../../../core/auth/app_permissions.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/cache/fulltech_cache_manager.dart';
 import '../../../core/cache/local_json_cache.dart';
@@ -843,6 +844,8 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     final user = ref.watch(authStateProvider).user;
     final state = ref.watch(catalogControllerProvider);
     final products = state.items;
+    final canEditProducts = hasUserPermission(user, AppPermission.editProducts);
+    final canAddStock = hasUserPermission(user, AppPermission.addStock);
     final isMobile = MediaQuery.sizeOf(context).width < 640;
     final tab = GoRouterState.of(context).uri.queryParameters['tab'];
     final initialTabIndex = switch (tab) {
@@ -864,7 +867,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
             if (isMobile)
               IconButton.filled(
                 tooltip: 'Nuevo producto',
-                onPressed: () => _openProductEditor(),
+                onPressed: canEditProducts ? () => _openProductEditor() : null,
                 icon: const Icon(Icons.add_rounded, size: 18),
               )
             else
@@ -918,6 +921,8 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                     onExport: _exportCatalog,
                     onEdit: (product) => _openProductEditor(product: product),
                     onSetStock: _setProductStock,
+                    canEditProducts: canEditProducts,
+                    canAddStock: canAddStock,
                     onDelete: (product) => ref
                         .read(catalogControllerProvider.notifier)
                         .remove(product.id),
@@ -927,6 +932,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                     products: products,
                     onRefresh: _refresh,
                     onSetStock: _setProductStock,
+                    canAddStock: canAddStock,
                   ),
                   CategoriesTab(products: products, onRefresh: _refresh),
                 ],
@@ -1001,6 +1007,8 @@ class CatalogTab extends StatefulWidget {
     required this.onExport,
     required this.onEdit,
     required this.onSetStock,
+    required this.canEditProducts,
+    required this.canAddStock,
     required this.onDelete,
   });
 
@@ -1013,6 +1021,8 @@ class CatalogTab extends StatefulWidget {
   final Future<void> Function() onExport;
   final ValueChanged<ProductModel> onEdit;
   final Future<void> Function(ProductModel product, double stock) onSetStock;
+  final bool canEditProducts;
+  final bool canAddStock;
   final Future<void> Function(ProductModel product) onDelete;
 
   @override
@@ -1127,8 +1137,8 @@ class _CatalogTabState extends State<CatalogTab> {
                   _searchCtrl.clear();
                   _query = '';
                 }),
-                onCreate: widget.onCreate,
-                onImport: widget.onImport,
+                onCreate: widget.canEditProducts ? widget.onCreate : null,
+                onImport: widget.canEditProducts ? widget.onImport : null,
                 onExport: widget.onExport,
               ),
               const SizedBox(height: 12),
@@ -1148,6 +1158,8 @@ class _CatalogTabState extends State<CatalogTab> {
                   }),
                   onEdit: widget.onEdit,
                   onSetStock: widget.onSetStock,
+                  canEditProducts: widget.canEditProducts,
+                  canAddStock: widget.canAddStock,
                   onDelete: _confirmDelete,
                 )
               else
@@ -1163,6 +1175,8 @@ class _CatalogTabState extends State<CatalogTab> {
                   }),
                   onEdit: widget.onEdit,
                   onSetStock: widget.onSetStock,
+                  canEditProducts: widget.canEditProducts,
+                  canAddStock: widget.canAddStock,
                   onDelete: _confirmDelete,
                 ),
             ],
@@ -1202,8 +1216,8 @@ class _CatalogToolbar extends StatelessWidget {
   final ValueChanged<bool> onToggleLowStock;
   final ValueChanged<bool> onToggleOutStock;
   final VoidCallback onClearFilters;
-  final VoidCallback onCreate;
-  final Future<void> Function() onImport;
+  final VoidCallback? onCreate;
+  final Future<void> Function()? onImport;
   final Future<void> Function() onExport;
 
   @override
@@ -1322,6 +1336,8 @@ class _CatalogTable extends StatelessWidget {
     required this.onToggle,
     required this.onEdit,
     required this.onSetStock,
+    required this.canEditProducts,
+    required this.canAddStock,
     required this.onDelete,
   });
 
@@ -1332,6 +1348,8 @@ class _CatalogTable extends StatelessWidget {
   final void Function(ProductModel product, bool selected) onToggle;
   final ValueChanged<ProductModel> onEdit;
   final Future<void> Function(ProductModel product, double stock) onSetStock;
+  final bool canEditProducts;
+  final bool canAddStock;
   final ValueChanged<ProductModel> onDelete;
 
   @override
@@ -1394,16 +1412,20 @@ class _CatalogTable extends StatelessWidget {
                       children: [
                         IconButton(
                           tooltip: 'Editar',
-                          onPressed: () => onEdit(product),
+                          onPressed: canEditProducts
+                              ? () => onEdit(product)
+                              : null,
                           icon: const Icon(Icons.edit_outlined),
                         ),
                         IconButton(
                           tooltip: 'Ajustar stock',
-                          onPressed: () => _showStockAdjustmentPanel(
-                            context,
-                            product: product,
-                            onSetStock: onSetStock,
-                          ),
+                          onPressed: canAddStock
+                              ? () => _showStockAdjustmentPanel(
+                                  context,
+                                  product: product,
+                                  onSetStock: onSetStock,
+                                )
+                              : null,
                           icon: const Icon(Icons.tune_outlined),
                         ),
                         IconButton(
@@ -1430,6 +1452,8 @@ class _CompactCatalogList extends StatelessWidget {
     required this.onToggle,
     required this.onEdit,
     required this.onSetStock,
+    required this.canEditProducts,
+    required this.canAddStock,
     required this.onDelete,
   });
 
@@ -1438,6 +1462,8 @@ class _CompactCatalogList extends StatelessWidget {
   final void Function(ProductModel product, bool selected) onToggle;
   final ValueChanged<ProductModel> onEdit;
   final Future<void> Function(ProductModel product, double stock) onSetStock;
+  final bool canEditProducts;
+  final bool canAddStock;
   final ValueChanged<ProductModel> onDelete;
 
   @override
@@ -1452,12 +1478,14 @@ class _CompactCatalogList extends StatelessWidget {
               product: product,
               selected: selectedIds.contains(product.id),
               onSelected: (value) => onToggle(product, value),
-              onEdit: () => onEdit(product),
-              onStock: () => _showStockAdjustmentPanel(
-                context,
-                product: product,
-                onSetStock: onSetStock,
-              ),
+              onEdit: canEditProducts ? () => onEdit(product) : null,
+              onStock: canAddStock
+                  ? () => _showStockAdjustmentPanel(
+                      context,
+                      product: product,
+                      onSetStock: onSetStock,
+                    )
+                  : null,
               onDelete: () => onDelete(product),
             ),
         ],
@@ -1566,11 +1594,13 @@ class StockAdjustmentsPage extends StatefulWidget {
     required this.products,
     required this.onRefresh,
     required this.onSetStock,
+    required this.canAddStock,
   });
 
   final List<ProductModel> products;
   final Future<void> Function() onRefresh;
   final Future<void> Function(ProductModel product, double stock) onSetStock;
+  final bool canAddStock;
 
   @override
   State<StockAdjustmentsPage> createState() => _StockAdjustmentsPageState();
@@ -1650,13 +1680,23 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
   bool get _canSubmit {
     final selected =
         _selected ?? (_products.isNotEmpty ? _products.first : null);
-    if (_saving || selected == null || _quantity <= 0 || !_quantity.isFinite) {
+    if (!widget.canAddStock ||
+        _saving ||
+        selected == null ||
+        _quantity <= 0 ||
+        !_quantity.isFinite) {
       return false;
     }
     return _previewStock(selected) >= 0;
   }
 
   Future<void> _applyAdjustment() async {
+    if (!widget.canAddStock) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No tienes permiso para ajustar stock')),
+      );
+      return;
+    }
     final selected =
         _selected ?? (_products.isNotEmpty ? _products.first : null);
     if (selected == null || _quantity <= 0 || !_quantity.isFinite) {
@@ -3616,6 +3656,7 @@ Future<void> showInventoryStockAdjustmentsPanel(
                   products: products,
                   onRefresh: onRefresh,
                   onSetStock: onSetStock,
+                  canAddStock: true,
                 ),
               ),
             ),

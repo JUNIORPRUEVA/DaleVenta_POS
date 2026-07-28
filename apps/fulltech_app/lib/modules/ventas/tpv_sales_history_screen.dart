@@ -6,7 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 
-import '../../core/auth/app_role.dart';
+import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/printing/unified_ticket_printer.dart';
@@ -234,11 +234,14 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   }
 
   Future<void> _returnSale(SaleModel sale) async {
-    final isAdmin = ref.read(authStateProvider).user?.appRole == AppRole.admin;
-    if (!isAdmin) {
+    final canReturn = hasUserPermission(
+      ref.read(authStateProvider).user,
+      AppPermission.refundSales,
+    );
+    if (!canReturn) {
       showCashToast(
         context,
-        'Acceso restringido: solo un administrador puede hacer devoluciones.',
+        'Acceso restringido: no tienes permiso para hacer devoluciones.',
         isError: true,
       );
       return;
