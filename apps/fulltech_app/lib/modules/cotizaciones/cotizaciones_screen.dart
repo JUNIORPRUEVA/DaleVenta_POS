@@ -8019,7 +8019,7 @@ class _DesktopQuotePanel extends StatelessWidget {
         border: const Border(top: BorderSide(color: Color(0xFFD3E0E7))),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(0, 10, 0, 10),
+        padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -10043,8 +10043,8 @@ class _DesktopSalesTicketFooter extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Container(
-      height: 56,
-      padding: const EdgeInsets.fromLTRB(14, 7, 14, 7),
+      height: 44,
+      padding: const EdgeInsets.fromLTRB(12, 3, 12, 3),
       decoration: BoxDecoration(
         color: const Color(0xFFF7FAFC),
         border: Border(top: BorderSide(color: const Color(0xFFD6E1E8))),
@@ -10054,8 +10054,8 @@ class _DesktopSalesTicketFooter extends StatelessWidget {
           Tooltip(
             message: 'Nuevo ticket',
             child: SizedBox(
-              width: 40,
-              height: 40,
+              width: 36,
+              height: 36,
               child: FilledButton(
                 onPressed: onCreateTicket,
                 style: FilledButton.styleFrom(
@@ -10065,16 +10065,16 @@ class _DesktopSalesTicketFooter extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-                child: const Icon(Icons.add_rounded, size: 22),
+                child: const Icon(Icons.add_rounded, size: 21),
               ),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: tickets.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              separatorBuilder: (_, __) => const SizedBox(width: 6),
               itemBuilder: (context, index) {
                 final ticket = tickets[index];
                 final selected = ticket.id == activeTicketId;
@@ -10090,7 +10090,7 @@ class _DesktopSalesTicketFooter extends StatelessWidget {
               },
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Text(
             '${tickets.length} tickets',
             style: theme.textTheme.labelMedium?.copyWith(
@@ -10136,7 +10136,7 @@ class _DesktopFooterTicketChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         child: SizedBox(
           width: 150,
-          height: 40,
+          height: 36,
           child: DecoratedBox(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
@@ -10150,7 +10150,7 @@ class _DesktopFooterTicketChip extends StatelessWidget {
               ],
             ),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 2, 0),
+              padding: const EdgeInsets.fromLTRB(9, 0, 2, 0),
               child: Row(
                 children: [
                   AppIcon(AppIcons.ticket, size: 16.5, color: fg),
