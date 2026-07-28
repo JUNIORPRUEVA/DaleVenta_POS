@@ -17,7 +17,6 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
 import { memoryStorage } from 'multer';
-import { randomUUID } from 'node:crypto';
 import { extname, join, posix } from 'node:path';
 import * as fs from 'node:fs';
 import { AuthGuard } from '@nestjs/passport';
@@ -25,7 +24,8 @@ import { Role } from '@prisma/client';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { R2Service } from '../storage/r2.service';
-import { sanitizeFileName } from '../storage/helpers/storage_helpers';
+import { buildTenantObjectKey, sanitizeFileName } from '../storage/helpers/storage_helpers';
+import { requireTenant } from '../auth/tenant-context';
 import { ContabilidadService } from './contabilidad.service';
 import {
   BulkDeleteClosesDto,
@@ -57,7 +57,7 @@ import {
   UpdatePayableServiceDto,
 } from './payable.dto';
 
-type RequestActor = { id?: string; role?: string };
+type RequestActor = { id?: string; role?: string; companyId?: string | null };
 const CLOSING_ROLES: Role[] = [
   Role.ADMIN,
   Role.ASISTENTE,
@@ -260,21 +260,47 @@ export class ContabilidadController {
             : safeExt === '.pdf'
               ? 'application/pdf'
               : 'image/jpeg';
-    const now = new Date();
-    const month = String(now.getUTCMonth() + 1).padStart(2, '0');
     const baseName = original.replace(/\.[^/.]+$/, '') || 'voucher';
-    const objectKey =
-      `contabilidad/daily-close-vouchers/${now.getUTCFullYear()}/${month}/${actor.id ?? 'anon'}/${randomUUID()}-${baseName}${safeExt}`
-        .replace(/\s+/g, '_')
-        .replace(/[^a-zA-Z0-9/_\-.]/g, '');
-    await this.r2.putObject({
-      objectKey,
-      body: file.buffer,
-      contentType,
+    const objectKey = buildTenantObjectKey({
+      companyId: requireTenant({ id: actor.id ?? '', role: actor.role ?? '', companyId: actor.companyId }),
+      area: 'contabilidad',
+      kind: 'daily-close-vouchers',
+      ownerId: actor.id ?? 'anon',
+      fileName: baseName,
+      extension: safeExt,
     });
+
+    const uploadDirEnv = (process.env['UPLOAD_DIR'] ?? '').trim();
+    const volumeDir = '/uploads';
+    const volumeExists = fs.existsSync(volumeDir);
+    const uploadDir =
+      uploadDirEnv.length > 0
+        ? (uploadDirEnv === './uploads' || uploadDirEnv === 'uploads') &&
+          volumeExists
+          ? volumeDir
+          : uploadDirEnv
+        : volumeExists
+          ? volumeDir
+          : join(process.cwd(), 'uploads');
+    const absoluteFilePath = join(uploadDir, ...objectKey.split('/'));
+    const absoluteDir = join(uploadDir, ...objectKey.split('/').slice(0, -1));
+    fs.mkdirSync(absoluteDir, { recursive: true });
+    fs.writeFileSync(absoluteFilePath, file.buffer);
+
+    try {
+      await this.r2.putObject({
+        objectKey: `uploads/${objectKey}`,
+        body: file.buffer,
+        contentType,
+      });
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn('[closes/vouchers/upload] R2 mirror failed, local file is used:', error);
+    }
+    const relativePath = `/${posix.join('uploads', objectKey)}`;
     return {
       storageKey: objectKey,
-      fileUrl: this.r2.buildPublicUrl(objectKey),
+      fileUrl: relativePath,
       fileName: original,
       mimeType: contentType,
     };
@@ -451,13 +477,15 @@ export class ContabilidadController {
 
     const actor = (req.user ?? {}) as RequestActor;
     const ownerSegment = (actor.id ?? 'anon').trim() || 'anon';
-    const now = new Date();
-    const month = String(now.getUTCMonth() + 1).padStart(2, '0');
     const baseName = original.replace(/\.[^/.]+$/, '') || 'voucher';
-    const objectKey =
-      `contabilidad/deposit-orders/${now.getUTCFullYear()}/${month}/${ownerSegment}/${randomUUID()}-${baseName}${safeExt}`
-        .replace(/\s+/g, '_')
-        .replace(/[^a-zA-Z0-9/_\-.]/g, '');
+    const objectKey = buildTenantObjectKey({
+      companyId: requireTenant({ id: actor.id ?? '', role: actor.role ?? '', companyId: actor.companyId }),
+      area: 'contabilidad',
+      kind: 'deposit-orders',
+      ownerId: ownerSegment,
+      fileName: baseName,
+      extension: safeExt,
+    });
 
     const uploadDirEnv = (process.env['UPLOAD_DIR'] ?? '').trim();
     const volumeDir = '/uploads';
@@ -557,13 +585,15 @@ export class ContabilidadController {
 
     const actor = (req.user ?? {}) as RequestActor;
     const ownerSegment = (actor.id ?? 'anon').trim() || 'anon';
-    const now = new Date();
-    const month = String(now.getUTCMonth() + 1).padStart(2, '0');
     const baseName = original.replace(/\.[^/.]+$/, '') || 'factura';
-    const objectKey =
-      `contabilidad/fiscal-invoices/${now.getUTCFullYear()}/${month}/${ownerSegment}/${randomUUID()}-${baseName}${safeExt}`
-        .replace(/\s+/g, '_')
-        .replace(/[^a-zA-Z0-9/_\-.]/g, '');
+    const objectKey = buildTenantObjectKey({
+      companyId: requireTenant({ id: actor.id ?? '', role: actor.role ?? '', companyId: actor.companyId }),
+      area: 'contabilidad',
+      kind: 'fiscal-invoices',
+      ownerId: ownerSegment,
+      fileName: baseName,
+      extension: safeExt,
+    });
 
     // Resolve local upload directory (same logic as main.ts / StorageController).
     const uploadDirEnv = (process.env['UPLOAD_DIR'] ?? '').trim();

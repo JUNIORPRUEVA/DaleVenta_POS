@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { basename, extname } from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 export type MediaType = 'image' | 'video' | 'document';
 
@@ -79,6 +80,58 @@ export function buildServiceObjectKey(serviceId: string, fileName: string, now: 
   const ts = Math.floor(now.getTime() / 1000);
   const safe = sanitizeFileName(fileName);
   return `services/${serviceId}/${yyyy}/${mm}/${ts}-${safe}`;
+}
+
+export function sanitizeObjectKeySegment(value: string, fallback = 'general') {
+  const cleaned = (value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[-_]+|[-_]+$/g, '');
+
+  return cleaned || fallback;
+}
+
+export function tenantUploadPrefix(companyId: string) {
+  const normalizedCompanyId = (companyId ?? '').trim();
+  if (!normalizedCompanyId) {
+    throw new BadRequestException('Empresa requerida para guardar archivo');
+  }
+
+  return `companies/${sanitizeObjectKeySegment(normalizedCompanyId, 'company')}`;
+}
+
+export function buildTenantObjectKey(params: {
+  companyId: string;
+  area: string;
+  kind?: string;
+  ownerId?: string | null;
+  fileName: string;
+  extension: string;
+  now?: Date;
+}) {
+  const now = params.now ?? new Date();
+  const yyyy = String(now.getUTCFullYear());
+  const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const original = sanitizeFileName(params.fileName || 'file');
+  const baseName = original.replace(/\.[^/.]+$/, '') || 'file';
+  const safeExt = params.extension.startsWith('.')
+    ? params.extension.toLowerCase()
+    : `.${params.extension.toLowerCase()}`;
+  const owner = sanitizeObjectKeySegment(params.ownerId ?? 'shared', 'shared');
+
+  return [
+    tenantUploadPrefix(params.companyId),
+    sanitizeObjectKeySegment(params.area),
+    sanitizeObjectKeySegment(params.kind ?? 'general'),
+    owner,
+    yyyy,
+    mm,
+    `${randomUUID()}-${baseName}${safeExt}`,
+  ].join('/');
 }
 
 export function assertValidObjectKeyForService(serviceId: string, objectKey: string) {

@@ -16,12 +16,11 @@ import { memoryStorage } from 'multer';
 import { extname } from 'node:path';
 import { join, posix } from 'node:path';
 import type { Express } from 'express';
-import { randomUUID } from 'crypto';
 import * as fs from 'node:fs';
 import { R2Service } from '../storage/r2.service';
-import { sanitizeFileName } from '../storage/helpers/storage_helpers';
+import { buildTenantObjectKey, sanitizeFileName } from '../storage/helpers/storage_helpers';
 import { ConfigService } from '@nestjs/config';
-import type { TenantUser } from '../auth/tenant-context';
+import { requireTenant, type TenantUser } from '../auth/tenant-context';
 
 @UseGuards(AuthGuard('jwt'), RolesGuard)
 @Controller('users')
@@ -92,10 +91,11 @@ export class UsersController {
   async upload(@Req() req: Request, @UploadedFile() file?: Express.Multer.File) {
     if (!file) throw new BadRequestException('No se subió ningún archivo');
 
-    const auth = req.user as { id?: string; role?: Role } | undefined;
+    const auth = req.user as TenantUser | undefined;
     const uploaderId = (auth?.id ?? '').trim();
     const uploaderRole = auth?.role;
     if (!uploaderId) throw new UnauthorizedException('Usuario no autenticado');
+    const companyId = requireTenant(auth);
 
     // Optional multipart fields to keep docs organized as an expediente.
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -120,9 +120,14 @@ export class UsersController {
       ? mime
       : (safeExt === '.png' ? 'image/png' : (safeExt === '.webp' ? 'image/webp' : 'image/jpeg'));
 
-    const objectKey = `users/${targetUserId}/${kind}/${randomUUID()}-${original.replace(/\.[^/.]+$/, '')}${safeExt}`
-      .replace(/\s+/g, '_')
-      .replace(/[^a-zA-Z0-9/_\-.]/g, '');
+    const objectKey = buildTenantObjectKey({
+      companyId,
+      area: 'users',
+      kind,
+      ownerId: targetUserId,
+      fileName: original,
+      extension: safeExt,
+    });
 
     // Local uploads folder is source of truth for /uploads serving.
     const uploadDir = this.resolveUploadDir();
@@ -158,6 +163,7 @@ export class UsersController {
       relativePath,
       kind,
       userId: targetUserId,
+      companyId,
       fileName: original,
     };
   }

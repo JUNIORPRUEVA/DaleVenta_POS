@@ -12,6 +12,9 @@ import { mkdir, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import type { Express } from "express";
 import { PrismaService } from "../prisma/prisma.service";
+import { requireTenant } from "../auth/tenant-context";
+import { R2Service } from "../storage/r2.service";
+import { buildTenantObjectKey } from "../storage/helpers/storage_helpers";
 import {
   CreatePurchaseInvoiceDto,
   CreatePurchaseOrderPdfShareLinkDto,
@@ -21,13 +24,14 @@ import {
   UpsertSupplierDto,
 } from "./dto/purchases.dto";
 
-type RequestUser = { id: string; role: Role };
+type RequestUser = { id: string; role: Role; companyId?: string | null };
 
 @Injectable()
 export class PurchasesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly r2: R2Service,
   ) {}
 
   private includeOrder() {
@@ -164,7 +168,7 @@ export class PurchasesService {
       }
     }
 
-    const uploaded = await this.persistInvoiceFile(file, requestBaseUrl);
+    const uploaded = await this.persistInvoiceFile(user, file, requestBaseUrl);
     const amount =
       dto.amount == null ? null : new Prisma.Decimal(dto.amount).toDecimalPlaces(2);
     if (amount?.lt(0)) {
@@ -652,6 +656,7 @@ export class PurchasesService {
   }
 
   private async persistInvoiceFile(
+    user: RequestUser,
     file: Express.Multer.File,
     requestBaseUrl?: string,
   ) {
@@ -668,13 +673,29 @@ export class PurchasesService {
       .replace(/^_+|_+$/g, "")
       .slice(0, 80);
     const now = new Date();
-    const yyyy = now.getUTCFullYear().toString();
-    const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
     const storedName = `${Date.now()}-${randomUUID()}-${baseName || "factura"}${ext}`;
-    const storageKey = `compras/facturas/${yyyy}/${mm}/${storedName}`;
+    const storageKey = buildTenantObjectKey({
+      companyId: requireTenant(user),
+      area: "compras",
+      kind: "facturas",
+      ownerId: user.id,
+      fileName: storedName,
+      extension: ext,
+      now,
+    });
     const absolutePath = path.join(this.resolveUploadDir(), ...storageKey.split("/"));
     await mkdir(path.dirname(absolutePath), { recursive: true });
     await writeFile(absolutePath, file.buffer);
+    try {
+      await this.r2.putObject({
+        objectKey: `uploads/${storageKey}`,
+        body: file.buffer,
+        contentType: this.safeInvoiceMimeType(file.mimetype, ext),
+      });
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn("[purchases/invoices] R2 mirror failed, local file is used:", error);
+    }
     const baseUrl = this.publicBaseUrl(requestBaseUrl);
     return {
       fileName: original.endsWith(ext) ? original : `${original}${ext}`,

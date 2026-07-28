@@ -11,7 +11,6 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@prisma/client';
-import { randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
 import { join, posix } from 'node:path';
 import * as fs from 'node:fs';
@@ -21,27 +20,49 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
-import { sanitizeFileName } from './helpers/storage_helpers';
+import { requireTenant, type TenantUser } from '../auth/tenant-context';
+import {
+  ALLOWED_CONTENT_TYPES,
+  buildTenantObjectKey,
+  inferMediaType,
+  sanitizeFileName,
+  sanitizeObjectKeySegment,
+} from './helpers/storage_helpers';
 import { R2Service } from './r2.service';
 
-const allowedMimeTypes = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'video/mp4',
-  'video/quicktime',
-  'video/webm',
+const allowedMimeTypes = new Set<string>([
+  ...ALLOWED_CONTENT_TYPES,
   'video/x-matroska',
+  'application/zip',
+  'application/x-zip-compressed',
+  'application/x-7z-compressed',
+  'application/gzip',
+  'application/x-tar',
+  'application/octet-stream',
 ]);
 
 const imageExtensions = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 const videoExtensions = new Set(['.mp4', '.mov', '.webm', '.mkv']);
+const documentExtensions = new Set([
+  '.pdf',
+  '.doc',
+  '.docx',
+  '.xls',
+  '.xlsx',
+  '.txt',
+  '.csv',
+  '.zip',
+  '.7z',
+  '.gz',
+  '.tar',
+]);
 const maxImageSizeBytes = 12 * 1024 * 1024;
 const maxVideoSizeBytes = 60 * 1024 * 1024;
+const maxDocumentSizeBytes = 100 * 1024 * 1024;
 
 function inferContentType(file: Express.Multer.File, safeExt: string): string {
   const mime = (file.mimetype ?? '').trim().toLowerCase();
-  if (allowedMimeTypes.has(mime)) return mime;
+  if (allowedMimeTypes.has(mime) && mime !== 'application/octet-stream') return mime;
   if (imageExtensions.has(safeExt)) {
     if (safeExt == '.png') return 'image/png';
     if (safeExt == '.webp') return 'image/webp';
@@ -50,11 +71,28 @@ function inferContentType(file: Express.Multer.File, safeExt: string): string {
   if (safeExt == '.mov') return 'video/quicktime';
   if (safeExt == '.webm') return 'video/webm';
   if (safeExt == '.mkv') return 'video/x-matroska';
+  if (safeExt == '.pdf') return 'application/pdf';
+  if (safeExt == '.doc') return 'application/msword';
+  if (safeExt == '.docx') return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  if (safeExt == '.xls') return 'application/vnd.ms-excel';
+  if (safeExt == '.xlsx') return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  if (safeExt == '.txt') return 'text/plain';
+  if (safeExt == '.csv') return 'text/csv';
+  if (safeExt == '.zip') return 'application/zip';
+  if (safeExt == '.7z') return 'application/x-7z-compressed';
+  if (safeExt == '.gz') return 'application/gzip';
+  if (safeExt == '.tar') return 'application/x-tar';
   return 'video/mp4';
 }
 
-function inferMediaFolder(contentType: string): 'images' | 'videos' {
-  return contentType.startsWith('video/') ? 'videos' : 'images';
+function inferMediaFolder(contentType: string): 'images' | 'videos' | 'documents' | 'backups' {
+  if (contentType == 'application/zip' || contentType == 'application/x-zip-compressed') return 'backups';
+  if (contentType == 'application/x-7z-compressed' || contentType == 'application/gzip' || contentType == 'application/x-tar') {
+    return 'backups';
+  }
+  if (contentType.startsWith('video/')) return 'videos';
+  if (contentType.startsWith('image/')) return 'images';
+  return 'documents';
 }
 
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -109,18 +147,18 @@ export class StorageController {
         const mime = (file.mimetype ?? '').trim().toLowerCase();
         const original = (file.originalname ?? '').trim().toLowerCase();
         const ext = extname(original);
-        const extAllowed = imageExtensions.has(ext) || videoExtensions.has(ext);
+        const extAllowed = imageExtensions.has(ext) || videoExtensions.has(ext) || documentExtensions.has(ext);
         const mimeAllowed = allowedMimeTypes.has(mime);
         const mimeUnknown = mime.length == 0 || mime == 'application/octet-stream';
         if (mimeAllowed || (mimeUnknown && extAllowed)) {
           return cb(null, true);
         }
         return cb(
-          new BadRequestException('Solo se permiten imágenes PNG/JPG/WEBP o videos MP4/MOV/WEBM/MKV'),
+          new BadRequestException('Solo se permiten imágenes, videos, documentos PDF/Office/texto o respaldos comprimidos'),
           false,
         );
       },
-      limits: { fileSize: 60 * 1024 * 1024 },
+      limits: { fileSize: maxDocumentSizeBytes },
     }),
   )
   async upload(@Req() req: Request, @UploadedFile() file?: Express.Multer.File) {
@@ -128,49 +166,49 @@ export class StorageController {
       throw new BadRequestException('No se subió ningún archivo');
     }
 
-    const auth = req.user as { id?: string } | undefined;
+    const auth = req.user as TenantUser | undefined;
     const userId = (auth?.id ?? '').trim();
     if (!userId) {
       throw new UnauthorizedException('Usuario no autenticado');
     }
+    const companyId = requireTenant(auth);
 
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const kind = (body['kind'] ?? 'general').toString().trim().toLowerCase() || 'general';
+    const kind = sanitizeObjectKeySegment((body['kind'] ?? 'general').toString(), 'general');
     const original = sanitizeFileName(file.originalname ?? 'archivo');
     const ext = extname(original).toLowerCase();
-    const safeExt = imageExtensions.has(ext) || videoExtensions.has(ext)
+    const safeExt = imageExtensions.has(ext) || videoExtensions.has(ext) || documentExtensions.has(ext)
       ? ext
       : ((file.mimetype ?? '').toLowerCase().startsWith('video/') ? '.mp4' : '.jpg');
     const contentType = inferContentType(file, safeExt);
     const mediaFolder = inferMediaFolder(contentType);
-    const maxAllowedSize = mediaFolder === 'videos' ? maxVideoSizeBytes : maxImageSizeBytes;
+    const maxAllowedSize =
+      mediaFolder === 'videos'
+        ? maxVideoSizeBytes
+        : mediaFolder === 'images'
+          ? maxImageSizeBytes
+          : maxDocumentSizeBytes;
     if (file.size > maxAllowedSize) {
       throw new BadRequestException(
         mediaFolder === 'videos'
           ? 'El video excede el limite permitido de 60 MB'
-          : 'La imagen excede el limite permitido de 12 MB',
+          : mediaFolder === 'images'
+            ? 'La imagen excede el limite permitido de 12 MB'
+            : 'El archivo excede el limite permitido de 100 MB',
       );
     }
-    const fileStem = original.replace(/\.[^/.]+$/, '');
-    const now = new Date();
-    const yyyy = String(now.getUTCFullYear());
-    const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
-    const kindFolder = kind.replace(/[^a-z0-9_-]/g, '-');
-    const objectKey = [
-      'media',
-      mediaFolder,
-      kindFolder,
-      userId,
-      yyyy,
-      mm,
-      `${randomUUID()}-${fileStem}${safeExt}`,
-    ]
-      .filter((segment) => segment.trim().length > 0)
-      .join('/');
+    const objectKey = buildTenantObjectKey({
+      companyId,
+      area: mediaFolder,
+      kind,
+      ownerId: userId,
+      fileName: original,
+      extension: safeExt,
+    });
 
     const uploadDir = this.resolveUploadDir();
     const absoluteFilePath = join(uploadDir, ...objectKey.split('/'));
-    const absoluteDir = join(uploadDir, 'media', mediaFolder, kindFolder, userId, yyyy, mm);
+    const absoluteDir = join(uploadDir, ...objectKey.split('/').slice(0, -1));
     fs.mkdirSync(absoluteDir, { recursive: true });
     fs.writeFileSync(absoluteFilePath, file.buffer);
 
@@ -204,8 +242,9 @@ export class StorageController {
       fileName: original,
       kind,
       contentType,
-      mediaType: mediaFolder == 'videos' ? 'video' : 'image',
+      mediaType: inferMediaType(contentType),
       size: file.size,
+      companyId,
     };
   }
 }

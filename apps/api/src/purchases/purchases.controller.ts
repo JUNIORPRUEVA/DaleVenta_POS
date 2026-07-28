@@ -30,7 +30,7 @@ import {
 } from "./dto/purchases.dto";
 import { PurchasesService } from "./purchases.service";
 
-type RequestUser = { id: string; role: Role };
+type RequestUser = { id: string; role: Role; companyId?: string | null };
 
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 @Roles(Role.ADMIN)

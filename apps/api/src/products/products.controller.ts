@@ -2,18 +2,20 @@ import { BadRequestException, Body, ConflictException, Controller, Delete, Get, 
 import { ConfigService } from '@nestjs/config';
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@prisma/client';
-import { diskStorage } from 'multer';
-import { extname, join } from 'node:path';
+import { memoryStorage } from 'multer';
+import { extname, join, posix } from 'node:path';
 import type { Express, Request, Response } from 'express';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
-import type { TenantUser } from '../auth/tenant-context';
+import { requireTenant, type TenantUser } from '../auth/tenant-context';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductCostInterceptor } from './product-cost.interceptor';
 import { ProductsService } from './products.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import * as fs from 'node:fs';
+import { R2Service } from '../storage/r2.service';
+import { buildTenantObjectKey, sanitizeFileName } from '../storage/helpers/storage_helpers';
 
 @UseInterceptors(ProductCostInterceptor)
 @Controller('products')
@@ -38,7 +40,11 @@ export class ProductsController {
     return join(process.cwd(), 'uploads');
   }
 
-  constructor(private readonly products: ProductsService, config: ConfigService) {
+  constructor(
+    private readonly products: ProductsService,
+    private readonly r2: R2Service,
+    config: ConfigService,
+  ) {
     const dir = this.resolveUploadDir(config);
     this.uploadDir = dir.trim();
     const base = config.get<string>('PUBLIC_BASE_URL') ?? config.get<string>('API_BASE_URL') ?? '';
@@ -146,22 +152,7 @@ export class ProductsController {
   @Post('upload')
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: (_req: Express.Request, _file: Express.Multer.File, cb: (error: Error | null, destination: string) => void) => {
-          const fromEnv = (process.env.UPLOAD_DIR ?? '').trim();
-          const volumeDir = '/uploads';
-          const volumeExists = fs.existsSync(volumeDir);
-          const dir = fromEnv.length > 0
-            ? ((fromEnv == './uploads' || fromEnv == 'uploads') && volumeExists ? volumeDir : fromEnv)
-            : (volumeExists ? volumeDir : join(process.cwd(), 'uploads'));
-          fs.mkdirSync(dir, { recursive: true });
-          cb(null, dir);
-        },
-        filename: (_req: Express.Request, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) => {
-          const unique = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
-          cb(null, `${unique}${extname(file.originalname)}`);
-        }
-      }),
+      storage: memoryStorage(),
       fileFilter: (_req: Express.Request, file: Express.Multer.File, cb: (error: Error | null, acceptFile: boolean) => void) => {
         const isImage = /^image\/(png|jpe?g|webp)$/.test(file.mimetype);
         if (!isImage) return cb(new BadRequestException('Solo se permiten imágenes PNG/JPG/WEBP'), false);
@@ -170,20 +161,67 @@ export class ProductsController {
       limits: { fileSize: 5 * 1024 * 1024 }
     })
   )
-  upload(@Req() req: Request, @UploadedFile() file?: Express.Multer.File) {
+  async upload(@Req() req: Request, @UploadedFile() file?: Express.Multer.File) {
     if (this.products.isReadOnly()) {
       throw new ConflictException('Productos en modo solo-lectura: no se permite subir imágenes aquí.');
     }
     if (!file) throw new BadRequestException('No se subió ningún archivo');
-    const relativePath = `/uploads/${file.filename}`;
+    if (!file.buffer?.length) {
+      throw new BadRequestException('No se pudo leer la imagen subida');
+    }
+
+    const user = req.user as TenantUser;
+    const companyId = requireTenant(user);
+    const original = sanitizeFileName(file.originalname ?? 'producto');
+    const ext = extname(original).toLowerCase();
+    const safeExt = ext && /\.(png|jpe?g|webp)$/.test(ext) ? ext : '.jpg';
+    const contentType = /^image\/(png|jpe?g|webp)$/.test(file.mimetype)
+      ? file.mimetype
+      : safeExt === '.png'
+        ? 'image/png'
+        : safeExt === '.webp'
+          ? 'image/webp'
+          : 'image/jpeg';
+    const objectKey = buildTenantObjectKey({
+      companyId,
+      area: 'products',
+      kind: 'images',
+      ownerId: user.id,
+      fileName: original,
+      extension: safeExt,
+    });
+
+    const absoluteFilePath = join(this.uploadDir, ...objectKey.split('/'));
+    const absoluteDir = join(this.uploadDir, ...objectKey.split('/').slice(0, -1));
+    fs.mkdirSync(absoluteDir, { recursive: true });
+    fs.writeFileSync(absoluteFilePath, file.buffer);
+
+    try {
+      await this.r2.putObject({
+        objectKey: `uploads/${objectKey}`,
+        body: file.buffer,
+        contentType,
+      });
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn('[products/upload] R2 mirror failed, local file is used:', error);
+    }
+
+    const relativePath = `/${posix.join('uploads', objectKey)}`;
     const proto = (req.get('x-forwarded-proto') ?? req.protocol ?? 'http').split(',')[0].trim();
     const host = (req.get('x-forwarded-host') ?? req.get('host') ?? '').split(',')[0].trim();
     const requestBase = host ? `${proto}://${host}` : '';
     const baseUrl = this.publicBaseUrl || requestBase;
     const url = baseUrl ? `${baseUrl}${relativePath}` : relativePath;
     // eslint-disable-next-line no-console
-    console.log(`[products/upload] saved file=${file.filename} path=${relativePath} url=${url}`);
-    return { filename: file.filename, path: relativePath, url };
+    console.log(`[products/upload] saved file=${absoluteFilePath} path=${relativePath} url=${url}`);
+    return {
+      filename: original,
+      objectKey: `uploads/${objectKey}`,
+      path: relativePath,
+      url,
+      companyId,
+    };
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
