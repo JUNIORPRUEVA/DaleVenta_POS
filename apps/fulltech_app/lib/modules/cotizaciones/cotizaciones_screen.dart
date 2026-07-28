@@ -8007,58 +8007,66 @@ class _DesktopQuotePanel extends StatelessWidget {
     final itemCountText = items.length == 1
         ? '1 producto'
         : '${items.length} productos';
+    final shouldShowTotalsBreakdown =
+        discountAmount > 0 ||
+        generalDiscountAmount > 0 ||
+        includeItbis ||
+        isAdmin;
 
     return DecoratedBox(
       decoration: BoxDecoration(
         color: Colors.white,
-        border: const Border(left: BorderSide(color: Color(0xFFD3E0E7))),
+        border: const Border(top: BorderSide(color: Color(0xFFD3E0E7))),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        padding: const EdgeInsets.fromLTRB(0, 10, 0, 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (hasClient) ...[
-              Material(
-                color: const Color(0xFFF3F8FA),
-                borderRadius: BorderRadius.circular(14),
-                child: InkWell(
-                  onTap: onPickClient,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Material(
+                  color: const Color(0xFFF3F8FA),
                   borderRadius: BorderRadius.circular(14),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 9,
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEAF1FF),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.person_outline_rounded,
-                            size: 18,
-                            color: Color(0xFF1957E6),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            selectedClientName.trim(),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w900,
-                              color: const Color(0xFF183548),
+                  child: InkWell(
+                    onTap: onPickClient,
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 9,
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEAF1FF),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              Icons.person_outline_rounded,
+                              size: 18,
+                              color: Color(0xFF1957E6),
                             ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              selectedClientName.trim(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFF183548),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -8111,53 +8119,57 @@ class _DesktopQuotePanel extends StatelessWidget {
                     ),
             ),
             if (hasItems) ...[
-              const SizedBox(height: 10),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: const Color(0xFFD3E0E7),
-                    width: 1.1,
+              if (shouldShowTotalsBreakdown) ...[
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.symmetric(horizontal: 8),
+                  padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: const Color(0xFFD3E0E7),
+                      width: 1.1,
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      _CompactTotalLine(
+                        label: 'Subtotal',
+                        value: money(subtotalBeforeDiscount),
+                      ),
+                      if (discountAmount > 0)
+                        _CompactTotalLine(
+                          label: 'Descuento',
+                          value: '-${money(discountAmount)}',
+                          valueColor: Colors.red.shade700,
+                        ),
+                      if (generalDiscountAmount > 0)
+                        _CompactTotalLine(
+                          label: 'Desc. general',
+                          value: '-${money(generalDiscountAmount)}',
+                          valueColor: Colors.red.shade700,
+                        ),
+                      if (includeItbis)
+                        _CompactTotalLine(
+                          label: 'ITBIS',
+                          value: money(itbisAmount),
+                        ),
+                      if (isAdmin)
+                        _CompactTotalLine(
+                          label: 'Utilidad',
+                          value: money(utilityAmount),
+                          valueColor: const Color(0xFF1957E6),
+                        ),
+                    ],
                   ),
                 ),
-                child: Column(
-                  children: [
-                    _CompactTotalLine(
-                      label: 'Subtotal',
-                      value: money(subtotalBeforeDiscount),
-                    ),
-                    if (discountAmount > 0)
-                      _CompactTotalLine(
-                        label: 'Descuento',
-                        value: '-${money(discountAmount)}',
-                        valueColor: Colors.red.shade700,
-                      ),
-                    if (generalDiscountAmount > 0)
-                      _CompactTotalLine(
-                        label: 'Desc. general',
-                        value: '-${money(generalDiscountAmount)}',
-                        valueColor: Colors.red.shade700,
-                      ),
-                    if (includeItbis)
-                      _CompactTotalLine(
-                        label: 'ITBIS',
-                        value: money(itbisAmount),
-                      ),
-                    if (isAdmin)
-                      _CompactTotalLine(
-                        label: 'Utilidad',
-                        value: money(utilityAmount),
-                        valueColor: const Color(0xFF1957E6),
-                      ),
-                  ],
-                ),
-              ),
+              ],
               const SizedBox(height: 10),
               Row(
                 children: [
+                  const SizedBox(width: 8),
                   Expanded(
                     child: GestureDetector(
                       onDoubleTap: onApplyGeneralDiscount,
@@ -8223,11 +8235,13 @@ class _DesktopQuotePanel extends StatelessWidget {
                       ),
                     ),
                   ),
+                  const SizedBox(width: 8),
                 ],
               ),
               const SizedBox(height: 8),
               Container(
                 width: double.infinity,
+                margin: const EdgeInsets.symmetric(horizontal: 8),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
                   vertical: 7,
@@ -9707,6 +9721,24 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
     super.dispose();
   }
 
+  Future<void> _showFullProductName() async {
+    final name = widget.item.nombre.trim();
+    if (name.isEmpty) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Producto'),
+        content: SelectableText(name),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
@@ -9723,7 +9755,7 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
         borderRadius: BorderRadius.circular(8),
         onDoubleTap: widget.onEditLine,
         child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
           decoration: BoxDecoration(
             color: item.isExternal
                 ? const Color(0xFFEAF1FF)
@@ -9779,19 +9811,41 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
               ),
               const SizedBox(width: 8),
               Expanded(
-                flex: 5,
+                flex: 6,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      item.nombre,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.nombre,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        Tooltip(
+                          message: 'Ver nombre completo',
+                          child: InkWell(
+                            onTap: _showFullProductName,
+                            borderRadius: BorderRadius.circular(999),
+                            child: const Padding(
+                              padding: EdgeInsets.all(3),
+                              child: AppIcon(
+                                AppIcons.visibility,
+                                size: 14.5,
+                                color: Color(0xFF1957E6),
+                                strokeWidth: 2,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     if (hasDiscount || item.isExternal)
                       Padding(
@@ -9823,9 +9877,9 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 5),
               SizedBox(
-                width: 84,
+                width: 76,
                 child: TextField(
                   controller: _priceCtrl,
                   keyboardType: const TextInputType.numberWithOptions(
@@ -9836,7 +9890,7 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                     isDense: true,
                     hintText: 'Precio',
                     contentPadding: EdgeInsets.symmetric(
-                      horizontal: 8,
+                      horizontal: 6,
                       vertical: 8,
                     ),
                     border: OutlineInputBorder(),
@@ -9863,35 +9917,44 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                     ),
                   ),
                 ),
-              const SizedBox(width: 6),
-              IconButton(
+              const SizedBox(width: 4),
+              _DesktopTicketQtyButton(
                 tooltip: 'Restar unidad',
-                visualDensity: VisualDensity.compact,
                 onPressed: widget.onMinus,
-                icon: const Icon(Icons.remove, size: 16),
+                icon: AppIcons.remove,
               ),
               SizedBox(
-                width: 24,
-                child: Text(
-                  qtyText,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 11,
+                width: 34,
+                height: 32,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFC7D7FF)),
+                  ),
+                  child: Center(
+                    child: Text(
+                      qtyText,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: const Color(0xFF183548),
+                        fontWeight: FontWeight.w900,
+                        fontSize: 13,
+                      ),
+                    ),
                   ),
                 ),
               ),
-              IconButton(
+              _DesktopTicketQtyButton(
                 tooltip: 'Sumar unidad',
-                visualDensity: VisualDensity.compact,
                 onPressed: widget.onPlus,
-                icon: const Icon(Icons.add, size: 16),
+                icon: AppIcons.add,
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
               SizedBox(
-                width: 96,
+                width: 84,
                 child: Text(
                   widget.money(item.total),
                   textAlign: TextAlign.right,
@@ -9899,7 +9962,7 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w900,
-                    fontSize: 12,
+                    fontSize: 11.6,
                   ),
                 ),
               ),
@@ -9910,14 +9973,84 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                   onPressed: widget.onEdit,
                   icon: const Icon(Icons.edit_outlined, size: 16),
                 ),
-              IconButton(
+              _DesktopTicketRemoveButton(
                 tooltip: 'Eliminar producto',
-                visualDensity: VisualDensity.compact,
                 onPressed: widget.onRemove,
-                icon: const Icon(Icons.close, size: 16),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopTicketQtyButton extends StatelessWidget {
+  const _DesktopTicketQtyButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final AppIconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: SizedBox(
+        width: 31,
+        height: 32,
+        child: IconButton(
+          onPressed: onPressed,
+          padding: EdgeInsets.zero,
+          visualDensity: VisualDensity.compact,
+          style: IconButton.styleFrom(
+            backgroundColor: const Color(0xFFEAF1FF),
+            foregroundColor: const Color(0xFF1957E6),
+            side: const BorderSide(color: Color(0xFFB9CCFF), width: 1.1),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          icon: AppIcon(icon, size: 18, strokeWidth: 2.3),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopTicketRemoveButton extends StatelessWidget {
+  const _DesktopTicketRemoveButton({
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: SizedBox(
+        width: 31,
+        height: 32,
+        child: IconButton(
+          onPressed: onPressed,
+          padding: EdgeInsets.zero,
+          visualDensity: VisualDensity.compact,
+          style: IconButton.styleFrom(
+            backgroundColor: const Color(0xFFFFEAEA),
+            foregroundColor: const Color(0xFFB42318),
+            side: const BorderSide(color: Color(0xFFFFB8B8), width: 1.1),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          icon: const AppIcon(AppIcons.close, size: 17.5, strokeWidth: 2.4),
         ),
       ),
     );
