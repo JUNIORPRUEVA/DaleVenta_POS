@@ -5,9 +5,9 @@ import 'runtime_env.dart';
 
 class Env {
   static const String _defaultApiBaseUrl =
-      'http://localhost:4000';
+      'https://daleventapos-backend.gcdndd.easypanel.host';
   static const String _defaultAppBaseUrl =
-      'http://localhost:4000';
+      'https://daleventapos-backend.gcdndd.easypanel.host';
   static const int _defaultApiTimeoutMs = 15000;
   static const int _minApiTimeoutMs = 1000;
 
