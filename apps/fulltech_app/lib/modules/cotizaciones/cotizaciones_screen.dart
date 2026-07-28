@@ -14,6 +14,8 @@ import '../../core/cache/fulltech_cache_manager.dart';
 import '../../core/cache/local_json_cache.dart';
 import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
+import '../../core/design_system/icons/app_icon.dart';
+import '../../core/design_system/icons/app_icons.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/models/user_model.dart';
 import '../../core/models/product_model.dart';
@@ -7574,13 +7576,13 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
                 ),
                 const SizedBox(width: 12),
                 _CatalogLineActionButton(
-                  icon: Icons.add_box_outlined,
+                  icon: AppIcons.productAdd,
                   label: 'Nuevo producto',
                   onPressed: widget.onOpenNewProduct,
                 ),
                 const SizedBox(width: 8),
                 _CatalogLineActionButton(
-                  icon: Icons.inventory_2_outlined,
+                  icon: AppIcons.stockAdd,
                   label: 'Agregar stock',
                   filled: true,
                   onPressed: widget.onOpenStockAdjustments,
@@ -8608,33 +8610,52 @@ class _CatalogLineActionButton extends StatelessWidget {
     this.filled = false,
   });
 
-  final IconData icon;
+  final AppIconData icon;
   final String label;
   final VoidCallback onPressed;
   final bool filled;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final background = filled ? const Color(0xFF1957E6) : Colors.white;
-    final foreground = filled ? Colors.white : const Color(0xFF1957E6);
+    final foreground = filled ? Colors.white : const Color(0xFF174EA6);
+    final borderColor = filled
+        ? const Color(0xFF1957E6)
+        : const Color(0xFFC7D7FF);
+
     return SizedBox(
       height: 42,
-      child: OutlinedButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 17),
-        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-        style: OutlinedButton.styleFrom(
-          backgroundColor: background,
-          foregroundColor: foreground,
-          side: BorderSide(
-            color: filled ? const Color(0xFF1957E6) : const Color(0xFFBBD0FF),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(
+                0xFF123A6F,
+              ).withValues(alpha: filled ? 0.14 : 0.06),
+              blurRadius: filled ? 14 : 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: OutlinedButton.icon(
+          onPressed: onPressed,
+          icon: AppIcon(icon, size: 17.5, color: foreground, strokeWidth: 2),
+          label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+          style: OutlinedButton.styleFrom(
+            backgroundColor: background,
+            foregroundColor: foreground,
+            side: BorderSide(color: borderColor, width: 1.1),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            textStyle: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+              fontSize: 12.4,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          textStyle: const TextStyle(
-            fontWeight: FontWeight.w900,
-            fontSize: 12.2,
-          ),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
         ),
       ),
     );
@@ -8674,54 +8695,169 @@ class _DesktopCategoryStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasFilter = selectedCategory != null;
-    final totalItems = categories.length + (hasFilter ? 1 : 0);
 
     return SizedBox(
-      height: 38,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.zero,
-        itemCount: totalItems,
-        separatorBuilder: (context, index) => const SizedBox(width: 6),
-        itemBuilder: (context, index) {
-          if (hasFilter && index == 0) {
-            return SizedBox(
-              width: 76,
-              child: Material(
-                color: const Color(0xFF1957E6),
-                borderRadius: BorderRadius.circular(7),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: () => onSelectCategory(null),
-                  child: const Center(
-                    child: Text(
-                      'Limpiar',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            );
+      height: 40,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          const gap = 6.0;
+          const clearWidth = 78.0;
+          const moreWidth = 42.0;
+          final visible = <String>[];
+          final hidden = <String>[];
+          final available = constraints.maxWidth;
+          var used = hasFilter ? clearWidth + gap : 0.0;
+
+          for (final category in categories) {
+            final nextWidth = _DesktopCategoryStripItem.widthFor(category);
+            final nextUsed = used + (visible.isEmpty ? 0 : gap) + nextWidth;
+            if (nextUsed <= available) {
+              visible.add(category);
+              used = nextUsed;
+            } else {
+              hidden.add(category);
+            }
           }
 
-          final categoryIndex = hasFilter ? index - 1 : index;
-          final category = categories[categoryIndex];
-          final product = _thumbnailProduct(category);
-          final managedCategory = _managedCategory(category);
-          return _DesktopCategoryStripItem(
-            label: category,
-            product: product,
-            managedCategory: managedCategory,
-            selected: selectedCategory == category,
-            onTap: () => onSelectCategory(category),
+          if (hidden.isNotEmpty) {
+            while (visible.isNotEmpty && used + gap + moreWidth > available) {
+              final removed = visible.removeLast();
+              hidden.insert(0, removed);
+              used -= _DesktopCategoryStripItem.widthFor(removed);
+              if (visible.isNotEmpty) used -= gap;
+            }
+          }
+
+          return Row(
+            children: [
+              if (hasFilter) ...[
+                _DesktopCategoryClearButton(
+                  onTap: () => onSelectCategory(null),
+                ),
+                const SizedBox(width: gap),
+              ],
+              for (final category in visible) ...[
+                if (category != visible.first) const SizedBox(width: gap),
+                _DesktopCategoryStripItem(
+                  label: category,
+                  product: _thumbnailProduct(category),
+                  managedCategory: _managedCategory(category),
+                  selected: selectedCategory == category,
+                  onTap: () => onSelectCategory(category),
+                ),
+              ],
+              if (hidden.isNotEmpty) ...[
+                if (visible.isNotEmpty) const SizedBox(width: gap),
+                _DesktopCategoryOverflowButton(
+                  categories: hidden,
+                  selectedCategory: selectedCategory,
+                  onSelectCategory: onSelectCategory,
+                ),
+              ],
+              const Spacer(),
+            ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _DesktopCategoryClearButton extends StatelessWidget {
+  const _DesktopCategoryClearButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SizedBox(
+      width: 78,
+      height: 38,
+      child: Material(
+        color: const Color(0xFF1957E6),
+        borderRadius: BorderRadius.circular(8),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Center(
+            child: Text(
+              'Limpiar',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 11.2,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopCategoryOverflowButton extends StatelessWidget {
+  const _DesktopCategoryOverflowButton({
+    required this.categories,
+    required this.selectedCategory,
+    required this.onSelectCategory,
+  });
+
+  final List<String> categories;
+  final String? selectedCategory;
+  final ValueChanged<String?> onSelectCategory;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 42,
+      height: 38,
+      child: PopupMenuButton<String>(
+        tooltip: 'Más categorías',
+        padding: EdgeInsets.zero,
+        color: Colors.white,
+        surfaceTintColor: Colors.white,
+        position: PopupMenuPosition.under,
+        onSelected: onSelectCategory,
+        itemBuilder: (context) => [
+          for (final category in categories)
+            PopupMenuItem(
+              value: category,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (selectedCategory == category)
+                    const AppIcon(
+                      AppIcons.success,
+                      size: 16,
+                      color: Color(0xFF1957E6),
+                    )
+                  else
+                    const SizedBox(width: 16),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Text(
+                      category,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFD3E0E7)),
+          ),
+          child: const Center(
+            child: AppIcon(AppIcons.more, size: 19, color: Color(0xFF50697A)),
+          ),
+        ),
       ),
     );
   }
@@ -8742,27 +8878,34 @@ class _DesktopCategoryStripItem extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
+  static double widthFor(String label) {
+    final normalizedLabel = label.trim();
+    return (normalizedLabel.length * 7.2 + 56).clamp(112.0, 420.0);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final imageUrl = product?.displayFotoUrl?.trim() ?? '';
     final categoryImageBytes = _decodeManagedCategoryImage(
       managedCategory?.imageBase64,
     );
     final normalizedLabel = label.trim().toUpperCase();
-    final tileWidth = (normalizedLabel.length * 6.3 + 48).clamp(108.0, 236.0);
+    final tileWidth = widthFor(label);
 
     return SizedBox(
       width: tileWidth,
+      height: 38,
       child: Material(
         color: selected ? const Color(0xFFEAF1FF) : Colors.white,
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(8),
         child: InkWell(
-          borderRadius: BorderRadius.circular(7),
+          borderRadius: BorderRadius.circular(8),
           onTap: onTap,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 7),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(7),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: selected
                     ? const Color(0xFF1957E6)
@@ -8814,14 +8957,14 @@ class _DesktopCategoryStripItem extends StatelessWidget {
                 Expanded(
                   child: Text(
                     normalizedLabel,
-                    maxLines: 2,
-                    softWrap: true,
-                    overflow: TextOverflow.visible,
-                    style: TextStyle(
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
                       color: const Color(0xFF152238),
-                      fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
-                      fontSize: 10.2,
-                      height: 1.0,
+                      fontWeight: selected ? FontWeight.w900 : FontWeight.w800,
+                      fontSize: 10.8,
+                      height: 1,
                     ),
                   ),
                 ),
@@ -9910,8 +10053,7 @@ class _DesktopFooterTicketChip extends StatelessWidget {
     final bg = selected ? const Color(0xFFEAF1FF) : Colors.white;
     final border = selected ? const Color(0xFF1957E6) : const Color(0xFFD6E1E8);
     final fg = selected ? const Color(0xFF1957E6) : const Color(0xFF183548);
-
-    final itemText = itemCount == 1 ? '1 articulo' : '$itemCount articulos';
+    final hasItems = itemCount > 0;
 
     return Material(
       color: bg,
@@ -9920,7 +10062,7 @@ class _DesktopFooterTicketChip extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: SizedBox(
-          width: 180,
+          width: 150,
           height: 40,
           child: DecoratedBox(
             decoration: BoxDecoration(
@@ -9938,7 +10080,7 @@ class _DesktopFooterTicketChip extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(10, 0, 2, 0),
               child: Row(
                 children: [
-                  Icon(Icons.receipt_long_outlined, size: 16, color: fg),
+                  AppIcon(AppIcons.ticket, size: 16.5, color: fg),
                   const SizedBox(width: 7),
                   Expanded(
                     child: Text(
@@ -9952,16 +10094,7 @@ class _DesktopFooterTicketChip extends StatelessWidget {
                       ),
                     ),
                   ),
-                  Text(
-                    itemText,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF647985),
-                      fontWeight: FontWeight.w800,
-                      fontSize: 10,
-                    ),
-                  ),
+                  if (hasItems) const _TicketActivityDot(),
                   SizedBox(
                     width: 28,
                     height: 32,
@@ -9997,8 +10130,9 @@ class _DesktopFooterTicketChip extends StatelessWidget {
                           ),
                         ),
                       ],
-                      icon: Icon(
-                        Icons.more_vert_rounded,
+                      icon: AppIcon(
+                        AppIcons.moreVertical,
+                        size: 17,
                         color: selected
                             ? const Color(0xFF1957E6)
                             : const Color(0xFF647985),
@@ -10007,6 +10141,69 @@ class _DesktopFooterTicketChip extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TicketActivityDot extends StatefulWidget {
+  const _TicketActivityDot();
+
+  @override
+  State<_TicketActivityDot> createState() => _TicketActivityDotState();
+}
+
+class _TicketActivityDotState extends State<_TicketActivityDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scale;
+  late final Animation<double> _opacity;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+    _scale = Tween<double>(begin: 0.82, end: 1.18).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOutCubic),
+    );
+    _opacity = Tween<double>(begin: 0.58, end: 1).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOutCubic),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: FadeTransition(
+        opacity: _opacity,
+        child: ScaleTransition(
+          scale: _scale,
+          child: Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1D6BFF),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF1D6BFF).withValues(alpha: 0.36),
+                  blurRadius: 10,
+                  spreadRadius: 1,
+                ),
+              ],
             ),
           ),
         ),
