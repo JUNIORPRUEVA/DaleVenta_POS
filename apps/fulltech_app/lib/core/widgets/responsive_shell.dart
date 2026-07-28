@@ -9,6 +9,9 @@ import '../../modules/cash/cash_dialogs.dart';
 import '../../modules/cash/cash_providers.dart';
 import '../auth/app_role.dart';
 import '../auth/auth_provider.dart';
+import '../design_system/icons/app_icon.dart';
+import '../design_system/icons/app_icon_sizes.dart';
+import '../design_system/icons/app_icons.dart';
 import '../location/location_tracker_provider.dart';
 import '../models/user_model.dart';
 import '../routing/routes.dart';
@@ -259,10 +262,11 @@ class DesktopShellAppBar extends ConsumerWidget {
                 child: IconButton(
                   tooltip: 'Menú',
                   onPressed: onToggleSidebar,
-                  icon: const Icon(
-                    Icons.menu_rounded,
+                  icon: const AppIcon(
+                    AppIcons.menu,
                     color: Color(0xFF1957E6),
-                    size: 22,
+                    size: AppIconSizes.navigation,
+                    semanticLabel: 'Abrir menú',
                   ),
                 ),
               ),
@@ -471,9 +475,7 @@ class _SidebarMenuGroup {
   final List<AppNavigationItem> items;
 }
 
-const List<String> _desktopSidebarFooterRoutes = <String>[
-  Routes.users,
-];
+const List<String> _desktopSidebarFooterRoutes = <String>[Routes.users];
 
 Map<String, AppNavigationItem> _desktopRouteToItem(
   List<AppNavigationSection> sections,
@@ -551,10 +553,7 @@ List<_SidebarMenuGroup> _buildDesktopSidebarGroups(
       key: 'administracion',
       title: 'Administración',
       icon: Icons.admin_panel_settings_outlined,
-      items: pick([
-        Routes.nomina,
-        Routes.misPagos,
-      ]),
+      items: pick([Routes.nomina, Routes.misPagos]),
     ),
     _SidebarMenuGroup(
       key: 'contabilidad',

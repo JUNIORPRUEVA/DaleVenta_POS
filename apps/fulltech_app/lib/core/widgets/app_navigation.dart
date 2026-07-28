@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../auth/app_permissions.dart';
+import '../design_system/icons/app_icons.dart';
 import '../models/user_model.dart';
 import '../routing/routes.dart';
 
@@ -13,10 +14,12 @@ class AppNavigationItem {
     required this.icon,
     required this.title,
     required this.route,
+    this.appIcon,
     this.showIndicator = false,
   });
 
   final IconData icon;
+  final AppIconData? appIcon;
   final String title;
   final String route;
   final bool showIndicator;
@@ -47,66 +50,77 @@ List<AppNavigationSection> buildAppNavigationSections(
         if (can(AppPermission.viewClients))
           const AppNavigationItem(
             icon: Icons.group_outlined,
+            appIcon: AppIcons.customer,
             title: 'Clientes',
             route: Routes.clientes,
           ),
         if (can(AppPermission.viewSales))
           const AppNavigationItem(
             icon: Icons.point_of_sale_outlined,
+            appIcon: AppIcons.sales,
             title: 'Facturación',
             route: Routes.cotizaciones,
           ),
         if (can(AppPermission.viewSales))
           const AppNavigationItem(
             icon: Icons.receipt_long_outlined,
+            appIcon: AppIcons.receipt,
             title: 'Lista de ventas',
             route: Routes.ventasLista,
           ),
         if (can(AppPermission.viewSales))
           const AppNavigationItem(
             icon: Icons.add_circle_outline_rounded,
+            appIcon: AppIcons.income,
             title: 'Registrar entrada',
             route: Routes.cajaRegistrarIngreso,
           ),
         if (can(AppPermission.viewSales))
           const AppNavigationItem(
             icon: Icons.remove_circle_outline_rounded,
+            appIcon: AppIcons.expense,
             title: 'Registrar salida',
             route: Routes.cajaRegistrarSalida,
           ),
         if (can(AppPermission.viewSales))
           const AppNavigationItem(
             icon: Icons.history_rounded,
+            appIcon: AppIcons.shift,
             title: 'Historial',
             route: Routes.cajaMovimientos,
           ),
         if (can(AppPermission.viewSales))
           const AppNavigationItem(
             icon: Icons.credit_score_outlined,
+            appIcon: AppIcons.payment,
             title: 'Créditos',
             route: Routes.ventasCreditos,
           ),
         if (can(AppPermission.viewCatalog))
           const AppNavigationItem(
             icon: Icons.inventory_2_outlined,
+            appIcon: AppIcons.inventory,
             title: 'Inventario',
             route: Routes.catalogo,
           ),
         if (can(AppPermission.viewPurchases))
           const AppNavigationItem(
             icon: Icons.shopping_cart_checkout_outlined,
+            appIcon: AppIcons.purchase,
             title: 'Compras',
             route: Routes.compras,
           ),
         if (can(AppPermission.viewSalesReports))
           const AppNavigationItem(
             icon: Icons.bar_chart_rounded,
+            appIcon: AppIcons.report,
             title: 'Reportes',
             route: Routes.ventas,
           ),
         if (can(AppPermission.viewAccounting))
           const AppNavigationItem(
             icon: Icons.account_balance,
+            appIcon: AppIcons.company,
             title: 'Contabilidad',
             route: Routes.contabilidad,
           ),
@@ -118,12 +132,14 @@ List<AppNavigationSection> buildAppNavigationSections(
         if (can(AppPermission.managePayroll))
           const AppNavigationItem(
             icon: Icons.payments_outlined,
+            appIcon: AppIcons.payment,
             title: 'Nómina',
             route: Routes.nomina,
           ),
         if (can(AppPermission.viewMyPayments))
           const AppNavigationItem(
             icon: Icons.receipt_long_outlined,
+            appIcon: AppIcons.receipt,
             title: 'Mis pagos',
             route: Routes.misPagos,
           ),
@@ -134,12 +150,14 @@ List<AppNavigationSection> buildAppNavigationSections(
       items: [
         const AppNavigationItem(
           icon: Icons.smart_toy_outlined,
+          appIcon: AppIcons.analytics,
           title: 'IA',
           route: Routes.ai,
         ),
         if (can(AppPermission.manageUsers))
           const AppNavigationItem(
             icon: Icons.groups_outlined,
+            appIcon: AppIcons.users,
             title: 'Equipo',
             route: Routes.users,
           ),

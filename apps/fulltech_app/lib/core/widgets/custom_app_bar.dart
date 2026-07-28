@@ -7,6 +7,9 @@ import 'package:go_router/go_router.dart';
 import '../auth/app_role.dart';
 import '../auth/auth_provider.dart';
 import '../routing/routes.dart';
+import '../design_system/icons/app_icon.dart';
+import '../design_system/icons/app_icon_sizes.dart';
+import '../design_system/icons/app_icons.dart';
 import '../theme/role_branding.dart';
 import '../routing/app_navigator.dart';
 import 'user_avatar.dart';
@@ -101,7 +104,11 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
                   () {
                     scaffold?.openDrawer();
                   },
-              icon: const Icon(Icons.menu_rounded),
+              icon: const AppIcon(
+                AppIcons.menu,
+                size: AppIconSizes.navigation,
+                semanticLabel: 'Abrir menú',
+              ),
               color: isMobileLayout ? Colors.white : desktopAccent,
               style: IconButton.styleFrom(
                 backgroundColor: isMobileLayout
@@ -156,16 +163,18 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
                               'assets/logoprincipal.png',
                               fit: BoxFit.contain,
                               errorBuilder: (context, error, stackTrace) {
-                                return const Icon(
-                                  Icons.business,
+                                return const AppIcon(
+                                  AppIcons.company,
                                   color: Colors.white,
+                                  semanticLabel: 'Empresa',
                                 );
                               },
                             )
-                          : const Icon(
-                              Icons.business_rounded,
+                          : const AppIcon(
+                              AppIcons.company,
                               color: Color(0xFF1957E6),
                               size: 20,
+                              semanticLabel: 'Empresa',
                             ),
                     ),
                   if (showLogo) const SizedBox(width: 12),

@@ -8,6 +8,9 @@ import '../auth/app_permissions.dart';
 import '../auth/auth_provider.dart';
 import '../auth/app_role.dart';
 import '../models/user_model.dart';
+import '../design_system/icons/app_icon.dart';
+import '../design_system/icons/app_icon_sizes.dart';
+import '../design_system/icons/app_icons.dart';
 import '../routing/routes.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
@@ -162,10 +165,11 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                                 ),
                               ],
                             ),
-                            child: const Icon(
-                              Icons.receipt_long_outlined,
+                            child: const AppIcon(
+                              AppIcons.receipt,
                               color: Colors.white,
                               size: 22,
+                              semanticLabel: 'DaleVenta POS',
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -195,9 +199,11 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                           IconButton(
                             tooltip: 'Cerrar menú',
                             onPressed: () => Navigator.pop(context),
-                            icon: Icon(
-                              Icons.close_rounded,
+                            icon: AppIcon(
+                              AppIcons.close,
+                              size: AppIconSizes.button,
                               color: AppColors.textSecondary,
+                              semanticLabel: 'Cerrar menú',
                             ),
                             style: IconButton.styleFrom(
                               backgroundColor: Colors.white,
@@ -225,10 +231,11 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              Icons.person_outline_rounded,
+                            AppIcon(
+                              AppIcons.user,
                               size: 14,
                               color: AppColors.textSecondary,
+                              semanticLabel: 'Usuario',
                             ),
                             const SizedBox(width: 6),
                             Flexible(
@@ -273,6 +280,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                         onTapHeader: () => _toggleGroup(i),
                         itemBuilder: (item) => _DrawerMenuItem(
                           icon: item.icon,
+                          appIcon: item.appIcon,
                           title: item.title,
                           compact: isCompactMobile,
                           selected: isNavigationRouteActive(
@@ -339,9 +347,11 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                             Navigator.pop(context);
                             await ref.read(authStateProvider.notifier).logout();
                           },
-                          icon: Icon(
-                            Icons.logout_rounded,
+                          icon: AppIcon(
+                            AppIcons.logout,
+                            size: AppIconSizes.button,
                             color: AppColors.textSecondary,
+                            semanticLabel: 'Cerrar sesión',
                           ),
                         ),
                       ],
@@ -846,6 +856,7 @@ class _DrawerMenuSubgroupSectionState
 
 class _DrawerMenuItem extends StatefulWidget {
   final IconData icon;
+  final AppIconData? appIcon;
   final String title;
   final bool compact;
   final bool selected;
@@ -854,6 +865,7 @@ class _DrawerMenuItem extends StatefulWidget {
 
   const _DrawerMenuItem({
     required this.icon,
+    this.appIcon,
     required this.title,
     required this.compact,
     required this.selected,
@@ -956,11 +968,18 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
                         ),
                       ),
                       SizedBox(width: selected ? 9 : 12),
-                      Icon(
-                        widget.icon,
-                        size: widget.compact ? 19 : 20,
-                        color: foreground,
-                      ),
+                      widget.appIcon == null
+                          ? Icon(
+                              widget.icon,
+                              size: widget.compact ? 19 : 20,
+                              color: foreground,
+                            )
+                          : AppIcon(
+                              widget.appIcon!,
+                              size: widget.compact ? 19 : 20,
+                              color: foreground,
+                              semanticLabel: widget.title,
+                            ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
