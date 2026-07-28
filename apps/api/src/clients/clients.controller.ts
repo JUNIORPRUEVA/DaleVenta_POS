@@ -17,11 +17,12 @@ export class ClientsController {
   constructor(private readonly clients: ClientsService) {}
 
   private userOrThrow(req: Request) {
-    const user = req.user as { id?: string; role?: Role } | undefined;
+    const user =
+      req.user as { id?: string; role?: Role; companyId?: string | null } | undefined;
     if (!user?.id || !user.role) {
       throw new UnauthorizedException('Usuario no autenticado');
     }
-    return { id: user.id, role: user.role };
+    return { id: user.id, role: user.role, companyId: user.companyId ?? null };
   }
 
   @Post()
