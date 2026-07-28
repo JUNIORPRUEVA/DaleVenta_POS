@@ -4563,26 +4563,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   bool _validateCheckoutReady() {
-    if (_selectedClientId == null || _selectedClientName == 'Sin cliente') {
-      _showSalesNotice(
-        title: 'Cliente requerido',
-        message: 'Selecciona o crea un cliente primero.',
-        icon: Icons.person_add_alt_1_outlined,
-        accent: const Color(0xFFF59E0B),
-      );
-      return false;
-    }
-
-    if ((_selectedClientPhone ?? '').trim().isEmpty) {
-      _showSalesNotice(
-        title: 'Teléfono requerido',
-        message: 'El cliente debe tener teléfono para continuar.',
-        icon: Icons.call_outlined,
-        accent: const Color(0xFFF59E0B),
-      );
-      return false;
-    }
-
     if (_items.isEmpty) {
       _showSalesNotice(
         title: 'Ticket vacío',
@@ -4676,7 +4656,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       final createdSale = await ref
           .read(ventasRepositoryProvider)
           .createSale(
-            customerId: _selectedClientId!,
+            customerId: _selectedClientId,
             note: saleNote.isEmpty ? _note : saleNote,
             paymentMethod: checkout == null
                 ? null
@@ -5450,6 +5430,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                           : _DesktopQuotePanel(
                               items: _items,
                               selectedClientName: _selectedClientName,
+                              selectedClientPhone: _selectedClientPhone,
                               includeItbis: _includeItbis,
                               subtotalBeforeDiscount: _subtotalBeforeDiscount,
                               discountAmount: _lineDiscountAmount,
@@ -7944,6 +7925,7 @@ class _DesktopQuotePanel extends StatelessWidget {
   const _DesktopQuotePanel({
     required this.items,
     required this.selectedClientName,
+    required this.selectedClientPhone,
     required this.includeItbis,
     required this.subtotalBeforeDiscount,
     required this.discountAmount,
@@ -7972,6 +7954,7 @@ class _DesktopQuotePanel extends StatelessWidget {
 
   final List<CotizacionItem> items;
   final String selectedClientName;
+  final String? selectedClientPhone;
   final bool includeItbis;
   final double subtotalBeforeDiscount;
   final double discountAmount;
@@ -8004,6 +7987,7 @@ class _DesktopQuotePanel extends StatelessWidget {
     final hasClient =
         selectedClientName.trim().isNotEmpty &&
         selectedClientName.trim() != 'Sin cliente';
+    final clientPhone = (selectedClientPhone ?? '').trim();
     final itemCountText = items.length == 1
         ? '1 producto'
         : '${items.length} productos';
@@ -8027,25 +8011,31 @@ class _DesktopQuotePanel extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Material(
-                  color: const Color(0xFFF3F8FA),
-                  borderRadius: BorderRadius.circular(14),
+                  color: const Color(0xFFF7FAFC),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: const BorderSide(color: Color(0xFFD8E5EC)),
+                  ),
                   child: InkWell(
                     onTap: onPickClient,
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(8),
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
-                        vertical: 9,
+                        vertical: 8,
                       ),
                       child: Row(
                         children: [
                           Container(
-                            width: 32,
-                            height: 32,
+                            width: 34,
+                            height: 34,
                             decoration: BoxDecoration(
                               color: const Color(0xFFEAF1FF),
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: const Color(0xFFCFE0FF),
+                              ),
                             ),
                             child: const Icon(
                               Icons.person_outline_rounded,
@@ -8055,14 +8045,66 @@ class _DesktopQuotePanel extends StatelessWidget {
                           ),
                           const SizedBox(width: 10),
                           Expanded(
-                            child: Text(
-                              selectedClientName.trim(),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w900,
-                                color: const Color(0xFF183548),
-                              ),
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final showInlinePhone =
+                                    clientPhone.isNotEmpty &&
+                                    constraints.maxWidth >= 260;
+                                final nameStyle = theme.textTheme.titleSmall
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w900,
+                                      color: const Color(0xFF183548),
+                                      letterSpacing: 0,
+                                    );
+                                final phoneStyle = theme.textTheme.bodySmall
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFF5E7180),
+                                      letterSpacing: 0,
+                                    );
+
+                                if (showInlinePhone) {
+                                  return Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          selectedClientName.trim(),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: nameStyle,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Text(
+                                        clientPhone,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: phoneStyle,
+                                      ),
+                                    ],
+                                  );
+                                }
+
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      selectedClientName.trim(),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: nameStyle,
+                                    ),
+                                    if (clientPhone.isNotEmpty)
+                                      Text(
+                                        clientPhone,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: phoneStyle,
+                                      ),
+                                  ],
+                                );
+                              },
                             ),
                           ),
                         ],

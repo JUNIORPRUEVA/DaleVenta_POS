@@ -28,8 +28,9 @@ export class CreateSaleItemDto {
 }
 
 export class CreateSaleDto {
+  @IsOptional()
   @IsUUID()
-  customerId!: string;
+  customerId?: string;
 
   @IsOptional()
   @IsString()

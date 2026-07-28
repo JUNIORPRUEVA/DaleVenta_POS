@@ -390,19 +390,19 @@ export class SalesService {
       throw new BadRequestException("La venta requiere al menos 1 item");
     }
 
-    if (!dto.customerId?.trim()) {
-      throw new BadRequestException("Debes seleccionar un cliente");
-    }
+    const customerId = dto.customerId?.trim() || null;
 
-    try {
-      const customer = await this.prisma.client.findFirst({
-        where: { id: dto.customerId, companyId, isDeleted: false },
-      });
-      if (!customer) {
-        throw new BadRequestException("Cliente inválido");
+    if (customerId) {
+      try {
+        const customer = await this.prisma.client.findFirst({
+          where: { id: customerId, companyId, isDeleted: false },
+        });
+        if (!customer) {
+          throw new BadRequestException("Cliente inválido");
+        }
+      } catch (error) {
+        if (!this.isSchemaMismatch(error)) throw error;
       }
-    } catch (error) {
-      if (!this.isSchemaMismatch(error)) throw error;
     }
 
     const productIds = Array.from(
@@ -570,7 +570,7 @@ export class SalesService {
           data: {
             userId: user.id,
             companyId,
-            customerId: dto.customerId,
+            customerId,
             cashSessionId: activeSession.id,
             saleDate: new Date(),
             note: dto.note,
@@ -622,10 +622,12 @@ export class SalesService {
           },
         });
 
-        await tx.client.update({
-          where: { id: dto.customerId },
-          data: { lastActivityAt: sale.saleDate },
-        });
+        if (customerId) {
+          await tx.client.update({
+            where: { id: customerId },
+            data: { lastActivityAt: sale.saleDate },
+          });
+        }
 
         return sale;
       });

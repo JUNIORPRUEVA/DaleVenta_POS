@@ -348,7 +348,7 @@ class VentasRepository {
   }
 
   Future<SaleModel?> createSale({
-    required String customerId,
+    String? customerId,
     String? note,
     String? paymentMethod,
     double? paymentCashAmount,
@@ -360,15 +360,14 @@ class VentasRepository {
     if (items.isEmpty) {
       throw ApiException('Agrega al menos un item');
     }
-    if (customerId.trim().isEmpty) {
-      throw ApiException('Debes seleccionar un cliente');
-    }
+    final normalizedCustomerId = (customerId ?? '').trim();
 
     try {
       final res = await _dio.post(
         ApiRoutes.sales,
         data: {
-          'customerId': customerId,
+          if (normalizedCustomerId.isNotEmpty)
+            'customerId': normalizedCustomerId,
           if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
           if ((paymentMethod ?? '').trim().isNotEmpty)
             'paymentMethod': paymentMethod!.trim(),
