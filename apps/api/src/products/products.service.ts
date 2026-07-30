@@ -113,8 +113,33 @@ export class ProductsService {
     );
   }
 
+  private hasProductImage(product: Product) {
+    const productAny = product as any;
+    return Boolean(
+      (typeof productAny.imageKey === 'string' && productAny.imageKey.trim()) ||
+      (typeof product.imagen === 'string' && product.imagen.trim()),
+    );
+  }
+
+  private shouldPreferProduct(candidate: Product, current: Product) {
+    const candidateHasImage = this.hasProductImage(candidate);
+    const currentHasImage = this.hasProductImage(current);
+    if (candidateHasImage !== currentHasImage) return candidateHasImage;
+
+    const candidateImageUpdatedAt = (candidate as any).imageUpdatedAt;
+    const currentImageUpdatedAt = (current as any).imageUpdatedAt;
+    if (candidateImageUpdatedAt instanceof Date && currentImageUpdatedAt instanceof Date) {
+      return candidateImageUpdatedAt.getTime() > currentImageUpdatedAt.getTime();
+    }
+    if (candidateImageUpdatedAt instanceof Date && !(currentImageUpdatedAt instanceof Date)) {
+      return true;
+    }
+
+    return false;
+  }
+
   private compactDuplicateProducts(products: Product[]) {
-    const seen = new Map<string, Product>();
+    const seen = new Map<string, number>();
     const compacted: Product[] = [];
 
     for (const product of products) {
@@ -129,11 +154,14 @@ export class ProductsService {
       ].join('|');
 
       const previous = seen.get(key);
-      if (previous && this.sameProductIdentity(previous, product)) {
+      if (previous !== undefined && this.sameProductIdentity(compacted[previous], product)) {
+        if (this.shouldPreferProduct(product, compacted[previous])) {
+          compacted[previous] = product;
+        }
         continue;
       }
 
-      seen.set(key, product);
+      seen.set(key, compacted.length);
       compacted.push(product);
     }
 
@@ -175,10 +203,26 @@ export class ProductsService {
         this.sameProductIdentity(candidate, data as Product),
       );
       if (equivalent) {
+        const imagePatch = imageKey
+          ? {
+              imagen: normalizedImagePath,
+              imageStorageProvider: 'r2',
+              imageKey,
+              imageMimeType: dto.imageMimeType?.trim() || null,
+              imageOriginalFileName: dto.imageOriginalFileName?.trim() || null,
+              imageUpdatedAt: new Date(),
+            }
+          : {};
+        const updatedEquivalent = Object.keys(imagePatch).length
+          ? await tx.product.update({
+              where: { id: equivalent.id },
+              data: imagePatch,
+            })
+          : equivalent;
         this.logger.warn(
-          `duplicate create prevented companyId=${companyId} existingProductId=${equivalent.id} name="${dto.nombre}"`,
+          `duplicate create merged companyId=${companyId} existingProductId=${equivalent.id} name="${dto.nombre}" imageMerged=${Boolean(imageKey)}`,
         );
-        return this.mapProduct(equivalent);
+        return this.mapProduct(updatedEquivalent);
       }
 
       if (dto.fotoUrl !== normalizedImagePath) {
