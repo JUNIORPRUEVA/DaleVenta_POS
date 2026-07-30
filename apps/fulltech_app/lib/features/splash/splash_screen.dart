@@ -1,111 +1,149 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
-import '../../core/widgets/fulltech_global_background.dart';
 
-class SplashScreen extends ConsumerWidget {
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends ConsumerState<SplashScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _intro;
+  late final Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat();
+    _intro = CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.0, 0.62, curve: Curves.easeOutCubic),
+    );
+    _pulse = CurvedAnimation(parent: _controller, curve: Curves.easeInOutSine);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final auth = ref.watch(authStateProvider);
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final size = MediaQuery.sizeOf(context);
+    final compact = size.width < 560 || size.height < 680;
+    final logoSize = compact ? 118.0 : 150.0;
+    final ringSize = compact ? 190.0 : 238.0;
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: const Color(0xFFF8FAFC),
       body: Stack(
+        fit: StackFit.expand,
         children: [
-          const FulltechGlobalBackground(
-            role: AppRole.unknown,
-            enableBlurEffects: true,
-          ),
+          const _SplashBackground(),
           SafeArea(
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+            child: Center(
+              child: AnimatedBuilder(
+                animation: _controller,
+                builder: (context, child) {
+                  final introValue = _intro.value;
+                  final scale = 0.94 + (introValue * 0.06);
+                  return Opacity(
+                    opacity: introValue.clamp(0.0, 1.0),
+                    child: Transform.translate(
+                      offset: Offset(0, (1 - introValue) * 18),
+                      child: Transform.scale(scale: scale, child: child),
+                    ),
+                  );
+                },
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 460),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: scheme.surface.withValues(alpha: 0.92),
-                      borderRadius: BorderRadius.circular(22),
-                      border: Border.all(
-                        color: scheme.outlineVariant.withValues(alpha: 0.68),
-                      ),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x140F172A),
-                          blurRadius: 22,
-                          offset: Offset(0, 14),
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: ringSize,
+                          height: ringSize,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              AnimatedBuilder(
+                                animation: _controller,
+                                builder: (context, _) {
+                                  return CustomPaint(
+                                    size: Size.square(ringSize),
+                                    painter: _StartupRingPainter(
+                                      progress: _controller.value,
+                                    ),
+                                  );
+                                },
+                              ),
+                              AnimatedBuilder(
+                                animation: _pulse,
+                                builder: (context, child) {
+                                  final scale =
+                                      0.985 +
+                                      (math.sin(_pulse.value * math.pi) * 0.03);
+                                  return Transform.scale(
+                                    scale: scale,
+                                    child: child,
+                                  );
+                                },
+                                child: _LogoMark(size: logoSize),
+                              ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(height: compact ? 22 : 28),
+                        const Text(
+                          'DaleVenta POS',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Color(0xFF0F172A),
+                            fontSize: 27,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          auth.restoringSession
+                              ? 'Restaurando sesión'
+                              : 'Preparando tu punto de venta',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+                        AnimatedBuilder(
+                          animation: _controller,
+                          builder: (context, _) {
+                            return CustomPaint(
+                              size: const Size(208, 5),
+                              painter: _LoadingTrackPainter(
+                                progress: _controller.value,
+                              ),
+                            );
+                          },
                         ),
                       ],
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 42,
-                            height: 42,
-                            decoration: BoxDecoration(
-                              color: scheme.primary.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Icon(
-                              auth.restoringSession
-                                  ? Icons.lock_clock_outlined
-                                  : Icons.rocket_launch_outlined,
-                              color: scheme.primary,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  auth.restoringSession
-                                      ? 'Restaurando sesión...'
-                                      : 'Abriendo DaleVenta POS...',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w800,
-                                    color: scheme.onSurface,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  auth.user == null
-                                      ? 'Verificando acceso inicial.'
-                                      : 'Entrando con tu sesión guardada.',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: scheme.onSurfaceVariant,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator.adaptive(
-                              strokeWidth: 2.6,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                scheme.primary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
                   ),
                 ),
@@ -116,4 +154,189 @@ class SplashScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _LogoMark extends StatelessWidget {
+  const _LogoMark({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(size * 0.10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(size * 0.22),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x241D4ED8),
+            blurRadius: 30,
+            offset: Offset(0, 18),
+          ),
+          BoxShadow(
+            color: Color(0x120F172A),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(size * 0.16),
+        child: Image.asset(
+          'assets/image/logo.png',
+          fit: BoxFit.contain,
+          errorBuilder: (context, error, stackTrace) {
+            return const Icon(
+              Icons.storefront_rounded,
+              color: Color(0xFF2563EB),
+              size: 58,
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _SplashBackground extends StatelessWidget {
+  const _SplashBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFEFF6FF), Color(0xFFF8FAFC), Color(0xFFF7FEE7)],
+          stops: [0.0, 0.58, 1.0],
+        ),
+      ),
+      child: CustomPaint(painter: _BackgroundLinesPainter()),
+    );
+  }
+}
+
+class _StartupRingPainter extends CustomPainter {
+  const _StartupRingPainter({required this.progress});
+
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.min(size.width, size.height) / 2 - 8;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    final basePaint = Paint()
+      ..color = const Color(0xFFE2E8F0)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2;
+    final arcPaint = Paint()
+      ..shader = const SweepGradient(
+        colors: [
+          Color(0x002563EB),
+          Color(0xFF2563EB),
+          Color(0xFF14B8A6),
+          Color(0x002563EB),
+        ],
+        stops: [0.0, 0.46, 0.78, 1.0],
+      ).createShader(rect)
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 4.2;
+    final tickPaint = Paint()
+      ..color = const Color(0xFF2563EB).withValues(alpha: 0.16)
+      ..strokeWidth = 1.2
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawCircle(center, radius - 1, basePaint);
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+    canvas.rotate(progress * math.pi * 2);
+    canvas.translate(-center.dx, -center.dy);
+    canvas.drawArc(rect, -math.pi / 2, math.pi * 1.42, false, arcPaint);
+    canvas.restore();
+
+    for (var i = 0; i < 20; i++) {
+      final angle = (math.pi * 2 / 20) * i + (progress * math.pi * 0.8);
+      final start = Offset(
+        center.dx + math.cos(angle) * (radius - 16),
+        center.dy + math.sin(angle) * (radius - 16),
+      );
+      final end = Offset(
+        center.dx + math.cos(angle) * (radius - 10),
+        center.dy + math.sin(angle) * (radius - 10),
+      );
+      canvas.drawLine(start, end, tickPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _StartupRingPainter oldDelegate) {
+    return oldDelegate.progress != progress;
+  }
+}
+
+class _LoadingTrackPainter extends CustomPainter {
+  const _LoadingTrackPainter({required this.progress});
+
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final trackRect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(size.height / 2),
+    );
+    canvas.drawRRect(trackRect, Paint()..color = const Color(0xFFE2E8F0));
+
+    final segmentWidth = size.width * 0.38;
+    final x = (size.width + segmentWidth) * progress - segmentWidth;
+    final segment = RRect.fromRectAndRadius(
+      Rect.fromLTWH(x, 0, segmentWidth, size.height),
+      Radius.circular(size.height / 2),
+    );
+    final paint = Paint()
+      ..shader = const LinearGradient(
+        colors: [Color(0xFF2563EB), Color(0xFF14B8A6)],
+      ).createShader(Offset.zero & size);
+    canvas.drawRRect(segment, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _LoadingTrackPainter oldDelegate) {
+    return oldDelegate.progress != progress;
+  }
+}
+
+class _BackgroundLinesPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFF1D4ED8).withValues(alpha: 0.055)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+
+    for (var i = 0; i < 7; i++) {
+      final y = size.height * (0.18 + (i * 0.105));
+      final path = Path()
+        ..moveTo(-30, y)
+        ..cubicTo(
+          size.width * 0.28,
+          y - 34,
+          size.width * 0.62,
+          y + 34,
+          size.width + 30,
+          y - 8,
+        );
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _BackgroundLinesPainter oldDelegate) => false;
 }

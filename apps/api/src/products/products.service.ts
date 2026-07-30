@@ -182,117 +182,148 @@ export class ProductsService {
     );
   }
 
-  create(user: TenantUser, dto: CreateProductDto): Promise<any> {
+  async create(user: TenantUser, dto: CreateProductDto): Promise<any> {
     this.assertWritable();
     const companyId = requireTenant(user);
-    return this.prisma.$transaction(async (tx) => {
-      const normalizedCodeForLookup = this.normalizeProductCodeForLookup(
-        this.normalizeProductCode(dto),
-      );
-      const operationProductId = this.operationProductId(
-        companyId,
-        dto.operationId,
-      );
-      if (operationProductId) {
-        const existingOperationProduct = await tx.product.findFirst({
-          where: { id: operationProductId, companyId },
-        });
-        if (existingOperationProduct) {
-          this.logProductSave({
-            action: "create",
-            decision: "idempotent-return-existing",
-            companyId,
-            productId: existingOperationProduct.id,
-            normalizedCode: normalizedCodeForLookup,
-            operationId: dto.operationId,
-            result: "existing",
-          });
-          return this.mapProduct(existingOperationProduct);
-        }
-      }
+    const operationProductIdForRecovery = this.operationProductId(
+      companyId,
+      dto.operationId,
+    );
 
-      if (normalizedCodeForLookup) {
-        const existingByCode = await this.findByNormalizedCode(
-          tx,
-          companyId,
-          normalizedCodeForLookup,
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const normalizedCodeForLookup = this.normalizeProductCodeForLookup(
+          this.normalizeProductCode(dto),
         );
-        if (existingByCode) {
-          this.logProductSave({
-            action: "create",
-            decision: "reject-duplicate-code",
-            companyId,
-            productId: existingByCode.id,
-            normalizedCode: normalizedCodeForLookup,
-            operationId: dto.operationId,
-            result: "conflict",
+        const operationProductId = this.operationProductId(
+          companyId,
+          dto.operationId,
+        );
+        if (operationProductId) {
+          const existingOperationProduct = await tx.product.findFirst({
+            where: { id: operationProductId, companyId },
           });
-          throw new ConflictException(
-            "Ya existe un producto con ese código en esta empresa",
+          if (existingOperationProduct) {
+            this.logProductSave({
+              action: "create",
+              decision: "idempotent-return-existing",
+              companyId,
+              productId: existingOperationProduct.id,
+              normalizedCode: normalizedCodeForLookup,
+              operationId: dto.operationId,
+              result: "existing",
+            });
+            return this.mapProduct(existingOperationProduct);
+          }
+        }
+
+        if (normalizedCodeForLookup) {
+          const existingByCode = await this.findByNormalizedCode(
+            tx,
+            companyId,
+            normalizedCodeForLookup,
+          );
+          if (existingByCode) {
+            this.logProductSave({
+              action: "create",
+              decision: "reject-duplicate-code",
+              companyId,
+              productId: existingByCode.id,
+              normalizedCode: normalizedCodeForLookup,
+              operationId: dto.operationId,
+              result: "conflict",
+            });
+            throw new ConflictException(
+              "Ya existe un producto con ese código en esta empresa",
+            );
+          }
+        }
+
+        const imageKey = this.extractR2Key(dto.imageKey ?? dto.fotoUrl);
+        const normalizedImagePath = imageKey
+          ? this.buildObjectMediaUrl(imageKey)
+          : this.normalizeImagePathForStorage(dto.fotoUrl);
+        const data = {
+          id: operationProductId ?? undefined,
+          nombre: dto.nombre,
+          codigo: this.normalizeProductCode(dto),
+          categoria: dto.categoria,
+          precio: new Prisma.Decimal(dto.precio),
+          costo: new Prisma.Decimal(dto.costo),
+          stock: new Prisma.Decimal(dto.stock ?? 0),
+          imagen: normalizedImagePath,
+          imageStorageProvider: imageKey ? "r2" : undefined,
+          imageKey: imageKey ?? undefined,
+          imageMimeType: imageKey
+            ? dto.imageMimeType?.trim() || undefined
+            : undefined,
+          imageOriginalFileName: imageKey
+            ? dto.imageOriginalFileName?.trim() || undefined
+            : undefined,
+          imageUpdatedAt: imageKey ? new Date() : undefined,
+          companyId,
+        };
+
+        if (dto.fotoUrl !== normalizedImagePath) {
+          this.logger.log(
+            `normalize create image path: "${dto.fotoUrl ?? ""}" -> "${normalizedImagePath ?? ""}"`,
           );
         }
-      }
 
-      const imageKey = this.extractR2Key(dto.imageKey ?? dto.fotoUrl);
-      const normalizedImagePath = imageKey
-        ? this.buildObjectMediaUrl(imageKey)
-        : this.normalizeImagePathForStorage(dto.fotoUrl);
-      const data = {
-        id: operationProductId ?? undefined,
-        nombre: dto.nombre,
-        codigo: this.normalizeProductCode(dto),
-        categoria: dto.categoria,
-        precio: new Prisma.Decimal(dto.precio),
-        costo: new Prisma.Decimal(dto.costo),
-        stock: new Prisma.Decimal(dto.stock ?? 0),
-        imagen: normalizedImagePath,
-        imageStorageProvider: imageKey ? "r2" : undefined,
-        imageKey: imageKey ?? undefined,
-        imageMimeType: imageKey
-          ? dto.imageMimeType?.trim() || undefined
-          : undefined,
-        imageOriginalFileName: imageKey
-          ? dto.imageOriginalFileName?.trim() || undefined
-          : undefined,
-        imageUpdatedAt: imageKey ? new Date() : undefined,
-        companyId,
-      };
-
-      if (dto.fotoUrl !== normalizedImagePath) {
-        this.logger.log(
-          `normalize create image path: "${dto.fotoUrl ?? ""}" -> "${normalizedImagePath ?? ""}"`,
+        try {
+          const product = operationProductId
+            ? await tx.product.upsert({
+                where: { id: operationProductId },
+                create: data,
+                update: {},
+              })
+            : await tx.product.create({ data });
+          this.logProductSave({
+            action: "create",
+            decision: operationProductId ? "upsert-idempotent" : "insert",
+            companyId,
+            productId: product.id,
+            normalizedCode: normalizedCodeForLookup,
+            operationId: dto.operationId,
+            result: "created",
+          });
+          return this.mapProduct(product);
+        } catch (error) {
+          if (this.isUniqueConstraint(error)) {
+            throw error;
+          }
+          if (!this.isSchemaMismatch(error)) throw error;
+          const product = await tx.product.create({ data });
+          return this.mapProduct(product);
+        }
+      });
+    } catch (error) {
+      if (this.isUniqueConstraint(error)) {
+        if (operationProductIdForRecovery) {
+          const existing = await this.prisma.product.findFirst({
+            where: { id: operationProductIdForRecovery, companyId },
+          });
+          if (existing) {
+            this.logProductSave({
+              action: "create",
+              decision: "idempotent-recovered-after-conflict",
+              companyId,
+              productId: existing.id,
+              normalizedCode: this.normalizeProductCodeForLookup(
+                this.normalizeProductCode(dto),
+              ),
+              operationId: dto.operationId,
+              result: "existing",
+            });
+            return this.mapProduct(existing);
+          }
+        }
+        throw new ConflictException(
+          "Ya existe un producto con ese código en esta empresa",
         );
       }
-
-      try {
-        const product = operationProductId
-          ? await tx.product.upsert({
-              where: { id: operationProductId },
-              create: data,
-              update: {},
-            })
-          : await tx.product.create({ data });
-        this.logProductSave({
-          action: "create",
-          decision: operationProductId ? "upsert-idempotent" : "insert",
-          companyId,
-          productId: product.id,
-          normalizedCode: normalizedCodeForLookup,
-          operationId: dto.operationId,
-          result: "created",
-        });
-        return this.mapProduct(product);
-      } catch (error) {
-        if (this.isUniqueConstraint(error)) {
-          throw new ConflictException(
-            "Ya existe un producto con ese código en esta empresa",
-          );
-        }
-        if (!this.isSchemaMismatch(error)) throw error;
-        const product = await tx.product.create({ data });
-        return this.mapProduct(product);
-      }
-    });
+      throw error;
+    }
   }
 
   async findAll(user: TenantUser): Promise<any[]> {

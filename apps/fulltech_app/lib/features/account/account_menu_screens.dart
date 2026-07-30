@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image/image.dart' as img;
 
 import '../../core/api/env.dart';
 import '../../core/app_update/app_update_controller.dart';
@@ -1161,15 +1162,58 @@ class _CompanySettingsEditorState
       _showMessage('No se pudo leer el logo seleccionado.');
       return;
     }
-    const maxLogoBytes = 1024 * 1024;
-    if (bytes.length > maxLogoBytes) {
-      _showMessage('El logo debe pesar menos de 1 MB.');
+    final normalizedBytes = _prepareCompanyLogoBytes(bytes);
+    if (normalizedBytes == null || normalizedBytes.isEmpty) {
+      _showMessage('El archivo seleccionado no parece ser una imagen válida.');
       return;
     }
     setState(() {
-      _logoBytes = Uint8List.fromList(bytes);
-      _logoBase64 = base64Encode(bytes);
+      _logoBytes = normalizedBytes;
+      _logoBase64 = base64Encode(normalizedBytes);
     });
+    _showMessage('Logo ajustado y listo para guardar.');
+  }
+
+  Uint8List? _prepareCompanyLogoBytes(List<int> sourceBytes) {
+    try {
+      final decoded = img.decodeImage(Uint8List.fromList(sourceBytes));
+      if (decoded == null) return null;
+
+      final oriented = img.bakeOrientation(decoded);
+      final cropSize = oriented.width < oriented.height
+          ? oriented.width
+          : oriented.height;
+      final cropped = img.copyCrop(
+        oriented,
+        x: ((oriented.width - cropSize) / 2).round(),
+        y: ((oriented.height - cropSize) / 2).round(),
+        width: cropSize,
+        height: cropSize,
+      );
+      final resized = img.copyResize(
+        cropped,
+        width: 256,
+        height: 256,
+        interpolation: img.Interpolation.cubic,
+      );
+
+      var output = Uint8List.fromList(img.encodePng(resized, level: 6));
+      if (output.length > 512 * 1024) {
+        output = Uint8List.fromList(img.encodeJpg(resized, quality: 86));
+      }
+      if (output.length > 512 * 1024) {
+        final compact = img.copyResize(
+          resized,
+          width: 192,
+          height: 192,
+          interpolation: img.Interpolation.cubic,
+        );
+        output = Uint8List.fromList(img.encodeJpg(compact, quality: 82));
+      }
+      return output;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<List<int>?> _readFileFromPath(String? path) async {
