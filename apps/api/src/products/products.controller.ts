@@ -162,11 +162,16 @@ export class ProductsController {
     FileInterceptor('file', {
       storage: memoryStorage(),
       fileFilter: (_req: Express.Request, file: Express.Multer.File, cb: (error: Error | null, acceptFile: boolean) => void) => {
-        const isImage = /^image\/(png|jpe?g|webp)$/.test(file.mimetype);
+        const original = sanitizeFileName(file.originalname ?? '');
+        const ext = extname(original).toLowerCase();
+        const mime = (file.mimetype ?? '').toLowerCase();
+        const isImage =
+          /^image\/(png|jpe?g|webp)$/.test(mime) ||
+          ((mime === 'application/octet-stream' || mime === '') && /\.(png|jpe?g|webp)$/.test(ext));
         if (!isImage) return cb(new BadRequestException('Solo se permiten imágenes PNG/JPG/WEBP'), false);
         cb(null, true);
       },
-      limits: { fileSize: 5 * 1024 * 1024 }
+      limits: { fileSize: 15 * 1024 * 1024 }
     })
   )
   async upload(@Req() req: Request, @UploadedFile() file?: Express.Multer.File) {

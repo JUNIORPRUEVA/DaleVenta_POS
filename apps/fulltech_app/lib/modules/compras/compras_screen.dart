@@ -15,6 +15,7 @@ import '../../core/company/company_settings_repository.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/models/product_model.dart';
 import '../../core/routing/routes.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -748,7 +749,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                   subtitle,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Color(0xFF52657A)),
+                  style: const TextStyle(color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -1302,7 +1303,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                         invoice.supplier.commercialName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Color(0xFF52657A)),
+                        style: const TextStyle(color: AppColors.textSecondary),
                       ),
                       const SizedBox(height: 6),
                       Wrap(
@@ -1399,7 +1400,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
-                                    color: Color(0xFF52657A),
+                                    color: AppColors.textSecondary,
                                   ),
                                 ),
                               ],
@@ -2223,7 +2224,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                       child: Text(
                         'La fecha se guarda automáticamente al subir.',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFF52657A),
+                          color: AppColors.textSecondary,
                         ),
                       ),
                     ),
@@ -2232,7 +2233,9 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                         padding: const EdgeInsets.only(top: 8),
                         child: Text(
                           _fileSizeLabel(pickedFile!.size),
-                          style: const TextStyle(color: Color(0xFF52657A)),
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                       ),
                   ],
@@ -2763,7 +2766,7 @@ class _PurchaseInvoiceDetailPanel extends StatelessWidget {
                         current.supplier.commercialName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Color(0xFF52657A)),
+                        style: const TextStyle(color: AppColors.textSecondary),
                       ),
                     ],
                   ),
@@ -3053,7 +3056,7 @@ class _InfoPill extends StatelessWidget {
                 Text(
                   label,
                   style: const TextStyle(
-                    color: Color(0xFF52657A),
+                    color: AppColors.textSecondary,
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                   ),
@@ -3123,7 +3126,7 @@ class _DetailRow extends StatelessWidget {
             child: Text(
               label,
               style: const TextStyle(
-                color: Color(0xFF52657A),
+                color: AppColors.textSecondary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -3875,7 +3878,7 @@ class _StockBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: danger ? const Color(0xFFE11D48) : const Color(0xFF2563EB),
+        color: danger ? AppColors.error : AppColors.secondary,
         borderRadius: BorderRadius.circular(999),
         boxShadow: [
           BoxShadow(

@@ -397,7 +397,7 @@ export class ProductsService {
     if (direct) return direct;
 
     try {
-      const parsed = new URL(value);
+      const parsed = new URL(value, 'https://daleventa.local');
       const queryKey = parsed.searchParams.get('key');
       const fromQuery = normalizeKey(queryKey ?? '');
       if (fromQuery) return fromQuery;

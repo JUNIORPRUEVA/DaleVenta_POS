@@ -187,11 +187,16 @@ class VentasRepository {
   Future<Map<String, dynamic>> reportsSalesOverview({
     required DateTime from,
     required DateTime to,
+    String? category,
   }) async {
     try {
       final res = await _dio.get(
         ApiRoutes.reportsSalesOverview,
-        queryParameters: {'from': _dateOnly(from), 'to': _dateOnly(to)},
+        queryParameters: {
+          'from': _dateOnly(from),
+          'to': _dateOnly(to),
+          if ((category ?? '').trim().isNotEmpty) 'category': category!.trim(),
+        },
         options: Options(extra: const {'skipLoader': true}),
       );
       return ((res.data as Map?) ?? const <String, dynamic>{})

@@ -99,6 +99,12 @@ class CatalogRepository {
       });
       final res = await _dio.post(ApiRoutes.productsUpload, data: formData);
       final data = res.data;
+      if (data is Map && data['key'] is String) {
+        return data['key'] as String;
+      }
+      if (data is Map && data['objectKey'] is String) {
+        return data['objectKey'] as String;
+      }
       if (data is Map && data['url'] is String) {
         return data['url'] as String;
       }

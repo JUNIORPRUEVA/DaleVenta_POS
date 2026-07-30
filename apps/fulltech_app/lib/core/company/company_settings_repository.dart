@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_routes.dart';
 import '../auth/auth_repository.dart';
 import '../cache/local_json_cache.dart';
+import '../debug/trace_log.dart';
 import '../errors/api_exception.dart';
 import '../offline/sync_queue_service.dart';
 import 'company_settings_model.dart';
@@ -82,13 +83,52 @@ class CompanySettingsRepository {
     return fallback;
   }
 
-  Future<CompanySettings?> getCachedSettings() async {
-    final cached = await _cache.readMap(
-      _cacheKey,
-      maxAge: const Duration(days: 14),
+  Map<String, dynamic> _normalizeMap(dynamic data, String fallbackMessage) {
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) {
+      return data.map((key, value) => MapEntry(key.toString(), value));
+    }
+    throw ApiException(fallbackMessage);
+  }
+
+  CompanySettings _settingsFromData(dynamic data) {
+    return CompanySettings.fromMap(
+      _normalizeMap(
+        data,
+        'La API devolvió una configuración inválida. Inténtalo de nuevo.',
+      ),
     );
-    if (cached == null) return null;
-    return CompanySettings.fromMap(cached);
+  }
+
+  void _traceProtectedError(
+    String message,
+    Object error,
+    StackTrace stackTrace,
+  ) {
+    TraceLog.log(
+      'company_settings',
+      message,
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
+
+  Future<CompanySettings?> getCachedSettings() async {
+    try {
+      final cached = await _cache.readMap(
+        _cacheKey,
+        maxAge: const Duration(days: 14),
+      );
+      if (cached == null) return null;
+      return CompanySettings.fromMap(cached);
+    } catch (error, stackTrace) {
+      _traceProtectedError(
+        'cached settings could not be parsed',
+        error,
+        stackTrace,
+      );
+      return null;
+    }
   }
 
   Future<CompanySettings> getSettingsRemoteAndCache() async {
@@ -99,9 +139,7 @@ class CompanySettingsRepository {
             options: Options(extra: const {'skipLoader': true}),
           )
           .timeout(_settingsTimeout);
-      final settings = CompanySettings.fromMap(
-        (res.data as Map).cast<String, dynamic>(),
-      );
+      final settings = _settingsFromData(res.data);
       await _cache.writeMap(_cacheKey, settings.toMap());
       return settings;
     } on TimeoutException {
@@ -116,7 +154,14 @@ class CompanySettingsRepository {
         _extractMessage(e.response?.data, 'No se pudo cargar configuración'),
         e.response?.statusCode,
       );
-    } catch (_) {
+    } on ApiException {
+      rethrow;
+    } catch (error, stackTrace) {
+      _traceProtectedError(
+        'remote settings response could not be parsed',
+        error,
+        stackTrace,
+      );
       return CompanySettings.empty();
     }
   }
@@ -124,47 +169,70 @@ class CompanySettingsRepository {
   Future<CompanySettings> getSettings() async {
     final cached = await getCachedSettings();
     if (cached != null) {
-      unawaited(getSettingsRemoteAndCache());
+      unawaited(
+        getSettingsRemoteAndCache().catchError((
+          Object error,
+          StackTrace stackTrace,
+        ) {
+          _traceProtectedError(
+            'background settings refresh failed',
+            error,
+            stackTrace,
+          );
+          return cached;
+        }),
+      );
       return cached;
     }
-    return getSettingsRemoteAndCache();
+    try {
+      return await getSettingsRemoteAndCache();
+    } catch (error, stackTrace) {
+      _traceProtectedError('settings load failed', error, stackTrace);
+      return CompanySettings.empty();
+    }
   }
 
   Future<void> _saveSettingsRemote(CompanySettings settings) async {
     try {
+      final payload = <String, dynamic>{
+        'companyName': settings.companyName,
+        'rnc': settings.rnc,
+        'phone': settings.phone,
+        'phonePreferential': settings.phonePreferential,
+        'address': settings.address,
+        'description': settings.description,
+        'instagramUrl': settings.instagramUrl,
+        'facebookUrl': settings.facebookUrl,
+        'websiteUrl': settings.websiteUrl,
+        'gpsLocationUrl': settings.gpsLocationUrl,
+        'businessHours': settings.businessHours,
+        'bankAccounts': settings.bankAccounts
+            .map((entry) => entry.toMap())
+            .toList(),
+        'legalRepresentativeName': settings.legalRepresentativeName,
+        'legalRepresentativeCedula': settings.legalRepresentativeCedula,
+        'legalRepresentativeRole': settings.legalRepresentativeRole,
+        'legalRepresentativeNationality':
+            settings.legalRepresentativeNationality,
+        'legalRepresentativeCivilStatus':
+            settings.legalRepresentativeCivilStatus,
+        'logoBase64': settings.logoBase64,
+        'evolutionApiBaseUrl': settings.evolutionApiBaseUrl,
+        'evolutionApiInstanceName': settings.evolutionApiInstanceName,
+        'whatsappWebhookEnabled': settings.whatsappWebhookEnabled,
+      };
+      if (settings.openAiApiKey.trim().isNotEmpty) {
+        payload['openAiApiKey'] = settings.openAiApiKey.trim();
+      }
+      if (settings.evolutionApiApiKey.trim().isNotEmpty) {
+        payload['evolutionApiApiKey'] = settings.evolutionApiApiKey.trim();
+      }
+
       await _dio
           .patch(
             ApiRoutes.settings,
             options: Options(extra: const {'skipLoader': true}),
-            data: {
-              'companyName': settings.companyName,
-              'rnc': settings.rnc,
-              'phone': settings.phone,
-              'phonePreferential': settings.phonePreferential,
-              'address': settings.address,
-              'description': settings.description,
-              'instagramUrl': settings.instagramUrl,
-              'facebookUrl': settings.facebookUrl,
-              'websiteUrl': settings.websiteUrl,
-              'gpsLocationUrl': settings.gpsLocationUrl,
-              'businessHours': settings.businessHours,
-              'bankAccounts': settings.bankAccounts
-                  .map((entry) => entry.toMap())
-                  .toList(),
-              'legalRepresentativeName': settings.legalRepresentativeName,
-              'legalRepresentativeCedula': settings.legalRepresentativeCedula,
-              'legalRepresentativeRole': settings.legalRepresentativeRole,
-              'legalRepresentativeNationality':
-                  settings.legalRepresentativeNationality,
-              'legalRepresentativeCivilStatus':
-                  settings.legalRepresentativeCivilStatus,
-              'logoBase64': settings.logoBase64,
-              'openAiApiKey': settings.openAiApiKey,
-              'evolutionApiBaseUrl': settings.evolutionApiBaseUrl,
-              'evolutionApiInstanceName': settings.evolutionApiInstanceName,
-              'evolutionApiApiKey': settings.evolutionApiApiKey,
-              'whatsappWebhookEnabled': settings.whatsappWebhookEnabled,
-            },
+            data: payload,
           )
           .timeout(_settingsTimeout);
     } on TimeoutException {
@@ -239,7 +307,10 @@ class CompanySettingsRepository {
             data: {'pin': pin},
           )
           .timeout(_settingsTimeout);
-      final data = (res.data as Map?) ?? const <String, dynamic>{};
+      final data = _normalizeMap(
+        res.data,
+        'La API devolvió una autorización inválida',
+      );
       final seconds = data['expiresInSeconds'];
       final token = data['adminAuthorizationToken'];
       if (token is! String || token.trim().isEmpty) {

@@ -13,6 +13,7 @@ import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/debug/debug_admin_action.dart';
 import '../../core/routing/routes.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -762,7 +763,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
       sale.isDeleted ? 'Devuelta' : 'Activa';
 
   Color _saleStatusColor(BuildContext context, SaleModel sale) {
-    if (sale.isDeleted) return const Color(0xFFB45309);
+    if (sale.isDeleted) return AppColors.warning;
     return Theme.of(context).colorScheme.primary;
   }
 
@@ -1106,7 +1107,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                     children: [
                       const Icon(
                         Icons.picture_as_pdf_outlined,
-                        color: Color(0xFF0F7C92),
+                        color: AppColors.primary,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -1116,7 +1117,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontWeight: FontWeight.w900,
-                            color: Color(0xFF111827),
+                            color: AppColors.textPrimary,
                           ),
                         ),
                       ),
@@ -1600,7 +1601,7 @@ class _SalesLedgerCard extends StatelessWidget {
                                     icon: const Icon(
                                       Icons.picture_as_pdf_outlined,
                                     ),
-                                    color: const Color(0xFFE11D48),
+                                    color: AppColors.error,
                                   ),
                                   IconButton(
                                     tooltip: sale.isDeleted
@@ -1921,7 +1922,7 @@ class _StatsHeader extends StatelessWidget {
             gradient: const LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFF1D4ED8), Color(0xFF0F172A)],
+              colors: [AppColors.secondary, AppColors.textPrimary],
             ),
             boxShadow: [
               BoxShadow(
@@ -1984,7 +1985,7 @@ class _HeaderActionButton extends StatelessWidget {
             label: Text(label),
             style: FilledButton.styleFrom(
               backgroundColor: Colors.white,
-              foregroundColor: const Color(0xFF0F172A),
+              foregroundColor: AppColors.textPrimary,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
           )
@@ -2403,7 +2404,7 @@ class _SalesSummary extends StatelessWidget {
                               ?.copyWith(
                                 fontWeight: FontWeight.w900,
                                 letterSpacing: -0.4,
-                                color: const Color(0xFF0F172A),
+                                color: AppColors.textPrimary,
                               ),
                         ),
                         const SizedBox(height: 4),
@@ -2430,7 +2431,7 @@ class _SalesSummary extends StatelessWidget {
                                     ?.copyWith(
                                       fontWeight: FontWeight.w900,
                                       letterSpacing: -0.4,
-                                      color: const Color(0xFF0F172A),
+                                      color: AppColors.textPrimary,
                                     ),
                               ),
                               const SizedBox(height: 4),
@@ -2885,9 +2886,9 @@ class _TrendChartPlot extends StatelessWidget {
                       maxValue: chartMax,
                       averageValue: averageDailySales,
                       bestDay: bestDay,
-                      lineColor: const Color(0xFF2563EB),
-                      fillTopColor: const Color(0xFF60A5FA),
-                      fillBottomColor: const Color(0xFF1D4ED8),
+                      lineColor: AppColors.secondary,
+                      fillTopColor: AppColors.secondary,
+                      fillBottomColor: AppColors.secondary,
                       gridColor: scheme.outlineVariant.withValues(alpha: 0.35),
                     ),
                     child: const SizedBox.expand(),
@@ -3219,7 +3220,7 @@ class _WeekdayPerformanceCard extends StatelessWidget {
                                 context,
                               ).colorScheme.surface,
                               valueColor: const AlwaysStoppedAnimation<Color>(
-                                Color(0xFF1D4ED8),
+                                AppColors.secondary,
                               ),
                             ),
                           ),

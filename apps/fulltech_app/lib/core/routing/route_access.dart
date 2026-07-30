@@ -69,6 +69,11 @@ class RouteAccess {
       case Routes.licencias:
       case Routes.actualizaciones:
       case Routes.configuracion:
+      case Routes.configuracionEmpresa:
+      case Routes.configuracionImpresora:
+      case Routes.configuracionBackup:
+      case Routes.configuracionParametros:
+      case Routes.configuracionDocumentos:
         return null;
       case Routes.whatsapp:
         return null;

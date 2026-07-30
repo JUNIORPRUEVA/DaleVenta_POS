@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -193,6 +194,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   List<_DesktopTicketDraft> _desktopTickets = [];
   String? _activeDesktopTicketId;
   String? _lastPublishedDesktopFooterSignature;
+  bool _showDesktopCalculator = false;
 
   bool _prefillFromRouteApplied = false;
   bool _routeObserverSubscribed = false;
@@ -651,17 +653,34 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         return false;
       }
       if (query.isEmpty) return true;
+      final code = (product.codigo ?? '').trim().toLowerCase();
       return product.nombre.toLowerCase().contains(query) ||
-          product.categoriaLabel.toLowerCase().contains(query);
+          product.categoriaLabel.toLowerCase().contains(query) ||
+          code.contains(query);
     }).toList();
   }
 
   void _submitSearchAndAddFirstVisibleProduct() {
+    final query = _searchCtrl.text.trim().toLowerCase();
+    if (query.isNotEmpty) {
+      for (final product in _productos) {
+        final code = (product.codigo ?? '').trim().toLowerCase();
+        if (code.isNotEmpty && code == query) {
+          _addProduct(product);
+          _searchCtrl.clear();
+          _commitEditorChange(() {});
+          return;
+        }
+      }
+    }
+
     final visible = _visibleProducts;
     if (visible.isEmpty) {
       return;
     }
     _addProduct(visible.first);
+    _searchCtrl.clear();
+    _commitEditorChange(() {});
   }
 
   double get _subtotal => _items.fold(0, (sum, item) => sum + item.total);
@@ -1162,6 +1181,17 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       (ticket) => ticket.id == active.id,
     );
     return active.label(index < 0 ? 0 : index);
+  }
+
+  void _toggleDesktopCalculator() {
+    setState(() {
+      final next = !_showDesktopCalculator;
+      _showDesktopCalculator = next;
+      if (next) {
+        _showDesktopManualItemForm = false;
+        _desktopManualEditIndex = null;
+      }
+    });
   }
 
   void _publishDesktopShellFooter() {
@@ -1988,6 +2018,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     if (isDesktop) {
       setState(() {
         _showDesktopManualItemForm = true;
+        _showDesktopCalculator = false;
         _desktopManualEditIndex = editIndex;
       });
       return;
@@ -5354,153 +5385,238 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   340.0,
                   390.0,
                 );
+                final reservedFiscalWidth = _includeItbis
+                    ? fiscalPaneWidth
+                    : 0.0;
+                final sidePaneWidth = quotePaneWidth;
+                final catalogOverlayWidth =
+                    constraints.maxWidth - sidePaneWidth - reservedFiscalWidth;
+                final calculatorPaneWidth = catalogOverlayWidth
+                    .clamp(292.0, 330.0)
+                    .toDouble();
+                final manualPaneWidth = catalogOverlayWidth
+                    .clamp(360.0, 420.0)
+                    .toDouble();
+                final overlayOpen =
+                    _showDesktopCalculator || _showDesktopManualItemForm;
+                final overlayPaneWidth = _showDesktopManualItemForm
+                    ? manualPaneWidth
+                    : calculatorPaneWidth;
 
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                return Stack(
                   children: [
-                    Expanded(
-                      child: _DesktopCatalogPane(
-                        searchController: _searchCtrl,
-                        selectedCategory: _selectedCategory,
-                        categories: _categories,
-                        managedCategories: managedCategories,
-                        allProducts: _productos,
-                        visibleProducts: _visibleProducts,
-                        loadingProducts: _loadingProducts,
-                        error: _error,
-                        money: _money,
-                        onSearchChanged: () => _commitEditorChange(() {}),
-                        onSearchSubmitted:
-                            _submitSearchAndAddFirstVisibleProduct,
-                        onSelectCategory: (category) => _commitEditorChange(
-                          () => _selectedCategory = category,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: _DesktopCatalogPane(
+                            searchController: _searchCtrl,
+                            selectedCategory: _selectedCategory,
+                            categories: _categories,
+                            managedCategories: managedCategories,
+                            allProducts: _productos,
+                            visibleProducts: _visibleProducts,
+                            loadingProducts: _loadingProducts,
+                            error: _error,
+                            money: _money,
+                            onSearchChanged: () => _commitEditorChange(() {}),
+                            onSearchSubmitted:
+                                _submitSearchAndAddFirstVisibleProduct,
+                            onSelectCategory: (category) => _commitEditorChange(
+                              () => _selectedCategory = category,
+                            ),
+                            onAddProduct: _addProduct,
+                            onAddExternalItem: () => _openExternalItemDialog(),
+                            onOpenNewProduct: _openInventoryCatalog,
+                            onOpenStockAdjustments: _openStockAdjustments,
+                          ),
                         ),
-                        onAddProduct: _addProduct,
-                        onAddExternalItem: () => _openExternalItemDialog(),
-                        onOpenNewProduct: _openInventoryCatalog,
-                        onOpenStockAdjustments: _openStockAdjustments,
-                      ),
-                    ),
-                    SizedBox(
-                      width: quotePaneWidth,
-                      child: _showDesktopManualItemForm
-                          ? _DesktopManualItemPanel(
-                              key: ValueKey(
-                                'manual-${_desktopManualEditIndex ?? 'new'}',
-                              ),
-                              item:
-                                  _desktopManualEditIndex != null &&
-                                      _desktopManualEditIndex! >= 0 &&
-                                      _desktopManualEditIndex! < _items.length
-                                  ? _items[_desktopManualEditIndex!]
-                                  : null,
-                              money: _money,
-                              parseAmount: _parseAccountingInput,
-                              formatAmount: _formatAccountingInput,
-                              isAdmin: isAdmin,
-                              onCancel: () => setState(() {
-                                _showDesktopManualItemForm = false;
-                                _desktopManualEditIndex = null;
-                              }),
-                              onSubmit:
-                                  ({
-                                    required name,
-                                    required qty,
-                                    required unitPrice,
-                                    required externalCost,
-                                  }) {
-                                    if (!_validateExternalItemInput(
-                                      name: name,
-                                      qty: qty,
-                                      unitPrice: unitPrice,
-                                      externalCost: externalCost,
-                                    )) {
-                                      _showExternalItemInputNotice();
-                                      return;
-                                    }
-                                    _commitExternalItem(
-                                      name: name,
-                                      qty: qty,
-                                      unitPrice: unitPrice,
-                                      externalCost: externalCost,
-                                      editIndex: _desktopManualEditIndex,
-                                    );
+                        SizedBox(
+                          width: sidePaneWidth,
+                          child: _DesktopQuotePanel(
+                            items: _items,
+                            selectedClientName: _selectedClientName,
+                            selectedClientPhone: _selectedClientPhone,
+                            includeItbis: _includeItbis,
+                            subtotalBeforeDiscount: _subtotalBeforeDiscount,
+                            discountAmount: _lineDiscountAmount,
+                            generalDiscountAmount:
+                                _effectiveGeneralDiscountAmount,
+                            subtotal: _subtotal,
+                            itbisAmount: _itbisAmount,
+                            total: _total,
+                            isAdmin: isAdmin,
+                            utilityAmount: _utilityAmount,
+                            money: _money,
+                            onPickClient: _openClientDialog,
+                            onClearClient: () => _commitEditorChange(() {
+                              _selectedClientId = null;
+                              _selectedClientName = 'Sin cliente';
+                              _selectedClientPhone = null;
+                            }),
+                            onOpenHistory: _openRecentSalesPanel,
+                            onToggleItbis: (value) => _commitEditorChange(
+                              () => _setItbisEnabled(value),
+                            ),
+                            hasNote: _note.trim().isNotEmpty,
+                            onOpenNote: _openNoteDialog,
+                            onClear: !_hasEditorContent
+                                ? null
+                                : () {
+                                    unawaited(_confirmAndClearSale());
                                   },
-                            )
-                          : _DesktopQuotePanel(
-                              items: _items,
-                              selectedClientName: _selectedClientName,
-                              selectedClientPhone: _selectedClientPhone,
-                              includeItbis: _includeItbis,
-                              subtotalBeforeDiscount: _subtotalBeforeDiscount,
-                              discountAmount: _lineDiscountAmount,
-                              generalDiscountAmount:
-                                  _effectiveGeneralDiscountAmount,
-                              subtotal: _subtotal,
-                              itbisAmount: _itbisAmount,
-                              total: _total,
-                              isAdmin: isAdmin,
-                              utilityAmount: _utilityAmount,
-                              money: _money,
-                              onPickClient: _openClientDialog,
-                              onClearClient: () => _commitEditorChange(() {
-                                _selectedClientId = null;
-                                _selectedClientName = 'Sin cliente';
-                                _selectedClientPhone = null;
-                              }),
-                              onOpenHistory: _openRecentSalesPanel,
-                              onToggleItbis: (value) => _commitEditorChange(
-                                () => _setItbisEnabled(value),
+                            onFinalize: _openCheckoutDialog,
+                            onApplyGeneralDiscount: _applyGeneralDiscount,
+                            onMinusQty: (index) =>
+                                _setQty(index, _items[index].qty - 1),
+                            onPlusQty: (index) =>
+                                _setQty(index, _items[index].qty + 1),
+                            onChangePrice: _setUnitPrice,
+                            onEditLine: _openLineEditor,
+                            onEditExternalItem: (index) =>
+                                _openExternalItemDialog(editIndex: index),
+                            onRemoveItem: (index) => _commitEditorChange(
+                              () => _items.removeAt(index),
+                            ),
+                          ),
+                        ),
+                        if (_includeItbis)
+                          SizedBox(
+                            width: fiscalPaneWidth,
+                            child: _DesktopFiscalInvoicePanel(
+                              voucherType: _fiscalVoucherType,
+                              voucherNumber: _fiscalVoucherNumber,
+                              dueDate: _fiscalVoucherDueDate,
+                              customerTaxId: _fiscalCustomerTaxId,
+                              customerName: _fiscalCustomerName,
+                              requiresTaxId: _fiscalVoucherRequiresTaxId,
+                              onTypeChanged: (value) => _commitEditorChange(
+                                () => _fiscalVoucherType = value,
                               ),
-                              hasNote: _note.trim().isNotEmpty,
-                              onOpenNote: _openNoteDialog,
-                              onClear: !_hasEditorContent
-                                  ? null
-                                  : () {
-                                      unawaited(_confirmAndClearSale());
-                                    },
-                              onFinalize: _openCheckoutDialog,
-                              onApplyGeneralDiscount: _applyGeneralDiscount,
-                              onMinusQty: (index) =>
-                                  _setQty(index, _items[index].qty - 1),
-                              onPlusQty: (index) =>
-                                  _setQty(index, _items[index].qty + 1),
-                              onChangePrice: _setUnitPrice,
-                              onEditLine: _openLineEditor,
-                              onEditExternalItem: (index) =>
-                                  _openExternalItemDialog(editIndex: index),
-                              onRemoveItem: (index) => _commitEditorChange(
-                                () => _items.removeAt(index),
+                              onVoucherNumberChanged: (value) =>
+                                  _commitEditorChange(
+                                    () => _fiscalVoucherNumber = value
+                                        .trim()
+                                        .toUpperCase(),
+                                  ),
+                              onCustomerTaxIdChanged: (value) =>
+                                  _commitEditorChange(
+                                    () => _fiscalCustomerTaxId = value,
+                                  ),
+                              onCustomerNameChanged: (value) =>
+                                  _commitEditorChange(
+                                    () => _fiscalCustomerName = value,
+                                  ),
+                              onPickDueDate: _pickFiscalVoucherDueDate,
+                            ),
+                          ),
+                      ],
+                    ),
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: catalogOverlayWidth,
+                      child: IgnorePointer(
+                        ignoring: !overlayOpen,
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: AnimatedOpacity(
+                                duration: const Duration(milliseconds: 180),
+                                curve: Curves.easeOutCubic,
+                                opacity: overlayOpen ? 1 : 0,
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => setState(() {
+                                    _showDesktopCalculator = false;
+                                    _showDesktopManualItemForm = false;
+                                    _desktopManualEditIndex = null;
+                                  }),
+                                  child: ClipRect(
+                                    child: BackdropFilter(
+                                      filter: ui.ImageFilter.blur(
+                                        sigmaX: 2.6,
+                                        sigmaY: 2.6,
+                                      ),
+                                      child: Container(
+                                        color: const Color(
+                                          0xFFF8FBFF,
+                                        ).withValues(alpha: 0.38),
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
+                            AnimatedPositioned(
+                              duration: const Duration(milliseconds: 260),
+                              curve: Curves.easeOutCubic,
+                              left: overlayOpen ? 0 : -overlayPaneWidth,
+                              top: 0,
+                              bottom: 0,
+                              width: overlayPaneWidth,
+                              child: _showDesktopManualItemForm
+                                  ? _DesktopManualItemPanel(
+                                      key: ValueKey(
+                                        'manual-${_desktopManualEditIndex ?? 'new'}',
+                                      ),
+                                      item:
+                                          _desktopManualEditIndex != null &&
+                                              _desktopManualEditIndex! >= 0 &&
+                                              _desktopManualEditIndex! <
+                                                  _items.length
+                                          ? _items[_desktopManualEditIndex!]
+                                          : null,
+                                      money: _money,
+                                      parseAmount: _parseAccountingInput,
+                                      formatAmount: _formatAccountingInput,
+                                      isAdmin: isAdmin,
+                                      onCancel: () => setState(() {
+                                        _showDesktopManualItemForm = false;
+                                        _desktopManualEditIndex = null;
+                                      }),
+                                      onSubmit:
+                                          ({
+                                            required name,
+                                            required qty,
+                                            required unitPrice,
+                                            required externalCost,
+                                          }) {
+                                            if (!_validateExternalItemInput(
+                                              name: name,
+                                              qty: qty,
+                                              unitPrice: unitPrice,
+                                              externalCost: externalCost,
+                                            )) {
+                                              _showExternalItemInputNotice();
+                                              return;
+                                            }
+                                            _commitExternalItem(
+                                              name: name,
+                                              qty: qty,
+                                              unitPrice: unitPrice,
+                                              externalCost: externalCost,
+                                              editIndex:
+                                                  _desktopManualEditIndex,
+                                            );
+                                          },
+                                    )
+                                  : _DesktopCalculatorPane(
+                                      onClose: _toggleDesktopCalculator,
+                                    ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                    if (_includeItbis)
-                      SizedBox(
-                        width: fiscalPaneWidth,
-                        child: _DesktopFiscalInvoicePanel(
-                          voucherType: _fiscalVoucherType,
-                          voucherNumber: _fiscalVoucherNumber,
-                          dueDate: _fiscalVoucherDueDate,
-                          customerTaxId: _fiscalCustomerTaxId,
-                          customerName: _fiscalCustomerName,
-                          requiresTaxId: _fiscalVoucherRequiresTaxId,
-                          onTypeChanged: (value) => _commitEditorChange(
-                            () => _fiscalVoucherType = value,
-                          ),
-                          onVoucherNumberChanged: (value) =>
-                              _commitEditorChange(
-                                () => _fiscalVoucherNumber = value
-                                    .trim()
-                                    .toUpperCase(),
-                              ),
-                          onCustomerTaxIdChanged: (value) =>
-                              _commitEditorChange(
-                                () => _fiscalCustomerTaxId = value,
-                              ),
-                          onCustomerNameChanged: (value) => _commitEditorChange(
-                            () => _fiscalCustomerName = value,
-                          ),
-                          onPickDueDate: _pickFiscalVoucherDueDate,
+                    if (!overlayOpen)
+                      Positioned(
+                        left: 12,
+                        bottom: 12,
+                        child: _DesktopCalculatorFab(
+                          open: _showDesktopCalculator,
+                          onTap: _toggleDesktopCalculator,
                         ),
                       ),
                   ],
@@ -8324,36 +8440,68 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
                   const spacing = 8.0;
                   final cardWidth = (width - spacing * (columns - 1)) / columns;
                   final cardHeight = (cardWidth * 1.02).clamp(95.0, 128.0);
+                  final manualHeight = cardHeight * 2 + spacing;
+                  final firstRowsCapacity = (columns - 1) * 2;
+                  var maxRow = 1;
+                  if (widget.visibleProducts.length > firstRowsCapacity) {
+                    final remaining =
+                        widget.visibleProducts.length - firstRowsCapacity;
+                    maxRow += (remaining / columns).ceil();
+                  }
+                  final contentHeight =
+                      (maxRow + 1) * cardHeight + maxRow * spacing;
 
                   return Scrollbar(
                     controller: _gridScrollController,
                     thumbVisibility: true,
                     interactive: true,
-                    child: GridView.builder(
+                    child: SingleChildScrollView(
                       controller: _gridScrollController,
-                      primary: false,
                       physics: const AlwaysScrollableScrollPhysics(),
-                      padding: EdgeInsets.zero,
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: columns,
-                        crossAxisSpacing: spacing,
-                        mainAxisSpacing: spacing,
-                        mainAxisExtent: cardHeight,
+                      child: SizedBox(
+                        height: contentHeight.clamp(
+                          constraints.maxHeight,
+                          double.infinity,
+                        ),
+                        child: Stack(
+                          children: [
+                            Positioned(
+                              left: 0,
+                              top: 0,
+                              width: cardWidth,
+                              height: manualHeight,
+                              child: _DesktopExternalProductCard(
+                                onTap: widget.onAddExternalItem,
+                              ),
+                            ),
+                            for (
+                              var index = 0;
+                              index < widget.visibleProducts.length;
+                              index++
+                            )
+                              Positioned(
+                                left:
+                                    _desktopCatalogProductColumn(
+                                      index,
+                                      columns,
+                                    ) *
+                                    (cardWidth + spacing),
+                                top:
+                                    _desktopCatalogProductRow(index, columns) *
+                                    (cardHeight + spacing),
+                                width: cardWidth,
+                                height: cardHeight,
+                                child: _DesktopProductCard(
+                                  product: widget.visibleProducts[index],
+                                  money: widget.money,
+                                  onTap: () => widget.onAddProduct(
+                                    widget.visibleProducts[index],
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
-                      itemCount: widget.visibleProducts.length + 1,
-                      itemBuilder: (context, index) {
-                        if (index == 0) {
-                          return _DesktopExternalProductCard(
-                            onTap: widget.onAddExternalItem,
-                          );
-                        }
-                        final product = widget.visibleProducts[index - 1];
-                        return _DesktopProductCard(
-                          product: product,
-                          money: widget.money,
-                          onTap: () => widget.onAddProduct(product),
-                        );
-                      },
                     ),
                   );
                 },
@@ -8364,6 +8512,22 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
       ),
     );
   }
+}
+
+int _desktopCatalogProductColumn(int index, int columns) {
+  final firstRowsCapacity = (columns - 1) * 2;
+  if (index < firstRowsCapacity) {
+    return (index % (columns - 1)) + 1;
+  }
+  return (index - firstRowsCapacity) % columns;
+}
+
+int _desktopCatalogProductRow(int index, int columns) {
+  final firstRowsCapacity = (columns - 1) * 2;
+  if (index < firstRowsCapacity) {
+    return index ~/ (columns - 1);
+  }
+  return 2 + ((index - firstRowsCapacity) ~/ columns);
 }
 
 typedef _ManualItemSubmit =
@@ -8404,6 +8568,10 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
   late final TextEditingController _qtyCtrl;
   late final TextEditingController _costCtrl;
   late final TextEditingController _priceCtrl;
+  final FocusNode _nameFocus = FocusNode();
+  final FocusNode _qtyFocus = FocusNode();
+  final FocusNode _costFocus = FocusNode();
+  final FocusNode _priceFocus = FocusNode();
 
   @override
   void initState() {
@@ -8425,6 +8593,9 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
     _priceCtrl = TextEditingController(
       text: item == null ? '' : widget.formatAmount(item.unitPrice),
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _nameFocus.requestFocus();
+    });
   }
 
   @override
@@ -8433,6 +8604,10 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
     _qtyCtrl.dispose();
     _costCtrl.dispose();
     _priceCtrl.dispose();
+    _nameFocus.dispose();
+    _qtyFocus.dispose();
+    _costFocus.dispose();
+    _priceFocus.dispose();
     super.dispose();
   }
 
@@ -8472,6 +8647,62 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
     );
   }
 
+  List<FocusNode> get _fieldFocusOrder => [
+    _nameFocus,
+    _qtyFocus,
+    _costFocus,
+    _priceFocus,
+  ];
+
+  void _moveFieldFocus(FocusNode current, int direction) {
+    final fields = _fieldFocusOrder;
+    final index = fields.indexOf(current);
+    if (index < 0) return;
+    final nextIndex = (index + direction).clamp(0, fields.length - 1);
+    fields[nextIndex].requestFocus();
+  }
+
+  KeyEventResult _handleFieldKey(FocusNode current, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowDown) {
+      _moveFieldFocus(current, 1);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _moveFieldFocus(current, -1);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      _submit();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  Widget _keyboardField({
+    required FocusNode focusNode,
+    required TextEditingController controller,
+    required InputDecoration decoration,
+    TextInputType? keyboardType,
+    TextInputAction textInputAction = TextInputAction.next,
+    ValueChanged<String>? onChanged,
+  }) {
+    return Focus(
+      onKeyEvent: (_, event) => _handleFieldKey(focusNode, event),
+      child: TextField(
+        focusNode: focusNode,
+        controller: controller,
+        keyboardType: keyboardType,
+        textInputAction: textInputAction,
+        onChanged: onChanged,
+        onSubmitted: (_) => _submit(),
+        decoration: decoration,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final editing = widget.item != null;
@@ -8480,7 +8711,7 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
     return DecoratedBox(
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(left: BorderSide(color: Color(0xFFD3E0E7))),
+        border: Border(right: BorderSide(color: Color(0xFFD3E0E7))),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
@@ -8538,7 +8769,8 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
               ],
             ),
             const SizedBox(height: 18),
-            TextField(
+            _keyboardField(
+              focusNode: _nameFocus,
               controller: _nameCtrl,
               textInputAction: TextInputAction.next,
               decoration: _decoration('Nombre producto o servicio'),
@@ -8547,7 +8779,8 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
             Row(
               children: [
                 Expanded(
-                  child: TextField(
+                  child: _keyboardField(
+                    focusNode: _qtyFocus,
                     controller: _qtyCtrl,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
@@ -8558,7 +8791,8 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: TextField(
+                  child: _keyboardField(
+                    focusNode: _costFocus,
                     controller: _costCtrl,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
@@ -8570,13 +8804,14 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
               ],
             ),
             const SizedBox(height: 12),
-            TextField(
+            _keyboardField(
+              focusNode: _priceFocus,
               controller: _priceCtrl,
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
+              textInputAction: TextInputAction.done,
               onChanged: (_) => setState(() {}),
-              onSubmitted: (_) => _submit(),
               decoration: _decoration('Precio unitario'),
             ),
             const SizedBox(height: 14),
@@ -8649,6 +8884,500 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
         ),
       ),
     );
+  }
+}
+
+class _DesktopCalculatorPane extends StatefulWidget {
+  const _DesktopCalculatorPane({required this.onClose});
+
+  final VoidCallback onClose;
+
+  @override
+  State<_DesktopCalculatorPane> createState() => _DesktopCalculatorPaneState();
+}
+
+class _DesktopCalculatorPaneState extends State<_DesktopCalculatorPane> {
+  final FocusNode _focusNode = FocusNode();
+  String _expression = '';
+  String _result = '0';
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _append(String value) {
+    setState(() {
+      _error = null;
+      _expression += value;
+      _previewResult();
+    });
+  }
+
+  void _clear() {
+    setState(() {
+      _expression = '';
+      _result = '0';
+      _error = null;
+    });
+  }
+
+  void _backspace() {
+    if (_expression.isEmpty) return;
+    setState(() {
+      _expression = _expression.substring(0, _expression.length - 1);
+      _error = null;
+      _previewResult();
+    });
+  }
+
+  void _calculate() {
+    if (_expression.trim().isEmpty) return;
+    try {
+      final value = _ExpressionEvaluator(_expression).parse();
+      setState(() {
+        _result = _formatCalculatorNumber(value);
+        _expression = _result;
+        _error = null;
+      });
+    } catch (_) {
+      setState(() => _error = 'Revisa la operación');
+    }
+  }
+
+  void _previewResult() {
+    if (_expression.trim().isEmpty) {
+      _result = '0';
+      return;
+    }
+    try {
+      _result = _formatCalculatorNumber(
+        _ExpressionEvaluator(_expression).parse(),
+      );
+    } catch (_) {
+      _result = '...';
+    }
+  }
+
+  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    final label = key.keyLabel;
+    final numpadDigits = {
+      LogicalKeyboardKey.numpad0: '0',
+      LogicalKeyboardKey.numpad1: '1',
+      LogicalKeyboardKey.numpad2: '2',
+      LogicalKeyboardKey.numpad3: '3',
+      LogicalKeyboardKey.numpad4: '4',
+      LogicalKeyboardKey.numpad5: '5',
+      LogicalKeyboardKey.numpad6: '6',
+      LogicalKeyboardKey.numpad7: '7',
+      LogicalKeyboardKey.numpad8: '8',
+      LogicalKeyboardKey.numpad9: '9',
+    };
+    final numpadOperators = {
+      LogicalKeyboardKey.numpadAdd: '+',
+      LogicalKeyboardKey.numpadSubtract: '-',
+      LogicalKeyboardKey.numpadMultiply: '*',
+      LogicalKeyboardKey.numpadDivide: '/',
+    };
+
+    final numpadDigit = numpadDigits[key];
+    if (numpadDigit != null) {
+      _append(numpadDigit);
+      return KeyEventResult.handled;
+    }
+    final numpadOperator = numpadOperators[key];
+    if (numpadOperator != null) {
+      _append(numpadOperator);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.numpadDecimal) {
+      _append('.');
+      return KeyEventResult.handled;
+    }
+
+    if (RegExp(r'^[0-9]$').hasMatch(label)) {
+      _append(label);
+      return KeyEventResult.handled;
+    }
+    if (label == '.' || label == ',') {
+      _append('.');
+      return KeyEventResult.handled;
+    }
+    if (label == '+' || label == '-' || label == '*' || label == '/') {
+      _append(label);
+      return KeyEventResult.handled;
+    }
+    if (label == '(' || label == ')') {
+      _append(label);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter ||
+        label == '=') {
+      _calculate();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.backspace) {
+      _backspace();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.escape) {
+      widget.onClose();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.delete || label.toLowerCase() == 'c') {
+      _clear();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final buttons = [
+      'C',
+      '(',
+      ')',
+      '÷',
+      '7',
+      '8',
+      '9',
+      '×',
+      '4',
+      '5',
+      '6',
+      '-',
+      '1',
+      '2',
+      '3',
+      '+',
+      '0',
+      '.',
+      '⌫',
+      '=',
+    ];
+
+    return Focus(
+      focusNode: _focusNode,
+      onKeyEvent: _handleKey,
+      child: Container(
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          color: Color(0xFFF8FBFF),
+          border: Border(right: BorderSide(color: Color(0xFFD3E0E7))),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFD3E0E7)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEAF1FF),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.calculate_outlined,
+                        color: Color(0xFF1957E6),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Calculadora',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF132337),
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Teclado y mouse',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF647985),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Cerrar calculadora',
+                      onPressed: widget.onClose,
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFD3E0E7)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      _expression.isEmpty ? '0' : _expression,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.end,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF52657A),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _error ?? _result,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: _error == null ? 34 : 18,
+                        fontWeight: FontWeight.w900,
+                        color: _error == null
+                            ? const Color(0xFF111827)
+                            : Colors.red.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: GridView.builder(
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: buttons.length,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 4,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                    childAspectRatio: 1.45,
+                  ),
+                  itemBuilder: (context, index) {
+                    final label = buttons[index];
+                    final isOperator = [
+                      '÷',
+                      '×',
+                      '-',
+                      '+',
+                      '=',
+                    ].contains(label);
+                    final isUtility = label == 'C' || label == '⌫';
+                    return _CalculatorButton(
+                      label: label,
+                      filled: label == '=',
+                      operator: isOperator,
+                      utility: isUtility,
+                      onPressed: () {
+                        if (label == 'C') return _clear();
+                        if (label == '⌫') return _backspace();
+                        if (label == '=') return _calculate();
+                        _append(
+                          label == '×'
+                              ? '*'
+                              : label == '÷'
+                              ? '/'
+                              : label,
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CalculatorButton extends StatelessWidget {
+  const _CalculatorButton({
+    required this.label,
+    required this.onPressed,
+    this.filled = false,
+    this.operator = false,
+    this.utility = false,
+  });
+
+  final String label;
+  final VoidCallback onPressed;
+  final bool filled;
+  final bool operator;
+  final bool utility;
+
+  @override
+  Widget build(BuildContext context) {
+    final background = filled
+        ? const Color(0xFF1957E6)
+        : operator
+        ? const Color(0xFFEAF1FF)
+        : utility
+        ? const Color(0xFFFFF4E8)
+        : Colors.white;
+    final foreground = filled
+        ? Colors.white
+        : operator
+        ? const Color(0xFF1957E6)
+        : utility
+        ? const Color(0xFF9A5A00)
+        : const Color(0xFF132337);
+
+    return Material(
+      color: background,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: filled ? const Color(0xFF1957E6) : const Color(0xFFD3E0E7),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: foreground,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _formatCalculatorNumber(double value) {
+  if (!value.isFinite) throw const FormatException('Invalid number');
+  final fixed = value.toStringAsFixed(8);
+  return fixed
+      .replaceFirst(RegExp(r'0+$'), '')
+      .replaceFirst(RegExp(r'\.$'), '');
+}
+
+class _ExpressionEvaluator {
+  _ExpressionEvaluator(String source)
+    : _source = source
+          .replaceAll(',', '.')
+          .replaceAll('×', '*')
+          .replaceAll('÷', '/');
+
+  final String _source;
+  int _index = 0;
+
+  double parse() {
+    final value = _parseExpression();
+    _skipSpaces();
+    if (_index != _source.length) throw const FormatException('Invalid input');
+    return value;
+  }
+
+  double _parseExpression() {
+    var value = _parseTerm();
+    while (true) {
+      _skipSpaces();
+      if (_match('+')) {
+        value += _parseTerm();
+      } else if (_match('-')) {
+        value -= _parseTerm();
+      } else {
+        return value;
+      }
+    }
+  }
+
+  double _parseTerm() {
+    var value = _parseFactor();
+    while (true) {
+      _skipSpaces();
+      if (_match('*')) {
+        value *= _parseFactor();
+      } else if (_match('/')) {
+        final divisor = _parseFactor();
+        if (divisor == 0) throw const FormatException('Division by zero');
+        value /= divisor;
+      } else {
+        return value;
+      }
+    }
+  }
+
+  double _parseFactor() {
+    _skipSpaces();
+    if (_match('+')) return _parseFactor();
+    if (_match('-')) return -_parseFactor();
+    if (_match('(')) {
+      final value = _parseExpression();
+      if (!_match(')')) throw const FormatException('Missing parenthesis');
+      return value;
+    }
+    return _parseNumber();
+  }
+
+  double _parseNumber() {
+    _skipSpaces();
+    final start = _index;
+    while (_index < _source.length) {
+      final char = _source[_index];
+      if (!RegExp(r'[0-9.]').hasMatch(char)) break;
+      _index++;
+    }
+    if (start == _index) throw const FormatException('Number expected');
+    final raw = _source.substring(start, _index);
+    final value = double.tryParse(raw);
+    if (value == null) throw const FormatException('Invalid number');
+    return value;
+  }
+
+  bool _match(String char) {
+    _skipSpaces();
+    if (_index >= _source.length || _source[_index] != char) return false;
+    _index++;
+    return true;
+  }
+
+  void _skipSpaces() {
+    while (_index < _source.length && _source[_index].trim().isEmpty) {
+      _index++;
+    }
   }
 }
 
@@ -9009,7 +9738,10 @@ class _DesktopQuotePanel extends StatelessWidget {
                       onPressed: onOpenHistory,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: const Color(0xFF1957E6),
-                        side: const BorderSide(color: Color(0xFFD3E0E7)),
+                        side: const BorderSide(
+                          color: Color(0xFFBFD0DD),
+                          width: 1.25,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(3),
                         ),
@@ -10010,101 +10742,195 @@ double? _parseAccountingInput(String raw) {
   return double.tryParse(value);
 }
 
-class _DesktopExternalProductCard extends StatelessWidget {
+class _DesktopExternalProductCard extends StatefulWidget {
   const _DesktopExternalProductCard({required this.onTap});
 
   final VoidCallback onTap;
 
   @override
+  State<_DesktopExternalProductCard> createState() =>
+      _DesktopExternalProductCardState();
+}
+
+class _DesktopExternalProductCardState
+    extends State<_DesktopExternalProductCard> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
+    final helpText =
+        'Usa venta manual para facturar productos o servicios que no están registrados en inventario. Es útil para cargos especiales, reparaciones, ajustes rápidos o artículos únicos sin afectar el stock.';
     return MouseRegion(
       cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: onTap,
-          child: Ink(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF8FB3FF), width: 1.2),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF1957E6).withValues(alpha: 0.08),
-                  blurRadius: 14,
-                  offset: const Offset(0, 8),
+          onTap: widget.onTap,
+          child: AnimatedScale(
+            scale: _hovered ? 0.975 : 1,
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOutCubic,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              curve: Curves.easeOutCubic,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _hovered
+                      ? const Color(0xFF1957E6)
+                      : const Color(0xFF8FB3FF),
+                  width: 1.2,
                 ),
-              ],
-            ),
-            child: Stack(
-              children: [
-                const Positioned.fill(
-                  left: 0,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: SizedBox(
-                      width: 4,
-                      height: 86,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Color(0xFF1957E6),
-                          borderRadius: BorderRadius.horizontal(
-                            right: Radius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(
+                      0xFF1957E6,
+                    ).withValues(alpha: _hovered ? 0.14 : 0.08),
+                    blurRadius: _hovered ? 18 : 14,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Stack(
+                children: [
+                  const Positioned.fill(
+                    left: 0,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: SizedBox(
+                        width: 4,
+                        height: 92,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Color(0xFF1957E6),
+                            borderRadius: BorderRadius.horizontal(
+                              right: Radius.circular(8),
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEAF1FF),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFFCFE0FF)),
-                        ),
-                        child: const Icon(
-                          Icons.add_shopping_cart_rounded,
-                          color: Color(0xFF1957E6),
-                          size: 25,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Sin inventario',
-                        maxLines: 1,
-                        textAlign: TextAlign.center,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Color(0xFF152238),
-                          fontWeight: FontWeight.w900,
-                          fontSize: 12,
-                          height: 1,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Venta manual',
-                        maxLines: 1,
-                        textAlign: TextAlign.center,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Color(0xFF1957E6),
-                          fontWeight: FontWeight.w800,
-                          fontSize: 10,
-                          height: 1,
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: Tooltip(
+                      message: helpText,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(999),
+                        onTap: () {
+                          showDialog<void>(
+                            context: context,
+                            builder: (dialogContext) => AlertDialog(
+                              title: const Text('Venta manual'),
+                              content: Text(helpText),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.of(dialogContext).pop(),
+                                  child: const Text('Entendido'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                        child: Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEAF1FF),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: const Color(0xFFCFE0FF)),
+                          ),
+                          child: const Icon(
+                            Icons.help_outline_rounded,
+                            color: Color(0xFF1957E6),
+                            size: 17,
+                          ),
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 74,
+                            height: 74,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEAF1FF),
+                              borderRadius: BorderRadius.circular(22),
+                              border: Border.all(
+                                color: const Color(0xFFCFE0FF),
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.add_shopping_cart_rounded,
+                              color: Color(0xFF1957E6),
+                              size: 40,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Sin inventario',
+                            maxLines: 1,
+                            textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Color(0xFF152238),
+                              fontWeight: FontWeight.w900,
+                              fontSize: 18,
+                              height: 1,
+                            ),
+                          ),
+                          const SizedBox(height: 7),
+                          const Text(
+                            'Venta rápida fuera de catálogo',
+                            maxLines: 1,
+                            textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Color(0xFF5C7184),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11.5,
+                              height: 1.1,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1957E6),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: const Text(
+                              'Agregar',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 12,
+                                height: 1,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -10817,6 +11643,53 @@ Widget _buildTicketTag({
       ),
     ),
   );
+}
+
+class _DesktopCalculatorFab extends StatelessWidget {
+  const _DesktopCalculatorFab({required this.open, required this.onTap});
+
+  final bool open;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: open ? 'Cerrar calculadora' : 'Abrir calculadora',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: open ? const Color(0xFF1957E6) : Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: open ? const Color(0xFF1957E6) : const Color(0xFFD3E0E7),
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF0F2742).withValues(alpha: 0.18),
+                  blurRadius: 20,
+                  offset: const Offset(0, 9),
+                ),
+              ],
+            ),
+            child: Icon(
+              Icons.calculate_outlined,
+              size: 27,
+              color: open ? Colors.white : const Color(0xFF1957E6),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _DesktopSalesTicketFooter extends StatelessWidget {

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/auth/auth_provider.dart';
 import '../../core/routing/routes.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/fulltech_page_header.dart';
@@ -15,14 +16,14 @@ import 'cash_providers.dart';
 import 'cash_repository.dart';
 import 'cash_turn_menu_button.dart';
 
-const _cashPrimary = Color(0xFF0E5261);
-const _cashBlue = Color(0xFF1957E6);
-const _cashBg = Color(0xFFEFF6FA);
-const _cashSurface = Color(0xFFF8FBFF);
-const _cashLine = Color(0xFFD4E3ED);
-const _cashText = Color(0xFF0F172A);
-const _cashMuted = Color(0xFF5D7085);
-const _danger = Color(0xFFDC2626);
+const _cashPrimary = AppColors.primary;
+const _cashBlue = AppColors.secondary;
+const _cashBg = AppColors.background;
+const _cashSurface = AppColors.surfaceAlt;
+const _cashLine = AppColors.border;
+const _cashText = AppColors.textPrimary;
+const _cashMuted = AppColors.textSecondary;
+const _danger = AppColors.error;
 
 final cashExpenseHistoryProvider = FutureProvider<List<CashMovementModel>>((
   ref,

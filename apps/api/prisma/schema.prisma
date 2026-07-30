@@ -1636,7 +1636,6 @@ model Product {
 
   @@index([companyId])
   @@index([companyId, nombre])
-  @@unique([companyId, codigo])
   @@index([companyId, imageKey])
 }
 

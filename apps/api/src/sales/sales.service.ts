@@ -10,7 +10,11 @@ import * as fs from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { PrismaService } from "../prisma/prisma.service";
-import { isAdminLike, requireTenant, type TenantUser } from "../auth/tenant-context";
+import {
+  isAdminLike,
+  requireTenant,
+  type TenantUser,
+} from "../auth/tenant-context";
 import { CreateSaleDto, CreateSaleItemDto } from "./dto/create-sale.dto";
 import { CreateSalePdfShareLinkDto } from "./dto/create-sale-pdf-share-link.dto";
 
@@ -37,7 +41,15 @@ export class SalesService {
           email: true,
         },
       },
-      items: true,
+      items: {
+        include: {
+          product: {
+            select: {
+              categoria: true,
+            },
+          },
+        },
+      },
       creditPayments: {
         orderBy: { paidAt: "desc" },
       },
@@ -175,7 +187,7 @@ export class SalesService {
         include: {
           customer: this.saleInclude().customer,
           user: this.saleInclude().user,
-          items: true,
+          items: this.saleInclude().items,
         },
       });
     } catch (error) {
@@ -297,7 +309,12 @@ export class SalesService {
     };
   }
 
-  async summaryByUser(user: TenantUser, from?: string, to?: string, userId?: string) {
+  async summaryByUser(
+    user: TenantUser,
+    from?: string,
+    to?: string,
+    userId?: string,
+  ) {
     const companyId = requireTenant(user);
     const where: Prisma.SaleWhereInput = {
       companyId,
@@ -502,7 +519,12 @@ export class SalesService {
       ? totalProfit.mul(commissionRate)
       : new Prisma.Decimal(0);
     const activeSession = await this.prisma.cashSession.findFirst({
-      where: { openedByUserId: user.id, companyId, status: "OPEN", closedAt: null },
+      where: {
+        openedByUserId: user.id,
+        companyId,
+        status: "OPEN",
+        closedAt: null,
+      },
       orderBy: { openedAt: "desc" },
     });
     if (!activeSession) {
@@ -692,14 +714,13 @@ export class SalesService {
     };
   }
 
-  async remove(
-    requestUser: TenantUser,
-    saleId: string,
-  ) {
+  async remove(requestUser: TenantUser, saleId: string) {
     const companyId = requireTenant(requestUser);
     let sale: { id: string; isDeleted: boolean; userId: string } | null = null;
     try {
-      sale = await this.prisma.sale.findFirst({ where: { id: saleId, companyId } });
+      sale = await this.prisma.sale.findFirst({
+        where: { id: saleId, companyId },
+      });
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
       throw new NotFoundException("Venta no encontrada");
@@ -820,7 +841,12 @@ export class SalesService {
     }
 
     const activeSession = await this.prisma.cashSession.findFirst({
-      where: { openedByUserId: user.id, companyId, status: "OPEN", closedAt: null },
+      where: {
+        openedByUserId: user.id,
+        companyId,
+        status: "OPEN",
+        closedAt: null,
+      },
       orderBy: { openedAt: "desc" },
     });
     if (!activeSession) {

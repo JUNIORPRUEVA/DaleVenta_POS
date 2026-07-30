@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -10,6 +9,7 @@ import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/routing/routes.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../settings/data/cloud_backup_service.dart';
 import '../settings/ui/printer_settings_page.dart';
@@ -134,7 +134,7 @@ class _AccountUpdatesScreenState extends ConsumerState<AccountUpdatesScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFEFF5F8),
+      backgroundColor: AppColors.background,
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 920),
@@ -153,7 +153,7 @@ class _AccountUpdatesScreenState extends ConsumerState<AccountUpdatesScreen> {
               _UpdatePanel(
                 icon: Icons.verified_outlined,
                 title: 'Actualización actual',
-                accent: const Color(0xFF1957E6),
+                accent: AppColors.secondary,
                 rows: [
                   _DetailRow(
                     'Versión instalada',
@@ -226,6 +226,7 @@ class AccountSettingsScreen extends ConsumerWidget {
     final company = ref.watch(companySettingsProvider);
 
     return _SettingsHubScaffold(
+      company: company,
       children: [
         _SettingsLaunchCard(
           icon: Icons.business_center_outlined,
@@ -239,6 +240,12 @@ class AccountSettingsScreen extends ConsumerWidget {
           route: Routes.configuracionEmpresa,
         ),
         const _SettingsLaunchCard(
+          icon: Icons.receipt_long_outlined,
+          title: 'Documentos',
+          description: 'Datos que aparecen en facturas, cotizaciones y PDFs.',
+          route: Routes.configuracionDocumentos,
+        ),
+        const _SettingsLaunchCard(
           icon: Icons.print_outlined,
           title: 'Impresora',
           description: 'Tickets, copias, papel, logo y formato de impresión.',
@@ -249,12 +256,6 @@ class AccountSettingsScreen extends ConsumerWidget {
           title: 'Backup',
           description: 'Descarga la información de la nube a respaldo local.',
           route: Routes.configuracionBackup,
-        ),
-        const _SettingsLaunchCard(
-          icon: Icons.tune_outlined,
-          title: 'Parámetros',
-          description: 'Ventas, inventario, documentos, seguridad y operación.',
-          route: Routes.configuracionParametros,
         ),
       ],
     );
@@ -368,19 +369,104 @@ class AccountParametersScreen extends StatelessWidget {
   }
 }
 
-class _SettingsHubScaffold extends StatelessWidget {
-  const _SettingsHubScaffold({required this.children});
+class AccountDocumentsSettingsScreen extends ConsumerWidget {
+  const AccountDocumentsSettingsScreen({super.key});
 
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final company = ref.watch(companySettingsProvider);
+    return _SettingsDetailScaffold(
+      title: 'Documentos',
+      subtitle:
+          'Información usada en facturas, cotizaciones, tickets y cartas.',
+      action: OutlinedButton.icon(
+        onPressed: () => ref.invalidate(companySettingsProvider),
+        icon: const Icon(Icons.sync_rounded),
+        label: const Text('Sincronizar'),
+        style: _outlinedButtonStyle(),
+      ),
+      child: _SectionPanel(
+        title: 'Datos para documentos',
+        children: [
+          company.maybeWhen(
+            data: (settings) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SettingsOptionGrid(
+                  items: [
+                    _SettingsOptionData(
+                      icon: Icons.storefront_rounded,
+                      title: 'Empresa',
+                      value: settings.companyName,
+                    ),
+                    _SettingsOptionData(
+                      icon: Icons.badge_outlined,
+                      title: 'RNC',
+                      value: settings.rnc,
+                    ),
+                    _SettingsOptionData(
+                      icon: Icons.location_on_outlined,
+                      title: 'Dirección',
+                      value: settings.address,
+                    ),
+                    _SettingsOptionData(
+                      icon: Icons.person_outline_rounded,
+                      title: 'Representante',
+                      value: settings.legalRepresentativeName,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _ParagraphBlock(
+                  title: 'Pie de identidad',
+                  text: settings.description.trim().isEmpty
+                      ? 'Agrega una descripción comercial en Empresa para reforzar tus documentos.'
+                      : settings.description.trim(),
+                ),
+                const SizedBox(height: 14),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
+                    onPressed: () => context.go(Routes.configuracionEmpresa),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Editar datos de empresa'),
+                    style: _filledButtonStyle(),
+                  ),
+                ),
+              ],
+            ),
+            orElse: () => const _ParagraphBlock(
+              title: 'Documentos',
+              text: 'Carga la configuración de empresa para revisar los datos.',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsHubScaffold extends StatelessWidget {
+  const _SettingsHubScaffold({required this.company, required this.children});
+
+  final AsyncValue<CompanySettings> company;
   final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
     final showInlineTitle = MediaQuery.sizeOf(context).width < 900;
+    final configuredName = company.maybeWhen(
+      data: (settings) => settings.companyName.trim(),
+      orElse: () => '',
+    );
+    final displayName = configuredName.isEmpty
+        ? 'DaleVenta POS'
+        : configuredName;
     return Scaffold(
-      backgroundColor: const Color(0xFFEFF5F8),
+      backgroundColor: AppColors.background,
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 980),
+          constraints: const BoxConstraints(maxWidth: 760),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(22, 26, 22, 28),
             child: Column(
@@ -390,20 +476,25 @@ class _SettingsHubScaffold extends StatelessWidget {
                   Text('Configuración', style: _titleStyle(28)),
                   const SizedBox(height: 6),
                   Text(
-                    'Elige el área que quieres ajustar.',
+                    'Centro de control para empresa, operación, seguridad y servicios.',
                     style: _bodyStyle(),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 18),
                 ],
+                _SettingsHeroPanel(
+                  companyName: displayName,
+                  configured: configuredName.isNotEmpty,
+                ),
+                const SizedBox(height: 16),
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       final twoColumns = constraints.maxWidth >= 720;
                       return GridView.count(
                         crossAxisCount: twoColumns ? 2 : 1,
-                        childAspectRatio: twoColumns ? 3.35 : 4.5,
-                        crossAxisSpacing: 14,
-                        mainAxisSpacing: 14,
+                        childAspectRatio: twoColumns ? 5.15 : 5.4,
+                        crossAxisSpacing: 10,
+                        mainAxisSpacing: 10,
                         children: children,
                       );
                     },
@@ -413,6 +504,46 @@ class _SettingsHubScaffold extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SettingsHeroPanel extends StatelessWidget {
+  const _SettingsHeroPanel({
+    required this.companyName,
+    required this.configured,
+  });
+
+  final String companyName;
+  final bool configured;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFDDE7EE)),
+      ),
+      child: Row(
+        children: [
+          _TileIcon(icon: Icons.settings_rounded, size: 38),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Configuración de DaleVenta POS', style: _titleStyle(18)),
+                const SizedBox(height: 2),
+                Text(companyName, style: _strongBodyStyle()),
+              ],
+            ),
+          ),
+          _StatusPill(label: configured ? 'Empresa configurada' : 'Pendiente'),
+        ],
       ),
     );
   }
@@ -435,7 +566,7 @@ class _SettingsDetailScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final showInlineTitle = MediaQuery.sizeOf(context).width < 900;
     return Scaffold(
-      backgroundColor: const Color(0xFFEFF5F8),
+      backgroundColor: AppColors.background,
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1120),
@@ -450,7 +581,7 @@ class _SettingsDetailScaffold extends StatelessWidget {
                     icon: const Icon(Icons.arrow_back_rounded),
                     style: IconButton.styleFrom(
                       backgroundColor: Colors.white,
-                      foregroundColor: const Color(0xFF1957E6),
+                      foregroundColor: AppColors.secondary,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                         side: const BorderSide(color: Color(0xFFDDE7EE)),
@@ -505,7 +636,7 @@ class _SettingsLaunchCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         onTap: () => context.go(route),
         child: Container(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: const Color(0xFFDDE7EE)),
@@ -513,33 +644,37 @@ class _SettingsLaunchCard extends StatelessWidget {
           child: Row(
             children: [
               Container(
-                width: 46,
-                height: 46,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1957E6).withValues(alpha: 0.09),
-                  borderRadius: BorderRadius.circular(12),
+                  color: AppColors.secondary.withValues(alpha: 0.09),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: const Color(0xFF1957E6), size: 23),
+                child: Icon(icon, color: AppColors.secondary, size: 20),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: _titleStyle(17)),
-                    const SizedBox(height: 5),
+                    Text(title, style: _titleStyle(15)),
+                    const SizedBox(height: 2),
                     Text(
                       description,
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: _bodyStyle(),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 10),
-              const Icon(Icons.chevron_right_rounded, color: Color(0xFF60758A)),
+              const SizedBox(width: 8),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: Color(0xFF60758A),
+                size: 20,
+              ),
             ],
           ),
         ),
@@ -632,7 +767,7 @@ class _AccountSidePanelScaffold extends StatelessWidget {
         ? MediaQuery.sizeOf(context).width
         : 560.0;
     return Scaffold(
-      backgroundColor: const Color(0xFFEFF5F8),
+      backgroundColor: AppColors.background,
       body: Align(
         alignment: Alignment.centerRight,
         child: Container(
@@ -907,14 +1042,24 @@ class _CompanySettingsEditorState
   late final TextEditingController _name;
   late final TextEditingController _rnc;
   late final TextEditingController _phone;
+  late final TextEditingController _phonePreferential;
   late final TextEditingController _address;
+  late final TextEditingController _description;
+  late final TextEditingController _businessHours;
+  late final TextEditingController _website;
+  late final TextEditingController _instagram;
+  late final TextEditingController _facebook;
+  late final TextEditingController _gpsLocation;
   late final TextEditingController _legalName;
   late final TextEditingController _legalCedula;
   late final TextEditingController _legalRole;
-  late final TextEditingController _adminPin;
-  late final TextEditingController _adminPinConfirm;
+  late final TextEditingController _legalNationality;
+  late final TextEditingController _legalCivilStatus;
+  late final TextEditingController _bankAlias;
+  late final TextEditingController _bankType;
+  late final TextEditingController _bankNumber;
+  late final TextEditingController _bankName;
   bool _saving = false;
-  bool _savingPin = false;
 
   @override
   void initState() {
@@ -922,12 +1067,23 @@ class _CompanySettingsEditorState
     _name = TextEditingController();
     _rnc = TextEditingController();
     _phone = TextEditingController();
+    _phonePreferential = TextEditingController();
     _address = TextEditingController();
+    _description = TextEditingController();
+    _businessHours = TextEditingController();
+    _website = TextEditingController();
+    _instagram = TextEditingController();
+    _facebook = TextEditingController();
+    _gpsLocation = TextEditingController();
     _legalName = TextEditingController();
     _legalCedula = TextEditingController();
     _legalRole = TextEditingController();
-    _adminPin = TextEditingController();
-    _adminPinConfirm = TextEditingController();
+    _legalNationality = TextEditingController();
+    _legalCivilStatus = TextEditingController();
+    _bankAlias = TextEditingController();
+    _bankType = TextEditingController();
+    _bankNumber = TextEditingController();
+    _bankName = TextEditingController();
     _syncControllers(widget.settings);
   }
 
@@ -943,10 +1099,26 @@ class _CompanySettingsEditorState
     _name.text = settings.companyName;
     _rnc.text = settings.rnc;
     _phone.text = settings.phone;
+    _phonePreferential.text = settings.phonePreferential;
     _address.text = settings.address;
+    _description.text = settings.description;
+    _businessHours.text = settings.businessHours;
+    _website.text = settings.websiteUrl;
+    _instagram.text = settings.instagramUrl;
+    _facebook.text = settings.facebookUrl;
+    _gpsLocation.text = settings.gpsLocationUrl;
     _legalName.text = settings.legalRepresentativeName;
     _legalCedula.text = settings.legalRepresentativeCedula;
     _legalRole.text = settings.legalRepresentativeRole;
+    _legalNationality.text = settings.legalRepresentativeNationality;
+    _legalCivilStatus.text = settings.legalRepresentativeCivilStatus;
+    final firstBank = settings.bankAccounts.isEmpty
+        ? const BankAccountEntry()
+        : settings.bankAccounts.first;
+    _bankAlias.text = firstBank.name;
+    _bankType.text = firstBank.type;
+    _bankNumber.text = firstBank.accountNumber;
+    _bankName.text = firstBank.bankName;
   }
 
   @override
@@ -954,12 +1126,23 @@ class _CompanySettingsEditorState
     _name.dispose();
     _rnc.dispose();
     _phone.dispose();
+    _phonePreferential.dispose();
     _address.dispose();
+    _description.dispose();
+    _businessHours.dispose();
+    _website.dispose();
+    _instagram.dispose();
+    _facebook.dispose();
+    _gpsLocation.dispose();
     _legalName.dispose();
     _legalCedula.dispose();
     _legalRole.dispose();
-    _adminPin.dispose();
-    _adminPinConfirm.dispose();
+    _legalNationality.dispose();
+    _legalCivilStatus.dispose();
+    _bankAlias.dispose();
+    _bankType.dispose();
+    _bankNumber.dispose();
+    _bankName.dispose();
     super.dispose();
   }
 
@@ -973,10 +1156,31 @@ class _CompanySettingsEditorState
               companyName: _name.text.trim(),
               rnc: _rnc.text.trim(),
               phone: _phone.text.trim(),
+              phonePreferential: _phonePreferential.text.trim(),
               address: _address.text.trim(),
+              description: _description.text.trim(),
+              businessHours: _businessHours.text.trim(),
+              websiteUrl: _website.text.trim(),
+              instagramUrl: _instagram.text.trim(),
+              facebookUrl: _facebook.text.trim(),
+              gpsLocationUrl: _gpsLocation.text.trim(),
               legalRepresentativeName: _legalName.text.trim(),
               legalRepresentativeCedula: _legalCedula.text.trim(),
               legalRepresentativeRole: _legalRole.text.trim(),
+              legalRepresentativeNationality: _legalNationality.text.trim(),
+              legalRepresentativeCivilStatus: _legalCivilStatus.text.trim(),
+              bankAccounts: [
+                if (_bankAlias.text.trim().isNotEmpty ||
+                    _bankType.text.trim().isNotEmpty ||
+                    _bankNumber.text.trim().isNotEmpty ||
+                    _bankName.text.trim().isNotEmpty)
+                  BankAccountEntry(
+                    name: _bankAlias.text.trim(),
+                    type: _bankType.text.trim(),
+                    accountNumber: _bankNumber.text.trim(),
+                    bankName: _bankName.text.trim(),
+                  ),
+              ],
             ),
           );
       ref.invalidate(companySettingsProvider);
@@ -997,45 +1201,6 @@ class _CompanySettingsEditorState
       ).showSnackBar(SnackBar(content: Text('No se pudo guardar: $error')));
     } finally {
       if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  Future<void> _saveAdminPin() async {
-    final pin = _adminPin.text.trim();
-    final confirm = _adminPinConfirm.text.trim();
-    if (!RegExp(r'^\d{4}$').hasMatch(pin)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('El PIN debe tener exactamente 4 dígitos.'),
-        ),
-      );
-      return;
-    }
-    if (pin != confirm) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Los PIN no coinciden.')));
-      return;
-    }
-    setState(() => _savingPin = true);
-    try {
-      await ref
-          .read(companySettingsRepositoryProvider)
-          .setAdminAuthorizationPin(pin);
-      ref.invalidate(companySettingsProvider);
-      _adminPin.clear();
-      _adminPinConfirm.clear();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('PIN administrativo guardado.')),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo guardar PIN: $error')));
-    } finally {
-      if (mounted) setState(() => _savingPin = false);
     }
   }
 
@@ -1076,17 +1241,54 @@ class _CompanySettingsEditorState
               : widget.settings.address.trim(),
         ),
         const SizedBox(height: 14),
+        _ParagraphBlock(
+          title: 'Datos fiscales y comerciales',
+          text:
+              'Esta información se usa como identidad central de la empresa en documentos y pantallas.',
+        ),
+        const SizedBox(height: 10),
         _FormWrap(
           children: [
             _field(_name, 'Nombre comercial', Icons.storefront_outlined),
             _field(_rnc, 'RNC / identificación fiscal', Icons.badge_outlined),
             _field(_phone, 'Teléfono principal', Icons.phone_outlined),
             _field(
+              _phonePreferential,
+              'Teléfono preferencial',
+              Icons.phone_in_talk_outlined,
+            ),
+            _field(
               _address,
               'Dirección de la empresa',
               Icons.location_on_outlined,
               maxLines: 2,
             ),
+            _field(_businessHours, 'Horario', Icons.schedule_outlined),
+            _field(
+              _description,
+              'Descripción comercial',
+              Icons.notes_outlined,
+              maxLines: 2,
+            ),
+            _field(_website, 'Sitio web', Icons.language_outlined),
+            _field(_instagram, 'Instagram', Icons.alternate_email_rounded),
+            _field(_facebook, 'Facebook', Icons.facebook_outlined),
+            _field(
+              _gpsLocation,
+              'Ubicación GPS / Google Maps',
+              Icons.map_outlined,
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        _ParagraphBlock(
+          title: 'Representante legal',
+          text:
+              'Datos usados en contratos, cartas y documentos administrativos.',
+        ),
+        const SizedBox(height: 10),
+        _FormWrap(
+          children: [
             _field(
               _legalName,
               'Representante legal',
@@ -1098,15 +1300,28 @@ class _CompanySettingsEditorState
               Icons.credit_card_outlined,
             ),
             _field(_legalRole, 'Cargo', Icons.work_outline_rounded),
+            _field(_legalNationality, 'Nacionalidad', Icons.flag_outlined),
+            _field(
+              _legalCivilStatus,
+              'Estado civil',
+              Icons.assignment_ind_outlined,
+            ),
           ],
         ),
         const SizedBox(height: 14),
-        _PinSettingsPanel(
-          configured: widget.settings.hasAdminAuthorizationPin,
-          pin: _adminPin,
-          confirm: _adminPinConfirm,
-          saving: _savingPin,
-          onSave: _saveAdminPin,
+        _ParagraphBlock(
+          title: 'Cuenta bancaria principal',
+          text:
+              'Se usará como referencia para documentos, depósitos y comunicación con clientes.',
+        ),
+        const SizedBox(height: 10),
+        _FormWrap(
+          children: [
+            _field(_bankAlias, 'Alias de cuenta', Icons.label_outline_rounded),
+            _field(_bankType, 'Tipo de cuenta', Icons.account_balance_outlined),
+            _field(_bankNumber, 'Número de cuenta', Icons.credit_card_outlined),
+            _field(_bankName, 'Banco', Icons.account_balance_rounded),
+          ],
         ),
         const SizedBox(height: 14),
         Align(
@@ -1139,138 +1354,6 @@ class _CompanySettingsEditorState
       maxLines: maxLines,
       decoration: InputDecoration(
         prefixIcon: Icon(icon, size: 18),
-        labelText: label,
-        border: const OutlineInputBorder(),
-        isDense: true,
-      ),
-    );
-  }
-}
-
-class _PinSettingsPanel extends StatelessWidget {
-  const _PinSettingsPanel({
-    required this.configured,
-    required this.pin,
-    required this.confirm,
-    required this.saving,
-    required this.onSave,
-  });
-
-  final bool configured;
-  final TextEditingController pin;
-  final TextEditingController confirm;
-  final bool saving;
-  final VoidCallback onSave;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FBFF),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFD7E4EE)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.admin_panel_settings_outlined,
-                color: Color(0xFF1957E6),
-                size: 20,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'PIN administrativo',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF102235),
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: configured
-                      ? const Color(0xFFE7F8EF)
-                      : const Color(0xFFFFF4E8),
-                  borderRadius: BorderRadius.circular(99),
-                  border: Border.all(
-                    color: configured
-                        ? const Color(0xFFBFE9D0)
-                        : const Color(0xFFFFD7A8),
-                  ),
-                ),
-                child: Text(
-                  configured ? 'Configurado' : 'Pendiente',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: configured
-                        ? const Color(0xFF10743B)
-                        : const Color(0xFF9A5A00),
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Este PIN permite autorizar pantallas y acciones administrativas desde una cuenta que no sea admin.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF607187),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _FormWrap(
-            children: [
-              _pinField(pin, 'Nuevo PIN'),
-              _pinField(confirm, 'Confirmar PIN'),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerRight,
-            child: OutlinedButton.icon(
-              onPressed: saving ? null : onSave,
-              icon: saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.lock_reset_outlined),
-              label: Text(saving ? 'Guardando' : 'Guardar PIN'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _pinField(TextEditingController controller, String label) {
-    return TextField(
-      controller: controller,
-      obscureText: true,
-      obscuringCharacter: '•',
-      enableSuggestions: false,
-      autocorrect: false,
-      maxLength: 4,
-      keyboardType: TextInputType.number,
-      inputFormatters: [
-        FilteringTextInputFormatter.digitsOnly,
-        LengthLimitingTextInputFormatter(4),
-      ],
-      decoration: InputDecoration(
-        counterText: '',
-        prefixIcon: const Icon(Icons.pin_outlined, size: 18),
         labelText: label,
         border: const OutlineInputBorder(),
         isDense: true,
@@ -1320,7 +1403,7 @@ class _SettingsOptionGrid extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(item.icon, color: const Color(0xFF1957E6), size: 18),
+                    Icon(item.icon, color: AppColors.secondary, size: 18),
                     const Spacer(),
                     Text(
                       item.title,
@@ -1551,7 +1634,7 @@ class _HeaderIcon extends StatelessWidget {
 class _TileIcon extends StatelessWidget {
   const _TileIcon({
     required this.icon,
-    this.color = const Color(0xFF1957E6),
+    this.color = AppColors.secondary,
     this.size = 34,
   });
 
@@ -1591,7 +1674,7 @@ class _StatusPill extends StatelessWidget {
       child: Text(
         label,
         style: const TextStyle(
-          color: Color(0xFF1957E6),
+          color: AppColors.secondary,
           fontWeight: FontWeight.w900,
           fontSize: 12,
           letterSpacing: 0,
@@ -1603,7 +1686,7 @@ class _StatusPill extends StatelessWidget {
 
 ButtonStyle _outlinedButtonStyle() {
   return OutlinedButton.styleFrom(
-    foregroundColor: const Color(0xFF1957E6),
+    foregroundColor: AppColors.secondary,
     side: const BorderSide(color: Color(0xFF9DB9F8)),
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     textStyle: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0),
@@ -1612,7 +1695,7 @@ ButtonStyle _outlinedButtonStyle() {
 
 ButtonStyle _filledButtonStyle() {
   return FilledButton.styleFrom(
-    backgroundColor: const Color(0xFF1957E6),
+    backgroundColor: AppColors.secondary,
     foregroundColor: Colors.white,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     textStyle: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0),
@@ -1621,7 +1704,7 @@ ButtonStyle _filledButtonStyle() {
 
 TextStyle _titleStyle(double size) {
   return TextStyle(
-    color: const Color(0xFF0F172A),
+    color: AppColors.textPrimary,
     fontSize: size,
     fontWeight: FontWeight.w900,
     letterSpacing: 0,
@@ -1692,6 +1775,6 @@ Color _updateAccent(AppUpdatePhase phase) {
     AppUpdatePhase.error ||
     AppUpdatePhase.requiredUpdate => const Color(0xFFDC2626),
     AppUpdatePhase.upToDate => const Color(0xFF16A34A),
-    _ => const Color(0xFF1957E6),
+    _ => AppColors.secondary,
   };
 }

@@ -12,6 +12,7 @@ import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/routing/routes.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -465,7 +466,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
         : visibleSales.first;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFEFF6FA),
+      backgroundColor: AppColors.background,
       drawer: buildAdaptiveDrawer(context, currentUser: user),
       appBar: FullTechPageHeader(
         title: 'Facturacion',
@@ -650,7 +651,10 @@ class _Toolbar extends StatelessWidget {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFF1957E6), width: 1.3),
+            borderSide: const BorderSide(
+              color: AppColors.secondary,
+              width: 1.3,
+            ),
           ),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
         ),
@@ -659,7 +663,7 @@ class _Toolbar extends StatelessWidget {
     return Container(
       padding: EdgeInsets.fromLTRB(mobile ? 10 : 24, 12, mobile ? 10 : 24, 10),
       decoration: const BoxDecoration(
-        color: Color(0xFFF4F8FB),
+        color: AppColors.surfaceSubtle,
         border: Border(bottom: BorderSide(color: Color(0xFFD8E5EE))),
       ),
       child: mobile
@@ -686,7 +690,7 @@ class _Toolbar extends StatelessWidget {
                         '${DateFormat('dd/MM/yyyy').format(fromDate)} - ${DateFormat('dd/MM/yyyy').format(toDate)}',
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Color(0xFF52667C),
+                          color: AppColors.textSecondary,
                           fontWeight: FontWeight.w800,
                           fontSize: 12,
                         ),
@@ -717,7 +721,7 @@ class _Toolbar extends StatelessWidget {
                     height: 42,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1957E6),
+                      color: AppColors.secondary,
                       borderRadius: BorderRadius.circular(9),
                       boxShadow: [
                         BoxShadow(
@@ -770,7 +774,7 @@ class _Toolbar extends StatelessWidget {
                 Text(
                   '${DateFormat('dd/MM/yyyy').format(fromDate)} - ${DateFormat('dd/MM/yyyy').format(toDate)}',
                   style: const TextStyle(
-                    color: Color(0xFF52667C),
+                    color: AppColors.textSecondary,
                     fontWeight: FontWeight.w800,
                     fontSize: 12,
                   ),
@@ -869,7 +873,7 @@ class _InvoiceListCard extends StatelessWidget {
                         'Selecciona una factura para ver el resumen completo a la derecha.',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Color(0xFF64748B),
+                          color: AppColors.textMuted,
                         ),
                       ),
                     ],
@@ -878,7 +882,7 @@ class _InvoiceListCard extends StatelessWidget {
                 Text(
                   statusText,
                   style: const TextStyle(
-                    color: Color(0xFF64748B),
+                    color: AppColors.textMuted,
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
                   ),
@@ -925,7 +929,7 @@ class _InvoiceListCard extends StatelessWidget {
                 return ListView.separated(
                   itemCount: sales.length,
                   separatorBuilder: (_, __) =>
-                      const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                      const Divider(height: 1, color: AppColors.border),
                   itemBuilder: (context, index) {
                     final sale = sales[index];
                     return _InvoiceRow(
@@ -1109,7 +1113,7 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
                       ),
                       child: const Icon(
                         Icons.filter_alt_rounded,
-                        color: Color(0xFF1957E6),
+                        color: AppColors.secondary,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -1120,7 +1124,7 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
                           Text(
                             'Filtros de ventas',
                             style: TextStyle(
-                              color: Color(0xFF0F172A),
+                              color: AppColors.textPrimary,
                               fontSize: 20,
                               fontWeight: FontWeight.w900,
                             ),
@@ -1129,7 +1133,7 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
                           Text(
                             'Rango, cajero, estado y metodo de pago',
                             style: TextStyle(
-                              color: Color(0xFF64748B),
+                              color: AppColors.textMuted,
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
                             ),
@@ -1145,7 +1149,7 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
                   ],
                 ),
               ),
-              const Divider(height: 1, color: Color(0xFFE2E8F0)),
+              const Divider(height: 1, color: AppColors.border),
               Expanded(
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
@@ -1265,8 +1269,8 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
               Container(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
                 decoration: const BoxDecoration(
-                  color: Color(0xFFF8FBFF),
-                  border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+                  color: AppColors.surfaceAlt,
+                  border: Border(top: BorderSide(color: AppColors.border)),
                 ),
                 child: Row(
                   children: [
@@ -1286,7 +1290,7 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
                         icon: const Icon(Icons.check_rounded),
                         label: const Text('Aplicar'),
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF1957E6),
+                          backgroundColor: AppColors.secondary,
                           foregroundColor: Colors.white,
                           minimumSize: const Size.fromHeight(46),
                         ),
@@ -1343,9 +1347,9 @@ class _DateFilterButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
+          color: AppColors.surfaceMuted,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFD6E3F5)),
+          border: Border.all(color: AppColors.borderStrong),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1353,7 +1357,7 @@ class _DateFilterButton extends StatelessWidget {
             Text(
               label,
               style: const TextStyle(
-                color: Color(0xFF64748B),
+                color: AppColors.textMuted,
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
               ),
@@ -1365,7 +1369,7 @@ class _DateFilterButton extends StatelessWidget {
                   child: Text(
                     value,
                     style: const TextStyle(
-                      color: Color(0xFF0F172A),
+                      color: AppColors.textPrimary,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
@@ -1373,7 +1377,7 @@ class _DateFilterButton extends StatelessWidget {
                 const Icon(
                   Icons.calendar_month_rounded,
                   size: 18,
-                  color: Color(0xFF1957E6),
+                  color: AppColors.secondary,
                 ),
               ],
             ),
@@ -1468,14 +1472,14 @@ class _InvoiceRow extends StatelessWidget {
                     children: [
                       Text(
                         dateFmt.format(sale.saleDate ?? DateTime.now()),
-                        style: const TextStyle(color: Color(0xFF64748B)),
+                        style: const TextStyle(color: AppColors.textMuted),
                       ),
                       _StatusPill(active: active),
                       Text(
                         sale.userName ?? sale.userId,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Color(0xFF64748B)),
+                        style: const TextStyle(color: AppColors.textMuted),
                       ),
                     ],
                   ),
@@ -1543,7 +1547,7 @@ class _InvoiceRow extends StatelessWidget {
                           sale.userName ?? sale.userId,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Color(0xFF64748B)),
+                          style: const TextStyle(color: AppColors.textMuted),
                         ),
                       ],
                     ),
@@ -1560,7 +1564,7 @@ class _InvoiceRow extends StatelessWidget {
                     flex: 14,
                     child: Text(
                       dateFmt.format(sale.saleDate ?? DateTime.now()),
-                      style: const TextStyle(color: Color(0xFF64748B)),
+                      style: const TextStyle(color: AppColors.textMuted),
                     ),
                   ),
                   Expanded(
@@ -1596,7 +1600,7 @@ class _InvoiceRow extends StatelessWidget {
                     onPressed: onPdf,
                     visualDensity: VisualDensity.compact,
                     icon: const Icon(Icons.picture_as_pdf_outlined, size: 19),
-                    color: const Color(0xFFE11D48),
+                    color: AppColors.error,
                   ),
                   IconButton(
                     tooltip: active ? 'Devolver' : 'Factura devuelta',
@@ -1606,7 +1610,7 @@ class _InvoiceRow extends StatelessWidget {
                       Icons.assignment_return_outlined,
                       size: 19,
                     ),
-                    color: const Color(0xFFEA580C),
+                    color: AppColors.warning,
                   ),
                 ],
               ),
@@ -1702,7 +1706,7 @@ class _InvoiceDetailPanel extends StatelessWidget {
             child: Text(
               'DETALLE',
               style: TextStyle(
-                color: Color(0xFF64748B),
+                color: AppColors.textMuted,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 0.6,
               ),
@@ -1728,7 +1732,7 @@ class _InvoiceDetailPanel extends StatelessWidget {
                       ),
                       Text(
                         '${qty(item.qty)} x ${formatRdCurrencyAccounting(item.priceSoldUnit)}',
-                        style: const TextStyle(color: Color(0xFF64748B)),
+                        style: const TextStyle(color: AppColors.textMuted),
                       ),
                       const SizedBox(width: 12),
                       SizedBox(
@@ -1767,7 +1771,7 @@ class _InvoiceDetailPanel extends StatelessWidget {
                     icon: const Icon(Icons.assignment_return_outlined),
                     label: Text(sale.isDeleted ? 'Devuelta' : 'Devolver'),
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF1957E6),
+                      backgroundColor: AppColors.secondary,
                       padding: const EdgeInsets.symmetric(vertical: 15),
                     ),
                   ),
@@ -1907,7 +1911,7 @@ class _DetailLine extends StatelessWidget {
             child: Text(
               label,
               style: const TextStyle(
-                color: Color(0xFF64748B),
+                color: AppColors.textMuted,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -1936,9 +1940,7 @@ class _TotalLine extends StatelessWidget {
             child: Text(
               label,
               style: TextStyle(
-                color: strong
-                    ? const Color(0xFF0F172A)
-                    : const Color(0xFF64748B),
+                color: strong ? AppColors.textPrimary : AppColors.textMuted,
                 fontWeight: strong ? FontWeight.w900 : FontWeight.w600,
               ),
             ),
@@ -1970,7 +1972,7 @@ class _EmptyDetail extends StatelessWidget {
       child: const Center(
         child: Text(
           'Selecciona una factura para ver el detalle',
-          style: TextStyle(color: Color(0xFF64748B)),
+          style: TextStyle(color: AppColors.textMuted),
         ),
       ),
     );
@@ -2024,15 +2026,15 @@ InputDecoration _filterInputDecoration(String label) {
   return InputDecoration(
     labelText: label,
     filled: true,
-    fillColor: const Color(0xFFF8FAFC),
+    fillColor: AppColors.surfaceMuted,
     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: Color(0xFFD6E3F5)),
+      borderSide: const BorderSide(color: AppColors.borderStrong),
     ),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: Color(0xFFD6E3F5)),
+      borderSide: const BorderSide(color: AppColors.borderStrong),
     ),
   );
 }

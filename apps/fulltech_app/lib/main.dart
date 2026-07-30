@@ -10,6 +10,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'core/app_update/app_update_controller.dart';
 import 'core/routing/app_router.dart';
+import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'core/loading/app_loading_overlay.dart';
 import 'core/auth/app_role.dart';
@@ -37,12 +38,12 @@ class _GlobalErrorFallbackState extends State<_GlobalErrorFallback> {
   @override
   Widget build(BuildContext context) {
     return const ColoredBox(
-      color: Color(0xFFF1F5F9),
+      color: AppColors.surfaceMuted,
       child: Center(
         child: Icon(
           Icons.error_outline_rounded,
           size: 36,
-          color: Color(0xFFB91C1C),
+          color: AppColors.error,
         ),
       ),
     );

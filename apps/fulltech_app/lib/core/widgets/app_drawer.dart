@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../modules/cash/cash_dialogs.dart';
 import '../../modules/cash/cash_providers.dart';
@@ -12,6 +11,7 @@ import '../models/user_model.dart';
 import '../design_system/icons/app_icon.dart';
 import '../design_system/icons/app_icon_sizes.dart';
 import '../design_system/icons/app_icons.dart';
+import '../routing/app_navigator.dart';
 import '../routing/routes.dart';
 import '../routing/route_access.dart';
 import '../theme/app_colors.dart';
@@ -91,8 +91,10 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
       _openMovementDialog(context, 'OUT');
       return;
     }
+    final routerContext = Navigator.of(context, rootNavigator: true).context;
     Navigator.pop(context);
-    context.go(item.route);
+    if (!routerContext.mounted) return;
+    AppNavigator.go(routerContext, item.route);
   }
 
   @override
@@ -244,8 +246,14 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                               Routes.profile,
                             ),
                             onTap: () {
+                              final routerContext = Navigator.of(
+                                context,
+                                rootNavigator: true,
+                              ).context;
                               Navigator.pop(context);
-                              context.go(Routes.profile);
+                              if (routerContext.mounted) {
+                                AppNavigator.go(routerContext, Routes.profile);
+                              }
                             },
                           ),
                         ),
@@ -275,8 +283,14 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                           Routes.users,
                         ),
                         onTap: () {
+                          final routerContext = Navigator.of(
+                            context,
+                            rootNavigator: true,
+                          ).context;
                           Navigator.pop(context);
-                          context.go(Routes.users);
+                          if (routerContext.mounted) {
+                            AppNavigator.go(routerContext, Routes.users);
+                          }
                         },
                       ),
                     ],

@@ -53,6 +53,7 @@ class Routes {
   static const configuracionImpresora = '/configuracion/impresora';
   static const configuracionBackup = '/configuracion/backup';
   static const configuracionParametros = '/configuracion/parametros';
+  static const configuracionDocumentos = '/configuracion/documentos';
   static const whatsapp = '/whatsapp';
   static const publicidad = '/publicidad';
   static const publicidadInvestigacion = '/publicidad/investigacion';

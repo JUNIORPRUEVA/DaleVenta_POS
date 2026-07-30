@@ -42,7 +42,7 @@ class AppTheme {
     );
     final outlineSoft = Color.alphaBlend(
       branding.tertiary.withValues(alpha: 0.12),
-      const Color(0xFFD6E2EC),
+      AppColors.border,
     );
     final textTheme = AppTypography.textTheme();
     final buttonTextStyle = textTheme.labelLarge?.copyWith(
@@ -59,7 +59,7 @@ class AppTheme {
       textTheme: textTheme,
       primaryTextTheme: textTheme,
       iconTheme: const IconThemeData(
-        color: Color(0xFF334155),
+        color: AppColors.textMuted,
         size: AppIconSizes.normal,
       ),
       primaryIconTheme: IconThemeData(
@@ -69,16 +69,16 @@ class AppTheme {
 
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF111827),
+        foregroundColor: AppColors.textPrimary,
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
         shadowColor: Colors.transparent,
-        shape: const Border(bottom: BorderSide(color: Color(0xFFD3E0E7))),
+        shape: const Border(bottom: BorderSide(color: AppColors.border)),
         centerTitle: false,
         titleTextStyle: textTheme.titleMedium?.copyWith(
           fontWeight: FontWeight.w600,
-          color: const Color(0xFF111827),
+          color: AppColors.textPrimary,
         ),
         toolbarTextStyle: textTheme.bodyMedium,
         iconTheme: IconThemeData(
@@ -135,12 +135,12 @@ class AppTheme {
         ),
         hintStyle: const TextStyle(
           fontFamily: AppTypography.fontFamily,
-          color: Color(0xFF94A3B8),
+          color: AppColors.textMuted,
           fontSize: 14,
           fontWeight: FontWeight.w400,
         ),
-        prefixIconColor: const Color(0xFF64748B),
-        suffixIconColor: const Color(0xFF64748B),
+        prefixIconColor: AppColors.textMuted,
+        suffixIconColor: AppColors.textMuted,
       ),
 
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -244,7 +244,7 @@ class AppTheme {
           size: AppIconSizes.navigation,
         ),
         unselectedIconTheme: const IconThemeData(
-          color: Color(0xFF64748B),
+          color: AppColors.textMuted,
           size: AppIconSizes.navigation,
         ),
         selectedLabelTextStyle: textTheme.labelMedium?.copyWith(
@@ -262,7 +262,7 @@ class AppTheme {
         iconTheme: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return IconThemeData(
-            color: selected ? branding.primary : const Color(0xFF64748B),
+            color: selected ? branding.primary : AppColors.textMuted,
             size: AppIconSizes.navigation,
           );
         }),
@@ -341,7 +341,7 @@ class AppTheme {
       tooltipTheme: TooltipThemeData(
         textStyle: textTheme.labelSmall?.copyWith(color: Colors.white),
         decoration: BoxDecoration(
-          color: const Color(0xFF0F172A),
+          color: AppColors.textPrimary,
           borderRadius: BorderRadius.circular(8),
         ),
         waitDuration: const Duration(milliseconds: 450),

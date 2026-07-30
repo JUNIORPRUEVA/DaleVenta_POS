@@ -15,6 +15,7 @@ import '../../../core/auth/auth_provider.dart';
 import '../../../core/cache/fulltech_cache_manager.dart';
 import '../../../core/cache/local_json_cache.dart';
 import '../../../core/models/product_model.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/media_file_actions.dart';
 import '../../../core/utils/money_formatters.dart';
 import '../../../core/utils/local_file_bytes.dart';
@@ -27,11 +28,11 @@ import '../../../core/widgets/product_network_image.dart';
 import '../../catalogo/application/catalog_controller.dart';
 import '../../catalogo/data/catalog_repository.dart';
 
-const _primaryBlue = Color(0xFF1A56DB);
-const _lightBlueHover = Color(0xFFEFF6FF);
-const _textSecondary = Color(0xFF64748B);
-const _borderSoft = Color(0xFFE2E8F0);
-const _pageBackground = Color(0xFFEFF4FA);
+const _primaryBlue = AppColors.secondary;
+const _lightBlueHover = AppColors.secondarySoft;
+const _textSecondary = AppColors.textMuted;
+const _borderSoft = AppColors.border;
+const _pageBackground = AppColors.background;
 const double _desktopSidePanelWidth = 500;
 const double _desktopWideSidePanelWidth = 550;
 const double _stockLowThreshold = 5;
@@ -82,9 +83,9 @@ String _stockLevelLabel(_StockLevel level) => switch (level) {
 };
 
 Color _stockLevelColor(_StockLevel level) => switch (level) {
-  _StockLevel.out => const Color(0xFFEF4444),
-  _StockLevel.low => const Color(0xFFF59E0B),
-  _StockLevel.high => const Color(0xFF1A56DB),
+  _StockLevel.out => AppColors.error,
+  _StockLevel.low => AppColors.warning,
+  _StockLevel.high => AppColors.secondary,
 };
 
 bool _matchesStockFilter(ProductModel product, _StockFilter filter) {
@@ -1991,7 +1992,7 @@ class _SelectedStockProduct extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Color(0xFF0F172A),
+                    color: AppColors.textPrimary,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -2075,7 +2076,7 @@ class _StockProductRow extends StatelessWidget {
                         style: const TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 12.5,
-                          color: Color(0xFF0F172A),
+                          color: AppColors.textPrimary,
                         ),
                       ),
                       const SizedBox(height: 1),

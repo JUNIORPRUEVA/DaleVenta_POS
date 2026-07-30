@@ -6,10 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/auth/auth_provider.dart';
+import '../../../core/utils/app_feedback.dart';
 import '../../../core/utils/money_formatters.dart';
 import '../../../core/widgets/app_drawer.dart';
 import '../../../modules/ventas/data/ventas_repository.dart';
 import '../../../modules/ventas/sales_models.dart';
+import '../utils/sales_report_pdf_service.dart';
 
 const _primaryBlue = Color(0xFF2563EB);
 const _teal = Color(0xFF0D9488);
@@ -132,6 +134,26 @@ class TopClient {
   final int purchaseCount;
 }
 
+class CategoryProfitData {
+  const CategoryProfitData({
+    required this.category,
+    required this.totalSales,
+    required this.totalCost,
+    required this.totalProfit,
+    required this.totalQty,
+    required this.salesCount,
+  });
+
+  final String category;
+  final double totalSales;
+  final double totalCost;
+  final double totalProfit;
+  final double totalQty;
+  final int salesCount;
+
+  double get margin => totalSales == 0 ? 0 : (totalProfit / totalSales) * 100;
+}
+
 class ReportsPage extends ConsumerStatefulWidget {
   const ReportsPage({super.key});
 
@@ -144,15 +166,19 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   DateTime? _customStart;
   DateTime? _customEnd;
   bool _loading = true;
+  bool _generatingPdf = false;
   String? _error;
+  String? _selectedCategory;
 
   KpisData _kpis = KpisData.fromSummary(SalesSummaryModel.empty());
   List<SaleModel> _sales = const [];
+  List<String> _categories = const [];
   List<SeriesDataPoint> _salesSeries = const [];
   List<SeriesDataPoint> _profitSeries = const [];
   List<PaymentMethodData> _paymentMethods = const [];
   List<TopProduct> _topProducts = const [];
   List<TopClient> _topClients = const [];
+  List<CategoryProfitData> _categoryProfits = const [];
   List<_ComparisonRowData> _comparisons = const [];
 
   final _date = DateFormat('dd/MM/yyyy');
@@ -178,22 +204,31 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       final repo = ref.read(ventasRepositoryProvider);
       final range = _range;
       final results = await Future.wait([
-        repo.reportsSalesOverview(from: range.start, to: range.end),
+        repo.reportsSalesOverview(
+          from: range.start,
+          to: range.end,
+          category: _selectedCategory,
+        ),
         repo.listSales(from: range.start, to: range.end),
       ]);
       final report = results[0] as Map<String, dynamic>;
-      final sales = results[1] as List<SaleModel>;
+      final sales = _projectSalesByCategory(
+        results[1] as List<SaleModel>,
+        _selectedCategory,
+      );
       final comparisons = await _loadComparisons(repo);
 
       if (!mounted) return;
       setState(() {
         _kpis = KpisData.fromReport(report);
         _sales = sales;
+        _categories = _parseCategories(report['categories']);
         _salesSeries = _parseSeries(report['salesSeries']);
         _profitSeries = _parseSeries(report['profitSeries']);
         _paymentMethods = _parsePaymentMethods(report['paymentMethods']);
         _topProducts = _parseTopProducts(report['topProducts']);
         _topClients = _parseTopClients(report['topClients']);
+        _categoryProfits = _parseCategoryProfits(report['categoryProfits']);
         _comparisons = comparisons;
         _loading = false;
       });
@@ -271,6 +306,68 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     _loadData();
   }
 
+  void _changeCategory(String? category) {
+    final normalized = (category ?? '').trim();
+    setState(() {
+      _selectedCategory = normalized.isEmpty ? null : normalized;
+    });
+    _loadData();
+  }
+
+  Future<void> _downloadPdf() async {
+    if (_loading || _generatingPdf) return;
+    setState(() => _generatingPdf = true);
+    try {
+      final range = _range;
+      final categoryLabel = _selectedCategory?.trim().isNotEmpty == true
+          ? _selectedCategory!.trim()
+          : 'Todas las categorias';
+      final bytes = await buildProfessionalSalesReportPdf(
+        from: range.start,
+        to: range.end,
+        categoryLabel: categoryLabel,
+        kpis: SalesReportPdfKpis(
+          totalSales: _kpis.totalSales,
+          totalProfit: _kpis.totalProfit,
+          netProfit: _kpis.netProfit,
+          totalCost: _kpis.totalCost,
+          salesCount: _kpis.salesCount,
+          avgTicket: _kpis.avgTicket,
+          margin: _kpis.margin,
+        ),
+        categories: _categoryProfits
+            .map(
+              (row) => SalesReportPdfCategoryRow(
+                category: row.category,
+                totalSales: row.totalSales,
+                totalCost: row.totalCost,
+                totalProfit: row.totalProfit,
+                totalQty: row.totalQty,
+                salesCount: row.salesCount,
+              ),
+            )
+            .toList(growable: false),
+        sales: _sales,
+      );
+      await downloadProfessionalSalesReportPdf(
+        bytes: bytes,
+        from: range.start,
+        to: range.end,
+        categoryLabel: categoryLabel,
+      );
+      if (!mounted) return;
+      await AppFeedback.showInfo(context, 'Reporte PDF descargado.');
+    } catch (_) {
+      if (!mounted) return;
+      await AppFeedback.showError(
+        context,
+        'No se pudo generar el reporte PDF.',
+      );
+    } finally {
+      if (mounted) setState(() => _generatingPdf = false);
+    }
+  }
+
   Future<void> _pickCustomRange() async {
     final initial = _range;
     final picked = await showDateRangePicker(
@@ -309,8 +406,13 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                       ? '${_date.format(_range.start)} - ${_date.format(_range.end)}'
                       : null,
                   loading: _loading,
+                  generatingPdf: _generatingPdf,
+                  categories: _categories,
+                  selectedCategory: _selectedCategory,
                   onPeriodChanged: _changePeriod,
+                  onCategoryChanged: _changeCategory,
                   onReload: _loadData,
+                  onDownloadPdf: _downloadPdf,
                 ),
                 const SizedBox(height: 12),
                 if (_loading)
@@ -339,6 +441,8 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                               ),
                               const SizedBox(height: 12),
                               _AdvancedKpiCards(kpis: _kpis),
+                              const SizedBox(height: 12),
+                              CategoryProfitTable(categories: _categoryProfits),
                               const SizedBox(height: 12),
                               wide
                                   ? Row(
@@ -470,15 +574,25 @@ class _ReportsTopBar extends StatelessWidget {
     required this.selectedPeriod,
     required this.customLabel,
     required this.loading,
+    required this.generatingPdf,
+    required this.categories,
+    required this.selectedCategory,
     required this.onPeriodChanged,
+    required this.onCategoryChanged,
     required this.onReload,
+    required this.onDownloadPdf,
   });
 
   final DateRangePeriod selectedPeriod;
   final String? customLabel;
   final bool loading;
+  final bool generatingPdf;
+  final List<String> categories;
+  final String? selectedCategory;
   final ValueChanged<DateRangePeriod> onPeriodChanged;
+  final ValueChanged<String?> onCategoryChanged;
   final VoidCallback onReload;
+  final VoidCallback onDownloadPdf;
 
   @override
   Widget build(BuildContext context) {
@@ -531,6 +645,20 @@ class _ReportsTopBar extends StatelessWidget {
                       onPressed: loading ? null : onReload,
                       icon: const Icon(Icons.refresh_rounded, size: 18),
                     ),
+                    const SizedBox(width: 6),
+                    IconButton.filledTonal(
+                      tooltip: 'Descargar PDF',
+                      onPressed: loading || generatingPdf
+                          ? null
+                          : onDownloadPdf,
+                      icon: generatingPdf
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                    ),
                   ],
                 ),
               ],
@@ -572,15 +700,130 @@ class _ReportsTopBar extends StatelessWidget {
                   icon: const Icon(Icons.refresh_rounded, size: 16),
                   label: const Text('Recargar'),
                 ),
+                const SizedBox(width: 8),
+                FilledButton.tonalIcon(
+                  onPressed: loading || generatingPdf ? null : onDownloadPdf,
+                  icon: generatingPdf
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.picture_as_pdf_outlined, size: 16),
+                  label: const Text('Descargar PDF'),
+                ),
               ],
             ),
           const SizedBox(height: 10),
-          DateRangeSelector(
-            selectedPeriod: selectedPeriod,
-            customLabel: customLabel,
-            onPeriodChanged: onPeriodChanged,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: mobile ? 1 : 3,
+                child: DateRangeSelector(
+                  selectedPeriod: selectedPeriod,
+                  customLabel: customLabel,
+                  onPeriodChanged: onPeriodChanged,
+                ),
+              ),
+              if (!mobile) ...[
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: CategoryFilterSelector(
+                    categories: categories,
+                    selectedCategory: selectedCategory,
+                    onChanged: loading ? null : onCategoryChanged,
+                  ),
+                ),
+              ],
+            ],
           ),
+          if (mobile) ...[
+            const SizedBox(height: 8),
+            CategoryFilterSelector(
+              categories: categories,
+              selectedCategory: selectedCategory,
+              onChanged: loading ? null : onCategoryChanged,
+            ),
+          ],
+          if (selectedCategory?.trim().isNotEmpty == true) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _Pill(text: 'Filtrado: ${selectedCategory!.trim()}'),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+class CategoryFilterSelector extends StatelessWidget {
+  const CategoryFilterSelector({
+    super.key,
+    required this.categories,
+    required this.selectedCategory,
+    required this.onChanged,
+  });
+
+  final List<String> categories;
+  final String? selectedCategory;
+  final ValueChanged<String?>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final items = <DropdownMenuItem<String?>>[
+      const DropdownMenuItem<String?>(
+        value: null,
+        child: Text('Todas las categorías'),
+      ),
+      for (final category in categories)
+        DropdownMenuItem<String?>(value: category, child: Text(category)),
+    ];
+    final selected = categories.contains(selectedCategory)
+        ? selectedCategory
+        : null;
+    return _Surface(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      radius: 12,
+      shadow: false,
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String?>(
+          isExpanded: true,
+          value: selected,
+          icon: Icon(Icons.keyboard_arrow_down_rounded, color: scheme.primary),
+          items: items,
+          onChanged: onChanged,
+          style: const TextStyle(
+            color: _textPrimary,
+            fontWeight: FontWeight.w700,
+            fontSize: 12,
+          ),
+          selectedItemBuilder: (context) => items
+              .map(
+                (item) => Row(
+                  children: [
+                    Icon(
+                      Icons.category_outlined,
+                      size: 17,
+                      color: scheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        item.value ?? 'Todas las categorías',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+              .toList(),
+        ),
       ),
     );
   }
@@ -934,6 +1177,153 @@ class TopProductsTable extends StatelessWidget {
                   ),
               ],
             ),
+    );
+  }
+}
+
+class CategoryProfitTable extends StatelessWidget {
+  const CategoryProfitTable({super.key, required this.categories});
+  final List<CategoryProfitData> categories;
+
+  @override
+  Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 640;
+    return _PremiumCard(
+      title: 'Ganancia por categoría',
+      child: categories.isEmpty
+          ? const _EmptyChart()
+          : Column(
+              children: [
+                for (var i = 0; i < categories.length; i++) ...[
+                  _CategoryProfitRow(data: categories[i], mobile: mobile),
+                  if (i != categories.length - 1) const Divider(height: 18),
+                ],
+              ],
+            ),
+    );
+  }
+}
+
+class _CategoryProfitRow extends StatelessWidget {
+  const _CategoryProfitRow({required this.data, required this.mobile});
+  final CategoryProfitData data;
+  final bool mobile;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = [
+      _CategoryMetric(
+        label: 'Ventas',
+        value: formatRdCurrencyAccounting(data.totalSales),
+      ),
+      _CategoryMetric(
+        label: 'Costo',
+        value: formatRdCurrencyAccounting(data.totalCost),
+      ),
+      _CategoryMetric(
+        label: 'Ganancia',
+        value: formatRdCurrencyAccounting(data.totalProfit),
+        color: data.totalProfit >= 0 ? _teal : _error,
+      ),
+      _CategoryMetric(
+        label: 'Margen',
+        value: '${data.margin.toStringAsFixed(1)}%',
+      ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: _teal.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.category_outlined,
+                color: _teal,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                data.category,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ),
+            Text(
+              '${data.salesCount} ventas',
+              style: const TextStyle(
+                color: _textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        mobile
+            ? Wrap(spacing: 8, runSpacing: 8, children: content)
+            : Row(
+                children: [
+                  for (var i = 0; i < content.length; i++) ...[
+                    Expanded(child: content[i]),
+                    if (i != content.length - 1) const SizedBox(width: 8),
+                  ],
+                ],
+              ),
+      ],
+    );
+  }
+}
+
+class _CategoryMetric extends StatelessWidget {
+  const _CategoryMetric({
+    required this.label,
+    required this.value,
+    this.color = _textPrimary,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 118),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: _pageBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _borderSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(color: _textSecondary, fontSize: 11),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w900,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1826,4 +2216,80 @@ List<TopClient> _parseTopClients(dynamic raw) {
       )
       .where((row) => row.clientName.trim().isNotEmpty)
       .toList(growable: false);
+}
+
+List<CategoryProfitData> _parseCategoryProfits(dynamic raw) {
+  final rows = raw is List ? raw : const [];
+  return rows
+      .whereType<Map>()
+      .map(
+        (row) => CategoryProfitData(
+          category: (row['category'] ?? 'Sin categoria').toString(),
+          totalSales: _toDouble(row['totalSales']),
+          totalCost: _toDouble(row['totalCost']),
+          totalProfit: _toDouble(row['totalProfit']),
+          totalQty: _toDouble(row['totalQty']),
+          salesCount: (row['salesCount'] as num?)?.toInt() ?? 0,
+        ),
+      )
+      .where((row) => row.category.trim().isNotEmpty)
+      .toList(growable: false);
+}
+
+List<String> _parseCategories(dynamic raw) {
+  final rows = raw is List ? raw : const [];
+  final categories = rows
+      .map((item) => item?.toString().trim() ?? '')
+      .where((item) => item.isNotEmpty)
+      .toSet()
+      .toList(growable: false);
+  categories.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+  return categories;
+}
+
+List<SaleModel> _projectSalesByCategory(
+  List<SaleModel> sales,
+  String? selectedCategory,
+) {
+  final category = (selectedCategory ?? '').trim().toLowerCase();
+  if (category.isEmpty) return sales;
+  final projected = <SaleModel>[];
+  for (final sale in sales) {
+    final items = sale.items
+        .where((item) => item.categoryLabel.trim().toLowerCase() == category)
+        .toList(growable: false);
+    if (items.isEmpty) continue;
+    final totalSold = items.fold(0.0, (sum, item) => sum + item.subtotalSold);
+    final totalCost = items.fold(0.0, (sum, item) => sum + item.subtotalCost);
+    final totalProfit = items.fold(0.0, (sum, item) => sum + item.profit);
+    final saleSold = sale.totalSold;
+    final allocation = saleSold > 0 ? totalSold / saleSold : 0.0;
+    projected.add(
+      SaleModel(
+        id: sale.id,
+        userId: sale.userId,
+        userName: sale.userName,
+        customerId: sale.customerId,
+        customerName: sale.customerName,
+        customerPhone: sale.customerPhone,
+        saleDate: sale.saleDate,
+        note: sale.note,
+        totalSold: totalSold,
+        totalCost: totalCost,
+        totalProfit: totalProfit,
+        commissionAmount: sale.commissionAmount * allocation,
+        paymentMethod: sale.paymentMethod,
+        paymentCashAmount: sale.paymentCashAmount * allocation,
+        paymentTransferAmount: sale.paymentTransferAmount * allocation,
+        creditAmount: sale.creditAmount * allocation,
+        creditPaidAmount: sale.creditPaidAmount * allocation,
+        creditBalance: sale.creditBalance * allocation,
+        creditStatus: sale.creditStatus,
+        isDeleted: sale.isDeleted,
+        deletedAt: sale.deletedAt,
+        items: items,
+      ),
+    );
+  }
+  return projected;
 }

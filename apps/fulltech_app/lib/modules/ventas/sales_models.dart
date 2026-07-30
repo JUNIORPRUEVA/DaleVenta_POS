@@ -121,6 +121,7 @@ class SaleItemModel {
   final double subtotalSold;
   final double subtotalCost;
   final double profit;
+  final String? category;
 
   const SaleItemModel({
     required this.id,
@@ -133,9 +134,22 @@ class SaleItemModel {
     required this.subtotalSold,
     required this.subtotalCost,
     required this.profit,
+    required this.category,
   });
 
   factory SaleItemModel.fromJson(Map<String, dynamic> json) {
+    final product = json['product'];
+    String? category;
+    if (product is Map) {
+      category =
+          product['categoria']?.toString() ??
+          product['categoriaNombre']?.toString() ??
+          product['category']?.toString();
+    }
+    category ??=
+        json['categoria']?.toString() ??
+        json['categoriaNombre']?.toString() ??
+        json['category']?.toString();
     return SaleItemModel(
       id: (json['id'] ?? '').toString(),
       productId: json['productId']?.toString(),
@@ -147,8 +161,11 @@ class SaleItemModel {
       subtotalSold: _toDouble(json['subtotalSold']),
       subtotalCost: _toDouble(json['subtotalCost']),
       profit: _toDouble(json['profit']),
+      category: category?.trim().isEmpty ?? true ? null : category!.trim(),
     );
   }
+
+  String get categoryLabel => category ?? 'Sin categoria';
 }
 
 class SaleModel {

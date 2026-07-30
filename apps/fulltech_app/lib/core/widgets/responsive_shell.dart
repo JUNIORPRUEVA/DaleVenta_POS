@@ -14,6 +14,7 @@ import '../design_system/icons/app_icon_sizes.dart';
 import '../design_system/icons/app_icons.dart';
 import '../location/location_tracker_provider.dart';
 import '../models/user_model.dart';
+import '../routing/app_navigator.dart';
 import '../routing/routes.dart';
 import '../theme/role_branding.dart';
 import '../utils/date_time_formatters.dart';
@@ -90,6 +91,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final user = ref.watch(authStateProvider).user;
     final sections = buildAppNavigationSections(ref, user);
     final location = safeCurrentLocation(context);
+    AppNavigator.recordShellLocation(location);
     final title = resolveNavigationTitle(location, sections);
     final showShellAppBar = desktopShellShouldShowOwnAppBar(location);
     final routeActions = ref.watch(desktopShellRouteActionsProvider);

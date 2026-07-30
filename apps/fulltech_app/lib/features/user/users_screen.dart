@@ -9,8 +9,10 @@ import '../../core/auth/admin_authorization.dart';
 import '../../core/auth/app_permissions.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
+import '../../core/company/company_settings_repository.dart';
 import '../../core/models/user_model.dart';
 import '../../core/routing/routes.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/utils/string_utils.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
@@ -289,6 +291,11 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
             : null,
         actions: [
           IconButton(
+            tooltip: 'PIN administrativo',
+            onPressed: () => _showAdminPinDialog(context, ref),
+            icon: const Icon(Icons.admin_panel_settings_outlined),
+          ),
+          IconButton(
             tooltip: 'Buscar',
             onPressed: () => setState(() => _searching = true),
             icon: const Icon(Icons.search),
@@ -408,6 +415,11 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                 ),
               ),
         actions: [
+          IconButton(
+            tooltip: 'PIN administrativo',
+            onPressed: () => _showAdminPinDialog(context, ref),
+            icon: const Icon(Icons.admin_panel_settings_outlined),
+          ),
           IconButton(
             tooltip: 'Agregar empleado',
             onPressed: () => _showUserDialog(context, ref),
@@ -531,6 +543,132 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
         ),
       ),
     );
+  }
+
+  Future<void> _showAdminPinDialog(BuildContext context, WidgetRef ref) async {
+    final pinCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    bool saving = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> save() async {
+              final pin = pinCtrl.text.trim();
+              final confirm = confirmCtrl.text.trim();
+              if (!RegExp(r'^\d{4}$').hasMatch(pin)) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('El PIN debe tener exactamente 4 dígitos.'),
+                  ),
+                );
+                return;
+              }
+              if (pin != confirm) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(content: Text('Los PIN no coinciden.')),
+                );
+                return;
+              }
+
+              setDialogState(() => saving = true);
+              try {
+                await ref
+                    .read(companySettingsRepositoryProvider)
+                    .setAdminAuthorizationPin(pin);
+                ref.invalidate(companySettingsProvider);
+                if (!dialogContext.mounted) return;
+                Navigator.of(dialogContext).pop();
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('PIN administrativo guardado.')),
+                );
+              } catch (error) {
+                if (!dialogContext.mounted) return;
+                setDialogState(() => saving = false);
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  SnackBar(content: Text('No se pudo guardar PIN: $error')),
+                );
+              }
+            }
+
+            return AlertDialog(
+              title: const Text('PIN administrativo'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Configura el PIN que autoriza acciones sensibles para usuarios permitidos.',
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: pinCtrl,
+                      obscureText: true,
+                      obscuringCharacter: '•',
+                      maxLength: 4,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(4),
+                      ],
+                      decoration: const InputDecoration(
+                        counterText: '',
+                        labelText: 'Nuevo PIN',
+                        prefixIcon: Icon(Icons.pin_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: confirmCtrl,
+                      obscureText: true,
+                      obscuringCharacter: '•',
+                      maxLength: 4,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(4),
+                      ],
+                      decoration: const InputDecoration(
+                        counterText: '',
+                        labelText: 'Confirmar PIN',
+                        prefixIcon: Icon(Icons.lock_reset_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: saving ? null : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton.icon(
+                  onPressed: saving ? null : save,
+                  icon: saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.save_outlined),
+                  label: Text(saving ? 'Guardando' : 'Guardar PIN'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    pinCtrl.dispose();
+    confirmCtrl.dispose();
   }
 
   Future<void> _toggleBlock(
@@ -1353,7 +1491,7 @@ class _UserPermissionDetailsPanel extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
+                    color: AppColors.surfaceMuted,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: theme.colorScheme.outlineVariant),
                   ),
@@ -1429,12 +1567,12 @@ class _UserPermissionDetailsPanel extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: const Color(0xFFECFDF5),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFBBF7D0)),
+                      border: Border.all(color: AppColors.successBorder),
                     ),
                     child: Text(
                       'El administrador tiene todos los permisos.',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF166534),
+                        color: AppColors.success,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -2030,11 +2168,9 @@ class _PermissionScreenTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final foreground = allowed
-        ? const Color(0xFF166534)
-        : const Color(0xFF64748B);
+    final foreground = allowed ? AppColors.success : AppColors.textMuted;
     final background = allowed
-        ? const Color(0xFFDCFCE7)
+        ? AppColors.successSoft
         : const Color(0xFFF1F5F9);
 
     return Container(
@@ -2043,7 +2179,7 @@ class _PermissionScreenTile extends StatelessWidget {
         color: background,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: allowed ? const Color(0xFFBBF7D0) : const Color(0xFFE2E8F0),
+          color: allowed ? AppColors.successBorder : AppColors.border,
         ),
       ),
       child: Row(
@@ -2165,7 +2301,7 @@ class _UsersTableHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final style = theme.textTheme.labelMedium?.copyWith(
-      color: const Color(0xFF64748B),
+      color: AppColors.textMuted,
       fontWeight: FontWeight.w800,
       letterSpacing: 0,
     );
@@ -2173,7 +2309,7 @@ class _UsersTableHeader extends StatelessWidget {
     return Container(
       height: 44,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      color: const Color(0xFFF8FAFC),
+      color: AppColors.surfaceMuted,
       child: Row(
         children: [
           _UserTableHeaderCell('Nombre', flex: 20, style: style),
@@ -2240,9 +2376,9 @@ class _UserRowCardState extends State<_UserRowCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final surfaceColor = widget.selected
-        ? const Color(0xFFEFF6FF)
+        ? AppColors.secondarySoft
         : _hovered
-        ? const Color(0xFFF8FAFC)
+        ? AppColors.surfaceMuted
         : theme.colorScheme.surface;
 
     return MouseRegion(
@@ -2263,7 +2399,7 @@ class _UserRowCardState extends State<_UserRowCard> {
               border: Border(
                 left: BorderSide(
                   color: widget.selected
-                      ? const Color(0xFF1957E6)
+                      ? AppColors.secondary
                       : Colors.transparent,
                   width: 3,
                 ),
@@ -2336,7 +2472,7 @@ class _UserTableText extends StatelessWidget {
       overflow: TextOverflow.ellipsis,
       style: Theme.of(context).textTheme.bodySmall?.copyWith(
         fontWeight: FontWeight.w600,
-        color: const Color(0xFF334155),
+        color: AppColors.textMuted,
         letterSpacing: 0,
       ),
     );
@@ -2350,12 +2486,8 @@ class _UserStatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final background = blocked
-        ? const Color(0xFFFFEDD5)
-        : const Color(0xFFDCFCE7);
-    final foreground = blocked
-        ? const Color(0xFFB45309)
-        : const Color(0xFF166534);
+    final background = blocked ? AppColors.warningSoft : AppColors.successSoft;
+    final foreground = blocked ? AppColors.warning : AppColors.success;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -2385,7 +2517,7 @@ class _UserRoleBadge extends StatelessWidget {
       AppRole.admin => (const Color(0xFFFCE7F3), const Color(0xFF9D174D)),
       AppRole.cajero => (const Color(0xFFE0F2FE), const Color(0xFF0369A1)),
       AppRole.asistente => (const Color(0xFFECFDF5), const Color(0xFF047857)),
-      AppRole.vendedor => (const Color(0xFFEFF6FF), const Color(0xFF1D4ED8)),
+      AppRole.vendedor => (AppColors.secondarySoft, const Color(0xFF1D4ED8)),
       AppRole.marketing => (const Color(0xFFF5F3FF), const Color(0xFF6D28D9)),
       AppRole.tecnico => (const Color(0xFFFFF7ED), const Color(0xFFC2410C)),
       AppRole.unknown => (const Color(0xFFF1F5F9), const Color(0xFF475569)),
@@ -2494,7 +2626,7 @@ class _DesktopUsersEmptyState extends StatelessWidget {
             message,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: const Color(0xFF64748B),
+              color: AppColors.textMuted,
               height: 1.45,
             ),
           ),

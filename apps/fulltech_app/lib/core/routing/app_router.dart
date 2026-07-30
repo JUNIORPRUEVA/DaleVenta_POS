@@ -144,6 +144,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const AccountParametersScreen(),
           ),
           GoRoute(
+            path: Routes.configuracionDocumentos,
+            builder: (context, state) => const AccountDocumentsSettingsScreen(),
+          ),
+          GoRoute(
             path: Routes.users,
             builder: (context, state) => const UsersScreen(),
           ),

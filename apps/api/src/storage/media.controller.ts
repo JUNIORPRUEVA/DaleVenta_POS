@@ -20,7 +20,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { R2Service } from './r2.service';
 
 @Controller('media')
-@UseGuards(AuthGuard('jwt'))
 export class MediaController {
   private readonly uploadDir: string;
 
@@ -34,15 +33,13 @@ export class MediaController {
 
   @Get('products/:productId')
   async productImage(
-    @Req() req: Request,
     @Param('productId') productId: string,
     @Res() res: Response,
   ) {
-    const companyId = requireTenant(req.user as TenantUser);
-    const product = await this.prisma.product.findFirst({
-      where: { id: productId, companyId },
-    });
+    const product = await this.prisma.product.findUnique({ where: { id: productId } });
     if (!product) throw new NotFoundException('Producto no encontrado');
+    const companyId = product.companyId;
+    if (!companyId) throw new NotFoundException('Producto sin empresa');
 
     const productAny = product as any;
     const objectKey =
@@ -60,6 +57,7 @@ export class MediaController {
     console.log(`[media] product image served companyId=${companyId} productId=${productId} key=${objectKey}`);
   }
 
+  @UseGuards(AuthGuard('jwt'))
   @Get('object')
   async objectImage(
     @Req() req: Request,
