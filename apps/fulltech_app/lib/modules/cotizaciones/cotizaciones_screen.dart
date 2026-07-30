@@ -5964,10 +5964,8 @@ class _CompanyAccountMenu extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final company = ref.watch(companySettingsProvider);
     final companyName = company.maybeWhen(
-      data: (settings) => settings.companyName.trim().isEmpty
-          ? 'FULLTECH'
-          : settings.companyName.trim(),
-      orElse: () => 'FULLTECH',
+      data: (settings) => _compactCompanyDisplayName(settings.companyName),
+      orElse: () => 'Empresa',
     );
     final logoBase64 = company.maybeWhen(
       data: (settings) => settings.logoBase64?.trim(),
@@ -6137,6 +6135,15 @@ class _CompanyAccountMenu extends ConsumerWidget {
       ),
     );
   }
+}
+
+String _compactCompanyDisplayName(String value) {
+  final normalized = value.trim().replaceAll(RegExp(r'\s+'), ' ');
+  if (normalized.isEmpty) return 'Empresa';
+  if (normalized.length <= 18) return normalized;
+  final firstSegment = normalized.split(' ').first.trim();
+  if (firstSegment.length >= 3) return firstSegment;
+  return normalized.substring(0, 18);
 }
 
 class _CompanyAppsSidePanel extends StatelessWidget {

@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:daleventa_pos/core/models/product_model.dart';
@@ -21,8 +22,10 @@ class _FakeCatalogRepository extends CatalogRepository {
     required double stock,
     String? fotoUrl,
     required String categoria,
+    String? operationId,
   }) async {
     creates += 1;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
     return ProductModel(
       id: 'created-$creates',
       nombre: nombre,
@@ -45,8 +48,10 @@ class _FakeCatalogRepository extends CatalogRepository {
     required double stock,
     String? fotoUrl,
     String? categoria,
+    String? operationId,
   }) async {
     updates += 1;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
     return ProductModel(
       id: id,
       nombre: nombre,
@@ -157,6 +162,70 @@ void main() {
     expect(repo.updates, 1);
     expect(repo.creates, 0);
     expect(find.text('Editar producto'), findsNothing);
+  });
+
+  testWidgets('escribir letras en código no guarda automáticamente', (
+    tester,
+  ) async {
+    final repo = _FakeCatalogRepository();
+    await _pumpEditor(tester, repo: repo);
+
+    await tester.enterText(find.byType(TextField).at(1), 'ABC');
+    await tester.pump();
+
+    expect(repo.creates, 0);
+    expect(repo.updates, 0);
+  });
+
+  testWidgets('escribir números en código no guarda automáticamente', (
+    tester,
+  ) async {
+    final repo = _FakeCatalogRepository();
+    await _pumpEditor(tester, repo: repo);
+
+    await tester.enterText(find.byType(TextField).at(1), '1234567890');
+    await tester.pump();
+
+    expect(repo.creates, 0);
+    expect(repo.updates, 0);
+  });
+
+  testWidgets('Enter en el campo código no crea producto', (tester) async {
+    final repo = _FakeCatalogRepository();
+    await _pumpEditor(tester, repo: repo);
+
+    await tester.enterText(find.byType(TextField).at(0), 'Producto scanner');
+    await tester.enterText(find.byType(TextField).at(1), 'SCN-001');
+    await tester.enterText(find.byType(TextField).at(2), '100');
+    await tester.enterText(find.byType(TextField).at(3), '60');
+    await tester.enterText(find.byType(TextField).at(4), '5');
+    await tester.enterText(find.byType(TextField).at(5), 'General');
+    await tester.tap(find.byType(TextField).at(1));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump(const Duration(milliseconds: 80));
+
+    expect(repo.creates, 0);
+    expect(repo.updates, 0);
+  });
+
+  testWidgets('doble click en guardar crea una sola vez', (tester) async {
+    final repo = _FakeCatalogRepository();
+    await _pumpEditor(tester, repo: repo);
+
+    await tester.enterText(find.byType(TextField).at(0), 'Producto doble');
+    await tester.enterText(find.byType(TextField).at(1), 'DBL-001');
+    await tester.enterText(find.byType(TextField).at(2), '100');
+    await tester.enterText(find.byType(TextField).at(3), '60');
+    await tester.enterText(find.byType(TextField).at(4), '5');
+    await tester.enterText(find.byType(TextField).at(5), 'General');
+    final save = find.text('Crear producto');
+    await tester.tap(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+
+    expect(repo.creates, 1);
+    expect(repo.updates, 0);
   });
 
   testWidgets('abrir y cerrar repetidamente no deja EditableText activo', (

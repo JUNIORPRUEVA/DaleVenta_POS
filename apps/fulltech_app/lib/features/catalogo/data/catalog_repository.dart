@@ -128,6 +128,7 @@ class CatalogRepository {
     required double stock,
     String? fotoUrl,
     required String categoria,
+    String? operationId,
   }) async {
     try {
       final res = await _dio.post(
@@ -141,6 +142,8 @@ class CatalogRepository {
           'precio': precio,
           'costo': costo,
           'stock': stock,
+          if ((operationId ?? '').trim().isNotEmpty)
+            'operationId': operationId!.trim(),
           if ((fotoUrl ?? '').trim().isNotEmpty) 'fotoUrl': fotoUrl!.trim(),
           'categoria': categoria,
         },
@@ -163,6 +166,7 @@ class CatalogRepository {
     required double stock,
     String? fotoUrl,
     String? categoria,
+    String? operationId,
   }) async {
     try {
       final res = await _dio.patch(
@@ -176,6 +180,8 @@ class CatalogRepository {
           'precio': precio,
           'costo': costo,
           'stock': stock,
+          if ((operationId ?? '').trim().isNotEmpty)
+            'operationId': operationId!.trim(),
           if ((fotoUrl ?? '').trim().isNotEmpty) 'fotoUrl': fotoUrl!.trim(),
           'categoria': categoria,
         },

@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsNumber, IsOptional, IsString, Min } from "class-validator";
 
 export class CreateProductDto {
   @IsString()
@@ -19,6 +19,10 @@ export class CreateProductDto {
   @IsOptional()
   @IsString()
   barcode?: string;
+
+  @IsOptional()
+  @IsString()
+  operationId?: string;
 
   @IsNumber()
   @Min(0)

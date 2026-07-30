@@ -170,7 +170,9 @@ export class PurchasesService {
 
     const uploaded = await this.persistInvoiceFile(user, file, requestBaseUrl);
     const amount =
-      dto.amount == null ? null : new Prisma.Decimal(dto.amount).toDecimalPlaces(2);
+      dto.amount == null
+        ? null
+        : new Prisma.Decimal(dto.amount).toDecimalPlaces(2);
     if (amount?.lt(0)) {
       throw new BadRequestException("El monto no puede ser negativo.");
     }
@@ -501,6 +503,7 @@ export class PurchasesService {
           } else if (item.current.createInventoryProductOnReceipt) {
             const created = await tx.product.create({
               data: {
+                companyId: order.companyId ?? requireTenant(user),
                 nombre: item.current.productNameSnapshot,
                 categoria:
                   item.current.descriptionSnapshot?.slice(0, 80) ||
@@ -661,7 +664,9 @@ export class PurchasesService {
     requestBaseUrl?: string,
   ) {
     if (!file.buffer?.length) {
-      throw new BadRequestException("No se pudo leer el archivo de la factura.");
+      throw new BadRequestException(
+        "No se pudo leer el archivo de la factura.",
+      );
     }
     const original = this.sanitizeUploadFileName(
       file.originalname || "factura-compra",
@@ -683,7 +688,10 @@ export class PurchasesService {
       extension: ext,
       now,
     });
-    const absolutePath = path.join(this.resolveUploadDir(), ...storageKey.split("/"));
+    const absolutePath = path.join(
+      this.resolveUploadDir(),
+      ...storageKey.split("/"),
+    );
     await mkdir(path.dirname(absolutePath), { recursive: true });
     await writeFile(absolutePath, file.buffer);
     try {
@@ -694,7 +702,10 @@ export class PurchasesService {
       });
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.warn("[purchases/invoices] R2 mirror failed, local file is used:", error);
+      console.warn(
+        "[purchases/invoices] R2 mirror failed, local file is used:",
+        error,
+      );
     }
     const baseUrl = this.publicBaseUrl(requestBaseUrl);
     return {

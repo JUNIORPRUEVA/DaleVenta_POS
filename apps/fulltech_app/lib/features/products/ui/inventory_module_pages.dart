@@ -3529,7 +3529,6 @@ class _InventorySidePanelScaffold extends StatelessWidget {
     required this.onClose,
     required this.body,
     this.footer,
-    this.onSubmit,
   });
 
   final String title;
@@ -3537,16 +3536,11 @@ class _InventorySidePanelScaffold extends StatelessWidget {
   final VoidCallback? onClose;
   final Widget body;
   final Widget? footer;
-  final VoidCallback? onSubmit;
 
   @override
   Widget build(BuildContext context) {
     return CallbackShortcuts(
       bindings: {
-        if (onSubmit != null)
-          const SingleActivator(LogicalKeyboardKey.enter): onSubmit!,
-        if (onSubmit != null)
-          const SingleActivator(LogicalKeyboardKey.numpadEnter): onSubmit!,
         if (onClose != null)
           const SingleActivator(LogicalKeyboardKey.escape): onClose!,
       },
@@ -3786,6 +3780,12 @@ class _InventoryProductEditorPageState
 
   ProductModel? get _product => widget.product;
 
+  String _newSaveOperationId(ProductModel? product) {
+    final now = DateTime.now().toUtc().microsecondsSinceEpoch;
+    final action = product == null ? 'create' : 'update-${product.id}';
+    return 'inventory-$action-$now-$hashCode';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -3896,6 +3896,8 @@ class _InventoryProductEditorPageState
       _formError = null;
     });
 
+    final product = _product;
+    final operationId = _newSaveOperationId(product);
     try {
       final repo = ref.read(catalogRepositoryProvider);
       String? uploadedImagePath;
@@ -3917,7 +3919,6 @@ class _InventoryProductEditorPageState
         );
       }
 
-      final product = _product;
       if (product == null) {
         await repo.createProduct(
           nombre: name,
@@ -3927,6 +3928,7 @@ class _InventoryProductEditorPageState
           stock: stock,
           categoria: category,
           fotoUrl: uploadedImagePath,
+          operationId: operationId,
         );
       } else {
         await repo.updateProduct(
@@ -3938,6 +3940,7 @@ class _InventoryProductEditorPageState
           stock: stock,
           categoria: category,
           fotoUrl: uploadedImagePath,
+          operationId: operationId,
         );
       }
 
@@ -3969,7 +3972,6 @@ class _InventoryProductEditorPageState
       title: product == null ? 'Nuevo producto' : 'Editar producto',
       icon: product == null ? Icons.add_box_outlined : Icons.edit_outlined,
       onClose: _isSaving ? null : _close,
-      onSubmit: _isSaving ? null : _save,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(

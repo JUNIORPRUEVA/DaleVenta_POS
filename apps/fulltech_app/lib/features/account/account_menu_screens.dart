@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +14,7 @@ import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/local_file_bytes.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../settings/data/cloud_backup_service.dart';
 import '../settings/ui/printer_settings_page.dart';
@@ -1059,6 +1064,8 @@ class _CompanySettingsEditorState
   late final TextEditingController _bankType;
   late final TextEditingController _bankNumber;
   late final TextEditingController _bankName;
+  String? _logoBase64;
+  Uint8List? _logoBytes;
   bool _saving = false;
 
   @override
@@ -1119,6 +1126,69 @@ class _CompanySettingsEditorState
     _bankType.text = firstBank.type;
     _bankNumber.text = firstBank.accountNumber;
     _bankName.text = firstBank.bankName;
+    _logoBase64 = _normalizeLogoBase64(settings.logoBase64);
+    _logoBytes = _decodeLogoBytes(_logoBase64);
+  }
+
+  String? _normalizeLogoBase64(String? value) {
+    final clean = value?.trim();
+    if (clean == null || clean.isEmpty) return null;
+    return clean;
+  }
+
+  Uint8List? _decodeLogoBytes(String? value) {
+    final raw = value?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final payload = raw.contains(',') ? raw.split(',').last : raw;
+      return base64Decode(payload);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _pickLogo() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+      withData: true,
+    );
+    final file = result?.files.single;
+    if (file == null) return;
+    final bytes = file.bytes ?? await _readFileFromPath(file.path);
+    if (!mounted) return;
+    if (bytes == null || bytes.isEmpty) {
+      _showMessage('No se pudo leer el logo seleccionado.');
+      return;
+    }
+    const maxLogoBytes = 1024 * 1024;
+    if (bytes.length > maxLogoBytes) {
+      _showMessage('El logo debe pesar menos de 1 MB.');
+      return;
+    }
+    setState(() {
+      _logoBytes = Uint8List.fromList(bytes);
+      _logoBase64 = base64Encode(bytes);
+    });
+  }
+
+  Future<List<int>?> _readFileFromPath(String? path) async {
+    if (path == null || path.trim().isEmpty) return null;
+    final bytes = await readLocalFileBytes(path);
+    return bytes.isEmpty ? null : bytes;
+  }
+
+  void _removeLogo() {
+    setState(() {
+      _logoBase64 = null;
+      _logoBytes = null;
+    });
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -1169,6 +1239,8 @@ class _CompanySettingsEditorState
               legalRepresentativeRole: _legalRole.text.trim(),
               legalRepresentativeNationality: _legalNationality.text.trim(),
               legalRepresentativeCivilStatus: _legalCivilStatus.text.trim(),
+              logoBase64: _logoBase64,
+              clearLogo: _logoBase64 == null,
               bankAccounts: [
                 if (_bankAlias.text.trim().isNotEmpty ||
                     _bankType.text.trim().isNotEmpty ||
@@ -1232,6 +1304,13 @@ class _CompanySettingsEditorState
               value: widget.settings.businessHours,
             ),
           ],
+        ),
+        const SizedBox(height: 12),
+        _CompanyLogoUploader(
+          logoBytes: _logoBytes,
+          companyName: _name.text.trim(),
+          onPick: _pickLogo,
+          onRemove: _logoBytes == null ? null : _removeLogo,
         ),
         const SizedBox(height: 12),
         _ParagraphBlock(
@@ -1357,6 +1436,90 @@ class _CompanySettingsEditorState
         labelText: label,
         border: const OutlineInputBorder(),
         isDense: true,
+      ),
+    );
+  }
+}
+
+class _CompanyLogoUploader extends StatelessWidget {
+  const _CompanyLogoUploader({
+    required this.logoBytes,
+    required this.companyName,
+    required this.onPick,
+    required this.onRemove,
+  });
+
+  final Uint8List? logoBytes;
+  final String companyName;
+  final VoidCallback onPick;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final displayName = companyName.trim().isEmpty
+        ? 'Empresa'
+        : companyName.trim();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FBFF),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: const Color(0xFFDDE7EE)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 68,
+            height: 68,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEAF1FF),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFCFE0FF)),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: logoBytes == null
+                ? const Icon(
+                    Icons.storefront_rounded,
+                    color: AppColors.secondary,
+                    size: 30,
+                  )
+                : Image.memory(logoBytes!, fit: BoxFit.cover),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Logo de la empresa', style: _strongBodyStyle()),
+                const SizedBox(height: 4),
+                Text(
+                  'Se mostrará en el topbar, documentos y áreas de identidad de $displayName.',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: _bodyStyle(),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          OutlinedButton.icon(
+            onPressed: onPick,
+            icon: const Icon(Icons.upload_file_rounded, size: 18),
+            label: Text(logoBytes == null ? 'Subir logo' : 'Cambiar'),
+            style: _outlinedButtonStyle(),
+          ),
+          if (onRemove != null) ...[
+            const SizedBox(width: 8),
+            IconButton(
+              tooltip: 'Quitar logo',
+              onPressed: onRemove,
+              icon: const Icon(Icons.delete_outline_rounded),
+              color: AppColors.error,
+            ),
+          ],
+        ],
       ),
     );
   }

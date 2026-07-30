@@ -76,6 +76,12 @@ class CatalogController extends StateNotifier<CatalogState> {
 
   CatalogController(this.ref) : super(const CatalogState());
 
+  String _newProductOperationId(String action, {String? productId}) {
+    final now = DateTime.now().toUtc().microsecondsSinceEpoch;
+    final suffix = productId == null ? '' : '-$productId';
+    return '$action-$now-$hashCode$suffix';
+  }
+
   Future<void> load({bool silent = false, bool forceRemote = false}) async {
     if (silent && forceRemote && _remoteRefreshInFlight) return;
     if (silent &&
@@ -150,8 +156,11 @@ class CatalogController extends StateNotifier<CatalogState> {
     required String categoria,
     List<int>? imageBytes,
     String? filename,
+    String? operationId,
   }) async {
+    if (state.saving) return;
     state = state.copyWith(saving: true, actionError: null);
+    final saveOperationId = operationId ?? _newProductOperationId('create');
     try {
       final repo = ref.read(catalogRepositoryProvider);
       String? path;
@@ -177,6 +186,7 @@ class CatalogController extends StateNotifier<CatalogState> {
         stock: stock,
         fotoUrl: path,
         categoria: categoria,
+        operationId: saveOperationId,
       );
       final updated = [created, ...state.items];
       state = state.copyWith(items: updated, saving: false);
@@ -204,6 +214,7 @@ class CatalogController extends StateNotifier<CatalogState> {
           costo: draft.costo,
           stock: draft.stock,
           categoria: draft.categoria,
+          operationId: _newProductOperationId('import-${createdCount + 1}'),
         );
         createdCount += 1;
       }
@@ -230,8 +241,12 @@ class CatalogController extends StateNotifier<CatalogState> {
     required String categoria,
     List<int>? newImageBytes,
     String? newFilename,
+    String? operationId,
   }) async {
+    if (state.saving) return;
     state = state.copyWith(saving: true, actionError: null);
+    final saveOperationId =
+        operationId ?? _newProductOperationId('update', productId: id);
     try {
       final repo = ref.read(catalogRepositoryProvider);
       String? fotoUrl;
@@ -261,6 +276,7 @@ class CatalogController extends StateNotifier<CatalogState> {
         stock: stock,
         fotoUrl: fotoUrl,
         categoria: categoria,
+        operationId: saveOperationId,
       );
       final list = state.items.map((p) => p.id == id ? updated : p).toList();
       state = state.copyWith(items: list, saving: false);

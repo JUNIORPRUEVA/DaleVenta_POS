@@ -1,13 +1,19 @@
-import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { Prisma, Product } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { requireTenant, type TenantUser } from '../auth/tenant-context';
-import { CatalogProductsService } from './catalog-products.service';
-import { CreateProductDto } from './dto/create-product.dto';
-import { UpdateProductDto } from './dto/update-product.dto';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { Prisma, Product } from "@prisma/client";
+import { createHash } from "node:crypto";
+import { PrismaService } from "../prisma/prisma.service";
+import { requireTenant, type TenantUser } from "../auth/tenant-context";
+import { CatalogProductsService } from "./catalog-products.service";
+import { CreateProductDto } from "./dto/create-product.dto";
+import { UpdateProductDto } from "./dto/update-product.dto";
 
-type ProductsSource = 'FULLPOS' | 'FULLPOS_DIRECT' | 'LOCAL';
+type ProductsSource = "FULLPOS" | "FULLPOS_DIRECT" | "LOCAL";
 
 @Injectable()
 export class ProductsService {
@@ -21,15 +27,25 @@ export class ProductsService {
     private readonly catalogProducts: CatalogProductsService,
     private readonly config: ConfigService,
   ) {
-    const base = this.config.get<string>('PUBLIC_BASE_URL') ?? this.config.get<string>('API_BASE_URL') ?? '';
+    const base =
+      this.config.get<string>("PUBLIC_BASE_URL") ??
+      this.config.get<string>("API_BASE_URL") ??
+      "";
     this.publicBaseUrl = this.normalizePublicBaseUrl(base);
 
-    const rawFallback = (this.config.get<string>('PRODUCTS_ALLOW_LOCAL_FALLBACK') ?? '').trim().toLowerCase();
-    this.allowLocalFallback = rawFallback === '1' || rawFallback === 'true' || rawFallback === 'yes';
+    const rawFallback = (
+      this.config.get<string>("PRODUCTS_ALLOW_LOCAL_FALLBACK") ?? ""
+    )
+      .trim()
+      .toLowerCase();
+    this.allowLocalFallback =
+      rawFallback === "1" || rawFallback === "true" || rawFallback === "yes";
 
-    const rawSource = (this.config.get<string>('PRODUCTS_SOURCE') ?? '').trim().toUpperCase();
-    let computed: ProductsSource = 'LOCAL';
-    if (rawSource && rawSource !== 'LOCAL') {
+    const rawSource = (this.config.get<string>("PRODUCTS_SOURCE") ?? "")
+      .trim()
+      .toUpperCase();
+    let computed: ProductsSource = "LOCAL";
+    if (rawSource && rawSource !== "LOCAL") {
       this.logger.warn(
         `PRODUCTS_SOURCE=${rawSource} ignorado: el catálogo administrado por FullTech usa fuente LOCAL.`,
       );
@@ -39,7 +55,10 @@ export class ProductsService {
   }
 
   isReadOnly() {
-    return this.productsSource === 'FULLPOS' || this.productsSource === 'FULLPOS_DIRECT';
+    return (
+      this.productsSource === "FULLPOS" ||
+      this.productsSource === "FULLPOS_DIRECT"
+    );
   }
 
   getSource(): ProductsSource {
@@ -47,8 +66,13 @@ export class ProductsService {
   }
 
   private assertWritable() {
-    if (this.productsSource === 'FULLPOS' || this.productsSource === 'FULLPOS_DIRECT') {
-      throw new ConflictException('Productos en modo solo-lectura: fuente FULLPOS (cloud). Administra productos en FULLPOS.');
+    if (
+      this.productsSource === "FULLPOS" ||
+      this.productsSource === "FULLPOS_DIRECT"
+    ) {
+      throw new ConflictException(
+        "Productos en modo solo-lectura: fuente FULLPOS (cloud). Administra productos en FULLPOS.",
+      );
     }
   }
 
@@ -59,8 +83,13 @@ export class ProductsService {
     barcode?: string;
   }): string | null {
     const raw = dto.codigo ?? dto.code ?? dto.sku ?? dto.barcode;
-    const value = raw?.trim();
+    const value = raw?.trim().replace(/\s+/g, " ");
     return value && value.length > 0 ? value : null;
+  }
+
+  private normalizeProductCodeForLookup(code?: string | null): string | null {
+    const value = (code ?? "").trim().replace(/\s+/g, " ");
+    return value ? value.toLowerCase() : null;
   }
 
   private hasProductCodeInput(dto: {
@@ -69,23 +98,28 @@ export class ProductsService {
     sku?: string;
     barcode?: string;
   }): boolean {
-    return dto.codigo !== undefined || dto.code !== undefined || dto.sku !== undefined || dto.barcode !== undefined;
+    return (
+      dto.codigo !== undefined ||
+      dto.code !== undefined ||
+      dto.sku !== undefined ||
+      dto.barcode !== undefined
+    );
   }
 
   private isSchemaMismatch(error: unknown) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      return error.code === 'P2021' || error.code === 'P2022';
+      return error.code === "P2021" || error.code === "P2022";
     }
 
-    if (typeof error === 'object' && error !== null) {
+    if (typeof error === "object" && error !== null) {
       const value = error as { code?: unknown; message?: unknown };
-      const code = typeof value.code === 'string' ? value.code : '';
-      const message = typeof value.message === 'string' ? value.message : '';
+      const code = typeof value.code === "string" ? value.code : "";
+      const message = typeof value.message === "string" ? value.message : "";
       return (
-        code === 'P2021' ||
-        code === 'P2022' ||
-        message.includes('does not exist in the current database') ||
-        message.toLowerCase().includes('column')
+        code === "P2021" ||
+        code === "P2022" ||
+        message.includes("does not exist in the current database") ||
+        message.toLowerCase().includes("column")
       );
     }
 
@@ -95,88 +129,116 @@ export class ProductsService {
   private isUniqueConstraint(error: unknown) {
     return (
       error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2002'
+      error.code === "P2002"
     );
   }
 
-  private normalizeComparableText(value?: string | null) {
-    return (value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+  private operationProductId(companyId: string, operationId?: string | null) {
+    const cleanOperationId = (operationId ?? "").trim();
+    if (!cleanOperationId) return null;
+    const digest = createHash("sha256")
+      .update(`${companyId}:${cleanOperationId}`)
+      .digest("hex");
+    return [
+      digest.substring(0, 8),
+      digest.substring(8, 12),
+      `4${digest.substring(13, 16)}`,
+      `8${digest.substring(17, 20)}`,
+      digest.substring(20, 32),
+    ].join("-");
   }
 
-  private sameProductIdentity(a: Product, b: Product) {
+  private logProductSave(params: {
+    action: "create" | "update";
+    decision: string;
+    companyId: string;
+    productId?: string | null;
+    normalizedCode?: string | null;
+    operationId?: string | null;
+    result?: string;
+  }) {
+    this.logger.log(
+      `product-save action=${params.action} decision=${params.decision} companyId=${params.companyId} productId=${params.productId ?? ""} normalizedCode=${params.normalizedCode ?? ""} operationId=${params.operationId ?? ""} result=${params.result ?? ""}`,
+    );
+  }
+
+  private async findByNormalizedCode(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    normalizedCode: string,
+  ) {
+    const candidates = await tx.product.findMany({
+      where: {
+        companyId,
+        codigo: { not: null },
+      },
+    });
     return (
-      this.normalizeComparableText(a.nombre) === this.normalizeComparableText(b.nombre) &&
-      this.normalizeComparableText(a.categoria) === this.normalizeComparableText(b.categoria) &&
-      new Prisma.Decimal(a.precio).equals(b.precio) &&
-      new Prisma.Decimal(a.costo).equals(b.costo) &&
-      new Prisma.Decimal(a.stock).equals(b.stock)
+      candidates.find(
+        (product) =>
+          this.normalizeProductCodeForLookup((product as any).codigo) ===
+          normalizedCode,
+      ) ?? null
     );
-  }
-
-  private hasProductImage(product: Product) {
-    const productAny = product as any;
-    return Boolean(
-      (typeof productAny.imageKey === 'string' && productAny.imageKey.trim()) ||
-      (typeof product.imagen === 'string' && product.imagen.trim()),
-    );
-  }
-
-  private shouldPreferProduct(candidate: Product, current: Product) {
-    const candidateHasImage = this.hasProductImage(candidate);
-    const currentHasImage = this.hasProductImage(current);
-    if (candidateHasImage !== currentHasImage) return candidateHasImage;
-
-    const candidateImageUpdatedAt = (candidate as any).imageUpdatedAt;
-    const currentImageUpdatedAt = (current as any).imageUpdatedAt;
-    if (candidateImageUpdatedAt instanceof Date && currentImageUpdatedAt instanceof Date) {
-      return candidateImageUpdatedAt.getTime() > currentImageUpdatedAt.getTime();
-    }
-    if (candidateImageUpdatedAt instanceof Date && !(currentImageUpdatedAt instanceof Date)) {
-      return true;
-    }
-
-    return false;
-  }
-
-  private compactDuplicateProducts(products: Product[]) {
-    const seen = new Map<string, number>();
-    const compacted: Product[] = [];
-
-    for (const product of products) {
-      const code = this.normalizeComparableText((product as any).codigo);
-      const key = [
-        product.companyId ?? '',
-        code ? `code:${code}` : `name:${this.normalizeComparableText(product.nombre)}`,
-        this.normalizeComparableText(product.categoria),
-        product.precio.toString(),
-        product.costo.toString(),
-        product.stock.toString(),
-      ].join('|');
-
-      const previous = seen.get(key);
-      if (previous !== undefined && this.sameProductIdentity(compacted[previous], product)) {
-        if (this.shouldPreferProduct(product, compacted[previous])) {
-          compacted[previous] = product;
-        }
-        continue;
-      }
-
-      seen.set(key, compacted.length);
-      compacted.push(product);
-    }
-
-    return compacted;
   }
 
   create(user: TenantUser, dto: CreateProductDto): Promise<any> {
     this.assertWritable();
     const companyId = requireTenant(user);
     return this.prisma.$transaction(async (tx) => {
+      const normalizedCodeForLookup = this.normalizeProductCodeForLookup(
+        this.normalizeProductCode(dto),
+      );
+      const operationProductId = this.operationProductId(
+        companyId,
+        dto.operationId,
+      );
+      if (operationProductId) {
+        const existingOperationProduct = await tx.product.findFirst({
+          where: { id: operationProductId, companyId },
+        });
+        if (existingOperationProduct) {
+          this.logProductSave({
+            action: "create",
+            decision: "idempotent-return-existing",
+            companyId,
+            productId: existingOperationProduct.id,
+            normalizedCode: normalizedCodeForLookup,
+            operationId: dto.operationId,
+            result: "existing",
+          });
+          return this.mapProduct(existingOperationProduct);
+        }
+      }
+
+      if (normalizedCodeForLookup) {
+        const existingByCode = await this.findByNormalizedCode(
+          tx,
+          companyId,
+          normalizedCodeForLookup,
+        );
+        if (existingByCode) {
+          this.logProductSave({
+            action: "create",
+            decision: "reject-duplicate-code",
+            companyId,
+            productId: existingByCode.id,
+            normalizedCode: normalizedCodeForLookup,
+            operationId: dto.operationId,
+            result: "conflict",
+          });
+          throw new ConflictException(
+            "Ya existe un producto con ese código en esta empresa",
+          );
+        }
+      }
+
       const imageKey = this.extractR2Key(dto.imageKey ?? dto.fotoUrl);
       const normalizedImagePath = imageKey
         ? this.buildObjectMediaUrl(imageKey)
         : this.normalizeImagePathForStorage(dto.fotoUrl);
       const data = {
+        id: operationProductId ?? undefined,
         nombre: dto.nombre,
         codigo: this.normalizeProductCode(dto),
         categoria: dto.categoria,
@@ -184,57 +246,47 @@ export class ProductsService {
         costo: new Prisma.Decimal(dto.costo),
         stock: new Prisma.Decimal(dto.stock ?? 0),
         imagen: normalizedImagePath,
-        imageStorageProvider: imageKey ? 'r2' : undefined,
+        imageStorageProvider: imageKey ? "r2" : undefined,
         imageKey: imageKey ?? undefined,
-        imageMimeType: imageKey ? (dto.imageMimeType?.trim() || undefined) : undefined,
-        imageOriginalFileName: imageKey ? (dto.imageOriginalFileName?.trim() || undefined) : undefined,
+        imageMimeType: imageKey
+          ? dto.imageMimeType?.trim() || undefined
+          : undefined,
+        imageOriginalFileName: imageKey
+          ? dto.imageOriginalFileName?.trim() || undefined
+          : undefined,
         imageUpdatedAt: imageKey ? new Date() : undefined,
         companyId,
       };
 
-      const existingCandidates = await tx.product.findMany({
-        where: {
-          companyId,
-          nombre: { equals: dto.nombre, mode: 'insensitive' },
-          categoria: { equals: dto.categoria, mode: 'insensitive' },
-        },
-      });
-      const equivalent = existingCandidates.find((candidate) =>
-        this.sameProductIdentity(candidate, data as Product),
-      );
-      if (equivalent) {
-        const imagePatch = imageKey
-          ? {
-              imagen: normalizedImagePath,
-              imageStorageProvider: 'r2',
-              imageKey,
-              imageMimeType: dto.imageMimeType?.trim() || null,
-              imageOriginalFileName: dto.imageOriginalFileName?.trim() || null,
-              imageUpdatedAt: new Date(),
-            }
-          : {};
-        const updatedEquivalent = Object.keys(imagePatch).length
-          ? await tx.product.update({
-              where: { id: equivalent.id },
-              data: imagePatch,
-            })
-          : equivalent;
-        this.logger.warn(
-          `duplicate create merged companyId=${companyId} existingProductId=${equivalent.id} name="${dto.nombre}" imageMerged=${Boolean(imageKey)}`,
-        );
-        return this.mapProduct(updatedEquivalent);
-      }
-
       if (dto.fotoUrl !== normalizedImagePath) {
-        this.logger.log(`normalize create image path: "${dto.fotoUrl ?? ''}" -> "${normalizedImagePath ?? ''}"`);
+        this.logger.log(
+          `normalize create image path: "${dto.fotoUrl ?? ""}" -> "${normalizedImagePath ?? ""}"`,
+        );
       }
 
       try {
-        const product = await tx.product.create({ data });
+        const product = operationProductId
+          ? await tx.product.upsert({
+              where: { id: operationProductId },
+              create: data,
+              update: {},
+            })
+          : await tx.product.create({ data });
+        this.logProductSave({
+          action: "create",
+          decision: operationProductId ? "upsert-idempotent" : "insert",
+          companyId,
+          productId: product.id,
+          normalizedCode: normalizedCodeForLookup,
+          operationId: dto.operationId,
+          result: "created",
+        });
         return this.mapProduct(product);
       } catch (error) {
         if (this.isUniqueConstraint(error)) {
-          throw new ConflictException('Ya existe un producto con ese código');
+          throw new ConflictException(
+            "Ya existe un producto con ese código en esta empresa",
+          );
         }
         if (!this.isSchemaMismatch(error)) throw error;
         const product = await tx.product.create({ data });
@@ -245,7 +297,10 @@ export class ProductsService {
 
   async findAll(user: TenantUser): Promise<any[]> {
     const companyId = requireTenant(user);
-    if (this.productsSource === 'FULLPOS' || this.productsSource === 'FULLPOS_DIRECT') {
+    if (
+      this.productsSource === "FULLPOS" ||
+      this.productsSource === "FULLPOS_DIRECT"
+    ) {
       try {
         const response = await this.catalogProducts.findAll();
         return response.items;
@@ -263,18 +318,24 @@ export class ProductsService {
     }
 
     try {
-      const products = await this.prisma.product.findMany({ where: { companyId }, orderBy: { nombre: 'asc' } });
-      return this.compactDuplicateProducts(products).map((p) => this.mapProduct(p));
+      const products = await this.prisma.product.findMany({
+        where: { companyId },
+        orderBy: { nombre: "asc" },
+      });
+      return products.map((p) => this.mapProduct(p));
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
-      const products = await this.prisma.product.findMany({ where: { companyId }, orderBy: { nombre: 'asc' } });
-      return this.compactDuplicateProducts(products).map((p) => this.mapProduct(p));
+      const products = await this.prisma.product.findMany({
+        where: { companyId },
+        orderBy: { nombre: "asc" },
+      });
+      return products.map((p) => this.mapProduct(p));
     }
   }
 
   async findOne(user: TenantUser, id: string): Promise<any> {
     const companyId = requireTenant(user);
-    if (this.productsSource === 'FULLPOS') {
+    if (this.productsSource === "FULLPOS") {
       try {
         return await this.catalogProducts.findOne(id);
       } catch (error) {
@@ -292,53 +353,114 @@ export class ProductsService {
 
     let product: Product | null = null;
     try {
-      product = await this.prisma.product.findFirst({ where: { id, companyId } });
+      product = await this.prisma.product.findFirst({
+        where: { id, companyId },
+      });
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
-      product = await this.prisma.product.findFirst({ where: { id, companyId } });
+      product = await this.prisma.product.findFirst({
+        where: { id, companyId },
+      });
     }
-    if (!product) throw new NotFoundException('Product not found');
+    if (!product) throw new NotFoundException("Product not found");
     return this.mapProduct(product);
   }
 
-  async update(user: TenantUser, id: string, dto: UpdateProductDto): Promise<any> {
+  async update(
+    user: TenantUser,
+    id: string,
+    dto: UpdateProductDto,
+  ): Promise<any> {
     this.assertWritable();
     const companyId = requireTenant(user);
     await this.findOne(user, id);
     return this.prisma.$transaction(async (tx) => {
-      const imageKey = dto.fotoUrl === undefined && dto.imageKey === undefined
-        ? undefined
-        : this.extractR2Key(dto.imageKey ?? dto.fotoUrl);
-      const normalizedImagePath = dto.fotoUrl === undefined
-        ? undefined
-        : imageKey
-          ? this.buildObjectMediaUrl(imageKey)
-          : this.normalizeImagePathForStorage(dto.fotoUrl);
+      const normalizedCodeForLookup = this.hasProductCodeInput(dto)
+        ? this.normalizeProductCodeForLookup(this.normalizeProductCode(dto))
+        : null;
+      if (normalizedCodeForLookup) {
+        const existingByCode = await this.findByNormalizedCode(
+          tx,
+          companyId,
+          normalizedCodeForLookup,
+        );
+        if (existingByCode && existingByCode.id !== id) {
+          this.logProductSave({
+            action: "update",
+            decision: "reject-duplicate-code",
+            companyId,
+            productId: id,
+            normalizedCode: normalizedCodeForLookup,
+            operationId: dto.operationId,
+            result: "conflict",
+          });
+          throw new ConflictException(
+            "Ya existe un producto con ese código en esta empresa",
+          );
+        }
+      }
+
+      const imageKey =
+        dto.fotoUrl === undefined && dto.imageKey === undefined
+          ? undefined
+          : this.extractR2Key(dto.imageKey ?? dto.fotoUrl);
+      const normalizedImagePath =
+        dto.fotoUrl === undefined
+          ? undefined
+          : imageKey
+            ? this.buildObjectMediaUrl(imageKey)
+            : this.normalizeImagePathForStorage(dto.fotoUrl);
       const data = {
         nombre: dto.nombre,
-        codigo: this.hasProductCodeInput(dto) ? this.normalizeProductCode(dto) : undefined,
+        codigo: this.hasProductCodeInput(dto)
+          ? this.normalizeProductCode(dto)
+          : undefined,
         categoria: dto.categoria,
-        precio: dto.precio === undefined ? undefined : new Prisma.Decimal(dto.precio),
-        costo: dto.costo === undefined ? undefined : new Prisma.Decimal(dto.costo),
-        stock: dto.stock === undefined ? undefined : new Prisma.Decimal(dto.stock),
+        precio:
+          dto.precio === undefined ? undefined : new Prisma.Decimal(dto.precio),
+        costo:
+          dto.costo === undefined ? undefined : new Prisma.Decimal(dto.costo),
+        stock:
+          dto.stock === undefined ? undefined : new Prisma.Decimal(dto.stock),
         imagen: normalizedImagePath,
-        imageStorageProvider: imageKey === undefined ? undefined : imageKey ? 'r2' : null,
+        imageStorageProvider:
+          imageKey === undefined ? undefined : imageKey ? "r2" : null,
         imageKey: imageKey === undefined ? undefined : imageKey,
-        imageMimeType: imageKey === undefined ? undefined : dto.imageMimeType?.trim() || null,
-        imageOriginalFileName: imageKey === undefined ? undefined : dto.imageOriginalFileName?.trim() || null,
-        imageUpdatedAt: imageKey === undefined ? undefined : imageKey ? new Date() : null,
+        imageMimeType:
+          imageKey === undefined
+            ? undefined
+            : dto.imageMimeType?.trim() || null,
+        imageOriginalFileName:
+          imageKey === undefined
+            ? undefined
+            : dto.imageOriginalFileName?.trim() || null,
+        imageUpdatedAt:
+          imageKey === undefined ? undefined : imageKey ? new Date() : null,
       };
 
       if (dto.fotoUrl !== undefined && dto.fotoUrl !== normalizedImagePath) {
-        this.logger.log(`normalize update image path: "${dto.fotoUrl}" -> "${normalizedImagePath ?? ''}"`);
+        this.logger.log(
+          `normalize update image path: "${dto.fotoUrl}" -> "${normalizedImagePath ?? ""}"`,
+        );
       }
 
       try {
         const updated = await tx.product.update({ where: { id }, data });
+        this.logProductSave({
+          action: "update",
+          decision: "update-by-id",
+          companyId,
+          productId: updated.id,
+          normalizedCode: normalizedCodeForLookup,
+          operationId: dto.operationId,
+          result: "updated",
+        });
         return this.mapProduct(updated);
       } catch (error) {
         if (this.isUniqueConstraint(error)) {
-          throw new ConflictException('Ya existe un producto con ese código');
+          throw new ConflictException(
+            "Ya existe un producto con ese código en esta empresa",
+          );
         }
         if (!this.isSchemaMismatch(error)) throw error;
         const updated = await tx.product.update({ where: { id }, data });
@@ -357,7 +479,9 @@ export class ProductsService {
   async purgeAllForDebug(user: TenantUser) {
     this.assertWritable();
     const companyId = requireTenant(user);
-    const deleted = await this.prisma.product.deleteMany({ where: { companyId } });
+    const deleted = await this.prisma.product.deleteMany({
+      where: { companyId },
+    });
     return {
       ok: true,
       deletedProducts: deleted.count,
@@ -366,7 +490,8 @@ export class ProductsService {
 
   private mapProduct(product: Product) {
     const productAny = product as any;
-    const imageKey = typeof productAny.imageKey === 'string' ? productAny.imageKey : null;
+    const imageKey =
+      typeof productAny.imageKey === "string" ? productAny.imageKey : null;
     const fotoUrl = imageKey
       ? this.buildProductMediaUrl(product.id)
       : this.resolveUrl(product.imagen ?? null);
@@ -374,7 +499,9 @@ export class ProductsService {
       ...product,
       fotoUrl,
       imageKey,
-      storageProvider: imageKey ? 'r2' : productAny.imageStorageProvider ?? null,
+      storageProvider: imageKey
+        ? "r2"
+        : (productAny.imageStorageProvider ?? null),
       imageMimeType: productAny.imageMimeType ?? null,
       imageOriginalFileName: productAny.imageOriginalFileName ?? null,
       imageUpdatedAt: productAny.imageUpdatedAt ?? null,
@@ -393,16 +520,16 @@ export class ProductsService {
     if (!url) return null;
 
     const extractUploadsPath = (value: string): string | null => {
-      const normalized = value.replace(/\\/g, '/').trim();
-      const marker = '/uploads/';
+      const normalized = value.replace(/\\/g, "/").trim();
+      const marker = "/uploads/";
       const markerIndex = normalized.indexOf(marker);
       if (markerIndex >= 0) {
         return normalized.substring(markerIndex);
       }
-      if (normalized.startsWith('uploads/')) {
+      if (normalized.startsWith("uploads/")) {
         return `/${normalized}`;
       }
-      if (normalized.startsWith('./uploads/')) {
+      if (normalized.startsWith("./uploads/")) {
         return normalized.substring(1);
       }
       return null;
@@ -425,7 +552,7 @@ export class ProductsService {
         }
 
         if (normalizedPath) {
-          const query = parsed.search ?? '';
+          const query = parsed.search ?? "";
           return `${this.publicBaseUrl}${normalizedPath}${query}`;
         }
       } catch {
@@ -442,7 +569,7 @@ export class ProductsService {
     }
 
     if (!this.publicBaseUrl) return url;
-    const normalized = url.startsWith('/') ? url : `/${url}`;
+    const normalized = url.startsWith("/") ? url : `/${url}`;
     return `${this.publicBaseUrl}${normalized}`;
   }
 
@@ -450,16 +577,16 @@ export class ProductsService {
     if (raw === undefined || raw === null) return null;
 
     const extractUploadsPath = (value: string): string | null => {
-      const normalized = value.replace(/\\/g, '/').trim();
-      const marker = '/uploads/';
+      const normalized = value.replace(/\\/g, "/").trim();
+      const marker = "/uploads/";
       const markerIndex = normalized.indexOf(marker);
       if (markerIndex >= 0) {
         return normalized.substring(markerIndex);
       }
-      if (normalized.startsWith('uploads/')) {
+      if (normalized.startsWith("uploads/")) {
         return `/${normalized}`;
       }
-      if (normalized.startsWith('./uploads/')) {
+      if (normalized.startsWith("./uploads/")) {
         return normalized.substring(1);
       }
       return null;
@@ -486,25 +613,25 @@ export class ProductsService {
   }
 
   private extractR2Key(raw?: string | null): string | null {
-    const value = (raw ?? '').trim().replace(/\\/g, '/');
-    if (!value || value.includes('..')) return null;
+    const value = (raw ?? "").trim().replace(/\\/g, "/");
+    if (!value || value.includes("..")) return null;
 
     const normalizeKey = (candidate: string): string | null => {
-      const key = candidate.trim().replace(/^\/+/, '');
-      if (!key || key.includes('..') || key.includes('\\')) return null;
-      return key.startsWith('uploads/companies/') ? key : null;
+      const key = candidate.trim().replace(/^\/+/, "");
+      if (!key || key.includes("..") || key.includes("\\")) return null;
+      return key.startsWith("uploads/companies/") ? key : null;
     };
 
     const direct = normalizeKey(value);
     if (direct) return direct;
 
     try {
-      const parsed = new URL(value, 'https://daleventa.local');
-      const queryKey = parsed.searchParams.get('key');
-      const fromQuery = normalizeKey(queryKey ?? '');
+      const parsed = new URL(value, "https://daleventa.local");
+      const queryKey = parsed.searchParams.get("key");
+      const fromQuery = normalizeKey(queryKey ?? "");
       if (fromQuery) return fromQuery;
 
-      const marker = '/uploads/companies/';
+      const marker = "/uploads/companies/";
       const markerIndex = parsed.pathname.indexOf(marker);
       if (markerIndex >= 0) {
         return normalizeKey(parsed.pathname.substring(markerIndex + 1));
@@ -513,7 +640,7 @@ export class ProductsService {
       // Keep falling through to path-style checks.
     }
 
-    const marker = '/uploads/companies/';
+    const marker = "/uploads/companies/";
     const markerIndex = value.indexOf(marker);
     if (markerIndex >= 0) {
       return normalizeKey(value.substring(markerIndex + 1));
@@ -533,21 +660,29 @@ export class ProductsService {
   }
 
   private normalizePublicBaseUrl(raw: string) {
-    const value = raw.trim().replace(/\/$/, '');
-    if (!value) return '';
-    if (value.includes(' ') || value.includes('"') || value.includes("'")) {
-      this.logger.warn('PUBLIC_BASE_URL/API_BASE_URL inválido para construir URLs públicas de media');
-      return '';
+    const value = raw.trim().replace(/\/$/, "");
+    if (!value) return "";
+    if (value.includes(" ") || value.includes('"') || value.includes("'")) {
+      this.logger.warn(
+        "PUBLIC_BASE_URL/API_BASE_URL inválido para construir URLs públicas de media",
+      );
+      return "";
     }
     if (/localhost|31\.97\.99\.70/i.test(value)) {
-      this.logger.warn('PUBLIC_BASE_URL/API_BASE_URL apunta a localhost/IP antigua; se usarán rutas relativas de media');
-      return '';
+      this.logger.warn(
+        "PUBLIC_BASE_URL/API_BASE_URL apunta a localhost/IP antigua; se usarán rutas relativas de media",
+      );
+      return "";
     }
-    if (process.env.NODE_ENV === 'production' && !value.startsWith('https://')) {
-      this.logger.warn('PUBLIC_BASE_URL/API_BASE_URL debe usar https:// en producción para media');
-      return '';
+    if (
+      process.env.NODE_ENV === "production" &&
+      !value.startsWith("https://")
+    ) {
+      this.logger.warn(
+        "PUBLIC_BASE_URL/API_BASE_URL debe usar https:// en producción para media",
+      );
+      return "";
     }
     return value;
   }
-
 }

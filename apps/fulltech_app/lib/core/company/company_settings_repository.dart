@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_routes.dart';
+import '../auth/auth_provider.dart';
 import '../auth/auth_repository.dart';
 import '../cache/local_json_cache.dart';
 import '../debug/trace_log.dart';
@@ -14,9 +15,11 @@ import 'company_settings_model.dart';
 final companySettingsRepositoryProvider = Provider<CompanySettingsRepository>((
   ref,
 ) {
+  final user = ref.watch(authStateProvider).user;
   final repository = CompanySettingsRepository(
     ref.watch(dioProvider),
     ref.read(syncQueueServiceProvider.notifier),
+    cacheScope: user?.email ?? user?.id,
   );
   repository.registerSyncHandlers();
   return repository;
@@ -44,10 +47,21 @@ class CompanySettingsRepository {
 
   final LocalJsonCache _cache = LocalJsonCache();
   final SyncQueueService _syncQueue;
+  final String? _cacheScope;
 
   bool _handlersRegistered = false;
 
-  CompanySettingsRepository(this._dio, this._syncQueue);
+  CompanySettingsRepository(this._dio, this._syncQueue, {String? cacheScope})
+    : _cacheScope = _normalizeCacheScope(cacheScope);
+
+  static String? _normalizeCacheScope(String? value) {
+    final clean = value?.trim().toLowerCase();
+    if (clean == null || clean.isEmpty) return null;
+    return clean.replaceAll(RegExp(r'[^a-z0-9_.@-]+'), '_');
+  }
+
+  String get _scopedCacheKey =>
+      _cacheScope == null ? _cacheKey : '$_cacheKey:$_cacheScope';
 
   void registerSyncHandlers() {
     if (_handlersRegistered) return;
@@ -115,10 +129,19 @@ class CompanySettingsRepository {
 
   Future<CompanySettings?> getCachedSettings() async {
     try {
-      final cached = await _cache.readMap(
-        _cacheKey,
+      var cached = await _cache.readMap(
+        _scopedCacheKey,
         maxAge: const Duration(days: 14),
       );
+      if (cached == null && _scopedCacheKey != _cacheKey) {
+        cached = await _cache.readMap(
+          _cacheKey,
+          maxAge: const Duration(days: 14),
+        );
+        if (cached != null) {
+          await _cache.writeMap(_scopedCacheKey, cached);
+        }
+      }
       if (cached == null) return null;
       return CompanySettings.fromMap(cached);
     } catch (error, stackTrace) {
@@ -140,7 +163,7 @@ class CompanySettingsRepository {
           )
           .timeout(_settingsTimeout);
       final settings = _settingsFromData(res.data);
-      await _cache.writeMap(_cacheKey, settings.toMap());
+      await _cache.writeMap(_scopedCacheKey, settings.toMap());
       return settings;
     } on TimeoutException {
       throw ApiException(
@@ -254,7 +277,7 @@ class CompanySettingsRepository {
   }
 
   Future<bool> saveSettingsOrQueue(CompanySettings settings) async {
-    await _cache.writeMap(_cacheKey, settings.toMap());
+    await _cache.writeMap(_scopedCacheKey, settings.toMap());
     try {
       await _saveSettingsRemote(settings);
       return false;
@@ -282,7 +305,7 @@ class CompanySettingsRepository {
       final cached = await getCachedSettings();
       if (cached != null) {
         await _cache.writeMap(
-          _cacheKey,
+          _scopedCacheKey,
           cached.copyWith(hasAdminAuthorizationPin: true).toMap(),
         );
       }
