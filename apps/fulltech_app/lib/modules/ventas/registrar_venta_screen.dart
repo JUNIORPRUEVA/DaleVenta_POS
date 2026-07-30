@@ -33,6 +33,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     implements RouteAware {
   final TextEditingController _searchCtrl = TextEditingController();
   final TextEditingController _noteCtrl = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
   DateTime? _lastAutoSyncAt;
   Timer? _liveSyncTimer;
   StreamSubscription<CatalogRealtimeMessage>? _realtimeSubscription;
@@ -57,11 +58,46 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   List<ProductModel> get _filteredProducts {
     final q = _searchCtrl.text.trim().toLowerCase();
     return _products.where((p) {
-      final matchesText = q.isEmpty || p.nombre.toLowerCase().contains(q);
+      final code = (p.codigo ?? '').trim().toLowerCase();
+      final matchesText =
+          q.isEmpty || p.nombre.toLowerCase().contains(q) || code.contains(q);
       final matchesCategory =
           _selectedCategory == null || p.categoriaLabel == _selectedCategory;
       return matchesText && matchesCategory;
     }).toList();
+  }
+
+  bool _matchesProductCode(ProductModel product, String rawCode) {
+    final code = (product.codigo ?? '').trim().toLowerCase();
+    final query = rawCode.trim().toLowerCase();
+    return code.isNotEmpty && query.isNotEmpty && code == query;
+  }
+
+  ProductModel? _findProductByCode(String rawCode) {
+    for (final product in _products) {
+      if (_matchesProductCode(product, rawCode)) return product;
+    }
+    return null;
+  }
+
+  void _submitProductSearch(String rawValue) {
+    final value = rawValue.trim();
+    if (value.isEmpty) return;
+    final product = _findProductByCode(value);
+    if (product == null) {
+      final visible = _filteredProducts;
+      if (visible.length == 1) {
+        _addProduct(visible.first);
+        _searchCtrl.clear();
+        setState(() {});
+        _searchFocus.requestFocus();
+      }
+      return;
+    }
+    _addProduct(product);
+    _searchCtrl.clear();
+    setState(() {});
+    _searchFocus.requestFocus();
   }
 
   List<String> get _availableCategories {
@@ -182,6 +218,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     _stopLiveSync();
     _realtimeSubscription?.cancel();
     _searchCtrl.dispose();
+    _searchFocus.dispose();
     _noteCtrl.dispose();
     super.dispose();
   }
@@ -412,10 +449,16 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: TextField(
                       controller: _searchCtrl,
+                      focusNode: _searchFocus,
+                      autofocus: true,
                       onChanged: (_) => setState(() {}),
+                      onSubmitted: _submitProductSearch,
                       decoration: InputDecoration(
-                        hintText: 'Buscar...',
-                        prefixIcon: const Icon(Icons.search, size: 18),
+                        hintText: 'Buscar o escanear código...',
+                        prefixIcon: const Icon(
+                          Icons.qr_code_scanner_outlined,
+                          size: 18,
+                        ),
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -461,10 +504,13 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
               child: TextField(
                 controller: _searchCtrl,
+                focusNode: _searchFocus,
+                autofocus: true,
                 onChanged: (_) => setState(() {}),
+                onSubmitted: _submitProductSearch,
                 decoration: InputDecoration(
-                  hintText: 'Buscar producto...',
-                  prefixIcon: const Icon(Icons.search),
+                  hintText: 'Buscar producto o escanear código...',
+                  prefixIcon: const Icon(Icons.qr_code_scanner_outlined),
                   suffixIcon: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [

@@ -4,6 +4,22 @@ export class CreateProductDto {
   @IsString()
   nombre!: string;
 
+  @IsOptional()
+  @IsString()
+  codigo?: string;
+
+  @IsOptional()
+  @IsString()
+  code?: string;
+
+  @IsOptional()
+  @IsString()
+  sku?: string;
+
+  @IsOptional()
+  @IsString()
+  barcode?: string;
+
   @IsNumber()
   @Min(0)
   precio!: number;

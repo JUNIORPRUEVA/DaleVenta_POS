@@ -3720,11 +3720,13 @@ class InventoryProductEditorPage extends ConsumerStatefulWidget {
 class _InventoryProductEditorPageState
     extends ConsumerState<InventoryProductEditorPage> {
   late final TextEditingController _nameCtrl;
+  late final TextEditingController _codeCtrl;
   late final TextEditingController _priceCtrl;
   late final TextEditingController _costCtrl;
   late final TextEditingController _stockCtrl;
   late final TextEditingController _categoryCtrl;
   late final FocusNode _nameFocus;
+  late final FocusNode _codeFocus;
   late final FocusNode _priceFocus;
   late final FocusNode _costFocus;
   late final FocusNode _stockFocus;
@@ -3744,6 +3746,7 @@ class _InventoryProductEditorPageState
     debugPrint('[ProductForm#$hashCode] initState');
     final product = widget.product;
     _nameCtrl = TextEditingController(text: product?.nombre ?? '');
+    _codeCtrl = TextEditingController(text: product?.codigo ?? '');
     _priceCtrl = TextEditingController(
       text: product == null ? '' : formatRdAccountingAmount(product.precio),
     );
@@ -3759,6 +3762,7 @@ class _InventoryProductEditorPageState
           : product.categoriaLabel,
     );
     _nameFocus = FocusNode();
+    _codeFocus = FocusNode();
     _priceFocus = FocusNode();
     _costFocus = FocusNode();
     _stockFocus = FocusNode();
@@ -3769,11 +3773,13 @@ class _InventoryProductEditorPageState
   void dispose() {
     debugPrint('[ProductForm#$hashCode] dispose');
     _nameCtrl.dispose();
+    _codeCtrl.dispose();
     _priceCtrl.dispose();
     _costCtrl.dispose();
     _stockCtrl.dispose();
     _categoryCtrl.dispose();
     _nameFocus.dispose();
+    _codeFocus.dispose();
     _priceFocus.dispose();
     _costFocus.dispose();
     _stockFocus.dispose();
@@ -3823,6 +3829,7 @@ class _InventoryProductEditorPageState
     FocusManager.instance.primaryFocus?.unfocus();
 
     final name = _nameCtrl.text.trim();
+    final code = _codeCtrl.text.trim();
     final price = _parseInventoryNumber(_priceCtrl.text);
     final cost = _parseInventoryNumber(_costCtrl.text);
     final stock = _parseInventoryNumber(_stockCtrl.text);
@@ -3868,6 +3875,7 @@ class _InventoryProductEditorPageState
       if (product == null) {
         await repo.createProduct(
           nombre: name,
+          codigo: code.isEmpty ? null : code,
           precio: price,
           costo: cost,
           stock: stock,
@@ -3878,6 +3886,7 @@ class _InventoryProductEditorPageState
         await repo.updateProduct(
           id: product.id,
           nombre: name,
+          codigo: code.isEmpty ? null : code,
           precio: price,
           costo: cost,
           stock: stock,
@@ -3930,6 +3939,19 @@ class _InventoryProductEditorPageState
               enabled: !_isSaving,
               decoration: const InputDecoration(
                 labelText: 'Nombre del producto',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _codeCtrl,
+              focusNode: _codeFocus,
+              enabled: !_isSaving,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Código / código de barra (opcional)',
+                hintText: 'Escanea o escribe el código del producto',
+                prefixIcon: Icon(Icons.qr_code_2_outlined),
                 border: OutlineInputBorder(),
               ),
             ),

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/account/account_menu_screens.dart';
 import '../../features/auth/presentation/login_screen.dart';
+import '../../features/auth/presentation/register_screen.dart';
 import '../../features/home/home_shell.dart';
 import '../../features/user/profile_screen.dart';
 import '../../features/user/users_screen.dart';
@@ -30,6 +31,7 @@ import '../../modules/ventas/registrar_venta_screen.dart';
 import '../../modules/ventas/sales_credit_screen.dart';
 import '../../modules/compras/compras_screen.dart';
 import '../ai_assistant/presentation/ai_screen.dart';
+import '../auth/admin_authorization_session.dart';
 import '../auth/auth_provider.dart';
 import '../auth/app_permissions.dart';
 import '../auth/app_role.dart';
@@ -44,6 +46,10 @@ final _routerRefreshProvider = Provider<_RouterRefreshNotifier>((ref) {
   final notifier = _RouterRefreshNotifier();
   ref.listen<AuthState>(
     authStateProvider,
+    (previous, next) => notifier.refresh(),
+  );
+  ref.listen<AdminAuthorizationState>(
+    adminAuthorizationProvider,
     (previous, next) => notifier.refresh(),
   );
   ref.onDispose(notifier.dispose);
@@ -70,7 +76,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: Routes.register,
-        redirect: (context, state) => Routes.login,
+        builder: (context, state) => const RegisterScreen(),
       ),
       GoRoute(
         path: Routes.home,
@@ -120,6 +126,22 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: Routes.configuracion,
             builder: (context, state) => const AccountSettingsScreen(),
+          ),
+          GoRoute(
+            path: Routes.configuracionEmpresa,
+            builder: (context, state) => const AccountCompanySettingsScreen(),
+          ),
+          GoRoute(
+            path: Routes.configuracionImpresora,
+            builder: (context, state) => const AccountPrinterSettingsScreen(),
+          ),
+          GoRoute(
+            path: Routes.configuracionBackup,
+            builder: (context, state) => const AccountBackupSettingsScreen(),
+          ),
+          GoRoute(
+            path: Routes.configuracionParametros,
+            builder: (context, state) => const AccountParametersScreen(),
           ),
           GoRoute(
             path: Routes.users,
@@ -276,6 +298,10 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       final required = RouteAccess.permissionForLocation(loc);
       if (required != null && !hasUserPermission(auth.user, required)) {
+        final adminOverride = ref
+            .read(adminAuthorizationProvider.notifier)
+            .isAuthorized;
+        if (adminOverride) return null;
         final fallback = RouteAccess.defaultHomeForRole(role);
         if (path != fallback) {
           return fallback;

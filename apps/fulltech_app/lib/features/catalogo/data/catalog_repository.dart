@@ -116,6 +116,7 @@ class CatalogRepository {
 
   Future<ProductModel> createProduct({
     required String nombre,
+    String? codigo,
     required double precio,
     required double costo,
     required double stock,
@@ -127,6 +128,10 @@ class CatalogRepository {
         ApiRoutes.products,
         data: {
           'nombre': nombre,
+          'codigo': codigo?.trim().isEmpty == true ? null : codigo?.trim(),
+          'code': codigo?.trim().isEmpty == true ? null : codigo?.trim(),
+          'sku': codigo?.trim().isEmpty == true ? null : codigo?.trim(),
+          'barcode': codigo?.trim().isEmpty == true ? null : codigo?.trim(),
           'precio': precio,
           'costo': costo,
           'stock': stock,
@@ -146,6 +151,7 @@ class CatalogRepository {
   Future<ProductModel> updateProduct({
     required String id,
     required String nombre,
+    String? codigo,
     required double precio,
     required double costo,
     required double stock,
@@ -157,6 +163,10 @@ class CatalogRepository {
         ApiRoutes.updateProduct(id),
         data: {
           'nombre': nombre,
+          'codigo': codigo?.trim().isEmpty == true ? null : codigo?.trim(),
+          'code': codigo?.trim().isEmpty == true ? null : codigo?.trim(),
+          'sku': codigo?.trim().isEmpty == true ? null : codigo?.trim(),
+          'barcode': codigo?.trim().isEmpty == true ? null : codigo?.trim(),
           'precio': precio,
           'costo': costo,
           'stock': stock,

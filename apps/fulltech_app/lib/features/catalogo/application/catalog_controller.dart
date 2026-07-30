@@ -143,6 +143,7 @@ class CatalogController extends StateNotifier<CatalogState> {
 
   Future<void> create({
     required String nombre,
+    String? codigo,
     required double precio,
     required double costo,
     required double stock,
@@ -170,6 +171,7 @@ class CatalogController extends StateNotifier<CatalogState> {
       }
       final created = await repo.createProduct(
         nombre: nombre,
+        codigo: codigo,
         precio: precio,
         costo: costo,
         stock: stock,
@@ -221,6 +223,7 @@ class CatalogController extends StateNotifier<CatalogState> {
   Future<void> update({
     required String id,
     required String nombre,
+    String? codigo,
     required double precio,
     required double costo,
     required double stock,
@@ -252,6 +255,7 @@ class CatalogController extends StateNotifier<CatalogState> {
       final updated = await repo.updateProduct(
         id: id,
         nombre: nombre,
+        codigo: codigo,
         precio: precio,
         costo: costo,
         stock: stock,
@@ -278,6 +282,7 @@ class CatalogController extends StateNotifier<CatalogState> {
     return update(
       id: product.id,
       nombre: product.nombre,
+      codigo: product.codigo,
       precio: product.precio,
       costo: product.costo,
       stock: stock,

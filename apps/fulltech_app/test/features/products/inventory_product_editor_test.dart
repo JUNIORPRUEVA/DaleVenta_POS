@@ -15,6 +15,7 @@ class _FakeCatalogRepository extends CatalogRepository {
   @override
   Future<ProductModel> createProduct({
     required String nombre,
+    String? codigo,
     required double precio,
     required double costo,
     required double stock,
@@ -25,6 +26,7 @@ class _FakeCatalogRepository extends CatalogRepository {
     return ProductModel(
       id: 'created-$creates',
       nombre: nombre,
+      codigo: codigo,
       precio: precio,
       costo: costo,
       stock: stock,
@@ -37,6 +39,7 @@ class _FakeCatalogRepository extends CatalogRepository {
   Future<ProductModel> updateProduct({
     required String id,
     required String nombre,
+    String? codigo,
     required double precio,
     required double costo,
     required double stock,
@@ -47,6 +50,7 @@ class _FakeCatalogRepository extends CatalogRepository {
     return ProductModel(
       id: id,
       nombre: nombre,
+      codigo: codigo,
       precio: precio,
       costo: costo,
       stock: stock,
@@ -109,10 +113,11 @@ void main() {
       await _pumpEditor(tester, repo: repo);
 
       await tester.enterText(find.byType(TextField).at(0), 'Producto prueba');
-      await tester.enterText(find.byType(TextField).at(1), '100');
-      await tester.enterText(find.byType(TextField).at(2), '60');
-      await tester.enterText(find.byType(TextField).at(3), '5');
-      await tester.enterText(find.byType(TextField).at(4), 'General');
+      await tester.enterText(find.byType(TextField).at(1), 'ABC-001');
+      await tester.enterText(find.byType(TextField).at(2), '100');
+      await tester.enterText(find.byType(TextField).at(3), '60');
+      await tester.enterText(find.byType(TextField).at(4), '5');
+      await tester.enterText(find.byType(TextField).at(5), 'General');
       await tester.tap(find.text('Crear producto'));
       await tester.pumpAndSettle();
 
@@ -145,7 +150,7 @@ void main() {
     await _pumpEditor(tester, repo: repo, product: product);
 
     await tester.enterText(find.byType(TextField).at(0), 'Taladro Pro');
-    await tester.enterText(find.byType(TextField).at(1), '650');
+    await tester.enterText(find.byType(TextField).at(2), '650');
     await tester.tap(find.text('Guardar cambios'));
     await tester.pumpAndSettle();
 

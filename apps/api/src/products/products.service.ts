@@ -52,6 +52,26 @@ export class ProductsService {
     }
   }
 
+  private normalizeProductCode(dto: {
+    codigo?: string;
+    code?: string;
+    sku?: string;
+    barcode?: string;
+  }): string | null {
+    const raw = dto.codigo ?? dto.code ?? dto.sku ?? dto.barcode;
+    const value = raw?.trim();
+    return value && value.length > 0 ? value : null;
+  }
+
+  private hasProductCodeInput(dto: {
+    codigo?: string;
+    code?: string;
+    sku?: string;
+    barcode?: string;
+  }): boolean {
+    return dto.codigo !== undefined || dto.code !== undefined || dto.sku !== undefined || dto.barcode !== undefined;
+  }
+
   private isSchemaMismatch(error: unknown) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       return error.code === 'P2021' || error.code === 'P2022';
@@ -82,6 +102,7 @@ export class ProductsService {
         : this.normalizeImagePathForStorage(dto.fotoUrl);
       const data = {
         nombre: dto.nombre,
+        codigo: this.normalizeProductCode(dto),
         categoria: dto.categoria,
         precio: new Prisma.Decimal(dto.precio),
         costo: new Prisma.Decimal(dto.costo),
@@ -183,6 +204,7 @@ export class ProductsService {
           : this.normalizeImagePathForStorage(dto.fotoUrl);
       const data = {
         nombre: dto.nombre,
+        codigo: this.hasProductCodeInput(dto) ? this.normalizeProductCode(dto) : undefined,
         categoria: dto.categoria,
         precio: dto.precio === undefined ? undefined : new Prisma.Decimal(dto.precio),
         costo: dto.costo === undefined ? undefined : new Prisma.Decimal(dto.costo),
@@ -241,6 +263,10 @@ export class ProductsService {
       imageMimeType: productAny.imageMimeType ?? null,
       imageOriginalFileName: productAny.imageOriginalFileName ?? null,
       imageUpdatedAt: productAny.imageUpdatedAt ?? null,
+      codigo: productAny.codigo ?? null,
+      code: productAny.codigo ?? null,
+      sku: productAny.codigo ?? null,
+      barcode: productAny.codigo ?? null,
       stock: Number(product.stock ?? 0),
       cantidadDisponible: Number(product.stock ?? 0),
       categoria: product.categoria ?? null,

@@ -25,6 +25,16 @@ final companySettingsProvider = FutureProvider<CompanySettings>((ref) async {
   return ref.watch(companySettingsRepositoryProvider).getSettings();
 });
 
+class AdminAuthorizationVerification {
+  const AdminAuthorizationVerification({
+    required this.duration,
+    required this.token,
+  });
+
+  final Duration duration;
+  final String token;
+}
+
 class CompanySettingsRepository {
   final Dio _dio;
   static const Duration _settingsTimeout = Duration(seconds: 20);
@@ -130,7 +140,17 @@ class CompanySettingsRepository {
               'companyName': settings.companyName,
               'rnc': settings.rnc,
               'phone': settings.phone,
+              'phonePreferential': settings.phonePreferential,
               'address': settings.address,
+              'description': settings.description,
+              'instagramUrl': settings.instagramUrl,
+              'facebookUrl': settings.facebookUrl,
+              'websiteUrl': settings.websiteUrl,
+              'gpsLocationUrl': settings.gpsLocationUrl,
+              'businessHours': settings.businessHours,
+              'bankAccounts': settings.bankAccounts
+                  .map((entry) => entry.toMap())
+                  .toList(),
               'legalRepresentativeName': settings.legalRepresentativeName,
               'legalRepresentativeCedula': settings.legalRepresentativeCedula,
               'legalRepresentativeRole': settings.legalRepresentativeRole,
@@ -179,6 +199,67 @@ class CompanySettingsRepository {
         payload: {'settings': settings.toMap()},
       );
       return true;
+    }
+  }
+
+  Future<void> setAdminAuthorizationPin(String pin) async {
+    try {
+      await _dio
+          .post(
+            ApiRoutes.settingsAdminPin,
+            options: Options(extra: const {'skipLoader': true}),
+            data: {'pin': pin},
+          )
+          .timeout(_settingsTimeout);
+      final cached = await getCachedSettings();
+      if (cached != null) {
+        await _cache.writeMap(
+          _cacheKey,
+          cached.copyWith(hasAdminAuthorizationPin: true).toMap(),
+        );
+      }
+    } on TimeoutException {
+      throw ApiException(
+        'Guardar el PIN tardó demasiado. Inténtalo de nuevo.',
+      );
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(e.response?.data, 'No se pudo guardar el PIN'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<AdminAuthorizationVerification> verifyAdminAuthorizationPin(
+    String pin,
+  ) async {
+    try {
+      final res = await _dio
+          .post(
+            ApiRoutes.settingsAdminPinVerify,
+            options: Options(extra: const {'skipLoader': true}),
+            data: {'pin': pin},
+          )
+          .timeout(_settingsTimeout);
+      final data = (res.data as Map?) ?? const <String, dynamic>{};
+      final seconds = data['expiresInSeconds'];
+      final token = data['adminAuthorizationToken'];
+      if (token is! String || token.trim().isEmpty) {
+        throw ApiException('La API no devolvió autorización administrativa');
+      }
+      return AdminAuthorizationVerification(
+        duration: Duration(seconds: seconds is num ? seconds.toInt() : 600),
+        token: token,
+      );
+    } on TimeoutException {
+      throw ApiException(
+        'La autorización tardó demasiado. Inténtalo de nuevo.',
+      );
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(e.response?.data, 'No se pudo autorizar la acción'),
+        e.response?.statusCode,
+      );
     }
   }
 

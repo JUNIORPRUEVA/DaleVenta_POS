@@ -22,6 +22,7 @@ import { WarrantyConfigsModule } from './warranty-configs/warranty-configs.modul
 import { CashModule } from './cash/cash.module';
 import { ReportsModule } from './reports/reports.module';
 import { PurchasesModule } from './purchases/purchases.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { PurchasesModule } from './purchases/purchases.module';
     CashModule,
     ReportsModule,
     PurchasesModule,
+    SettingsModule,
   ]
 })
 export class AppModule {}

@@ -71,6 +71,7 @@ class CompanySettings {
   final bool whatsappWebhookEnabled;
   final String productsSource;
   final bool productsReadOnly;
+  final bool hasAdminAuthorizationPin;
 
   const CompanySettings({
     required this.companyName,
@@ -101,6 +102,7 @@ class CompanySettings {
     this.whatsappWebhookEnabled = false,
     this.productsSource = 'LOCAL',
     this.productsReadOnly = false,
+    this.hasAdminAuthorizationPin = false,
   });
 
   factory CompanySettings.empty() {
@@ -133,6 +135,7 @@ class CompanySettings {
       whatsappWebhookEnabled: false,
       productsSource: 'LOCAL',
       productsReadOnly: false,
+      hasAdminAuthorizationPin: false,
     );
   }
 
@@ -165,6 +168,7 @@ class CompanySettings {
     bool? whatsappWebhookEnabled,
     String? productsSource,
     bool? productsReadOnly,
+    bool? hasAdminAuthorizationPin,
     bool clearLogo = false,
   }) {
     return CompanySettings(
@@ -204,6 +208,8 @@ class CompanySettings {
           whatsappWebhookEnabled ?? this.whatsappWebhookEnabled,
       productsSource: productsSource ?? this.productsSource,
       productsReadOnly: productsReadOnly ?? this.productsReadOnly,
+      hasAdminAuthorizationPin:
+          hasAdminAuthorizationPin ?? this.hasAdminAuthorizationPin,
     );
   }
 
@@ -236,6 +242,7 @@ class CompanySettings {
     'whatsappWebhookEnabled': whatsappWebhookEnabled,
     'productsSource': productsSource,
     'productsReadOnly': productsReadOnly,
+    'hasAdminAuthorizationPin': hasAdminAuthorizationPin,
   };
 
   factory CompanySettings.fromMap(Map<String, dynamic> map) {
@@ -282,6 +289,7 @@ class CompanySettings {
       whatsappWebhookEnabled: map['whatsappWebhookEnabled'] == true,
       productsSource: (map['productsSource'] ?? 'LOCAL').toString(),
       productsReadOnly: map['productsReadOnly'] == true,
+      hasAdminAuthorizationPin: map['hasAdminAuthorizationPin'] == true,
     );
   }
 }

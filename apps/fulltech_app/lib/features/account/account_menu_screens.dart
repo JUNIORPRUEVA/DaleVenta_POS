@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../../core/api/env.dart';
 import '../../core/app_update/app_update_controller.dart';
@@ -11,6 +11,7 @@ import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/routing/routes.dart';
 import '../../core/utils/safe_url_launcher.dart';
+import '../settings/data/cloud_backup_service.dart';
 import '../settings/ui/printer_settings_page.dart';
 
 class AccountAppsScreen extends StatelessWidget {
@@ -89,92 +90,130 @@ class AccountLicensesScreen extends ConsumerWidget {
   }
 }
 
-class AccountUpdatesScreen extends ConsumerWidget {
+class AccountUpdatesScreen extends ConsumerStatefulWidget {
   const AccountUpdatesScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AccountUpdatesScreen> createState() =>
+      _AccountUpdatesScreenState();
+}
+
+class _AccountUpdatesScreenState extends ConsumerState<AccountUpdatesScreen> {
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      ref.read(appUpdateProvider.notifier).checkNow();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(appUpdateProvider);
     final controller = ref.read(appUpdateProvider.notifier);
     final installed = state.installedRelease;
     final update = state.updateInfo;
-    final checkedAt = state.checkedAt == null
-        ? 'Sin verificación reciente'
-        : DateFormat('dd/MM/yyyy HH:mm', 'es_DO').format(state.checkedAt!);
+    final progress = state.downloadProgress;
+    final hasUpdate = update?.update == true;
+    final busy =
+        state.phase == AppUpdatePhase.checking ||
+        state.phase == AppUpdatePhase.downloadingUpdate ||
+        state.phase == AppUpdatePhase.installingUpdate;
+    final showInlineTitle = MediaQuery.sizeOf(context).width < 900;
 
-    return _AccountFullPageScaffold(
-      icon: Icons.system_update_alt_rounded,
-      title: 'Actualizaciones',
-      subtitle:
-          'Revisa la versión instalada, el canal de releases y el estado de actualización del sistema.',
-      action: FilledButton.icon(
-        onPressed: state.phase == AppUpdatePhase.checking
-            ? null
-            : () => controller.checkNow(force: true),
-        icon: const Icon(Icons.refresh_rounded),
-        label: const Text('Buscar actualización'),
-        style: _filledButtonStyle(),
-      ),
-      children: [
-        _StatusBanner(
-          icon: _updateIcon(state.phase),
-          title: _updateTitle(state),
-          message: state.message ?? _updateMessage(state),
-          accent: _updateAccent(state.phase),
-        ),
-        _FullPageGrid(
-          children: [
-            _MetricPanel(
-              icon: Icons.computer_rounded,
-              label: 'Plataforma',
-              value: installed?.platform.displayName ?? 'No detectada',
-            ),
-            _MetricPanel(
-              icon: Icons.tag_rounded,
-              label: 'Versión instalada',
-              value: installed == null
-                  ? 'Sin datos'
-                  : '${installed.currentVersion}+${installed.currentBuild}',
-            ),
-            _MetricPanel(
-              icon: Icons.new_releases_outlined,
-              label: 'Última versión',
-              value: update?.latestVersion ?? 'Sin release disponible',
-            ),
-            _MetricPanel(
-              icon: Icons.schedule_rounded,
-              label: 'Última revisión',
-              value: checkedAt,
-            ),
-          ],
-        ),
-        _SectionPanel(
-          title: 'Detalle del release',
-          children: [
-            _DetailRow(
-              'Actualización disponible',
-              update?.update == true ? 'Sí' : 'No',
-            ),
-            _DetailRow(
-              'Actualización obligatoria',
-              update?.required == true ? 'Sí' : 'No',
-            ),
-            _DetailRow(
-              'Build publicado',
-              update?.latestBuild?.toString() ?? 'Sin datos',
-            ),
-            _DetailRow(
-              'Descarga',
-              update?.hasDownloadUrl == true ? 'Configurada' : 'No configurada',
-            ),
-            if ((update?.releaseNotes ?? '').trim().isNotEmpty)
-              _ParagraphBlock(
-                title: 'Notas',
-                text: update!.releaseNotes!.trim(),
+    Future<void> handlePendingAction() async {
+      if (hasUpdate && update?.hasDownloadUrl == true) {
+        await safeOpenUrl(context, Uri.parse(update!.downloadUrl!));
+        return;
+      }
+      if (hasUpdate) {
+        await controller.retryBlockedUpdate();
+        return;
+      }
+      await controller.checkNow(force: true);
+    }
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFEFF5F8),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 920),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(22, 26, 22, 28),
+            children: [
+              if (showInlineTitle) ...[
+                Text('Actualizaciones', style: _titleStyle(28)),
+                const SizedBox(height: 6),
+                Text(
+                  'Verifica la versión instalada y cualquier actualización pendiente.',
+                  style: _bodyStyle(),
+                ),
+                const SizedBox(height: 22),
+              ],
+              _UpdatePanel(
+                icon: Icons.verified_outlined,
+                title: 'Actualización actual',
+                accent: const Color(0xFF1957E6),
+                rows: [
+                  _DetailRow(
+                    'Versión instalada',
+                    installed == null
+                        ? 'No detectada'
+                        : '${installed.currentVersion}+${installed.currentBuild}',
+                  ),
+                  _DetailRow(
+                    'Plataforma',
+                    installed?.platform.displayName ?? 'No detectada',
+                  ),
+                ],
               ),
-          ],
+              const SizedBox(height: 14),
+              _UpdatePanel(
+                icon: _updateIcon(state.phase),
+                title: 'Actualización pendiente',
+                accent: _updateAccent(state.phase),
+                message: state.message ?? _updateMessage(state),
+                progress: progress,
+                rows: [
+                  _DetailRow(
+                    'Estado',
+                    hasUpdate ? 'Disponible' : _pendingUpdateLabel(state.phase),
+                  ),
+                  _DetailRow(
+                    'Nueva versión',
+                    hasUpdate
+                        ? '${update?.latestVersion ?? 'Sin versión'}'
+                              '${update?.latestBuild == null ? '' : '+${update!.latestBuild}'}'
+                        : 'Sin actualización pendiente',
+                  ),
+                ],
+                action: FilledButton.icon(
+                  onPressed: busy ? null : handlePendingAction,
+                  icon: busy
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          hasUpdate
+                              ? Icons.system_update_alt_rounded
+                              : Icons.refresh_rounded,
+                        ),
+                  label: Text(
+                    busy
+                        ? _busyUpdateLabel(state.phase)
+                        : hasUpdate
+                        ? 'Actualizar ahora'
+                        : 'Buscar actualización',
+                  ),
+                  style: _filledButtonStyle(),
+                ),
+              ),
+            ],
+          ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -185,100 +224,391 @@ class AccountSettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final company = ref.watch(companySettingsProvider);
-    final user = ref.watch(authStateProvider).user;
 
-    return _AccountFullPageScaffold(
-      icon: Icons.settings_outlined,
-      title: 'Configuración',
-      subtitle:
-          'Centro de control para empresa, impresión, seguridad y parámetros operativos.',
+    return _SettingsHubScaffold(
+      children: [
+        _SettingsLaunchCard(
+          icon: Icons.business_center_outlined,
+          title: 'Empresa',
+          description: company.maybeWhen(
+            data: (settings) => settings.companyName.trim().isEmpty
+                ? 'Datos fiscales, dirección y representante legal.'
+                : settings.companyName.trim(),
+            orElse: () => 'Datos fiscales, dirección y representante legal.',
+          ),
+          route: Routes.configuracionEmpresa,
+        ),
+        const _SettingsLaunchCard(
+          icon: Icons.print_outlined,
+          title: 'Impresora',
+          description: 'Tickets, copias, papel, logo y formato de impresión.',
+          route: Routes.configuracionImpresora,
+        ),
+        const _SettingsLaunchCard(
+          icon: Icons.cloud_sync_outlined,
+          title: 'Backup',
+          description: 'Descarga la información de la nube a respaldo local.',
+          route: Routes.configuracionBackup,
+        ),
+        const _SettingsLaunchCard(
+          icon: Icons.tune_outlined,
+          title: 'Parámetros',
+          description: 'Ventas, inventario, documentos, seguridad y operación.',
+          route: Routes.configuracionParametros,
+        ),
+      ],
+    );
+  }
+}
+
+class AccountCompanySettingsScreen extends ConsumerWidget {
+  const AccountCompanySettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final company = ref.watch(companySettingsProvider);
+
+    return _SettingsDetailScaffold(
+      title: 'Empresa',
+      subtitle: 'Datos usados en facturas, cotizaciones, tickets y reportes.',
       action: OutlinedButton.icon(
         onPressed: () => ref.invalidate(companySettingsProvider),
         icon: const Icon(Icons.sync_rounded),
         label: const Text('Sincronizar'),
         style: _outlinedButtonStyle(),
       ),
-      children: [
-        _FullPageGrid(
-          children: [
-            _MetricPanel(
-              icon: Icons.business_rounded,
-              label: 'Empresa',
-              value: company.maybeWhen(
-                data: (settings) => settings.companyName.trim().isEmpty
-                    ? 'DaleVenta POS'
-                    : settings.companyName.trim(),
-                orElse: () => 'DaleVenta POS',
+      child: _SectionPanel(
+        title: 'Datos de empresa',
+        children: [
+          company.maybeWhen(
+            data: (settings) => _CompanySettingsEditor(settings: settings),
+            orElse: () => const _ParagraphBlock(
+              title: 'Configuración de empresa',
+              text:
+                  'Los datos de la empresa se sincronizan con el servidor para usarse en documentos internos y fiscales.',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class AccountPrinterSettingsScreen extends StatelessWidget {
+  const AccountPrinterSettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const _SettingsDetailScaffold(
+      title: 'Impresora',
+      subtitle:
+          'Controla cómo se imprimen tickets, copias y datos del negocio.',
+      child: _SectionPanel(
+        title: 'Impresión y tickets',
+        children: [PrinterSettingsPage(embedded: true)],
+      ),
+    );
+  }
+}
+
+class AccountBackupSettingsScreen extends StatelessWidget {
+  const AccountBackupSettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const _SettingsDetailScaffold(
+      title: 'Backup',
+      subtitle: 'Guarda una copia local de la información sincronizada.',
+      child: _SectionPanel(
+        title: 'Backup y recuperación',
+        children: [_BackupSection()],
+      ),
+    );
+  }
+}
+
+class AccountParametersScreen extends StatelessWidget {
+  const AccountParametersScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const _SettingsDetailScaffold(
+      title: 'Parámetros',
+      subtitle: 'Opciones generales para organizar la operación del sistema.',
+      child: _SectionPanel(
+        title: 'Parámetros importantes',
+        children: [
+          _SettingsOptionGrid(
+            items: [
+              _SettingsOptionData(
+                icon: Icons.inventory_2_outlined,
+                title: 'Inventario',
+                value: 'Stock, productos, costos y sincronización.',
               ),
-            ),
-            _MetricPanel(
-              icon: Icons.mail_outline_rounded,
-              label: 'Cuenta',
-              value: user?.email ?? 'Sin usuario',
-            ),
-            _MetricPanel(
-              icon: Icons.security_rounded,
-              label: 'Rol',
-              value: user?.role ?? 'Sin rol',
-            ),
-            _MetricPanel(
-              icon: Icons.cloud_done_outlined,
-              label: 'Backend',
-              value: Env.apiBaseUrl,
-            ),
-          ],
-        ),
-        _SectionPanel(
-          title: 'Empresa y documentos',
-          children: [
-            company.maybeWhen(
-              data: (settings) => _CompanySettingsEditor(settings: settings),
-              orElse: () => const _ParagraphBlock(
-                title: 'Configuración de empresa',
-                text:
-                    'Los datos de la empresa se sincronizan con el servidor para usarse en facturas, cotizaciones y documentos internos.',
+              _SettingsOptionData(
+                icon: Icons.point_of_sale_outlined,
+                title: 'Ventas',
+                value: 'Facturación, créditos y reportes operativos.',
               ),
-            ),
-          ],
-        ),
-        _SectionPanel(
-          title: 'Parámetros importantes',
-          children: [
-            _SettingsOptionGrid(
-              items: const [
-                _SettingsOptionData(
-                  icon: Icons.inventory_2_outlined,
-                  title: 'Inventario',
-                  value: 'Stock, productos, costos y sincronización.',
-                ),
-                _SettingsOptionData(
-                  icon: Icons.point_of_sale_outlined,
-                  title: 'Ventas',
-                  value: 'Facturación, créditos y reportes operativos.',
-                ),
-                _SettingsOptionData(
-                  icon: Icons.receipt_long_outlined,
-                  title: 'Documentos',
-                  value: 'Empresa aplicada a PDFs, tickets y contratos.',
-                ),
-                _SettingsOptionData(
-                  icon: Icons.lock_outline_rounded,
-                  title: 'Seguridad',
-                  value: 'Acceso controlado por roles y permisos.',
+              _SettingsOptionData(
+                icon: Icons.receipt_long_outlined,
+                title: 'Documentos',
+                value: 'Datos de empresa aplicados a PDFs y contratos.',
+              ),
+              _SettingsOptionData(
+                icon: Icons.lock_outline_rounded,
+                title: 'Seguridad',
+                value: 'Acceso controlado por roles y permisos.',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsHubScaffold extends StatelessWidget {
+  const _SettingsHubScaffold({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final showInlineTitle = MediaQuery.sizeOf(context).width < 900;
+    return Scaffold(
+      backgroundColor: const Color(0xFFEFF5F8),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 980),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 26, 22, 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (showInlineTitle) ...[
+                  Text('Configuración', style: _titleStyle(28)),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Elige el área que quieres ajustar.',
+                    style: _bodyStyle(),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final twoColumns = constraints.maxWidth >= 720;
+                      return GridView.count(
+                        crossAxisCount: twoColumns ? 2 : 1,
+                        childAspectRatio: twoColumns ? 3.35 : 4.5,
+                        crossAxisSpacing: 14,
+                        mainAxisSpacing: 14,
+                        children: children,
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsDetailScaffold extends StatelessWidget {
+  const _SettingsDetailScaffold({
+    required this.title,
+    required this.subtitle,
+    required this.child,
+    this.action,
+  });
+
+  final String title;
+  final String subtitle;
+  final Widget child;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final showInlineTitle = MediaQuery.sizeOf(context).width < 900;
+    return Scaffold(
+      backgroundColor: const Color(0xFFEFF5F8),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1120),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(22, 24, 22, 28),
+            children: [
+              Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Volver',
+                    onPressed: () => context.go(Routes.configuracion),
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF1957E6),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: const BorderSide(color: Color(0xFFDDE7EE)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: showInlineTitle
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(title, style: _titleStyle(24)),
+                              const SizedBox(height: 3),
+                              Text(subtitle, style: _bodyStyle()),
+                            ],
+                          )
+                        : Text(subtitle, style: _bodyStyle()),
+                  ),
+                  if (action != null) action!,
+                ],
+              ),
+              const SizedBox(height: 20),
+              child,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsLaunchCard extends StatelessWidget {
+  const _SettingsLaunchCard({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.route,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final String route;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => context.go(route),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFDDE7EE)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1957E6).withValues(alpha: 0.09),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: const Color(0xFF1957E6), size: 23),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: _titleStyle(17)),
+                    const SizedBox(height: 5),
+                    Text(
+                      description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: _bodyStyle(),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Icon(Icons.chevron_right_rounded, color: Color(0xFF60758A)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _UpdatePanel extends StatelessWidget {
+  const _UpdatePanel({
+    required this.icon,
+    required this.title,
+    required this.accent,
+    required this.rows,
+    this.message,
+    this.progress,
+    this.action,
+  });
+
+  final IconData icon;
+  final String title;
+  final Color accent;
+  final List<Widget> rows;
+  final String? message;
+  final double? progress;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SurfacePanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _TileIcon(icon: icon, color: accent, size: 42),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: _titleStyle(18)),
+                    if ((message ?? '').trim().isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(message!.trim(), style: _bodyStyle()),
+                    ],
+                  ],
+                ),
+              ),
+              if (action != null) action!,
+            ],
+          ),
+          if (progress != null) ...[
+            const SizedBox(height: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: progress!.clamp(0, 1),
+                minHeight: 8,
+                backgroundColor: const Color(0xFFDDE7EE),
+                color: accent,
+              ),
+            ),
           ],
-        ),
-        const _SectionPanel(
-          title: 'Impresión y tickets',
-          children: [PrinterSettingsPage(embedded: true)],
-        ),
-        const _SectionPanel(
-          title: 'Backup y recuperación',
-          children: [_BackupSection()],
-        ),
-      ],
+          const SizedBox(height: 14),
+          ...rows,
+        ],
+      ),
     );
   }
 }
@@ -328,67 +658,6 @@ class _AccountSidePanelScaffold extends StatelessWidget {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AccountFullPageScaffold extends StatelessWidget {
-  const _AccountFullPageScaffold({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.children,
-    this.action,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final List<Widget> children;
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFEFF5F8),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border(bottom: BorderSide(color: Color(0xFFD3E0E7))),
-              ),
-              child: Row(
-                children: [
-                  _HeaderIcon(icon: icon),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(title, style: _titleStyle(20)),
-                        const SizedBox(height: 2),
-                        Text(subtitle, style: _bodyStyle()),
-                      ],
-                    ),
-                  ),
-                  if (action != null) action!,
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.all(18),
-                itemBuilder: (context, index) => children[index],
-                separatorBuilder: (_, __) => const SizedBox(height: 14),
-                itemCount: children.length,
-              ),
-            ),
-          ],
         ),
       ),
     );
@@ -602,68 +871,6 @@ class _StatusBanner extends StatelessWidget {
   }
 }
 
-class _FullPageGrid extends StatelessWidget {
-  const _FullPageGrid({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 1000 ? 4 : 2;
-        return GridView.count(
-          crossAxisCount: columns,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: columns == 4 ? 2.35 : 2.8,
-          children: children,
-        );
-      },
-    );
-  }
-}
-
-class _MetricPanel extends StatelessWidget {
-  const _MetricPanel({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return _SurfacePanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: const Color(0xFF1957E6), size: 19),
-          const Spacer(),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: _bodyStyle(),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            value,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: _titleStyle(14),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _SectionPanel extends StatelessWidget {
   const _SectionPanel({required this.title, required this.children});
 
@@ -685,47 +892,384 @@ class _SectionPanel extends StatelessWidget {
   }
 }
 
-class _CompanySettingsEditor extends StatelessWidget {
+class _CompanySettingsEditor extends ConsumerStatefulWidget {
   const _CompanySettingsEditor({required this.settings});
 
   final CompanySettings settings;
 
   @override
+  ConsumerState<_CompanySettingsEditor> createState() =>
+      _CompanySettingsEditorState();
+}
+
+class _CompanySettingsEditorState
+    extends ConsumerState<_CompanySettingsEditor> {
+  late final TextEditingController _name;
+  late final TextEditingController _rnc;
+  late final TextEditingController _phone;
+  late final TextEditingController _address;
+  late final TextEditingController _legalName;
+  late final TextEditingController _legalCedula;
+  late final TextEditingController _legalRole;
+  late final TextEditingController _adminPin;
+  late final TextEditingController _adminPinConfirm;
+  bool _saving = false;
+  bool _savingPin = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _name = TextEditingController();
+    _rnc = TextEditingController();
+    _phone = TextEditingController();
+    _address = TextEditingController();
+    _legalName = TextEditingController();
+    _legalCedula = TextEditingController();
+    _legalRole = TextEditingController();
+    _adminPin = TextEditingController();
+    _adminPinConfirm = TextEditingController();
+    _syncControllers(widget.settings);
+  }
+
+  @override
+  void didUpdateWidget(covariant _CompanySettingsEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_saving && oldWidget.settings != widget.settings) {
+      _syncControllers(widget.settings);
+    }
+  }
+
+  void _syncControllers(CompanySettings settings) {
+    _name.text = settings.companyName;
+    _rnc.text = settings.rnc;
+    _phone.text = settings.phone;
+    _address.text = settings.address;
+    _legalName.text = settings.legalRepresentativeName;
+    _legalCedula.text = settings.legalRepresentativeCedula;
+    _legalRole.text = settings.legalRepresentativeRole;
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _rnc.dispose();
+    _phone.dispose();
+    _address.dispose();
+    _legalName.dispose();
+    _legalCedula.dispose();
+    _legalRole.dispose();
+    _adminPin.dispose();
+    _adminPinConfirm.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      final queued = await ref
+          .read(companySettingsRepositoryProvider)
+          .saveSettingsOrQueue(
+            widget.settings.copyWith(
+              companyName: _name.text.trim(),
+              rnc: _rnc.text.trim(),
+              phone: _phone.text.trim(),
+              address: _address.text.trim(),
+              legalRepresentativeName: _legalName.text.trim(),
+              legalRepresentativeCedula: _legalCedula.text.trim(),
+              legalRepresentativeRole: _legalRole.text.trim(),
+            ),
+          );
+      ref.invalidate(companySettingsProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            queued
+                ? 'Empresa guardada localmente y pendiente de sincronizar.'
+                : 'Datos de empresa guardados.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('No se pudo guardar: $error')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _saveAdminPin() async {
+    final pin = _adminPin.text.trim();
+    final confirm = _adminPinConfirm.text.trim();
+    if (!RegExp(r'^\d{4}$').hasMatch(pin)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('El PIN debe tener exactamente 4 dígitos.')),
+      );
+      return;
+    }
+    if (pin != confirm) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Los PIN no coinciden.')),
+      );
+      return;
+    }
+    setState(() => _savingPin = true);
+    try {
+      await ref
+          .read(companySettingsRepositoryProvider)
+          .setAdminAuthorizationPin(pin);
+      ref.invalidate(companySettingsProvider);
+      _adminPin.clear();
+      _adminPinConfirm.clear();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('PIN administrativo guardado.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('No se pudo guardar PIN: $error')));
+    } finally {
+      if (mounted) setState(() => _savingPin = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _SettingsOptionGrid(
           items: [
             _SettingsOptionData(
               icon: Icons.storefront_rounded,
               title: 'Nombre comercial',
-              value: settings.companyName,
+              value: widget.settings.companyName,
             ),
             _SettingsOptionData(
               icon: Icons.badge_outlined,
               title: 'RNC',
-              value: settings.rnc,
+              value: widget.settings.rnc,
             ),
             _SettingsOptionData(
               icon: Icons.phone_outlined,
               title: 'Teléfono',
-              value: settings.phone,
+              value: widget.settings.phone,
             ),
             _SettingsOptionData(
               icon: Icons.schedule_rounded,
               title: 'Horario',
-              value: settings.businessHours,
+              value: widget.settings.businessHours,
             ),
           ],
         ),
         const SizedBox(height: 12),
         _ParagraphBlock(
           title: 'Dirección fiscal y comercial',
-          text: settings.address.trim().isEmpty
+          text: widget.settings.address.trim().isEmpty
               ? 'No hay dirección configurada para documentos.'
-              : settings.address.trim(),
+              : widget.settings.address.trim(),
+        ),
+        const SizedBox(height: 14),
+        _FormWrap(
+          children: [
+            _field(_name, 'Nombre comercial', Icons.storefront_outlined),
+            _field(_rnc, 'RNC / identificación fiscal', Icons.badge_outlined),
+            _field(_phone, 'Teléfono principal', Icons.phone_outlined),
+            _field(
+              _address,
+              'Dirección de la empresa',
+              Icons.location_on_outlined,
+              maxLines: 2,
+            ),
+            _field(
+              _legalName,
+              'Representante legal',
+              Icons.person_outline_rounded,
+            ),
+            _field(
+              _legalCedula,
+              'Cédula representante',
+              Icons.credit_card_outlined,
+            ),
+            _field(_legalRole, 'Cargo', Icons.work_outline_rounded),
+          ],
+        ),
+        const SizedBox(height: 14),
+        _PinSettingsPanel(
+          configured: widget.settings.hasAdminAuthorizationPin,
+          pin: _adminPin,
+          confirm: _adminPinConfirm,
+          saving: _savingPin,
+          onSave: _saveAdminPin,
+        ),
+        const SizedBox(height: 14),
+        Align(
+          alignment: Alignment.centerRight,
+          child: FilledButton.icon(
+            onPressed: _saving ? null : _save,
+            icon: _saving
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.save_outlined),
+            label: Text(_saving ? 'Guardando' : 'Guardar empresa'),
+            style: _filledButtonStyle(),
+          ),
         ),
       ],
+    );
+  }
+
+  Widget _field(
+    TextEditingController controller,
+    String label,
+    IconData icon, {
+    int maxLines = 1,
+  }) {
+    return TextField(
+      controller: controller,
+      maxLines: maxLines,
+      decoration: InputDecoration(
+        prefixIcon: Icon(icon, size: 18),
+        labelText: label,
+        border: const OutlineInputBorder(),
+        isDense: true,
+      ),
+    );
+  }
+}
+
+class _PinSettingsPanel extends StatelessWidget {
+  const _PinSettingsPanel({
+    required this.configured,
+    required this.pin,
+    required this.confirm,
+    required this.saving,
+    required this.onSave,
+  });
+
+  final bool configured;
+  final TextEditingController pin;
+  final TextEditingController confirm;
+  final bool saving;
+  final VoidCallback onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FBFF),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFD7E4EE)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.admin_panel_settings_outlined,
+                color: Color(0xFF1957E6),
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'PIN administrativo',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF102235),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: configured
+                      ? const Color(0xFFE7F8EF)
+                      : const Color(0xFFFFF4E8),
+                  borderRadius: BorderRadius.circular(99),
+                  border: Border.all(
+                    color: configured
+                        ? const Color(0xFFBFE9D0)
+                        : const Color(0xFFFFD7A8),
+                  ),
+                ),
+                child: Text(
+                  configured ? 'Configurado' : 'Pendiente',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: configured
+                        ? const Color(0xFF10743B)
+                        : const Color(0xFF9A5A00),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Este PIN permite autorizar pantallas y acciones administrativas desde una cuenta que no sea admin.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: const Color(0xFF607187),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _FormWrap(
+            children: [
+              _pinField(pin, 'Nuevo PIN'),
+              _pinField(confirm, 'Confirmar PIN'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton.icon(
+              onPressed: saving ? null : onSave,
+              icon: saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.lock_reset_outlined),
+              label: Text(saving ? 'Guardando' : 'Guardar PIN'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _pinField(TextEditingController controller, String label) {
+    return TextField(
+      controller: controller,
+      obscureText: true,
+      maxLength: 4,
+      keyboardType: TextInputType.number,
+      inputFormatters: [
+        FilteringTextInputFormatter.digitsOnly,
+        LengthLimitingTextInputFormatter(4),
+      ],
+      decoration: InputDecoration(
+        counterText: '',
+        prefixIcon: const Icon(Icons.pin_outlined, size: 18),
+        labelText: label,
+        border: const OutlineInputBorder(),
+        isDense: true,
+      ),
     );
   }
 }
@@ -798,18 +1342,124 @@ class _SettingsOptionGrid extends StatelessWidget {
   }
 }
 
-class _BackupSection extends StatelessWidget {
+class _BackupSection extends ConsumerStatefulWidget {
   const _BackupSection();
 
   @override
+  ConsumerState<_BackupSection> createState() => _BackupSectionState();
+}
+
+class _BackupSectionState extends ConsumerState<_BackupSection> {
+  bool _running = false;
+  CloudBackupResult? _result;
+
+  Future<void> _createBackup() async {
+    setState(() => _running = true);
+    try {
+      final result = await ref
+          .read(cloudBackupServiceProvider)
+          .createCloudBackup();
+      if (!mounted) return;
+      setState(() => _result = result);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.hasFailures
+                ? 'Backup creado con algunos módulos pendientes.'
+                : 'Backup local creado correctamente.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo crear el backup: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _running = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final result = _result;
     return Column(
-      children: const [
-        _DetailRow('Storage de archivos', 'Cloudflare R2 configurado'),
-        _DetailRow('Alcance', 'Imágenes, documentos y recursos por empresa'),
-        _DetailRow('Separación', 'Datos aislados por empresa activa'),
-        _DetailRow('Recuperación', 'Lista para restauración operativa'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _DetailRow('Origen', 'Datos de nube y configuración local'),
+        const _DetailRow('Destino', 'Documentos / DaleVenta POS / backups'),
+        const _DetailRow('Formato', 'Carpeta JSON + archivo ZIP'),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            FilledButton.icon(
+              onPressed: _running ? null : _createBackup,
+              icon: _running
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.cloud_download_outlined),
+              label: Text(_running ? 'Descargando' : 'Crear backup local'),
+              style: _filledButtonStyle(),
+            ),
+            const SizedBox(width: 10),
+            OutlinedButton.icon(
+              onPressed: null,
+              icon: const Icon(Icons.cloud_upload_outlined),
+              label: const Text('Restaurar a nube'),
+              style: _outlinedButtonStyle(),
+            ),
+          ],
+        ),
+        if (result != null) ...[
+          const SizedBox(height: 14),
+          _StatusBanner(
+            icon: result.hasFailures
+                ? Icons.warning_amber_rounded
+                : Icons.verified_outlined,
+            title: result.hasFailures
+                ? 'Backup creado con observaciones'
+                : 'Backup listo para recuperación',
+            message:
+                '${result.modules.length} módulos guardados. ZIP: ${result.zipPath}',
+            accent: result.hasFailures
+                ? const Color(0xFFE08A00)
+                : const Color(0xFF178A5C),
+          ),
+          if (result.failedModules.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            for (final entry in result.failedModules.entries)
+              _DetailRow(entry.key, entry.value),
+          ],
+        ],
       ],
+    );
+  }
+}
+
+class _FormWrap extends StatelessWidget {
+  const _FormWrap({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 760;
+        final width = compact
+            ? constraints.maxWidth
+            : (constraints.maxWidth - 12) / 2;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final child in children) SizedBox(width: width, child: child),
+          ],
+        );
+      },
     );
   }
 }
@@ -992,27 +1642,31 @@ TextStyle _strongBodyStyle() {
   );
 }
 
-String _updateTitle(AppUpdateState state) {
-  return switch (state.phase) {
-    AppUpdatePhase.checking => 'Buscando actualización',
-    AppUpdatePhase.upToDate => 'Sistema actualizado',
-    AppUpdatePhase.optionalUpdate => 'Actualización disponible',
-    AppUpdatePhase.requiredUpdate => 'Actualización obligatoria',
-    AppUpdatePhase.downloadingUpdate => 'Descargando actualización',
-    AppUpdatePhase.installingUpdate => 'Instalando actualización',
-    AppUpdatePhase.disabled => 'Releases no configurados',
-    AppUpdatePhase.unsupported => 'Plataforma no administrada',
-    AppUpdatePhase.error => 'No se pudo verificar',
-    AppUpdatePhase.idle => 'Listo para verificar',
-  };
-}
-
 String _updateMessage(AppUpdateState state) {
   final update = state.updateInfo;
   if (update?.update == true) {
     return 'Hay una versión nueva disponible para este dispositivo.';
   }
   return 'Puedes verificar manualmente si existe una versión nueva para este equipo.';
+}
+
+String _pendingUpdateLabel(AppUpdatePhase phase) {
+  return switch (phase) {
+    AppUpdatePhase.upToDate => 'No disponible',
+    AppUpdatePhase.disabled => 'No configurado',
+    AppUpdatePhase.unsupported => 'No administrada',
+    AppUpdatePhase.error => 'No verificada',
+    AppUpdatePhase.idle => 'Pendiente de verificación',
+    _ => 'Verificando',
+  };
+}
+
+String _busyUpdateLabel(AppUpdatePhase phase) {
+  return switch (phase) {
+    AppUpdatePhase.downloadingUpdate => 'Descargando',
+    AppUpdatePhase.installingUpdate => 'Instalando',
+    _ => 'Buscando',
+  };
 }
 
 IconData _updateIcon(AppUpdatePhase phase) {

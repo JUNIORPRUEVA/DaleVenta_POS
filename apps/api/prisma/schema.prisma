@@ -1392,6 +1392,7 @@ model AppConfig {
   evolutionApiApiKey               String?  @map("evolution_api_api_key")
   whatsappWebhookEnabled           Boolean  @default(false) @map("whatsapp_webhook_enabled")
   operationsTechCanViewAllServices Boolean  @default(false) @map("operations_tech_can_view_all_services")
+  adminAuthorizationPinHash        String?  @map("admin_authorization_pin_hash")
   createdAt                        DateTime @default(now())
   updatedAt                        DateTime @updatedAt
 
@@ -1617,6 +1618,7 @@ model Product {
   id                    String    @id @default(uuid()) @db.Uuid
   companyId             String?   @map("company_id") @db.Uuid
   nombre                String
+  codigo                String?
   categoria             String
   costo                 Decimal   @db.Decimal(12, 2)
   precio                Decimal   @db.Decimal(12, 2)
@@ -1634,6 +1636,7 @@ model Product {
 
   @@index([companyId])
   @@index([companyId, nombre])
+  @@unique([companyId, codigo])
   @@index([companyId, imageKey])
 }
 

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../modules/cash/cash_dialogs.dart';
 import '../../modules/cash/cash_providers.dart';
+import '../auth/admin_authorization.dart';
 import '../auth/app_permissions.dart';
 import '../auth/auth_provider.dart';
 import '../auth/app_role.dart';
@@ -12,6 +13,7 @@ import '../design_system/icons/app_icon.dart';
 import '../design_system/icons/app_icon_sizes.dart';
 import '../design_system/icons/app_icons.dart';
 import '../routing/routes.dart';
+import '../routing/route_access.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import 'app_navigation.dart';
@@ -69,7 +71,18 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
     }
   }
 
-  void _handleItemTap(BuildContext context, AppNavigationItem item) {
+  Future<void> _handleItemTap(
+    BuildContext context,
+    AppNavigationItem item,
+  ) async {
+    final permission = RouteAccess.permissionForLocation(item.route);
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: permission,
+      reason: 'Entrar a ${item.title}',
+    );
+    if (!allowed || !context.mounted) return;
     if (item.route == Routes.cajaRegistrarIngreso) {
       _openMovementDialog(context, 'IN');
       return;

@@ -6,6 +6,8 @@ class ApiRoutes {
   static const refresh = '/auth/refresh';
   static const me = '/auth/me';
   static const settings = '/settings';
+  static const settingsAdminPin = '/settings/admin-pin';
+  static const settingsAdminPinVerify = '/settings/admin-pin/verify';
 
   // Usuarios
   static const users = '/users';

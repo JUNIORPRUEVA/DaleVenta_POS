@@ -2440,6 +2440,7 @@ class _ProductForm extends ConsumerStatefulWidget {
 
 class _ProductFormState extends ConsumerState<_ProductForm> {
   late final TextEditingController _nameCtrl;
+  late final TextEditingController _codeCtrl;
   late final TextEditingController _priceCtrl;
   late final TextEditingController _costCtrl;
   late final TextEditingController _stockCtrl;
@@ -2452,6 +2453,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.product?.nombre ?? '');
+    _codeCtrl = TextEditingController(text: widget.product?.codigo ?? '');
     _priceCtrl = TextEditingController(
       text: widget.product?.precio.toStringAsFixed(2) ?? '',
     );
@@ -2470,6 +2472,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   @override
   void dispose() {
     _nameCtrl.dispose();
+    _codeCtrl.dispose();
     _priceCtrl.dispose();
     _costCtrl.dispose();
     _stockCtrl.dispose();
@@ -2493,6 +2496,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
 
   Future<void> _submit() async {
     final name = _nameCtrl.text.trim();
+    final code = _codeCtrl.text.trim();
     final price = _parseCatalogNumber(_priceCtrl.text);
     final cost = _parseCatalogNumber(_costCtrl.text);
     final stock = _parseCatalogNumber(_stockCtrl.text);
@@ -2530,6 +2534,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
       if (widget.product == null) {
         await controller.create(
           nombre: name,
+          codigo: code.isEmpty ? null : code,
           precio: price,
           costo: cost,
           stock: stock,
@@ -2545,6 +2550,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
         await controller.update(
           id: widget.product!.id,
           nombre: name,
+          codigo: code.isEmpty ? null : code,
           precio: price,
           costo: cost,
           stock: stock,
@@ -2596,6 +2602,15 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
           TextField(
             controller: _nameCtrl,
             decoration: const InputDecoration(labelText: 'Nombre'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _codeCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Código / código de barra (opcional)',
+              hintText: 'Escanea o escribe el código del producto',
+              prefixIcon: Icon(Icons.qr_code_2_outlined),
+            ),
           ),
           const SizedBox(height: 12),
           TextField(

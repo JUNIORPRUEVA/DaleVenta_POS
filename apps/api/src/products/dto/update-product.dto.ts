@@ -6,6 +6,22 @@ export class UpdateProductDto {
   nombre?: string;
 
   @IsOptional()
+  @IsString()
+  codigo?: string;
+
+  @IsOptional()
+  @IsString()
+  code?: string;
+
+  @IsOptional()
+  @IsString()
+  sku?: string;
+
+  @IsOptional()
+  @IsString()
+  barcode?: string;
+
+  @IsOptional()
   @IsNumber()
   @Min(0)
   precio?: number;
