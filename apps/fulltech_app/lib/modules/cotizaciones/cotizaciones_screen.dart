@@ -8142,33 +8142,15 @@ class _ProductThumbCard extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               (product.displayFotoUrl ?? '').trim().isEmpty
-                  ? Container(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest,
-                      child: const Center(
-                        child: Icon(Icons.inventory_2_outlined, size: 18),
-                      ),
-                    )
+                  ? const _ProductImagePlaceholder.compact()
                   : ProductNetworkImage(
                       imageUrl: product.displayFotoUrl!,
                       productId: product.id,
                       productName: product.nombre,
                       originalUrl: product.originalFotoUrl,
                       fit: BoxFit.cover,
-                      loading: Container(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest,
-                      ),
-                      fallback: Container(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest,
-                        child: const Center(
-                          child: Icon(Icons.broken_image_outlined, size: 16),
-                        ),
-                      ),
+                      loading: const _ProductImagePlaceholder.compact(),
+                      fallback: const _ProductImagePlaceholder.compact(),
                     ),
               const Positioned.fill(
                 child: DecoratedBox(
@@ -10560,42 +10542,15 @@ class _DesktopProductCard extends StatelessWidget {
               fit: StackFit.expand,
               children: [
                 (product.displayFotoUrl ?? '').trim().isEmpty
-                    ? Container(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        child: Center(
-                          child: Icon(
-                            Icons.inventory_2_outlined,
-                            size: 24,
-                            color: theme.colorScheme.outline,
-                          ),
-                        ),
-                      )
+                    ? const _ProductImagePlaceholder()
                     : ProductNetworkImage(
                         imageUrl: product.displayFotoUrl!,
                         productId: product.id,
                         productName: product.nombre,
                         originalUrl: product.originalFotoUrl,
                         fit: BoxFit.cover,
-                        loading: Container(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          child: Center(
-                            child: Icon(
-                              Icons.inventory_2_outlined,
-                              size: 20,
-                              color: theme.colorScheme.outline,
-                            ),
-                          ),
-                        ),
-                        fallback: Container(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          child: Center(
-                            child: Icon(
-                              Icons.broken_image_outlined,
-                              size: 20,
-                              color: theme.colorScheme.outline,
-                            ),
-                          ),
-                        ),
+                        loading: const _ProductImagePlaceholder(),
+                        fallback: const _ProductImagePlaceholder(),
                       ),
                 const Positioned.fill(
                   child: DecoratedBox(

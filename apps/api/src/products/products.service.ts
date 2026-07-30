@@ -99,6 +99,47 @@ export class ProductsService {
     );
   }
 
+  private normalizeComparableText(value?: string | null) {
+    return (value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+  }
+
+  private sameProductIdentity(a: Product, b: Product) {
+    return (
+      this.normalizeComparableText(a.nombre) === this.normalizeComparableText(b.nombre) &&
+      this.normalizeComparableText(a.categoria) === this.normalizeComparableText(b.categoria) &&
+      new Prisma.Decimal(a.precio).equals(b.precio) &&
+      new Prisma.Decimal(a.costo).equals(b.costo) &&
+      new Prisma.Decimal(a.stock).equals(b.stock)
+    );
+  }
+
+  private compactDuplicateProducts(products: Product[]) {
+    const seen = new Map<string, Product>();
+    const compacted: Product[] = [];
+
+    for (const product of products) {
+      const code = this.normalizeComparableText((product as any).codigo);
+      const key = [
+        product.companyId ?? '',
+        code ? `code:${code}` : `name:${this.normalizeComparableText(product.nombre)}`,
+        this.normalizeComparableText(product.categoria),
+        product.precio.toString(),
+        product.costo.toString(),
+        product.stock.toString(),
+      ].join('|');
+
+      const previous = seen.get(key);
+      if (previous && this.sameProductIdentity(previous, product)) {
+        continue;
+      }
+
+      seen.set(key, product);
+      compacted.push(product);
+    }
+
+    return compacted;
+  }
+
   create(user: TenantUser, dto: CreateProductDto): Promise<any> {
     this.assertWritable();
     const companyId = requireTenant(user);
@@ -122,6 +163,23 @@ export class ProductsService {
         imageUpdatedAt: imageKey ? new Date() : undefined,
         companyId,
       };
+
+      const existingCandidates = await tx.product.findMany({
+        where: {
+          companyId,
+          nombre: { equals: dto.nombre, mode: 'insensitive' },
+          categoria: { equals: dto.categoria, mode: 'insensitive' },
+        },
+      });
+      const equivalent = existingCandidates.find((candidate) =>
+        this.sameProductIdentity(candidate, data as Product),
+      );
+      if (equivalent) {
+        this.logger.warn(
+          `duplicate create prevented companyId=${companyId} existingProductId=${equivalent.id} name="${dto.nombre}"`,
+        );
+        return this.mapProduct(equivalent);
+      }
 
       if (dto.fotoUrl !== normalizedImagePath) {
         this.logger.log(`normalize create image path: "${dto.fotoUrl ?? ''}" -> "${normalizedImagePath ?? ''}"`);
@@ -162,11 +220,11 @@ export class ProductsService {
 
     try {
       const products = await this.prisma.product.findMany({ where: { companyId }, orderBy: { nombre: 'asc' } });
-      return products.map((p) => this.mapProduct(p));
+      return this.compactDuplicateProducts(products).map((p) => this.mapProduct(p));
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
       const products = await this.prisma.product.findMany({ where: { companyId }, orderBy: { nombre: 'asc' } });
-      return products.map((p) => this.mapProduct(p));
+      return this.compactDuplicateProducts(products).map((p) => this.mapProduct(p));
     }
   }
 

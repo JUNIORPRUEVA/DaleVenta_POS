@@ -155,6 +155,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.updates, 1);
+    expect(repo.creates, 0);
     expect(find.text('Editar producto'), findsNothing);
   });
 
