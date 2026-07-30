@@ -220,6 +220,7 @@ class SaleModel {
       userName =
           user['nombreCompleto']?.toString() ?? user['email']?.toString();
     }
+    userName ??= json['userName']?.toString();
 
     return SaleModel(
       id: (json['id'] ?? '').toString(),

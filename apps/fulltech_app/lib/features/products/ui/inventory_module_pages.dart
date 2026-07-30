@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/api/env.dart';
+import '../../../core/auth/admin_authorization.dart';
 import '../../../core/auth/app_permissions.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/cache/fulltech_cache_manager.dart';
@@ -685,6 +686,13 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
   }
 
   Future<void> _openProductEditor({ProductModel? product}) async {
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.editProducts,
+      reason: product == null ? 'Crear producto' : 'Editar producto',
+    );
+    if (!allowed || !mounted) return;
     final categoryState = ref.read(inventoryCategoriesProvider);
     final result = await showInventoryProductEditor(
       context,
@@ -707,6 +715,13 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
   }
 
   Future<void> _setProductStock(ProductModel product, double stock) async {
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.addStock,
+      reason: 'Ajustar stock de producto',
+    );
+    if (!allowed || !mounted) return;
     await ref
         .read(catalogControllerProvider.notifier)
         .adjustStock(product: product, stock: stock);
@@ -754,6 +769,13 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
   }
 
   Future<void> _importCatalog() async {
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.editProducts,
+      reason: 'Importar catálogo de productos',
+    );
+    if (!allowed || !mounted) return;
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['xlsx', 'csv', 'txt'],
@@ -844,8 +866,8 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     final user = ref.watch(authStateProvider).user;
     final state = ref.watch(catalogControllerProvider);
     final products = state.items;
-    final canEditProducts = hasUserPermission(user, AppPermission.editProducts);
-    final canAddStock = hasUserPermission(user, AppPermission.addStock);
+    final canEditProducts = user != null;
+    final canAddStock = user != null;
     final isMobile = MediaQuery.sizeOf(context).width < 640;
     final tab = GoRouterState.of(context).uri.queryParameters['tab'];
     final initialTabIndex = switch (tab) {
@@ -923,9 +945,18 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                     onSetStock: _setProductStock,
                     canEditProducts: canEditProducts,
                     canAddStock: canAddStock,
-                    onDelete: (product) => ref
-                        .read(catalogControllerProvider.notifier)
-                        .remove(product.id),
+                    onDelete: (product) async {
+                      final allowed = await ensureAdminAuthorization(
+                        context,
+                        ref,
+                        permission: AppPermission.editProducts,
+                        reason: 'Eliminar producto',
+                      );
+                      if (!allowed || !context.mounted) return;
+                      await ref
+                          .read(catalogControllerProvider.notifier)
+                          .remove(product.id);
+                    },
                   ),
                   InventoryTab(products: products, onRefresh: _refresh),
                   StockAdjustmentsPage(
@@ -2190,6 +2221,13 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
   }
 
   Future<void> _openEditor({InventoryCategoryModel? category}) async {
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.editProducts,
+      reason: category == null ? 'Crear categoría' : 'Editar categoría',
+    );
+    if (!allowed || !mounted) return;
     final result = await showDialog<_CategoryEditorResult>(
       context: context,
       barrierColor: FullTechDialogTokens.overlayColor,
@@ -2250,6 +2288,13 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
   }
 
   Future<void> _deleteCategory(InventoryCategoryModel category) async {
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.editProducts,
+      reason: 'Eliminar categoría',
+    );
+    if (!allowed || !mounted) return;
     final count = _productCounts[category.name] ?? 0;
     if (count > 0) {
       await FullTechConfirmDialog.show(

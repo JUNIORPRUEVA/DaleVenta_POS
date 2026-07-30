@@ -163,7 +163,6 @@ export class SalesService {
     const normalizedCustomerId = customerId?.trim();
     const where: Prisma.SaleWhereInput = {
       companyId,
-      userId: user.id,
       ...(includeDeleted ? {} : { isDeleted: false }),
       ...(normalizedCustomerId ? { customerId: normalizedCustomerId } : {}),
       ...this.buildDateRange(from, to),
@@ -196,9 +195,6 @@ export class SalesService {
     const normalizedCustomerId = customerId?.trim();
     const where: Prisma.SaleWhereInput = {
       companyId,
-      ...(isAdminLike(user)
-        ? {}
-        : { userId: user.id }),
       ...(includeDeleted ? {} : { isDeleted: false }),
       ...(normalizedCustomerId ? { customerId: normalizedCustomerId } : {}),
       ...this.buildDateRange(from, to),
@@ -252,7 +248,6 @@ export class SalesService {
     const normalizedCustomerId = customerId?.trim();
     const where: Prisma.SaleWhereInput = {
       companyId,
-      userId: user.id,
       isDeleted: false,
       ...(normalizedCustomerId ? { customerId: normalizedCustomerId } : {}),
       ...this.buildDateRange(from, to),
@@ -796,9 +791,6 @@ export class SalesService {
       companyId,
       isDeleted: false,
       creditStatus: includePaid ? { in: ["open", "paid"] } : "open",
-      ...(isAdminLike(user)
-        ? {}
-        : { userId: user.id }),
     };
 
     try {
@@ -825,12 +817,6 @@ export class SalesService {
     });
     if (!sale || sale.isDeleted || sale.creditStatus === "none") {
       throw new NotFoundException("Crédito no encontrado");
-    }
-    if (
-      sale.userId !== user.id &&
-      !isAdminLike(user)
-    ) {
-      throw new ForbiddenException("No puedes modificar este crédito");
     }
 
     const activeSession = await this.prisma.cashSession.findFirst({

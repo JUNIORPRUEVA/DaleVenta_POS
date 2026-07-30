@@ -249,9 +249,6 @@ export class CashService {
       ...(movementType ? { movementType } : {}),
       companyId,
       ...this.movementDateRange(query.from, query.to),
-      ...(isAdminLike(user)
-        ? {}
-        : { session: { openedByUserId: user.id } }),
     };
 
     const rows = await this.prisma.cashMovement.findMany({

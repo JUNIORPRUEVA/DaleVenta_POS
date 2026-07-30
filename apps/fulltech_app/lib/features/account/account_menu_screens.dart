@@ -1005,14 +1005,16 @@ class _CompanySettingsEditorState
     final confirm = _adminPinConfirm.text.trim();
     if (!RegExp(r'^\d{4}$').hasMatch(pin)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('El PIN debe tener exactamente 4 dígitos.')),
+        const SnackBar(
+          content: Text('El PIN debe tener exactamente 4 dígitos.'),
+        ),
       );
       return;
     }
     if (pin != confirm) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Los PIN no coinciden.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Los PIN no coinciden.')));
       return;
     }
     setState(() => _savingPin = true);
@@ -1257,6 +1259,9 @@ class _PinSettingsPanel extends StatelessWidget {
     return TextField(
       controller: controller,
       obscureText: true,
+      obscuringCharacter: '•',
+      enableSuggestions: false,
+      autocorrect: false,
       maxLength: 4,
       keyboardType: TextInputType.number,
       inputFormatters: [

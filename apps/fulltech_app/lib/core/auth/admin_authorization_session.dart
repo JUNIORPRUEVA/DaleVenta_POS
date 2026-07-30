@@ -15,9 +15,10 @@ class AdminAuthorizationState {
 }
 
 final adminAuthorizationProvider =
-    StateNotifierProvider<AdminAuthorizationController, AdminAuthorizationState>(
-      (ref) => AdminAuthorizationController(ref),
-    );
+    StateNotifierProvider<
+      AdminAuthorizationController,
+      AdminAuthorizationState
+    >((ref) => AdminAuthorizationController(ref));
 
 class AdminAuthorizationController
     extends StateNotifier<AdminAuthorizationState> {

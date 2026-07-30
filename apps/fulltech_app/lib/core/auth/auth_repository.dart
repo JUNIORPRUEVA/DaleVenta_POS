@@ -13,6 +13,7 @@ import '../errors/api_exception.dart';
 import '../models/user_model.dart';
 import '../network/network_reachability.dart';
 import '../utils/is_flutter_test.dart';
+import 'admin_authorization_session.dart';
 import 'auth_interceptor.dart';
 import 'auth_session_events.dart';
 import 'token_storage.dart';
@@ -58,6 +59,17 @@ final dioProvider = Provider<Dio>((ref) {
   final sessionEvents = ref.watch(authSessionEventsProvider);
   final reachability = ref.watch(networkReachabilityProvider);
   api.dio.interceptors.add(AuthInterceptor(storage, sessionEvents, api.dio));
+  api.dio.interceptors.add(
+    InterceptorsWrapper(
+      onRequest: (options, handler) {
+        final adminAuthorization = ref.read(adminAuthorizationProvider);
+        if (adminAuthorization.isAuthorized) {
+          options.headers['x-admin-authorization'] = adminAuthorization.token;
+        }
+        handler.next(options);
+      },
+    ),
+  );
   api.dio.interceptors.add(
     ApiConnectivityInterceptor(dio: api.dio, reachability: reachability),
   );

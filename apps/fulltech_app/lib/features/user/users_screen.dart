@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/env.dart';
+import '../../core/auth/admin_authorization.dart';
 import '../../core/auth/app_permissions.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
@@ -537,6 +538,13 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
     WidgetRef ref,
     UserModel user,
   ) async {
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.manageUsers,
+      reason: user.blocked ? 'Desbloquear usuario' : 'Bloquear usuario',
+    );
+    if (!allowed || !context.mounted) return;
     try {
       await ref
           .read(usersControllerProvider.notifier)
@@ -559,7 +567,18 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
     }
   }
 
-  void _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? user]) {
+  Future<void> _showUserDialog(
+    BuildContext context,
+    WidgetRef ref, [
+    UserModel? user,
+  ]) async {
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.manageUsers,
+      reason: user == null ? 'Crear usuario' : 'Editar usuario',
+    );
+    if (!allowed || !context.mounted) return;
     final scaffoldContext = context;
 
     void showSnack(SnackBar snackBar) {
@@ -1056,7 +1075,18 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
     });
   }
 
-  void _showDeleteDialog(BuildContext context, WidgetRef ref, UserModel user) {
+  Future<void> _showDeleteDialog(
+    BuildContext context,
+    WidgetRef ref,
+    UserModel user,
+  ) async {
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.manageUsers,
+      reason: 'Eliminar usuario',
+    );
+    if (!allowed || !context.mounted) return;
     final scaffoldContext = context;
 
     void showSnack(SnackBar snackBar) {
@@ -1746,6 +1776,13 @@ class _UserPermissionsScreenState extends ConsumerState<UserPermissionsScreen> {
   }
 
   Future<void> _save(UserModel user) async {
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.manageUsers,
+      reason: 'Guardar permisos de usuario',
+    );
+    if (!allowed || !mounted) return;
     final draft = _draft ?? _buildInitialDraft(user);
     setState(() => _saving = true);
     try {

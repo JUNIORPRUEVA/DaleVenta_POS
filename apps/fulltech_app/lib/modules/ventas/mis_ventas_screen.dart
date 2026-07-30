@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 
+import '../../core/auth/admin_authorization.dart';
+import '../../core/auth/app_permissions.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
@@ -892,15 +894,13 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
   }
 
   Future<void> _returnSale(BuildContext context, SaleModel sale) async {
-    final isAdmin = ref.read(authStateProvider).user?.appRole == AppRole.admin;
-    if (!isAdmin) {
-      showCashToast(
-        context,
-        'Acceso restringido: solo un administrador puede hacer devoluciones.',
-        isError: true,
-      );
-      return;
-    }
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.refundSales,
+      reason: 'Devolver venta',
+    );
+    if (!allowed || !context.mounted) return;
 
     final ok = await showDialog<bool>(
       context: context,

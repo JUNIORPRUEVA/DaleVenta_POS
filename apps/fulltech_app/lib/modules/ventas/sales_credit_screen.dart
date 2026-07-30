@@ -104,7 +104,8 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
           if (query.isEmpty) return true;
           return (sale.customerName ?? '').toLowerCase().contains(query) ||
               sale.id.toLowerCase().contains(query) ||
-              (sale.customerPhone ?? '').toLowerCase().contains(query);
+              (sale.customerPhone ?? '').toLowerCase().contains(query) ||
+              (sale.userName ?? sale.userId).toLowerCase().contains(query);
         })
         .toList(growable: false);
     final selected = _selectedCredit(rows);
@@ -394,6 +395,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
     final companyName = _fallback(company.companyName, 'FULLTECH, SRL');
     final customerName = _fallback(sale.customerName, 'Cliente');
     final customerPhone = _fallback(sale.customerPhone, 'No registrado');
+    final cashierName = _fallback(sale.userName ?? sale.userId, 'Usuario');
     final status = sale.creditBalance <= 0.009 ? 'Saldado' : 'Pendiente';
 
     doc.addPage(
@@ -468,6 +470,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                     pw.SizedBox(height: 9),
                     _factLine('Emision', date),
                     _factLine('Estado', status),
+                    _factLine('Cajero', cashierName),
                   ],
                 ),
               ),
@@ -1400,6 +1403,7 @@ class _CreditCardInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cashier = (sale.userName ?? sale.userId).trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1415,6 +1419,13 @@ class _CreditCardInfo extends StatelessWidget {
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(color: Color(0xFF52657A)),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Cajero: ${cashier.isEmpty ? 'Usuario' : cashier}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: Color(0xFF64748B), fontSize: 12.5),
         ),
         const SizedBox(height: 8),
         Wrap(
@@ -1468,6 +1479,7 @@ class _CreditDetailPanel extends StatelessWidget {
         ? 'Sin fecha'
         : DateFormat('dd/MM/yyyy HH:mm').format(sale.saleDate!.toLocal());
     final paid = sale.creditBalance <= 0.009;
+    final cashier = (sale.userName ?? sale.userId).trim();
     final mobile = MediaQuery.sizeOf(context).width < 620;
     return Container(
       width: mobile ? double.infinity : 460,
@@ -1536,6 +1548,10 @@ class _CreditDetailPanel extends StatelessWidget {
                             : sale.customerPhone!,
                       ),
                       _DetailLine(label: 'Fecha', value: date),
+                      _DetailLine(
+                        label: 'Cajero',
+                        value: cashier.isEmpty ? 'Usuario' : cashier,
+                      ),
                       _StatusPill(paid: paid),
                     ],
                   ),

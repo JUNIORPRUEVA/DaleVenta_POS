@@ -31,6 +31,17 @@ Future<bool> ensureAdminAuthorization(
   return granted == true;
 }
 
+bool hasPermissionOrAdminAuthorization(
+  WidgetRef ref,
+  AppPermission permission,
+) {
+  final user = ref.read(authStateProvider).user;
+  if (user == null) return false;
+  if (user.appRole == AppRole.admin) return true;
+  if (hasUserPermission(user, permission)) return true;
+  return ref.read(adminAuthorizationProvider.notifier).isAuthorized;
+}
+
 class _AdminAuthorizationDialog extends ConsumerStatefulWidget {
   const _AdminAuthorizationDialog({required this.reason});
 
@@ -138,6 +149,9 @@ class _AdminAuthorizationDialogState
                 controller: _pin,
                 autofocus: true,
                 obscureText: true,
+                obscuringCharacter: '•',
+                enableSuggestions: false,
+                autocorrect: false,
                 maxLength: 4,
                 keyboardType: TextInputType.number,
                 inputFormatters: [

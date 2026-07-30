@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 
+import '../../core/auth/admin_authorization.dart';
 import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
@@ -234,18 +235,13 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   }
 
   Future<void> _returnSale(SaleModel sale) async {
-    final canReturn = hasUserPermission(
-      ref.read(authStateProvider).user,
-      AppPermission.refundSales,
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.refundSales,
+      reason: 'Devolver factura',
     );
-    if (!canReturn) {
-      showCashToast(
-        context,
-        'Acceso restringido: no tienes permiso para hacer devoluciones.',
-        isError: true,
-      );
-      return;
-    }
+    if (!allowed || !mounted) return;
 
     final ok = await showDialog<bool>(
       context: context,

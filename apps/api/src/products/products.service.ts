@@ -92,6 +92,13 @@ export class ProductsService {
     return false;
   }
 
+  private isUniqueConstraint(error: unknown) {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    );
+  }
+
   create(user: TenantUser, dto: CreateProductDto): Promise<any> {
     this.assertWritable();
     const companyId = requireTenant(user);
@@ -124,6 +131,9 @@ export class ProductsService {
         const product = await tx.product.create({ data });
         return this.mapProduct(product);
       } catch (error) {
+        if (this.isUniqueConstraint(error)) {
+          throw new ConflictException('Ya existe un producto con ese código');
+        }
         if (!this.isSchemaMismatch(error)) throw error;
         const product = await tx.product.create({ data });
         return this.mapProduct(product);
@@ -225,6 +235,9 @@ export class ProductsService {
         const updated = await tx.product.update({ where: { id }, data });
         return this.mapProduct(updated);
       } catch (error) {
+        if (this.isUniqueConstraint(error)) {
+          throw new ConflictException('Ya existe un producto con ese código');
+        }
         if (!this.isSchemaMismatch(error)) throw error;
         const updated = await tx.product.update({ where: { id }, data });
         return this.mapProduct(updated);

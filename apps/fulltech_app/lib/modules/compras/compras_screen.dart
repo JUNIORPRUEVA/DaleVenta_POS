@@ -8,7 +8,8 @@ import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
-import '../../core/auth/app_role.dart';
+import '../../core/auth/admin_authorization.dart';
+import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/errors/api_exception.dart';
@@ -540,8 +541,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   }
 
   Widget _ordersTab() {
-    final canDeleteOrders =
-        ref.watch(authStateProvider).user?.appRole.isAdmin ?? false;
+    final canDeleteOrders = ref.watch(authStateProvider).user != null;
     final visible = _orders
         .where((o) => _statusFilter.isEmpty || o.status == _statusFilter)
         .toList();
@@ -634,6 +634,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                                           .read(purchasesRepositoryProvider)
                                           .duplicate(selectedOrder.id),
                                       'Orden duplicada.',
+                                      permission: AppPermission.createPurchases,
+                                      reason: 'Duplicar orden de compra',
                                     ),
                               onDelete:
                                   selectedOrder == null || !canDeleteOrders
@@ -691,6 +693,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         _orderAction(
           () => ref.read(purchasesRepositoryProvider).approve(order.id),
           'Orden aprobada.',
+          permission: AppPermission.approvePurchases,
+          reason: 'Aprobar orden de compra',
         );
       }
       if (value == 'send') _sendOrderPdfToSupplier(order);
@@ -699,6 +703,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         _orderAction(
           () => ref.read(purchasesRepositoryProvider).duplicate(order.id),
           'Orden duplicada.',
+          permission: AppPermission.createPurchases,
+          reason: 'Duplicar orden de compra',
         );
       }
       if (value == 'delete') _confirmDeleteOrder(order);
@@ -788,6 +794,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                     () =>
                         ref.read(purchasesRepositoryProvider).approve(order.id),
                     'Orden aprobada.',
+                    permission: AppPermission.approvePurchases,
+                    reason: 'Aprobar orden de compra',
                   )
                 : null,
           ),
@@ -816,6 +824,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
             onPressed: () => _orderAction(
               () => ref.read(purchasesRepositoryProvider).duplicate(order.id),
               'Orden duplicada.',
+              permission: AppPermission.createPurchases,
+              reason: 'Duplicar orden de compra',
             ),
           ),
           if (canDelete)
@@ -1619,6 +1629,13 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
 
   Future<void> _saveOrder({required bool draft}) async {
     if (_cart.isEmpty) return _snack('Agrega al menos un producto.');
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.createPurchases,
+      reason: draft ? 'Guardar borrador de compra' : 'Generar orden de compra',
+    );
+    if (!allowed || !mounted) return;
     setState(() => _saving = true);
     try {
       final order = await _persistCurrentOrder(clearDraft: true);
@@ -1669,8 +1686,17 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
 
   Future<void> _orderAction(
     Future<PurchaseOrderModel> Function() action,
-    String message,
-  ) async {
+    String message, {
+    required AppPermission permission,
+    required String reason,
+  }) async {
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: permission,
+      reason: reason,
+    );
+    if (!allowed || !mounted) return;
     try {
       final updated = await action();
       setState(
@@ -1686,6 +1712,13 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   }
 
   Future<void> _confirmDeleteOrder(PurchaseOrderModel order) async {
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.deletePurchaseDrafts,
+      reason: 'Eliminar orden de compra',
+    );
+    if (!allowed || !mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1729,6 +1762,13 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   }
 
   Future<void> _receive(PurchaseOrderModel order) async {
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.receivePurchases,
+      reason: 'Registrar recepción de compra',
+    );
+    if (!allowed || !mounted) return;
     final update = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1756,6 +1796,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       update
           ? 'Inventario actualizado correctamente.'
           : 'Recepción registrada.',
+      permission: AppPermission.receivePurchases,
+      reason: 'Registrar recepción de compra',
     );
   }
 
@@ -1862,6 +1904,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                       .read(purchasesRepositoryProvider)
                       .markSent(persisted.id),
                   'Orden marcada como enviada.',
+                  permission: AppPermission.editPurchases,
+                  reason: 'Marcar orden como enviada',
                 );
               } on TimeoutException {
                 showNotice(
@@ -2005,6 +2049,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       await _orderAction(
         () => ref.read(purchasesRepositoryProvider).markSent(order.id),
         'Orden enviada al suplidor.',
+        permission: AppPermission.editPurchases,
+        reason: 'Enviar orden al suplidor',
       );
     } on TimeoutException {
       _snack('Tiempo de espera agotado preparando el enlace PDF.');
@@ -2437,6 +2483,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
           onDuplicate: () => _orderAction(
             () => ref.read(purchasesRepositoryProvider).duplicate(order.id),
             'Orden duplicada.',
+            permission: AppPermission.createPurchases,
+            reason: 'Duplicar orden de compra',
           ),
           onDelete: canDelete ? () => _confirmDeleteOrder(order) : null,
         ),

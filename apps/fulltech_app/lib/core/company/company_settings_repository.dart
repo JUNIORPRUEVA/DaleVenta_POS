@@ -219,9 +219,7 @@ class CompanySettingsRepository {
         );
       }
     } on TimeoutException {
-      throw ApiException(
-        'Guardar el PIN tardó demasiado. Inténtalo de nuevo.',
-      );
+      throw ApiException('Guardar el PIN tardó demasiado. Inténtalo de nuevo.');
     } on DioException catch (e) {
       throw ApiException(
         _extractMessage(e.response?.data, 'No se pudo guardar el PIN'),
