@@ -182,6 +182,117 @@ export class ProductsService {
     );
   }
 
+  private normalizeTextKey(value?: string | null) {
+    return (value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+  }
+
+  private hasEmptyProductCode(product: Product) {
+    return this.normalizeProductCodeForLookup((product as any).codigo) === null;
+  }
+
+  private productIdentityWhere(
+    companyId: string,
+    data: {
+      nombre?: string | null;
+      categoria?: string | null;
+      precio?: Prisma.Decimal | number | string | null;
+      costo?: Prisma.Decimal | number | string | null;
+      stock?: Prisma.Decimal | number | string | null;
+    },
+  ) {
+    return {
+      companyId,
+      nombre: { equals: data.nombre ?? "", mode: "insensitive" as const },
+      categoria: {
+        equals: data.categoria ?? "",
+        mode: "insensitive" as const,
+      },
+      precio: new Prisma.Decimal(data.precio ?? 0),
+      costo: new Prisma.Decimal(data.costo ?? 0),
+      stock: new Prisma.Decimal(data.stock ?? 0),
+    };
+  }
+
+  private async productReferenceCount(
+    tx: Prisma.TransactionClient,
+    productId: string,
+  ) {
+    const [saleItems, cotizacionItems, purchaseOrderItems, websiteOverrides] =
+      await Promise.all([
+        tx.saleItem.count({ where: { productId } }),
+        tx.cotizacionItem.count({ where: { productId } }),
+        tx.purchaseOrderItem.count({ where: { productId } }),
+        tx.websiteProductOverride.count({ where: { productId } }),
+      ]);
+    return saleItems + cotizacionItems + purchaseOrderItems + websiteOverrides;
+  }
+
+  private async findEquivalentProducts(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    data: {
+      nombre?: string | null;
+      categoria?: string | null;
+      precio?: Prisma.Decimal | number | string | null;
+      costo?: Prisma.Decimal | number | string | null;
+      stock?: Prisma.Decimal | number | string | null;
+    },
+    excludeId?: string,
+  ) {
+    const candidates = await tx.product.findMany({
+      where: this.productIdentityWhere(companyId, data),
+    });
+    return candidates.filter(
+      (product) =>
+        product.id !== excludeId &&
+        this.normalizeTextKey(product.nombre) ===
+          this.normalizeTextKey(data.nombre) &&
+        this.normalizeTextKey(product.categoria) ===
+          this.normalizeTextKey(data.categoria),
+    );
+  }
+
+  private async pruneSafeDuplicateProducts(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    canonical: Product,
+  ) {
+    const duplicates = await this.findEquivalentProducts(
+      tx,
+      companyId,
+      canonical,
+      canonical.id,
+    );
+    let deleted = 0;
+    let skipped = 0;
+    for (const duplicate of duplicates) {
+      const duplicateCode = this.normalizeProductCodeForLookup(
+        (duplicate as any).codigo,
+      );
+      const canonicalCode = this.normalizeProductCodeForLookup(
+        (canonical as any).codigo,
+      );
+      if (duplicateCode && duplicateCode !== canonicalCode) {
+        skipped += 1;
+        continue;
+      }
+      const references = await this.productReferenceCount(tx, duplicate.id);
+      if (references > 0) {
+        skipped += 1;
+        this.logger.warn(
+          `product-duplicate-prune skipped companyId=${companyId} canonicalProductId=${canonical.id} duplicateProductId=${duplicate.id} references=${references}`,
+        );
+        continue;
+      }
+      await tx.product.delete({ where: { id: duplicate.id } });
+      deleted += 1;
+      this.logger.log(
+        `product-duplicate-prune deleted companyId=${companyId} canonicalProductId=${canonical.id} duplicateProductId=${duplicate.id}`,
+      );
+    }
+    return { deleted, skipped };
+  }
+
   async create(user: TenantUser, dto: CreateProductDto): Promise<any> {
     this.assertWritable();
     const companyId = requireTenant(user);
@@ -270,6 +381,43 @@ export class ProductsService {
           );
         }
 
+        const equivalentProducts = await this.findEquivalentProducts(
+          tx,
+          companyId,
+          data,
+        );
+        const reusableEquivalent = equivalentProducts.find((product) => {
+          const productCode = this.normalizeProductCodeForLookup(
+            (product as any).codigo,
+          );
+          return (
+            productCode === null || productCode === normalizedCodeForLookup
+          );
+        });
+        if (reusableEquivalent) {
+          const updateData = { ...data };
+          delete (updateData as { id?: string }).id;
+          const product = await tx.product.update({
+            where: { id: reusableEquivalent.id },
+            data: updateData,
+          });
+          const prune = await this.pruneSafeDuplicateProducts(
+            tx,
+            companyId,
+            product,
+          );
+          this.logProductSave({
+            action: "create",
+            decision: "reuse-equivalent-product",
+            companyId,
+            productId: product.id,
+            normalizedCode: normalizedCodeForLookup,
+            operationId: dto.operationId,
+            result: `updated-existing deletedDuplicates=${prune.deleted} skippedDuplicates=${prune.skipped}`,
+          });
+          return this.mapProduct(product);
+        }
+
         try {
           const product = operationProductId
             ? await tx.product.upsert({
@@ -287,6 +435,7 @@ export class ProductsService {
             operationId: dto.operationId,
             result: "created",
           });
+          await this.pruneSafeDuplicateProducts(tx, companyId, product);
           return this.mapProduct(product);
         } catch (error) {
           if (this.isUniqueConstraint(error)) {
@@ -294,6 +443,7 @@ export class ProductsService {
           }
           if (!this.isSchemaMismatch(error)) throw error;
           const product = await tx.product.create({ data });
+          await this.pruneSafeDuplicateProducts(tx, companyId, product);
           return this.mapProduct(product);
         }
       });
@@ -477,6 +627,11 @@ export class ProductsService {
 
       try {
         const updated = await tx.product.update({ where: { id }, data });
+        const prune = await this.pruneSafeDuplicateProducts(
+          tx,
+          companyId,
+          updated,
+        );
         this.logProductSave({
           action: "update",
           decision: "update-by-id",
@@ -484,7 +639,7 @@ export class ProductsService {
           productId: updated.id,
           normalizedCode: normalizedCodeForLookup,
           operationId: dto.operationId,
-          result: "updated",
+          result: `updated deletedDuplicates=${prune.deleted} skippedDuplicates=${prune.skipped}`,
         });
         return this.mapProduct(updated);
       } catch (error) {
@@ -495,6 +650,7 @@ export class ProductsService {
         }
         if (!this.isSchemaMismatch(error)) throw error;
         const updated = await tx.product.update({ where: { id }, data });
+        await this.pruneSafeDuplicateProducts(tx, companyId, updated);
         return this.mapProduct(updated);
       }
     });

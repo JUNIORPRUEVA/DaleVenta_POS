@@ -204,7 +204,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     final role = authState.user?.appRole ?? AppRole.unknown;
 
     return MaterialApp.router(
-      title: 'DaleVenta POS - Sistema de facturacion',
+      title: 'FullPOS Cloud - Sistema de facturacion',
       debugShowCheckedModeBanner: false,
       locale: const Locale('es', 'DO'),
       supportedLocales: const [Locale('es', 'DO'), Locale('es')],

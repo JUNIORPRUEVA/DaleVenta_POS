@@ -65,6 +65,21 @@ class _FakeCatalogRepository extends CatalogRepository {
   }
 }
 
+ProductModel _product({
+  required String id,
+  required String name,
+  required String category,
+}) {
+  return ProductModel(
+    id: id,
+    nombre: name,
+    precio: 100,
+    costo: 60,
+    stock: 1,
+    categoria: category,
+  );
+}
+
 Future<ProductFormResult?> _pumpEditor(
   WidgetTester tester, {
   required _FakeCatalogRepository repo,
@@ -106,6 +121,107 @@ Future<ProductFormResult?> _pumpEditor(
 }
 
 void main() {
+  testWidgets('catálogo resetea filtro cuando desaparece la categoría', (
+    tester,
+  ) async {
+    var products = [
+      _product(id: 'p-1', name: 'Producto humo', category: 'Smoke'),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setHostState) {
+            return Scaffold(
+              body: Column(
+                children: [
+                  ElevatedButton(
+                    onPressed: () => setHostState(() => products = []),
+                    child: const Text('Vaciar categoría'),
+                  ),
+                  Expanded(
+                    child: CatalogTab(
+                      products: products,
+                      loading: false,
+                      error: null,
+                      onRefresh: () async {},
+                      onCreate: () {},
+                      onImport: () async {},
+                      onExport: () async {},
+                      onEdit: (_) {},
+                      onSetStock: (_, _) async {},
+                      canEditProducts: true,
+                      canAddStock: true,
+                      onDelete: (_) async {},
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(DropdownButton<String?>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Smoke').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Vaciar categoría'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Todas las categorías'), findsWidgets);
+  });
+
+  testWidgets(
+    'ajustes de stock resetea filtro cuando desaparece la categoría',
+    (tester) async {
+      var products = [
+        _product(id: 'p-1', name: 'Producto humo', category: 'Smoke'),
+      ];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StatefulBuilder(
+            builder: (context, setHostState) {
+              return Scaffold(
+                body: Column(
+                  children: [
+                    ElevatedButton(
+                      onPressed: () => setHostState(() => products = []),
+                      child: const Text('Vaciar categoría'),
+                    ),
+                    Expanded(
+                      child: StockAdjustmentsPage(
+                        products: products,
+                        onRefresh: () async {},
+                        onSetStock: (_, _) async {},
+                        canAddStock: true,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Smoke').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Vaciar categoría'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Todas las categorías'), findsWidgets);
+    },
+  );
+
   testWidgets(
     'crear producto cierra el formulario sin errores de EditableText',
     (tester) async {

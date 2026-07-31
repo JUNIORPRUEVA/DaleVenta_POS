@@ -97,32 +97,13 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
     final drawerButton = (onMenuPressed != null || hasDrawer)
         ? Padding(
             padding: const EdgeInsets.only(left: 10, top: 8, bottom: 8),
-            child: IconButton(
-              tooltip: 'Menú',
+            child: _ElegantAppBarMenuButton(
+              isMobile: isMobileLayout,
               onPressed:
                   onMenuPressed ??
                   () {
                     scaffold?.openDrawer();
                   },
-              icon: const AppIcon(
-                AppIcons.menu,
-                size: AppIconSizes.navigation,
-                semanticLabel: 'Abrir menú',
-              ),
-              color: isMobileLayout ? Colors.white : desktopAccent,
-              style: IconButton.styleFrom(
-                backgroundColor: isMobileLayout
-                    ? Colors.white.withValues(alpha: 0.14)
-                    : const Color(0xFFEAF1FF),
-                side: BorderSide(
-                  color: isMobileLayout
-                      ? Colors.white.withValues(alpha: 0.18)
-                      : const Color(0xFFCFE0FF),
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
             ),
           )
         : null;
@@ -335,6 +316,95 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
                         backgroundColor: Colors.white,
                       ),
                     ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ElegantAppBarMenuButton extends StatefulWidget {
+  const _ElegantAppBarMenuButton({
+    required this.onPressed,
+    required this.isMobile,
+  });
+
+  final VoidCallback onPressed;
+  final bool isMobile;
+
+  @override
+  State<_ElegantAppBarMenuButton> createState() =>
+      _ElegantAppBarMenuButtonState();
+}
+
+class _ElegantAppBarMenuButtonState extends State<_ElegantAppBarMenuButton> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = _hovered || _pressed;
+    final foreground = widget.isMobile
+        ? Colors.white
+        : (active ? const Color(0xFF1957E6) : const Color(0xFF24445A));
+    final background = widget.isMobile
+        ? Colors.white.withValues(alpha: active ? 0.22 : 0.14)
+        : (active ? const Color(0xFFFFFFFF) : const Color(0xFFF7FAFC));
+    final borderColor = widget.isMobile
+        ? Colors.white.withValues(alpha: active ? 0.32 : 0.18)
+        : (active ? const Color(0xFF9FBCFF) : const Color(0xFFD4E2EA));
+
+    return Tooltip(
+      message: 'Abrir menú',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() {
+          _hovered = false;
+          _pressed = false;
+        }),
+        child: GestureDetector(
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapCancel: () => setState(() => _pressed = false),
+          onTapUp: (_) => setState(() => _pressed = false),
+          onTap: widget.onPressed,
+          child: AnimatedScale(
+            scale: _pressed ? 0.94 : (_hovered ? 1.035 : 1),
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOutCubic,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: background,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: borderColor),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(
+                      0xFF1957E6,
+                    ).withValues(alpha: active ? 0.18 : 0.07),
+                    blurRadius: active ? 16 : 9,
+                    offset: Offset(0, active ? 6 : 3),
+                  ),
+                ],
+              ),
+              child: AnimatedRotation(
+                turns: _pressed ? 0.03 : 0,
+                duration: const Duration(milliseconds: 150),
+                curve: Curves.easeOutCubic,
+                child: Center(
+                  child: AppIcon(
+                    AppIcons.menu,
+                    size: AppIconSizes.navigation,
+                    color: foreground,
+                    semanticLabel: 'Abrir menú',
+                  ),
+                ),
+              ),
             ),
           ),
         ),

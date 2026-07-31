@@ -5102,17 +5102,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       child: Row(
         children: [
           Builder(
-            builder: (scaffoldContext) => Material(
-              color: Colors.white.withValues(alpha: 0.88),
-              borderRadius: BorderRadius.circular(14),
-              child: InkWell(
-                onTap: () => Scaffold.of(scaffoldContext).openDrawer(),
-                borderRadius: BorderRadius.circular(14),
-                child: const Padding(
-                  padding: EdgeInsets.all(10),
-                  child: Icon(Icons.menu_rounded, size: 20),
-                ),
-              ),
+            builder: (scaffoldContext) => _AnimatedDrawerButton(
+              onPressed: () => Scaffold.of(scaffoldContext).openDrawer(),
             ),
           ),
           const SizedBox(width: 8),
@@ -5874,38 +5865,223 @@ class _QuotationTopbarMenu extends StatelessWidget {
             ),
           ),
         ],
-        child: Container(
-          height: 38,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF3F7FF),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFCFE0FF)),
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.request_quote_outlined,
-                size: 18,
-                color: Color(0xFF123A75),
+        child: const _TopbarActionShell(
+          icon: Icons.request_quote_outlined,
+          label: 'Cotizaciones',
+          hasChevron: true,
+        ),
+      ),
+    );
+  }
+}
+
+class _TopbarActionShell extends StatefulWidget {
+  const _TopbarActionShell({
+    required this.icon,
+    required this.label,
+    this.leading,
+    this.hasChevron = false,
+    this.primary = false,
+    this.minWidth,
+  });
+
+  final IconData icon;
+  final String label;
+  final Widget? leading;
+  final bool hasChevron;
+  final bool primary;
+  final double? minWidth;
+
+  @override
+  State<_TopbarActionShell> createState() => _TopbarActionShellState();
+}
+
+class _TopbarActionShellState extends State<_TopbarActionShell> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = _hovered || _pressed;
+    final foreground = widget.primary
+        ? Colors.white
+        : (active ? const Color(0xFF1957E6) : const Color(0xFF123A75));
+    final iconBg = widget.primary
+        ? Colors.white.withValues(alpha: active ? 0.20 : 0.14)
+        : const Color(0xFFEAF1FF);
+    final borderColor = widget.primary
+        ? const Color(0xFF7DA2FF)
+        : (active ? const Color(0xFF9FBCFF) : const Color(0xFFCFE0FF));
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() {
+        _hovered = false;
+        _pressed = false;
+      }),
+      child: Listener(
+        onPointerDown: (_) => setState(() => _pressed = true),
+        onPointerCancel: (_) => setState(() => _pressed = false),
+        onPointerUp: (_) => setState(() => _pressed = false),
+        child: AnimatedScale(
+          scale: _pressed ? 0.97 : (_hovered ? 1.012 : 1),
+          duration: const Duration(milliseconds: 130),
+          curve: Curves.easeOutCubic,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            height: 40,
+            constraints: BoxConstraints(minWidth: widget.minWidth ?? 0),
+            padding: const EdgeInsets.fromLTRB(10, 5, 11, 5),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: widget.primary
+                    ? (active
+                          ? const [Color(0xFF2E6BFF), Color(0xFF164ED6)]
+                          : const [Color(0xFF1F62FF), Color(0xFF1957E6)])
+                    : (active
+                          ? const [Color(0xFFFFFFFF), Color(0xFFEAF1FF)]
+                          : const [Color(0xFFFFFFFF), Color(0xFFF7FAFC)]),
               ),
-              SizedBox(width: 7),
-              Text(
-                'Cotizaciones',
-                style: TextStyle(
-                  color: Color(0xFF123A75),
-                  fontWeight: FontWeight.w900,
-                  fontSize: 12,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: borderColor),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(
+                    0xFF1957E6,
+                  ).withValues(alpha: widget.primary ? 0.22 : 0.10),
+                  blurRadius: active ? 18 : 10,
+                  offset: Offset(0, active ? 7 : 3),
                 ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: iconBg,
+                    borderRadius: BorderRadius.circular(6),
+                    border: widget.primary
+                        ? Border.all(color: Colors.white24)
+                        : null,
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child:
+                      widget.leading ??
+                      Icon(widget.icon, size: 16, color: foreground),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  widget.label,
+                  style: TextStyle(
+                    color: foreground,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12.5,
+                    letterSpacing: 0,
+                  ),
+                ),
+                if (widget.hasChevron) ...[
+                  const SizedBox(width: 5),
+                  AnimatedRotation(
+                    turns: _pressed ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 18,
+                      color: foreground,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AnimatedDrawerButton extends StatefulWidget {
+  const _AnimatedDrawerButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  State<_AnimatedDrawerButton> createState() => _AnimatedDrawerButtonState();
+}
+
+class _AnimatedDrawerButtonState extends State<_AnimatedDrawerButton>
+    with SingleTickerProviderStateMixin {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = _hovered || _pressed;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() {
+        _hovered = false;
+        _pressed = false;
+      }),
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTap: widget.onPressed,
+        child: AnimatedScale(
+          scale: _pressed ? 0.94 : (_hovered ? 1.035 : 1),
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOutCubic,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: active
+                    ? const [Color(0xFFFFFFFF), Color(0xFFEAF1FF)]
+                    : const [Color(0xFFFFFFFF), Color(0xFFF7FAFC)],
               ),
-              SizedBox(width: 4),
-              Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 18,
-                color: Color(0xFF123A75),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: active
+                    ? const Color(0xFF9FBCFF)
+                    : const Color(0xFFD4E2EA),
               ),
-            ],
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(
+                    0xFF1957E6,
+                  ).withValues(alpha: active ? 0.20 : 0.08),
+                  blurRadius: active ? 18 : 10,
+                  offset: Offset(0, active ? 7 : 3),
+                ),
+              ],
+            ),
+            child: AnimatedRotation(
+              turns: _pressed ? 0.03 : 0,
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOutCubic,
+              child: Icon(
+                Icons.menu_rounded,
+                size: 23,
+                color: active
+                    ? const Color(0xFF1957E6)
+                    : const Color(0xFF24445A),
+              ),
+            ),
           ),
         ),
       ),
@@ -6089,48 +6265,13 @@ class _CompanyAccountMenu extends ConsumerWidget {
             ),
           ),
         ],
-        child: Container(
-          height: 38,
-          padding: const EdgeInsets.fromLTRB(8, 5, 10, 5),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1957E6),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFF7DA2FF)),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x291957E6),
-                blurRadius: 14,
-                offset: Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _CompanyLogoBox(logoBase64: logoBase64),
-              const SizedBox(width: 8),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 190),
-                child: Text(
-                  companyName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 12.5,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              const Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 18,
-                color: Colors.white,
-              ),
-            ],
-          ),
+        child: _TopbarActionShell(
+          icon: Icons.storefront_rounded,
+          label: companyName,
+          leading: _CompanyLogoBox(logoBase64: logoBase64, size: 26),
+          hasChevron: true,
+          primary: true,
+          minWidth: 132,
         ),
       ),
     );
@@ -6561,27 +6702,28 @@ TextStyle _companySideStrongStyle() {
 }
 
 class _CompanyLogoBox extends StatelessWidget {
-  const _CompanyLogoBox({required this.logoBase64});
+  const _CompanyLogoBox({required this.logoBase64, this.size = 28});
 
   final String? logoBase64;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
     final logoBytes = _decodeLogo(logoBase64);
     return Container(
-      width: 28,
-      height: 28,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         color: const Color(0xFFEAF1FF),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(color: Colors.white24),
       ),
       clipBehavior: Clip.antiAlias,
       child: logoBytes == null
-          ? const Icon(
+          ? Icon(
               Icons.storefront_rounded,
-              size: 16,
-              color: Color(0xFF1957E6),
+              size: size * 0.58,
+              color: const Color(0xFF1957E6),
             )
           : Image.memory(logoBytes, fit: BoxFit.cover),
     );
@@ -6873,86 +7015,21 @@ class _ClientTopbarAction extends StatefulWidget {
 }
 
 class _ClientTopbarActionState extends State<_ClientTopbarAction> {
-  bool _hovered = false;
-  bool _pressed = false;
-
   @override
   Widget build(BuildContext context) {
-    final scale = _pressed ? 0.97 : (_hovered ? 1.035 : 1.0);
-    const foreground = Color(0xFF123A75);
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() {
-          _hovered = false;
-          _pressed = false;
-        }),
-        child: AnimatedScale(
-          scale: scale,
-          duration: const Duration(milliseconds: 140),
-          curve: Curves.easeOutCubic,
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: widget.onPressed,
-              onTapDown: (_) => setState(() => _pressed = true),
-              onTapCancel: () => setState(() => _pressed = false),
-              onTapUp: (_) => setState(() => _pressed = false),
-              borderRadius: BorderRadius.circular(8),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                curve: Curves.easeOutCubic,
-                height: 40,
-                padding: const EdgeInsets.symmetric(horizontal: 15),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF3F7FF),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFCFE0FF)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(
-                        0xFF123A75,
-                      ).withValues(alpha: _hovered ? 0.12 : 0.06),
-                      blurRadius: _hovered ? 12 : 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: widget.hasClient
-                            ? const Color(0xFFEAF1FF)
-                            : Colors.white,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Icon(
-                        Icons.person_add_alt_1_rounded,
-                        color: widget.hasClient
-                            ? const Color(0xFF1957E6)
-                            : foreground,
-                        size: 16,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Cliente',
-                      style: const TextStyle(
-                        color: foreground,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: widget.onPressed,
+          borderRadius: BorderRadius.circular(8),
+          child: _TopbarActionShell(
+            icon: widget.hasClient
+                ? Icons.person_rounded
+                : Icons.person_add_alt_1_rounded,
+            label: 'Cliente',
+            minWidth: 108,
           ),
         ),
       ),

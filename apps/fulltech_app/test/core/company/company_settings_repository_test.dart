@@ -50,7 +50,7 @@ void main() {
     'getSettings keeps cached settings when background refresh fails',
     () async {
       await LocalJsonCache().writeMap('company_settings_cache_v1', {
-        'companyName': 'DaleVenta POS',
+        'companyName': 'FullPOS Cloud',
       });
       final dio = Dio()
         ..httpClientAdapter = _FakeHttpClientAdapter((_) async {
@@ -72,7 +72,7 @@ void main() {
         return loaded;
       }, (error, _) => unhandledErrors.add(error));
 
-      expect(settings.companyName, 'DaleVenta POS');
+      expect(settings.companyName, 'FullPOS Cloud');
       expect(unhandledErrors, isEmpty);
     },
   );

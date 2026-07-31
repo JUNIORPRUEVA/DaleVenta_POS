@@ -28,7 +28,7 @@ class AccountAppsScreen extends StatelessWidget {
     return _AccountSidePanelScaffold(
       icon: Icons.apps_rounded,
       title: 'Apps',
-      subtitle: 'Accesos para usar DaleVenta POS en distintos dispositivos.',
+      subtitle: 'Accesos para usar FullPOS Cloud en distintos dispositivos.',
       children: [
         _AccessChannelTile(
           icon: Icons.android_rounded,
@@ -80,9 +80,9 @@ class AccountLicensesScreen extends ConsumerWidget {
           title: 'Empresa activa',
           value: company.maybeWhen(
             data: (settings) => settings.companyName.trim().isEmpty
-                ? 'DaleVenta POS'
+                ? 'FullPOS Cloud'
                 : settings.companyName.trim(),
-            orElse: () => 'DaleVenta POS',
+            orElse: () => 'FullPOS Cloud',
           ),
         ),
         _InfoTile(
@@ -466,7 +466,7 @@ class _SettingsHubScaffold extends StatelessWidget {
       orElse: () => '',
     );
     final displayName = configuredName.isEmpty
-        ? 'DaleVenta POS'
+        ? 'FullPOS Cloud'
         : configuredName;
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -542,7 +542,7 @@ class _SettingsHeroPanel extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Configuración de DaleVenta POS', style: _titleStyle(18)),
+                Text('Configuración de FullPOS Cloud', style: _titleStyle(18)),
                 const SizedBox(height: 2),
                 Text(companyName, style: _strongBodyStyle()),
               ],
@@ -1682,7 +1682,7 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _DetailRow('Origen', 'Datos de nube y configuración local'),
-        const _DetailRow('Destino', 'Documentos / DaleVenta POS / backups'),
+        const _DetailRow('Destino', 'Documentos / FullPOS Cloud / backups'),
         const _DetailRow('Formato', 'Carpeta JSON + archivo ZIP'),
         const SizedBox(height: 12),
         Row(

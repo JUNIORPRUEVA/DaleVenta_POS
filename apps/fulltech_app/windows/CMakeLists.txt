@@ -1,6 +1,6 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.14)
-project(daleventa_pos LANGUAGES CXX)
+project(fullpos_cloud LANGUAGES CXX)
 
 # Flutter genera scripts de instalación con rutas absolutas al directorio `build/`.
 # En algunos entornos CMAKE_ERROR_ON_ABSOLUTE_INSTALL_DESTINATION viene activado
@@ -9,7 +9,7 @@ set(CMAKE_ERROR_ON_ABSOLUTE_INSTALL_DESTINATION OFF)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "daleventa_pos")
+set(BINARY_NAME "fullpos_cloud")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.

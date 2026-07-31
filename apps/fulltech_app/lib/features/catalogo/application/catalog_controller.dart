@@ -55,6 +55,7 @@ final catalogControllerProvider =
 class CatalogImportDraft {
   const CatalogImportDraft({
     required this.nombre,
+    this.codigo,
     required this.precio,
     required this.costo,
     required this.stock,
@@ -62,10 +63,39 @@ class CatalogImportDraft {
   });
 
   final String nombre;
+  final String? codigo;
   final double precio;
   final double costo;
   final double stock;
   final String categoria;
+}
+
+class CatalogImportProgress {
+  const CatalogImportProgress({
+    required this.done,
+    required this.total,
+    required this.current,
+  });
+
+  final int done;
+  final int total;
+  final String current;
+}
+
+class CatalogImportResult {
+  const CatalogImportResult({
+    required this.created,
+    required this.updated,
+    required this.skippedExisting,
+    required this.skippedFileDuplicates,
+  });
+
+  final int created;
+  final int updated;
+  final int skippedExisting;
+  final int skippedFileDuplicates;
+
+  int get processed => created + updated + skippedExisting;
 }
 
 class CatalogController extends StateNotifier<CatalogState> {
@@ -80,6 +110,53 @@ class CatalogController extends StateNotifier<CatalogState> {
     final now = DateTime.now().toUtc().microsecondsSinceEpoch;
     final suffix = productId == null ? '' : '-$productId';
     return '$action-$now-$hashCode$suffix';
+  }
+
+  String _normalizeImportCode(String? value) {
+    return (value ?? '').trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+  }
+
+  String _normalizeImportText(String value) {
+    return value.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+  }
+
+  String _importIdentityKey({
+    required String nombre,
+    String? codigo,
+    required double precio,
+    required double costo,
+    required double stock,
+    required String categoria,
+  }) {
+    final code = _normalizeImportCode(codigo);
+    if (code.isNotEmpty) return 'code:$code';
+    return [
+      'identity',
+      _normalizeImportText(nombre),
+      _normalizeImportText(categoria),
+      precio.toStringAsFixed(2),
+      costo.toStringAsFixed(2),
+      stock.toStringAsFixed(2),
+    ].join('|');
+  }
+
+  ProductModel? _findImportMatch(
+    CatalogImportDraft draft,
+    Map<String, ProductModel> existingByCode,
+    Map<String, ProductModel> existingByIdentity,
+  ) {
+    final code = _normalizeImportCode(draft.codigo);
+    if (code.isNotEmpty) {
+      final byCode = existingByCode[code];
+      if (byCode != null) return byCode;
+    }
+    return existingByIdentity[_importIdentityKey(
+      nombre: draft.nombre,
+      precio: draft.precio,
+      costo: draft.costo,
+      stock: draft.stock,
+      categoria: draft.categoria,
+    )];
   }
 
   Future<void> load({bool silent = false, bool forceRemote = false}) async {
@@ -201,27 +278,154 @@ class CatalogController extends StateNotifier<CatalogState> {
     }
   }
 
-  Future<int> importProducts(List<CatalogImportDraft> drafts) async {
-    if (drafts.isEmpty) return 0;
+  Future<CatalogImportResult> importProducts(
+    List<CatalogImportDraft> drafts, {
+    bool updateExisting = false,
+    void Function(CatalogImportProgress progress)? onProgress,
+  }) async {
+    if (drafts.isEmpty) {
+      return const CatalogImportResult(
+        created: 0,
+        updated: 0,
+        skippedExisting: 0,
+        skippedFileDuplicates: 0,
+      );
+    }
     state = state.copyWith(saving: true, actionError: null);
     try {
       final repo = ref.read(catalogRepositoryProvider);
-      var createdCount = 0;
+      final uniqueDrafts = <CatalogImportDraft>[];
+      final seenFileKeys = <String>{};
+      var skippedFileDuplicates = 0;
       for (final draft in drafts) {
-        await repo.createProduct(
+        final key = _importIdentityKey(
           nombre: draft.nombre,
+          codigo: draft.codigo,
           precio: draft.precio,
           costo: draft.costo,
           stock: draft.stock,
           categoria: draft.categoria,
-          operationId: _newProductOperationId('import-${createdCount + 1}'),
         );
-        createdCount += 1;
+        if (!seenFileKeys.add(key)) {
+          skippedFileDuplicates += 1;
+          continue;
+        }
+        uniqueDrafts.add(draft);
+      }
+
+      final existingByCode = <String, ProductModel>{};
+      final existingByIdentity = <String, ProductModel>{};
+      for (final product in state.items) {
+        final code = _normalizeImportCode(product.codigo);
+        if (code.isNotEmpty) {
+          existingByCode.putIfAbsent(code, () => product);
+        }
+        existingByIdentity.putIfAbsent(
+          _importIdentityKey(
+            nombre: product.nombre,
+            precio: product.precio,
+            costo: product.costo,
+            stock: product.stock ?? 0,
+            categoria: product.categoriaLabel,
+          ),
+          () => product,
+        );
+      }
+
+      var createdCount = 0;
+      var updatedCount = 0;
+      var skippedExisting = 0;
+      for (var index = 0; index < uniqueDrafts.length; index++) {
+        final draft = uniqueDrafts[index];
+        onProgress?.call(
+          CatalogImportProgress(
+            done: index,
+            total: uniqueDrafts.length,
+            current: draft.nombre,
+          ),
+        );
+        final existing = _findImportMatch(
+          draft,
+          existingByCode,
+          existingByIdentity,
+        );
+        if (existing != null) {
+          if (!updateExisting) {
+            skippedExisting += 1;
+            continue;
+          }
+          final updated = await repo.updateProduct(
+            id: existing.id,
+            nombre: draft.nombre,
+            codigo: draft.codigo,
+            precio: draft.precio,
+            costo: draft.costo,
+            stock: draft.stock,
+            categoria: draft.categoria,
+            operationId: _newProductOperationId(
+              'import-update-${updatedCount + 1}',
+              productId: existing.id,
+            ),
+          );
+          existingByIdentity.remove(
+            _importIdentityKey(
+              nombre: existing.nombre,
+              precio: existing.precio,
+              costo: existing.costo,
+              stock: existing.stock ?? 0,
+              categoria: existing.categoriaLabel,
+            ),
+          );
+          final updatedCode = _normalizeImportCode(updated.codigo);
+          if (updatedCode.isNotEmpty) existingByCode[updatedCode] = updated;
+          existingByIdentity[_importIdentityKey(
+                nombre: updated.nombre,
+                precio: updated.precio,
+                costo: updated.costo,
+                stock: updated.stock ?? 0,
+                categoria: updated.categoriaLabel,
+              )] =
+              updated;
+          updatedCount += 1;
+        } else {
+          final created = await repo.createProduct(
+            nombre: draft.nombre,
+            codigo: draft.codigo,
+            precio: draft.precio,
+            costo: draft.costo,
+            stock: draft.stock,
+            categoria: draft.categoria,
+            operationId: _newProductOperationId('import-create-${index + 1}'),
+          );
+          final createdCode = _normalizeImportCode(created.codigo);
+          if (createdCode.isNotEmpty) existingByCode[createdCode] = created;
+          existingByIdentity[_importIdentityKey(
+                nombre: created.nombre,
+                precio: created.precio,
+                costo: created.costo,
+                stock: created.stock ?? 0,
+                categoria: created.categoriaLabel,
+              )] =
+              created;
+          createdCount += 1;
+        }
+        onProgress?.call(
+          CatalogImportProgress(
+            done: index + 1,
+            total: uniqueDrafts.length,
+            current: draft.nombre,
+          ),
+        );
       }
       state = state.copyWith(saving: false);
       await load(forceRemote: true);
       _lastSuccessfulRemoteSyncAt = DateTime.now();
-      return createdCount;
+      return CatalogImportResult(
+        created: createdCount,
+        updated: updatedCount,
+        skippedExisting: skippedExisting,
+        skippedFileDuplicates: skippedFileDuplicates,
+      );
     } catch (e) {
       final message = e is ApiException
           ? e.message

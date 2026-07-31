@@ -99,7 +99,7 @@ class CloudBackupService {
     }
 
     final manifest = {
-      'app': 'DaleVenta POS',
+      'app': 'FullPOS Cloud',
       'kind': 'cloud-local-backup',
       'createdAt': now.toIso8601String(),
       'folderPath': folder.path,
@@ -127,7 +127,7 @@ class CloudBackupService {
 
   Future<Directory> _backupRoot() async {
     final base = await getApplicationDocumentsDirectory();
-    final dir = Directory(p.join(base.path, 'DaleVenta POS', 'backups'));
+    final dir = Directory(p.join(base.path, 'FullPOS Cloud', 'backups'));
     await dir.create(recursive: true);
     return dir;
   }

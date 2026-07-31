@@ -84,7 +84,7 @@ class AppLoadingScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 14),
                       Text(
-                        'DaleVenta POS',
+                        'FullPOS Cloud',
                         textAlign: TextAlign.center,
                         style: theme.textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.w900,

@@ -514,6 +514,9 @@ _CatalogImportBundle _parseCatalogRows(List<List<String>> rows) {
   final nameIndex = hasHeader
       ? indexOf(['nombre', 'producto', 'name', 'descripcion'], 1)
       : 0;
+  final codeIndex = hasHeader
+      ? indexOf(['codigo', 'code', 'sku', 'barcode', 'codigo barra'], -1)
+      : -1;
   final priceIndex = hasHeader
       ? indexOf(['precio', 'precio venta', 'price'], 4)
       : 1;
@@ -537,6 +540,7 @@ _CatalogImportBundle _parseCatalogRows(List<List<String>> rows) {
         index >= 0 && index < cells.length ? cells[index].trim() : '';
 
     final nombre = cell(nameIndex);
+    final codigo = cell(codeIndex);
     final precio = _parseInventoryNumber(cell(priceIndex));
     final costo = _parseInventoryNumber(cell(costIndex));
     final stock = _parseInventoryNumber(cell(stockIndex)) ?? 0;
@@ -556,6 +560,7 @@ _CatalogImportBundle _parseCatalogRows(List<List<String>> rows) {
     drafts.add(
       CatalogImportDraft(
         nombre: nombre,
+        codigo: codigo.isEmpty ? null : codigo,
         precio: precio,
         costo: costo,
         stock: stock,
@@ -649,6 +654,143 @@ Future<Uint8List?> _readPickedFileBytes(PlatformFile file) async {
   if (path == null || path.trim().isEmpty) return null;
   final localBytes = await readLocalFileBytes(path);
   return localBytes.isEmpty ? null : Uint8List.fromList(localBytes);
+}
+
+String _normalizeImportCode(String? value) {
+  return (value ?? '').trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+}
+
+String _normalizeImportText(String value) {
+  return value.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+}
+
+String _importIdentityKey({
+  required String nombre,
+  String? codigo,
+  required double precio,
+  required double costo,
+  required double stock,
+  required String categoria,
+}) {
+  final code = _normalizeImportCode(codigo);
+  if (code.isNotEmpty) return 'code:$code';
+  return [
+    'identity',
+    _normalizeImportText(nombre),
+    _normalizeImportText(categoria),
+    precio.toStringAsFixed(2),
+    costo.toStringAsFixed(2),
+    stock.toStringAsFixed(2),
+  ].join('|');
+}
+
+class _CatalogImportDecision {
+  const _CatalogImportDecision({required this.updateExisting});
+
+  final bool updateExisting;
+}
+
+class _CatalogImportSummary {
+  const _CatalogImportSummary({
+    required this.newProducts,
+    required this.existingProducts,
+    required this.fileDuplicates,
+  });
+
+  final int newProducts;
+  final int existingProducts;
+  final int fileDuplicates;
+}
+
+_CatalogImportSummary _analyzeImport({
+  required List<ProductModel> products,
+  required List<CatalogImportDraft> drafts,
+}) {
+  final existingKeys = <String>{};
+  for (final product in products) {
+    existingKeys.add(
+      _importIdentityKey(
+        nombre: product.nombre,
+        codigo: product.codigo,
+        precio: product.precio,
+        costo: product.costo,
+        stock: product.stock ?? 0,
+        categoria: product.categoriaLabel,
+      ),
+    );
+    final identityWithoutCode = _importIdentityKey(
+      nombre: product.nombre,
+      precio: product.precio,
+      costo: product.costo,
+      stock: product.stock ?? 0,
+      categoria: product.categoriaLabel,
+    );
+    existingKeys.add(identityWithoutCode);
+  }
+
+  final seenFileKeys = <String>{};
+  var newProducts = 0;
+  var existingProducts = 0;
+  var fileDuplicates = 0;
+  for (final draft in drafts) {
+    final key = _importIdentityKey(
+      nombre: draft.nombre,
+      codigo: draft.codigo,
+      precio: draft.precio,
+      costo: draft.costo,
+      stock: draft.stock,
+      categoria: draft.categoria,
+    );
+    if (!seenFileKeys.add(key)) {
+      fileDuplicates += 1;
+      continue;
+    }
+    final identityWithoutCode = _importIdentityKey(
+      nombre: draft.nombre,
+      precio: draft.precio,
+      costo: draft.costo,
+      stock: draft.stock,
+      categoria: draft.categoria,
+    );
+    if (existingKeys.contains(key) ||
+        existingKeys.contains(identityWithoutCode)) {
+      existingProducts += 1;
+    } else {
+      newProducts += 1;
+    }
+  }
+  return _CatalogImportSummary(
+    newProducts: newProducts,
+    existingProducts: existingProducts,
+    fileDuplicates: fileDuplicates,
+  );
+}
+
+class _ImportSummaryLine extends StatelessWidget {
+  const _ImportSummaryLine({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final int value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: _primaryBlue),
+          const SizedBox(width: 10),
+          Expanded(child: Text(label)),
+          Text('$value', style: const TextStyle(fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
 }
 
 class InventoryModulePages extends ConsumerStatefulWidget {
@@ -770,6 +912,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
   }
 
   Future<void> _importCatalog() async {
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
     final allowed = await ensureAdminAuthorization(
       context,
       ref,
@@ -814,16 +957,14 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
         return;
       }
 
-      final confirmed = await FullTechConfirmDialog.show(
+      final importDecision = await _showImportDecisionDialog(
         context,
-        title: 'Importar catálogo',
-        message:
-            'Se crearán ${bundle.products.length} productos, se sincronizarán ${bundle.categories.length} categorías y ${bundle.suppliers.length} suplidores desde el catálogo. ¿Deseas continuar?',
-        confirmText: 'Importar',
-        cancelText: 'Cancelar',
-        icon: Icons.upload_file_rounded,
+        products: ref.read(catalogControllerProvider).items,
+        drafts: bundle.products,
+        categoriesCount: bundle.categories.length,
+        suppliersCount: bundle.suppliers.length,
       );
-      if (confirmed != true || !mounted) return;
+      if (importDecision == null || !mounted) return;
 
       for (final categoryName in bundle.categories) {
         InventoryCategoryModel? existing;
@@ -841,16 +982,38 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
       await ref
           .read(inventorySuppliersProvider.notifier)
           .upsertMany(bundle.suppliers);
-      final imported = bundle.products.isEmpty
-          ? 0
-          : await ref
-                .read(catalogControllerProvider.notifier)
-                .importProducts(bundle.products);
+      if (!mounted) return;
+      final progress = ValueNotifier<CatalogImportProgress>(
+        const CatalogImportProgress(done: 0, total: 0, current: ''),
+      );
+      unawaited(_showImportProgressDialog(rootNavigator.context, progress));
+      CatalogImportResult imported;
+      try {
+        imported = bundle.products.isEmpty
+            ? const CatalogImportResult(
+                created: 0,
+                updated: 0,
+                skippedExisting: 0,
+                skippedFileDuplicates: 0,
+              )
+            : await ref
+                  .read(catalogControllerProvider.notifier)
+                  .importProducts(
+                    bundle.products,
+                    updateExisting: importDecision.updateExisting,
+                    onProgress: (value) => progress.value = value,
+                  );
+      } finally {
+        if (rootNavigator.canPop()) {
+          rootNavigator.pop();
+        }
+        progress.dispose();
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Se importaron $imported productos, ${bundle.categories.length} categorías y ${bundle.suppliers.length} suplidores',
+            'Importación lista: ${imported.created} nuevos, ${imported.updated} actualizados, ${imported.skippedExisting} existentes omitidos, ${imported.skippedFileDuplicates} repetidos del archivo omitidos.',
           ),
         ),
       );
@@ -860,6 +1023,127 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
         SnackBar(content: Text('No se pudo importar el catálogo: $e')),
       );
     }
+  }
+
+  Future<_CatalogImportDecision?> _showImportDecisionDialog(
+    BuildContext context, {
+    required List<ProductModel> products,
+    required List<CatalogImportDraft> drafts,
+    required int categoriesCount,
+    required int suppliersCount,
+  }) {
+    final summary = _analyzeImport(products: products, drafts: drafts);
+    return showDialog<_CatalogImportDecision>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Importación inteligente'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _ImportSummaryLine(
+                icon: Icons.add_box_outlined,
+                label: 'Nuevos',
+                value: summary.newProducts,
+              ),
+              _ImportSummaryLine(
+                icon: Icons.sync_alt_rounded,
+                label: 'Ya existen',
+                value: summary.existingProducts,
+              ),
+              _ImportSummaryLine(
+                icon: Icons.content_copy_outlined,
+                label: 'Repetidos en archivo',
+                value: summary.fileDuplicates,
+              ),
+              _ImportSummaryLine(
+                icon: Icons.category_outlined,
+                label: 'Categorías',
+                value: categoriesCount,
+              ),
+              _ImportSummaryLine(
+                icon: Icons.local_shipping_outlined,
+                label: 'Suplidores',
+                value: suppliersCount,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                summary.existingProducts > 0
+                    ? 'Puedes importar solo los productos nuevos o actualizar los existentes con los datos del archivo.'
+                    : 'Se importarán solo productos nuevos; los repetidos del archivo se omiten automáticamente.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton.tonal(
+              onPressed: summary.newProducts == 0
+                  ? null
+                  : () => Navigator.of(
+                      dialogContext,
+                    ).pop(const _CatalogImportDecision(updateExisting: false)),
+              child: const Text('Solo nuevos'),
+            ),
+            FilledButton(
+              onPressed: summary.existingProducts == 0
+                  ? null
+                  : () => Navigator.of(
+                      dialogContext,
+                    ).pop(const _CatalogImportDecision(updateExisting: true)),
+              child: const Text('Actualizar existentes'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showImportProgressDialog(
+    BuildContext context,
+    ValueNotifier<CatalogImportProgress> progress,
+  ) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('Importando productos'),
+            content: ValueListenableBuilder<CatalogImportProgress>(
+              valueListenable: progress,
+              builder: (context, value, _) {
+                final total = value.total <= 0 ? 1 : value.total;
+                final ratio = (value.done / total).clamp(0.0, 1.0);
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    LinearProgressIndicator(value: ratio),
+                    const SizedBox(height: 12),
+                    Text('${value.done} de ${value.total} productos'),
+                    if (value.current.trim().isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        value.current,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -1079,17 +1363,24 @@ class _CatalogTabState extends State<CatalogTab> {
 
   List<String> get _categories {
     final values = widget.products
-        .map((product) => product.categoriaLabel)
+        .map((product) => product.categoriaLabel.trim())
+        .where((category) => category.isNotEmpty)
         .toSet()
         .toList();
     values.sort();
     return values;
   }
 
-  List<ProductModel> get _visible {
+  String? _validCategory(List<String> categories) {
+    final selected = _category?.trim();
+    if (selected == null || selected.isEmpty) return null;
+    return categories.contains(selected) ? selected : null;
+  }
+
+  List<ProductModel> _visibleFor(String? category) {
     final query = _query.trim().toLowerCase();
     return widget.products.where((product) {
-      if (_category != null && product.categoriaLabel != _category) {
+      if (category != null && product.categoriaLabel != category) {
         return false;
       }
       if (_onlyLowStock && !_isLowStock(product)) return false;
@@ -1109,11 +1400,12 @@ class _CatalogTabState extends State<CatalogTab> {
   }
 
   void _selectAllVisible(bool selected) {
+    final visible = _visibleFor(_validCategory(_categories));
     setState(() {
       if (selected) {
-        _selectedIds.addAll(_visible.map((product) => product.id));
+        _selectedIds.addAll(visible.map((product) => product.id));
       } else {
-        _selectedIds.removeAll(_visible.map((product) => product.id));
+        _selectedIds.removeAll(visible.map((product) => product.id));
       }
     });
   }
@@ -1136,7 +1428,16 @@ class _CatalogTabState extends State<CatalogTab> {
 
   @override
   Widget build(BuildContext context) {
-    final visible = _visible;
+    final categories = _categories;
+    final selectedCategory = _validCategory(categories);
+    if (_category != selectedCategory) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _category != selectedCategory) {
+          setState(() => _category = selectedCategory);
+        }
+      });
+    }
+    final visible = _visibleFor(selectedCategory);
     final allSelected =
         visible.isNotEmpty &&
         visible.every((product) => _selectedIds.contains(product.id));
@@ -1151,8 +1452,8 @@ class _CatalogTabState extends State<CatalogTab> {
             children: [
               _CatalogToolbar(
                 controller: _searchCtrl,
-                categories: _categories,
-                selectedCategory: _category,
+                categories: categories,
+                selectedCategory: selectedCategory,
                 onlyLowStock: _onlyLowStock,
                 onlyOutStock: _onlyOutStock,
                 selectedCount: _selectedIds.length,
@@ -1255,6 +1556,17 @@ class _CatalogToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mobile = MediaQuery.sizeOf(context).width < 640;
+    final categoryOptions =
+        categories
+            .map((category) => category.trim())
+            .where((category) => category.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    final safeSelectedCategory =
+        selectedCategory != null && categoryOptions.contains(selectedCategory)
+        ? selectedCategory
+        : null;
     return ProductsSurface(
       padding: EdgeInsets.all(mobile ? 10 : 12),
       child: Wrap(
@@ -1281,7 +1593,7 @@ class _CatalogToolbar extends StatelessWidget {
             child: SizedBox(
               width: mobile ? double.infinity : null,
               child: DropdownButton<String?>(
-                value: selectedCategory,
+                value: safeSelectedCategory,
                 isExpanded: mobile,
                 hint: const Text('Todas las categorías'),
                 items: [
@@ -1289,7 +1601,7 @@ class _CatalogToolbar extends StatelessWidget {
                     value: null,
                     child: Text('Todas las categorías'),
                   ),
-                  for (final category in categories)
+                  for (final category in categoryOptions)
                     DropdownMenuItem(value: category, child: Text(category)),
                 ],
                 onChanged: onCategoryChanged,
@@ -1691,7 +2003,16 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
     return values;
   }
 
-  List<ProductModel> get _filteredProducts {
+  String _validCategoryFilter(List<String> categories) {
+    if (_categoryFilter == 'Todas las categorías') {
+      return _categoryFilter;
+    }
+    return categories.contains(_categoryFilter)
+        ? _categoryFilter
+        : 'Todas las categorías';
+  }
+
+  List<ProductModel> _filteredProductsFor(String categoryFilter) {
     final query = _searchCtrl.text.trim().toLowerCase();
     return _products
         .where((product) {
@@ -1700,8 +2021,8 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
               product.nombre.toLowerCase().contains(query) ||
               (product.codigo?.toLowerCase().contains(query) ?? false);
           final matchesCategory =
-              _categoryFilter == 'Todas las categorías' ||
-              product.categoriaLabel == _categoryFilter;
+              categoryFilter == 'Todas las categorías' ||
+              product.categoriaLabel == categoryFilter;
           return matchesSearch &&
               matchesCategory &&
               _matchesStockFilter(product, _stockFilter);
@@ -1777,9 +2098,18 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final categories = _categories;
+    final categoryFilter = _validCategoryFilter(categories);
+    if (_categoryFilter != categoryFilter) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _categoryFilter != categoryFilter) {
+          setState(() => _categoryFilter = categoryFilter);
+        }
+      });
+    }
     final selected =
         _selected ?? (_products.isNotEmpty ? _products.first : null);
-    final filtered = _filteredProducts;
+    final filtered = _filteredProductsFor(categoryFilter);
 
     return Column(
       children: [
@@ -1811,13 +2141,14 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
                     ),
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String>(
-                      initialValue: _categoryFilter,
+                      key: ValueKey(categoryFilter),
+                      initialValue: categoryFilter,
                       items: [
                         const DropdownMenuItem(
                           value: 'Todas las categorías',
                           child: Text('Todas las categorías'),
                         ),
-                        for (final category in _categories)
+                        for (final category in categories)
                           DropdownMenuItem(
                             value: category,
                             child: Text(category),

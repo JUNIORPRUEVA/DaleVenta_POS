@@ -34,7 +34,7 @@ class AppStartupState {
   factory AppStartupState.initial() {
     return const AppStartupState(
       phase: AppStartupPhase.critical,
-      title: 'Iniciando DaleVenta POS...',
+      title: 'Iniciando FullPOS Cloud...',
       subtitle:
           'Preparando la configuración básica para abrir la app sin bloquear la interfaz.',
       statusLabel: 'Primer render',
@@ -140,7 +140,7 @@ class AppStartupController extends StateNotifier<AppStartupState> {
       stopwatch.stop();
       state = state.copyWith(
         phase: AppStartupPhase.ready,
-        title: 'DaleVenta POS listo',
+        title: 'FullPOS Cloud listo',
         subtitle:
             'La aplicación ya puede mostrarse. Las verificaciones secundarias siguen en background.',
         statusLabel: 'OK',
@@ -156,7 +156,7 @@ class AppStartupController extends StateNotifier<AppStartupState> {
       stopwatch.stop();
       state = state.copyWith(
         phase: AppStartupPhase.failed,
-        title: 'No se pudo iniciar DaleVenta POS',
+        title: 'No se pudo iniciar FullPOS Cloud',
         subtitle:
             'La configuración crítica falló antes de abrir la app. Puedes reintentar sin recargar manualmente.',
         statusLabel: 'Error de startup',

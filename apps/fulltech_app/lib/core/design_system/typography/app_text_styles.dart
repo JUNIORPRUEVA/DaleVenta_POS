@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import 'app_typography.dart';
 
-abstract final class DaleVentaTextStyles {
+abstract final class FullPOSCloudTextStyles {
   static const screenTitle = TextStyle(
     fontFamily: AppTypography.fontFamily,
     fontSize: 24,

@@ -43,8 +43,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     final auth = ref.watch(authStateProvider);
     final size = MediaQuery.sizeOf(context);
     final compact = size.width < 560 || size.height < 680;
-    final logoSize = compact ? 118.0 : 150.0;
-    final ringSize = compact ? 190.0 : 238.0;
+    final logoSize = compact ? 82.0 : 104.0;
+    final ringSize = compact ? 136.0 : 168.0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -107,18 +107,18 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                             ],
                           ),
                         ),
-                        SizedBox(height: compact ? 22 : 28),
+                        SizedBox(height: compact ? 16 : 20),
                         const Text(
-                          'DaleVenta POS',
+                          'FullPOS Cloud',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: Color(0xFF0F172A),
-                            fontSize: 27,
+                            fontSize: 23,
                             fontWeight: FontWeight.w900,
                             letterSpacing: 0,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 6),
                         Text(
                           auth.restoringSession
                               ? 'Restaurando sesión'
@@ -126,17 +126,17 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             color: Color(0xFF64748B),
-                            fontSize: 14,
+                            fontSize: 12,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 0,
                           ),
                         ),
-                        const SizedBox(height: 22),
+                        const SizedBox(height: 18),
                         AnimatedBuilder(
                           animation: _controller,
                           builder: (context, _) {
                             return CustomPaint(
-                              size: const Size(208, 5),
+                              size: const Size(170, 4),
                               painter: _LoadingTrackPainter(
                                 progress: _controller.value,
                               ),
@@ -169,18 +169,18 @@ class _LogoMark extends StatelessWidget {
       padding: EdgeInsets.all(size * 0.10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(size * 0.22),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+        borderRadius: BorderRadius.circular(size * 0.20),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
         boxShadow: const [
           BoxShadow(
             color: Color(0x241D4ED8),
-            blurRadius: 30,
-            offset: Offset(0, 18),
+            blurRadius: 22,
+            offset: Offset(0, 12),
           ),
           BoxShadow(
             color: Color(0x120F172A),
-            blurRadius: 18,
-            offset: Offset(0, 8),
+            blurRadius: 14,
+            offset: Offset(0, 6),
           ),
         ],
       ),
@@ -234,7 +234,7 @@ class _StartupRingPainter extends CustomPainter {
     final basePaint = Paint()
       ..color = const Color(0xFFE2E8F0)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2;
+      ..strokeWidth = 1.6;
     final arcPaint = Paint()
       ..shader = const SweepGradient(
         colors: [
@@ -247,10 +247,10 @@ class _StartupRingPainter extends CustomPainter {
       ).createShader(rect)
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
-      ..strokeWidth = 4.2;
+      ..strokeWidth = 3.2;
     final tickPaint = Paint()
       ..color = const Color(0xFF2563EB).withValues(alpha: 0.16)
-      ..strokeWidth = 1.2
+      ..strokeWidth = 1
       ..strokeCap = StrokeCap.round;
 
     canvas.drawCircle(center, radius - 1, basePaint);

@@ -229,58 +229,131 @@ class CashTurnMenuButton extends ConsumerWidget {
           ),
         ),
       ],
-      child: Container(
-        height: 38,
-        padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(13),
-          border: Border.all(color: const Color(0xFFDCE8FF)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.025),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+      child: _TurnTopbarButton(
+        icon: active == null
+            ? Icons.point_of_sale_outlined
+            : Icons.store_rounded,
+        compact: compact,
+      ),
+    );
+  }
+}
+
+class _TurnTopbarButton extends StatefulWidget {
+  const _TurnTopbarButton({required this.icon, required this.compact});
+
+  final IconData icon;
+  final bool compact;
+
+  @override
+  State<_TurnTopbarButton> createState() => _TurnTopbarButtonState();
+}
+
+class _TurnTopbarButtonState extends State<_TurnTopbarButton> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = _hovered || _pressed;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() {
+        _hovered = false;
+        _pressed = false;
+      }),
+      child: Listener(
+        onPointerDown: (_) => setState(() => _pressed = true),
+        onPointerCancel: (_) => setState(() => _pressed = false),
+        onPointerUp: (_) => setState(() => _pressed = false),
+        child: AnimatedScale(
+          scale: _pressed ? 0.97 : (_hovered ? 1.012 : 1),
+          duration: const Duration(milliseconds: 130),
+          curve: Curves.easeOutCubic,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            height: 40,
+            padding: EdgeInsets.fromLTRB(
+              widget.compact ? 9 : 10,
+              5,
+              widget.compact ? 9 : 11,
+              5,
             ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 26,
-              height: 26,
-              decoration: BoxDecoration(
-                color: const Color(0xFFEAF1FF),
-                borderRadius: BorderRadius.circular(6),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: active
+                    ? const [Color(0xFFFFFFFF), Color(0xFFEAF1FF)]
+                    : const [Color(0xFFFFFFFF), Color(0xFFF7FAFC)],
               ),
-              child: Icon(
-                active == null
-                    ? Icons.point_of_sale_outlined
-                    : Icons.store_rounded,
-                color: const Color(0xFF1957E6),
-                size: 16,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: active
+                    ? const Color(0xFF9FBCFF)
+                    : const Color(0xFFCFE0FF),
               ),
-            ),
-            if (!compact) ...[
-              const SizedBox(width: 8),
-              const Text(
-                'Turno',
-                style: TextStyle(
-                  color: Color(0xFF1E3A8A),
-                  fontWeight: FontWeight.w900,
-                  fontSize: 13,
-                  letterSpacing: 0,
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(
+                    0xFF1957E6,
+                  ).withValues(alpha: active ? 0.14 : 0.08),
+                  blurRadius: active ? 18 : 10,
+                  offset: Offset(0, active ? 7 : 3),
                 ),
-              ),
-            ],
-            const SizedBox(width: 4),
-            const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: Color(0xFF1957E6),
-              size: 18,
+              ],
             ),
-          ],
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEAF1FF),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    widget.icon,
+                    color: active
+                        ? const Color(0xFF1957E6)
+                        : const Color(0xFF123A75),
+                    size: 16,
+                  ),
+                ),
+                if (!widget.compact) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    'Turno',
+                    style: TextStyle(
+                      color: active
+                          ? const Color(0xFF1957E6)
+                          : const Color(0xFF123A75),
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12.5,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ],
+                const SizedBox(width: 5),
+                AnimatedRotation(
+                  turns: _pressed ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  child: Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: active
+                        ? const Color(0xFF1957E6)
+                        : const Color(0xFF123A75),
+                    size: 18,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

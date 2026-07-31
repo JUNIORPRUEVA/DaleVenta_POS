@@ -59,7 +59,7 @@ Future<Uint8List> buildProfessionalSalesReportPdf({
   final qtyFmt = NumberFormat('#,##0.##', 'es_DO');
   final doc = pw.Document(
     title: 'Reporte profesional de ventas',
-    author: 'DaleVentas POS',
+    author: 'FullPOS Cloud',
   );
 
   doc.addPage(
@@ -76,7 +76,7 @@ Future<Uint8List> buildProfessionalSalesReportPdf({
       footer: (context) => pw.Row(
         children: [
           pw.Text(
-            'DaleVentas POS',
+            'FullPOS Cloud',
             style: pw.TextStyle(fontSize: 8, color: PdfColors.blueGrey500),
           ),
           pw.Spacer(),

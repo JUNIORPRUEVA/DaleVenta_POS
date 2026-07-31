@@ -1,0 +1,179 @@
+import 'package:dio/dio.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:daleventa_pos/core/models/product_model.dart';
+import 'package:daleventa_pos/features/catalogo/application/catalog_controller.dart';
+import 'package:daleventa_pos/features/catalogo/data/catalog_repository.dart';
+
+class _ImportFakeCatalogRepository extends CatalogRepository {
+  _ImportFakeCatalogRepository(this.products) : super(Dio());
+
+  List<ProductModel> products;
+  int creates = 0;
+  int updates = 0;
+
+  @override
+  Future<List<ProductModel>> fetchProducts({
+    bool forceRefresh = false,
+    bool silent = false,
+  }) async {
+    return products;
+  }
+
+  @override
+  Future<ProductModel> createProduct({
+    required String nombre,
+    String? codigo,
+    required double precio,
+    required double costo,
+    required double stock,
+    String? fotoUrl,
+    required String categoria,
+    String? operationId,
+  }) async {
+    creates += 1;
+    final product = ProductModel(
+      id: 'created-$creates',
+      nombre: nombre,
+      codigo: codigo,
+      precio: precio,
+      costo: costo,
+      stock: stock,
+      categoria: categoria,
+      fotoUrl: fotoUrl,
+    );
+    products = [product, ...products];
+    return product;
+  }
+
+  @override
+  Future<ProductModel> updateProduct({
+    required String id,
+    required String nombre,
+    String? codigo,
+    required double precio,
+    required double costo,
+    required double stock,
+    String? fotoUrl,
+    String? categoria,
+    String? operationId,
+  }) async {
+    updates += 1;
+    final product = ProductModel(
+      id: id,
+      nombre: nombre,
+      codigo: codigo,
+      precio: precio,
+      costo: costo,
+      stock: stock,
+      categoria: categoria,
+      fotoUrl: fotoUrl,
+    );
+    products = [
+      for (final item in products)
+        if (item.id == id) product else item,
+    ];
+    return product;
+  }
+}
+
+void main() {
+  test(
+    'importación actualiza producto existente sin código al confirmar',
+    () async {
+      final repo = _ImportFakeCatalogRepository([
+        ProductModel(
+          id: 'p-1',
+          nombre: 'TECLADO CON PUERTO USB',
+          precio: 800,
+          costo: 400,
+          stock: 2,
+          categoria: 'COMPUTADORAS Y POS',
+        ),
+      ]);
+      final container = ProviderContainer(
+        overrides: [catalogRepositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(catalogControllerProvider.notifier);
+      await controller.load();
+
+      final result = await controller.importProducts(const [
+        CatalogImportDraft(
+          nombre: 'TECLADO CON PUERTO USB',
+          codigo: '1016',
+          precio: 800,
+          costo: 400,
+          stock: 2,
+          categoria: 'COMPUTADORAS Y POS',
+        ),
+      ], updateExisting: true);
+
+      expect(result.created, 0);
+      expect(result.updated, 1);
+      expect(repo.creates, 0);
+      expect(repo.updates, 1);
+      expect(repo.products.single.id, 'p-1');
+      expect(repo.products.single.codigo, '1016');
+    },
+  );
+
+  test(
+    'importación omite repetidos del archivo y existentes sin confirmar',
+    () async {
+      final repo = _ImportFakeCatalogRepository([
+        ProductModel(
+          id: 'p-1',
+          nombre: 'Mouse USB',
+          codigo: 'M-001',
+          precio: 250,
+          costo: 100,
+          stock: 3,
+          categoria: 'COMPUTADORAS Y POS',
+        ),
+      ]);
+      final container = ProviderContainer(
+        overrides: [catalogRepositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(catalogControllerProvider.notifier);
+      await controller.load();
+
+      final result = await controller.importProducts(const [
+        CatalogImportDraft(
+          nombre: 'Mouse USB',
+          codigo: 'M-001',
+          precio: 250,
+          costo: 100,
+          stock: 3,
+          categoria: 'COMPUTADORAS Y POS',
+        ),
+        CatalogImportDraft(
+          nombre: 'Cable HDMI',
+          codigo: 'C-001',
+          precio: 300,
+          costo: 150,
+          stock: 5,
+          categoria: 'COMPUTADORAS Y POS',
+        ),
+        CatalogImportDraft(
+          nombre: 'Cable HDMI',
+          codigo: 'C-001',
+          precio: 300,
+          costo: 150,
+          stock: 5,
+          categoria: 'COMPUTADORAS Y POS',
+        ),
+      ]);
+
+      expect(result.created, 1);
+      expect(result.updated, 0);
+      expect(result.skippedExisting, 1);
+      expect(result.skippedFileDuplicates, 1);
+      expect(repo.creates, 1);
+      expect(repo.updates, 0);
+    },
+  );
+}

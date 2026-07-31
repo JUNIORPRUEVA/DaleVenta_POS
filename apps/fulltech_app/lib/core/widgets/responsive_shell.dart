@@ -186,7 +186,7 @@ class DesktopShellFooter extends ConsumerWidget {
             children: [
               Expanded(
                 child: Text(
-                  '© 2026 DaleVenta POS — Todos los derechos reservados',
+                  '© 2026 FullPOS Cloud — Todos los derechos reservados',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelMedium?.copyWith(
@@ -253,25 +253,7 @@ class DesktopShellAppBar extends ConsumerWidget {
 
           return Row(
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEAF1FF),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFCFE0FF)),
-                ),
-                child: IconButton(
-                  tooltip: 'Menú',
-                  onPressed: onToggleSidebar,
-                  icon: const AppIcon(
-                    AppIcons.menu,
-                    color: Color(0xFF1957E6),
-                    size: AppIconSizes.navigation,
-                    semanticLabel: 'Abrir menú',
-                  ),
-                ),
-              ),
+              _DesktopTopbarMenuButton(onPressed: onToggleSidebar),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -289,7 +271,7 @@ class DesktopShellAppBar extends ConsumerWidget {
                           color: const Color(0xFF111827),
                         ),
                         children: [
-                          if (title == 'DaleVenta POS')
+                          if (title == 'FullPOS Cloud')
                             TextSpan(
                               text: ' - Sistema de facturacion',
                               style: theme.textTheme.titleSmall?.copyWith(
@@ -471,6 +453,91 @@ class _DesktopShellActionGroup extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _DesktopTopbarMenuButton extends StatefulWidget {
+  const _DesktopTopbarMenuButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  State<_DesktopTopbarMenuButton> createState() =>
+      _DesktopTopbarMenuButtonState();
+}
+
+class _DesktopTopbarMenuButtonState extends State<_DesktopTopbarMenuButton> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = _hovered || _pressed;
+    return Tooltip(
+      message: 'Abrir menú',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() {
+          _hovered = false;
+          _pressed = false;
+        }),
+        child: GestureDetector(
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapCancel: () => setState(() => _pressed = false),
+          onTapUp: (_) => setState(() => _pressed = false),
+          onTap: widget.onPressed,
+          child: AnimatedScale(
+            scale: _pressed ? 0.94 : (_hovered ? 1.035 : 1),
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOutCubic,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: active
+                      ? const [Color(0xFFFFFFFF), Color(0xFFEAF1FF)]
+                      : const [Color(0xFFFFFFFF), Color(0xFFF7FAFC)],
+                ),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: active
+                      ? const Color(0xFF9FBCFF)
+                      : const Color(0xFFD4E2EA),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(
+                      0xFF1957E6,
+                    ).withValues(alpha: active ? 0.18 : 0.07),
+                    blurRadius: active ? 16 : 9,
+                    offset: Offset(0, active ? 6 : 3),
+                  ),
+                ],
+              ),
+              child: AnimatedRotation(
+                turns: _pressed ? 0.03 : 0,
+                duration: const Duration(milliseconds: 150),
+                curve: Curves.easeOutCubic,
+                child: const Center(
+                  child: AppIcon(
+                    AppIcons.menu,
+                    color: Color(0xFF1957E6),
+                    size: AppIconSizes.navigation,
+                    semanticLabel: 'Abrir menú',
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

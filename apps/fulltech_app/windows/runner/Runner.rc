@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "DaleVenta POS" "\0"
-            VALUE "FileDescription", "DaleVenta POS - Sistema de facturacion" "\0"
+            VALUE "CompanyName", "FullPOS Cloud" "\0"
+            VALUE "FileDescription", "FullPOS Cloud - Sistema de facturacion" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "DaleVenta POS" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 DaleVenta POS. All rights reserved." "\0"
-            VALUE "OriginalFilename", "daleventa_pos.exe" "\0"
-            VALUE "ProductName", "DaleVenta POS - Sistema de facturacion" "\0"
+            VALUE "InternalName", "FullPOS Cloud" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 FullPOS Cloud. All rights reserved." "\0"
+            VALUE "OriginalFilename", "fullpos_cloud.exe" "\0"
+            VALUE "ProductName", "FullPOS Cloud - Sistema de facturacion" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

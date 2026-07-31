@@ -16,13 +16,13 @@ async function upsertDefaultCompany() {
   return prisma.company.upsert({
     where: { slug: 'daleventa-pos' },
     update: {
-      name: 'DaleVenta POS',
+      name: 'FullPOS Cloud',
       status: 'ACTIVE',
       plan: 'ENTERPRISE',
       maxUsers: 1000,
     },
     create: {
-      name: 'DaleVenta POS',
+      name: 'FullPOS Cloud',
       slug: 'daleventa-pos',
       status: 'ACTIVE',
       plan: 'ENTERPRISE',

@@ -122,9 +122,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
 
     return Drawer(
       width: isDesktop ? 318 : null,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.horizontal(right: Radius.circular(18)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: AppColors.surface,
@@ -155,7 +153,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                     children: [
                       Expanded(
                         child: Text(
-                          'DaleVenta POS',
+                          'FullPOS Cloud',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTextStyles.title.copyWith(

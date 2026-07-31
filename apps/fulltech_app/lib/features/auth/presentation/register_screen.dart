@@ -196,7 +196,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               controlAffinity: ListTileControlAffinity.leading,
                               contentPadding: EdgeInsets.zero,
                               title: const Text(
-                                'Acepto crear mi empresa y usar DaleVenta POS de forma responsable.',
+                                'Acepto crear mi empresa y usar FullPOS Cloud de forma responsable.',
                                 style: TextStyle(
                                   color: Color(0xFF52667C),
                                   fontSize: 12,

@@ -913,7 +913,11 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
           .importProducts(drafts);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Se importaron $imported productos')),
+        SnackBar(
+          content: Text(
+            'Importación lista: ${imported.created} nuevos, ${imported.skippedExisting} existentes omitidos, ${imported.skippedFileDuplicates} repetidos omitidos.',
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -951,6 +955,9 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
     final nameIndex = hasHeader
         ? indexOf(['nombre', 'producto', 'name'], 0)
         : 0;
+    final codeIndex = hasHeader
+        ? indexOf(['codigo', 'code', 'sku', 'barcode', 'codigo barra'], -1)
+        : -1;
     final priceIndex = hasHeader ? indexOf(['precio', 'price'], 1) : 1;
     final costIndex = hasHeader ? indexOf(['costo', 'cost'], 2) : 2;
     final stockIndex = hasHeader
@@ -968,6 +975,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
           index >= 0 && index < cells.length ? cells[index].trim() : '';
 
       final nombre = cell(nameIndex);
+      final codigo = cell(codeIndex);
       final precio = _parseCatalogNumber(cell(priceIndex));
       final costo = _parseCatalogNumber(cell(costIndex));
       final stock = _parseCatalogNumber(cell(stockIndex)) ?? 0;
@@ -979,6 +987,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
       drafts.add(
         CatalogImportDraft(
           nombre: nombre,
+          codigo: codigo.isEmpty ? null : codigo,
           precio: precio,
           costo: costo,
           stock: stock,

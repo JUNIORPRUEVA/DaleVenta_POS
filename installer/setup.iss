@@ -1,8 +1,8 @@
 #ifndef MyAppName
-#define MyAppName "DaleVenta POS"
+#define MyAppName "FullPOS Cloud"
 #endif
 #ifndef MyAppPublisher
-#define MyAppPublisher "DaleVenta POS"
+#define MyAppPublisher "FullPOS Cloud"
 #endif
 #ifndef MyAppPublisherURL
 #define MyAppPublisherURL "https://daleventa-pos.local"
@@ -11,7 +11,7 @@
 #define MyAppSupportURL "https://daleventa-pos.local"
 #endif
 #ifndef MyAppExeName
-#define MyAppExeName "daleventa_pos.exe"
+#define MyAppExeName "fullpos_cloud.exe"
 #endif
 #ifndef MyAppVersion
 #define MyAppVersion "1.0.0+1"
@@ -37,7 +37,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=output
-OutputBaseFilename=DaleVenta-POS-Setup-{#StringChange(MyAppVersion, "+", "-")}
+OutputBaseFilename=FullPOS-Cloud-Setup-{#StringChange(MyAppVersion, "+", "-")}
 Compression=lzma
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible

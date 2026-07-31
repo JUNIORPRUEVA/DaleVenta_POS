@@ -239,10 +239,10 @@ String resolveNavigationTitle(
   if (path.startsWith('/users/')) return 'Detalle de usuario';
 
   final segments = path.split('/').where((part) => part.trim().isNotEmpty);
-  if (segments.isEmpty) return 'DaleVenta POS';
+  if (segments.isEmpty) return 'FullPOS Cloud';
   final last = segments.last.replaceAll('-', ' ');
   return last.isEmpty
-      ? 'DaleVenta POS'
+      ? 'FullPOS Cloud'
       : '${last[0].toUpperCase()}${last.substring(1)}';
 }
 
