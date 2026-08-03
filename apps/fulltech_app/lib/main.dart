@@ -18,6 +18,7 @@ import 'core/auth/auth_provider.dart';
 import 'core/debug/app_error_reporter.dart';
 import 'core/debug/app_error_overlay.dart';
 import 'core/offline/sync_queue_service.dart';
+import 'core/offline/offline_sync_handlers_bootstrap.dart';
 import 'core/realtime/catalog_realtime_service.dart';
 import 'core/startup/app_startup_controller.dart';
 import 'core/startup/initial_release_check.dart';
@@ -55,15 +56,10 @@ Future<void> main() async {
     () async {
       WidgetsFlutterBinding.ensureInitialized();
       GoogleFonts.config.allowRuntimeFetching = false;
-      MediaKit.ensureInitialized();
+      if (!kIsWeb) {
+        MediaKit.ensureInitialized();
+      }
       _initializeSqlite();
-      final localeInitFuture = ensureContabilidadLocale(
-        locale: PlatformDispatcher.instance.locale.toString(),
-      );
-      final authLaunchSnapshotFuture = loadAuthLaunchSnapshot();
-
-      await localeInitFuture;
-      final authLaunchSnapshot = await authLaunchSnapshotFuture;
 
       FlutterError.onError = (details) {
         FlutterError.presentError(details);
@@ -79,14 +75,13 @@ Future<void> main() async {
         return true;
       };
 
-      runApp(
-        ProviderScope(
-          overrides: [
-            authLaunchSnapshotProvider.overrideWithValue(authLaunchSnapshot),
-          ],
-          child: const AppBootstrap(),
+      unawaited(
+        ensureContabilidadLocale(
+          locale: PlatformDispatcher.instance.locale.toString(),
         ),
       );
+
+      runApp(const ProviderScope(child: AppBootstrap()));
     },
     (error, stack) {
       AppErrorReporter.instance.record(error, stack, context: 'Zone');
@@ -190,12 +185,14 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       return;
     }
 
+    unawaited(ref.read(syncQueueServiceProvider.notifier).processPending());
     unawaited(ref.read(appUpdateProvider.notifier).checkNow());
   }
 
   @override
   Widget build(BuildContext context) {
     if (widget.enableBackgroundStartup && _backgroundStartupStarted) {
+      ref.watch(offlineSyncHandlersBootstrapProvider);
       ref.watch(syncQueueBootstrapProvider);
     }
     ref.watch(appUpdateProvider);

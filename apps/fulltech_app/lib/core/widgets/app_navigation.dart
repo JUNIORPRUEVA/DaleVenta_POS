@@ -129,6 +129,13 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Contabilidad',
             route: Routes.contabilidad,
           ),
+        if (canOrAuthorize(AppPermission.viewAccounting))
+          const AppNavigationItem(
+            icon: Icons.fact_check_outlined,
+            appIcon: AppIcons.receipt,
+            title: 'Factura fiscal',
+            route: Routes.contabilidadFacturaFiscal,
+          ),
       ],
     ),
     AppNavigationSection(
@@ -222,8 +229,15 @@ String resolveNavigationTitle(
 
   if (path == Routes.registrarVenta) return 'Nueva venta';
   if (path == Routes.cotizacionesHistorial) return 'Cotizaciones';
+  if (path == Routes.catalogoStock) return 'Stock';
+  if (path == Routes.catalogoCategorias) return 'Categorías';
+  if (path == Routes.catalogoConteo) return 'Conteo de stock';
   if (path == Routes.ventasLista) return 'Lista de ventas';
   if (path == Routes.compras) return 'Compras';
+  if (path == Routes.comprasLista) return 'Lista de compras';
+  if (path == Routes.comprasSuplidores) return 'Suplidores';
+  if (path == Routes.comprasFacturas) return 'Facturas';
+  if (path == Routes.comprasPorComprar) return 'Productos por comprar';
   if (path == Routes.caja) return 'Movimiento caja';
   if (path == Routes.cajaMovimientos) return 'Historial de efectivo';
   if (path == Routes.cajaRegistrarGasto) return 'Registrar gasto';
@@ -250,6 +264,9 @@ bool desktopShellShouldShowOwnAppBar(String location) {
   final path = Uri.tryParse(location)?.path ?? location;
   const routesWithOwnAppBar = <String>[
     Routes.catalogo,
+    Routes.catalogoStock,
+    Routes.catalogoCategorias,
+    Routes.catalogoConteo,
     Routes.contabilidad,
     Routes.clientes,
     Routes.ventas,

@@ -1,8 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/printing/printing_platform_resolver.dart';
 import '../../core/printing/models/receipt_text_utils.dart';
 import '../../core/printing/unified_ticket_printer.dart';
+import '../../features/settings/data/mobile_printer_settings_repository.dart';
 import 'cash_models.dart';
 
 final cashCloseTicketPrinterProvider = Provider<CashCloseTicketPrinter>((ref) {
@@ -35,7 +37,25 @@ class CashCloseTicketPrinter {
 
   final Ref _ref;
 
-  Future<PrintTicketResult> printCloseTicket(CashCloseTicketSnapshot snapshot) {
+  Future<PrintTicketResult> printCloseTicket(
+    CashCloseTicketSnapshot snapshot, {
+    bool automatic = true,
+  }) async {
+    final platform = _ref.read(printingPlatformResolverProvider).capabilities;
+    if (automatic && platform.isMobile) {
+      final settings = await _ref
+          .read(mobilePrinterSettingsRepositoryProvider)
+          .getOrCreate();
+      if (!settings.printingEnabled ||
+          !settings.autoPrintShiftClosing ||
+          settings.askBeforePrinting) {
+        return const PrintTicketResult(
+          success: true,
+          skipped: true,
+          message: 'Auto-print de cierre desactivado',
+        );
+      }
+    }
     return _ref
         .read(unifiedTicketPrinterProvider)
         .printCustomLines(
@@ -121,11 +141,13 @@ class CashCloseTicketPrinter {
     final active = snapshot.active;
     const width = 32;
     final note = (snapshot.note ?? '').trim();
-    final movements = snapshot.movements.take(8).toList(growable: false);
+    final movements = snapshot.movements;
 
     return [
       ReceiptTextUtils.center('CORTE DE TURNO', width),
       ReceiptTextUtils.separator(width, 'double'),
+      ReceiptTextUtils.center('RESUMEN DE CAJA', width),
+      ReceiptTextUtils.separator(width, 'dashed'),
       ReceiptTextUtils.leftRight(
         'Fecha',
         date.format(snapshot.capturedAt.toLocal()),
@@ -146,6 +168,7 @@ class CashCloseTicketPrinter {
         ),
       ],
       ReceiptTextUtils.separator(width, 'dashed'),
+      ReceiptTextUtils.center('VENTAS Y EFECTIVO', width),
       ReceiptTextUtils.leftRight(
         'Base inicial',
         money.format(snapshot.summary.openingAmount),
@@ -227,7 +250,7 @@ class CashCloseTicketPrinter {
       ),
       if (snapshot.summary.categorySummary.isNotEmpty) ...[
         ReceiptTextUtils.separator(width, 'dashed'),
-        'POR CATEGORIA',
+        ReceiptTextUtils.center('POR CATEGORIA', width),
         for (final category in snapshot.summary.categorySummary.take(8)) ...[
           ...ReceiptTextUtils.wrap(category.category, width),
           ReceiptTextUtils.leftRight(
@@ -243,6 +266,7 @@ class CashCloseTicketPrinter {
         ],
       ],
       ReceiptTextUtils.separator(width, 'double'),
+      ReceiptTextUtils.center('CUADRE FINAL', width),
       ReceiptTextUtils.leftRight(
         'Gran total venta',
         money.format(snapshot.summary.totalSales),
@@ -285,7 +309,7 @@ class CashCloseTicketPrinter {
       ],
       if (movements.isNotEmpty) ...[
         ReceiptTextUtils.separator(width, 'dashed'),
-        'MOVIMIENTOS',
+        ReceiptTextUtils.center('MOVIMIENTOS', width),
         for (final movement in movements) ...[
           ReceiptTextUtils.leftRight(
             _movementLabel(movement),
@@ -299,7 +323,7 @@ class CashCloseTicketPrinter {
       ReceiptTextUtils.separator(width, 'double'),
       ReceiptTextUtils.center('FIRMA CAJERO', width),
       '',
-      '____________________________',
+      ReceiptTextUtils.center('________________________', width),
     ];
   }
 

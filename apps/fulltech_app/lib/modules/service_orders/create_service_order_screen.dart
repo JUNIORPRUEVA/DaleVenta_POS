@@ -188,9 +188,10 @@ class _CreateServiceOrderScreenState
         label: const Text('Referencia'),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: state.loading && !state.initialized
-          ? const Center(child: CircularProgressIndicator())
-          : LayoutBuilder(
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: LayoutBuilder(
               builder: (context, constraints) {
                 final desktop = constraints.maxWidth >= kDesktopShellBreakpoint;
                 final form = _buildFormColumn(
@@ -257,6 +258,16 @@ class _CreateServiceOrderScreenState
                 );
               },
             ),
+          ),
+          if (state.loading && !state.initialized)
+            const Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              child: LinearProgressIndicator(minHeight: 2),
+            ),
+        ],
+      ),
       bottomNavigationBar: SafeArea(
         maintainBottomViewPadding: true,
         minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),

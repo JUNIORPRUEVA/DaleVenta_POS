@@ -13,10 +13,12 @@ import '../../core/app_update/app_update_models.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
+import '../../core/routing/app_navigator.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/local_file_bytes.dart';
 import '../../core/utils/safe_url_launcher.dart';
+import '../../core/widgets/custom_app_bar.dart';
 import '../settings/data/cloud_backup_service.dart';
 import '../settings/ui/printer_settings_page.dart';
 
@@ -460,7 +462,7 @@ class _SettingsHubScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final showInlineTitle = MediaQuery.sizeOf(context).width < 900;
+    final mobile = MediaQuery.sizeOf(context).width < 900;
     final configuredName = company.maybeWhen(
       data: (settings) => settings.companyName.trim(),
       orElse: () => '',
@@ -470,28 +472,34 @@ class _SettingsHubScaffold extends StatelessWidget {
         : configuredName;
     return Scaffold(
       backgroundColor: AppColors.background,
+      appBar: mobile
+          ? const CustomAppBar(
+              title: 'Configuración',
+              showLogo: false,
+              showDepartmentLabel: false,
+              trailing: SizedBox.shrink(),
+            )
+          : null,
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 760),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(22, 26, 22, 28),
+            padding: EdgeInsets.fromLTRB(
+              mobile ? 20 : 22,
+              mobile ? 16 : 26,
+              mobile ? 20 : 22,
+              28,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (showInlineTitle) ...[
-                  Text('Configuración', style: _titleStyle(28)),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Centro de control para empresa, operación, seguridad y servicios.',
-                    style: _bodyStyle(),
+                if (!mobile) ...[
+                  _SettingsHeroPanel(
+                    companyName: displayName,
+                    configured: configuredName.isNotEmpty,
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 16),
                 ],
-                _SettingsHeroPanel(
-                  companyName: displayName,
-                  configured: configuredName.isNotEmpty,
-                ),
-                const SizedBox(height: 16),
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
@@ -571,45 +579,71 @@ class _SettingsDetailScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final showInlineTitle = MediaQuery.sizeOf(context).width < 900;
+    final compact = MediaQuery.sizeOf(context).width < 640;
+    final headerTitle = showInlineTitle
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: _titleStyle(24)),
+              const SizedBox(height: 3),
+              Text(subtitle, style: _bodyStyle()),
+            ],
+          )
+        : Text(subtitle, style: _bodyStyle());
+    final backButton = IconButton(
+      tooltip: 'Volver',
+      onPressed: () =>
+          AppNavigator.goBack(context, fallbackRoute: Routes.configuracion),
+      icon: const Icon(Icons.arrow_back_rounded),
+      style: IconButton.styleFrom(
+        backgroundColor: Colors.white,
+        foregroundColor: AppColors.secondary,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: Color(0xFFDDE7EE)),
+        ),
+      ),
+    );
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1120),
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(22, 24, 22, 28),
+            padding: EdgeInsets.fromLTRB(
+              compact ? 12 : 22,
+              compact ? 14 : 24,
+              compact ? 12 : 22,
+              28,
+            ),
             children: [
-              Row(
-                children: [
-                  IconButton(
-                    tooltip: 'Volver',
-                    onPressed: () => context.go(Routes.configuracion),
-                    icon: const Icon(Icons.arrow_back_rounded),
-                    style: IconButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: AppColors.secondary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: const BorderSide(color: Color(0xFFDDE7EE)),
-                      ),
+              if (compact)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        backButton,
+                        const SizedBox(width: 10),
+                        Expanded(child: headerTitle),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: showInlineTitle
-                        ? Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(title, style: _titleStyle(24)),
-                              const SizedBox(height: 3),
-                              Text(subtitle, style: _bodyStyle()),
-                            ],
-                          )
-                        : Text(subtitle, style: _bodyStyle()),
-                  ),
-                  if (action != null) action!,
-                ],
-              ),
+                    if (action != null) ...[
+                      const SizedBox(height: 10),
+                      Align(alignment: Alignment.centerRight, child: action!),
+                    ],
+                  ],
+                )
+              else
+                Row(
+                  children: [
+                    backButton,
+                    const SizedBox(width: 12),
+                    Expanded(child: headerTitle),
+                    if (action != null) action!,
+                  ],
+                ),
               const SizedBox(height: 20),
               child,
             ],
@@ -640,7 +674,7 @@ class _SettingsLaunchCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
-        onTap: () => context.go(route),
+        onTap: () => AppNavigator.go(context, route),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
@@ -840,7 +874,7 @@ class _PanelHeader extends StatelessWidget {
           ),
           IconButton(
             tooltip: 'Volver',
-            onPressed: () => Navigator.of(context).maybePop(),
+            onPressed: () => AppNavigator.goBack(context),
             icon: const Icon(Icons.close_rounded),
           ),
         ],
@@ -1020,16 +1054,17 @@ class _SectionPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _SurfacePanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: _titleStyle(16)),
-          const SizedBox(height: 12),
-          ...children,
-        ],
-      ),
+    final mobile = MediaQuery.sizeOf(context).width < 640;
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: _titleStyle(16)),
+        const SizedBox(height: 12),
+        ...children,
+      ],
     );
+    if (mobile) return content;
+    return _SurfacePanel(child: content);
   }
 }
 
@@ -1506,17 +1541,18 @@ class _CompanyLogoUploader extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 640 ? 10 : 14),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FBFF),
         borderRadius: BorderRadius.circular(7),
         border: Border.all(color: const Color(0xFFDDE7EE)),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 68,
-            height: 68,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final mobile = constraints.maxWidth < 420;
+          final image = Container(
+            width: mobile ? 62 : 68,
+            height: mobile ? 62 : 68,
             decoration: BoxDecoration(
               color: const Color(0xFFEAF1FF),
               borderRadius: BorderRadius.circular(10),
@@ -1530,9 +1566,8 @@ class _CompanyLogoUploader extends StatelessWidget {
                     size: 30,
                   )
                 : Image.memory(logoBytes!, fit: BoxFit.cover),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
+          );
+          final text = Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1546,24 +1581,47 @@ class _CompanyLogoUploader extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 12),
-          OutlinedButton.icon(
+          );
+          final pickButton = OutlinedButton.icon(
             onPressed: onPick,
             icon: const Icon(Icons.upload_file_rounded, size: 18),
             label: Text(logoBytes == null ? 'Subir logo' : 'Cambiar'),
             style: _outlinedButtonStyle(),
-          ),
-          if (onRemove != null) ...[
-            const SizedBox(width: 8),
-            IconButton(
-              tooltip: 'Quitar logo',
-              onPressed: onRemove,
-              icon: const Icon(Icons.delete_outline_rounded),
-              color: AppColors.error,
-            ),
-          ],
-        ],
+          );
+          final actions = Row(
+            mainAxisSize: mobile ? MainAxisSize.max : MainAxisSize.min,
+            children: [
+              if (mobile) Expanded(child: pickButton) else pickButton,
+              if (onRemove != null) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: 'Quitar logo',
+                  onPressed: onRemove,
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  color: AppColors.error,
+                ),
+              ],
+            ],
+          );
+          if (mobile) {
+            return Column(
+              children: [
+                Row(children: [image, const SizedBox(width: 12), text]),
+                const SizedBox(height: 10),
+                actions,
+              ],
+            );
+          }
+          return Row(
+            children: [
+              image,
+              const SizedBox(width: 14),
+              text,
+              const SizedBox(width: 12),
+              SizedBox(width: 150, child: actions),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1597,7 +1655,7 @@ class _SettingsOptionGrid extends StatelessWidget {
           physics: const NeverScrollableScrollPhysics(),
           crossAxisSpacing: 10,
           mainAxisSpacing: 10,
-          childAspectRatio: compact ? 2.15 : 2.25,
+          childAspectRatio: compact ? 1.55 : 2.25,
           children: [
             for (final item in items)
               Container(
@@ -1685,9 +1743,10 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
         const _DetailRow('Destino', 'Documentos / FullPOS Cloud / backups'),
         const _DetailRow('Formato', 'Carpeta JSON + archivo ZIP'),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            FilledButton.icon(
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final stack = constraints.maxWidth < 390;
+            final create = FilledButton.icon(
               onPressed: _running ? null : _createBackup,
               icon: _running
                   ? const SizedBox(
@@ -1696,17 +1755,32 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.cloud_download_outlined),
-              label: Text(_running ? 'Descargando' : 'Crear backup local'),
+              label: Text(
+                _running ? 'Descargando' : 'Crear backup',
+                overflow: TextOverflow.ellipsis,
+              ),
               style: _filledButtonStyle(),
-            ),
-            const SizedBox(width: 10),
-            OutlinedButton.icon(
+            );
+            final restore = OutlinedButton.icon(
               onPressed: null,
               icon: const Icon(Icons.cloud_upload_outlined),
-              label: const Text('Restaurar a nube'),
+              label: const Text('Restaurar', overflow: TextOverflow.ellipsis),
               style: _outlinedButtonStyle(),
-            ),
-          ],
+            );
+            if (stack) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [create, const SizedBox(height: 8), restore],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(child: create),
+                const SizedBox(width: 10),
+                Expanded(child: restore),
+              ],
+            );
+          },
         ),
         if (result != null) ...[
           const SizedBox(height: 14),
@@ -1789,23 +1863,42 @@ class _DetailRow extends StatelessWidget {
     final text = (value ?? '').trim().isEmpty
         ? 'No configurado'
         : value!.trim();
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        children: [
-          Expanded(child: Text(label, style: _bodyStyle())),
-          const SizedBox(width: 12),
-          Flexible(
-            child: Text(
-              text,
-              textAlign: TextAlign.end,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: _strongBodyStyle(),
-            ),
-          ),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stack = constraints.maxWidth < 340;
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: stack
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: _bodyStyle()),
+                    const SizedBox(height: 2),
+                    Text(
+                      text,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: _strongBodyStyle(),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(child: Text(label, style: _bodyStyle())),
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Text(
+                        text,
+                        textAlign: TextAlign.end,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: _strongBodyStyle(),
+                      ),
+                    ),
+                  ],
+                ),
+        );
+      },
     );
   }
 }

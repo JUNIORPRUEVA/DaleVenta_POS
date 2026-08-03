@@ -10,6 +10,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   media_kit_libs_windows_video
   media_kit_video
   permission_handler_windows
+  print_bluetooth_thermal
   printing
   speech_to_text_windows
   sqlite3_flutter_libs

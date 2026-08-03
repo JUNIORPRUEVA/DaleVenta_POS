@@ -7,6 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 import '../../../core/api/env.dart';
 import '../../../core/auth/admin_authorization.dart';
@@ -22,6 +25,7 @@ import '../../../core/utils/local_file_bytes.dart';
 import '../../../core/utils/product_image_url.dart';
 import '../../../core/utils/simple_xlsx.dart';
 import '../../../core/widgets/app_drawer.dart';
+import '../../../core/widgets/custom_app_bar.dart';
 import '../../../core/widgets/fulltech_dialog.dart';
 import '../../../core/widgets/fulltech_page_header.dart';
 import '../../../core/widgets/product_network_image.dart';
@@ -794,7 +798,9 @@ class _ImportSummaryLine extends StatelessWidget {
 }
 
 class InventoryModulePages extends ConsumerStatefulWidget {
-  const InventoryModulePages({super.key});
+  const InventoryModulePages({super.key, this.initialMobileTab});
+
+  final String? initialMobileTab;
 
   @override
   ConsumerState<InventoryModulePages> createState() =>
@@ -802,12 +808,26 @@ class InventoryModulePages extends ConsumerStatefulWidget {
 }
 
 class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
+  final _catalogKey = GlobalKey<_CatalogTabState>();
+  final _stockKey = GlobalKey<_StockAdjustmentsPageState>();
+  final _categoriesKey = GlobalKey<_CategoriesTabState>();
+  final _inventoryKey = GlobalKey<_InventoryTabState>();
+  final _mobileSearchCtrl = TextEditingController();
+  bool _mobileSearchOpen = false;
+  int _mobileTabIndex = 0;
+
   @override
   void initState() {
     super.initState();
     Future.microtask(() {
       ref.read(catalogControllerProvider.notifier).load(silent: true);
     });
+  }
+
+  @override
+  void dispose() {
+    _mobileSearchCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _refresh() {
@@ -846,7 +866,9 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
       ),
     );
     if (!mounted || result?.saved != true) return;
-    await ref.read(catalogControllerProvider.notifier).load(forceRemote: true);
+    await ref
+        .read(catalogControllerProvider.notifier)
+        .load(forceRemote: true, silent: true);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -909,6 +931,128 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
         SnackBar(content: Text('No se pudo exportar el catálogo: $e')),
       );
     }
+  }
+
+  Future<void> _exportProductsSelection(List<ProductModel> products) async {
+    if (products.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecciona productos para exportar')),
+      );
+      return;
+    }
+    final saved = await saveMediaBytes(
+      bytes: _buildInventoryWorkbook(
+        products: products,
+        suppliers: ref.read(inventorySuppliersProvider).items,
+      ),
+      fileName:
+          'catalogo_seleccion_${DateTime.now().millisecondsSinceEpoch}.xlsx',
+      allowedExtensions: const ['xlsx'],
+      mimeType:
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(saved ? 'Selección exportada' : 'Exportación cancelada'),
+      ),
+    );
+  }
+
+  Future<void> _showProductsPdf(List<ProductModel> products) async {
+    if (products.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecciona productos para ver el PDF')),
+      );
+      return;
+    }
+    final bytes = await _buildProductsPdf(products);
+    if (!mounted) return;
+    await Printing.layoutPdf(
+      name: 'productos_seleccion.pdf',
+      onLayout: (_) async => bytes,
+    );
+  }
+
+  Future<Uint8List> _buildProductsPdf(List<ProductModel> products) async {
+    final doc = pw.Document();
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(28),
+        build: (context) => [
+          pw.Text(
+            'Catálogo seleccionado',
+            style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
+          ),
+          pw.SizedBox(height: 6),
+          pw.Text('${products.length} productos'),
+          pw.SizedBox(height: 16),
+          pw.TableHelper.fromTextArray(
+            border: pw.TableBorder.all(color: PdfColors.grey300, width: .5),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.blue50),
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            cellStyle: const pw.TextStyle(fontSize: 9),
+            cellPadding: const pw.EdgeInsets.all(5),
+            headers: const [
+              'Código',
+              'Producto',
+              'Categoría',
+              'Stock',
+              'Precio',
+            ],
+            data: [
+              for (final product in products)
+                [
+                  product.codigo?.trim().isNotEmpty == true
+                      ? product.codigo!.trim()
+                      : 'Sin SKU',
+                  product.nombre,
+                  product.categoriaLabel,
+                  _stockText(product.stock),
+                  formatRdCurrencyAccounting(product.precio),
+                ],
+            ],
+          ),
+        ],
+      ),
+    );
+    return doc.save();
+  }
+
+  Future<void> _deleteProductsSelection(List<ProductModel> products) async {
+    if (products.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecciona productos para eliminar')),
+      );
+      return;
+    }
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.editProducts,
+      reason: 'Eliminar productos',
+    );
+    if (!allowed || !mounted) return;
+    final confirmed = await FullTechConfirmDialog.show(
+      context,
+      title: 'Eliminar selección',
+      message: '¿Deseas eliminar ${products.length} productos seleccionados?',
+      confirmText: 'Eliminar',
+      cancelText: 'Cancelar',
+      icon: Icons.delete_outline_rounded,
+      iconColor: FullTechDialogTokens.errorColor,
+      isDestructive: true,
+    );
+    if (confirmed != true || !mounted) return;
+    final controller = ref.read(catalogControllerProvider.notifier);
+    for (final product in products) {
+      await controller.remove(product.id);
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${products.length} productos eliminados')),
+    );
   }
 
   Future<void> _importCatalog() async {
@@ -1022,6 +1166,84 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudo importar el catálogo: $e')),
       );
+    }
+  }
+
+  void _setMobileSearch(String value) {
+    switch (_mobileTabIndex) {
+      case 1:
+        _inventoryKey.currentState?.setSearchQuery(value);
+        break;
+      case 2:
+        _stockKey.currentState?.setSearchQuery(value);
+        break;
+      case 3:
+        _categoriesKey.currentState?.setSearchQuery(value);
+        break;
+      default:
+        _catalogKey.currentState?.setSearchQuery(value);
+        break;
+    }
+  }
+
+  void _toggleMobileSearch() {
+    setState(() {
+      _mobileSearchOpen = !_mobileSearchOpen;
+      if (!_mobileSearchOpen) {
+        _mobileSearchCtrl.clear();
+        _setMobileSearch('');
+      }
+    });
+  }
+
+  void _openCurrentMobileFilters() {
+    switch (_mobileTabIndex) {
+      case 1:
+        _inventoryKey.currentState?.openMobileFilters();
+        break;
+      case 2:
+        _stockKey.currentState?.openMobileFilters();
+        break;
+      case 3:
+        _categoriesKey.currentState?.openMobileFilters();
+        break;
+      default:
+        _catalogKey.currentState?.openMobileFilters();
+        break;
+    }
+  }
+
+  void _runCurrentMobileAdd() {
+    switch (_mobileTabIndex) {
+      case 3:
+        _categoriesKey.currentState?.openNewCategory();
+        break;
+      case 1:
+        break;
+      default:
+        _openProductEditor();
+        break;
+    }
+  }
+
+  Future<void> _handleMobileOverflow(String action) async {
+    if (_mobileTabIndex != 0) return;
+    switch (action) {
+      case 'import':
+        await _importCatalog();
+        break;
+      case 'export':
+        await _exportCatalog();
+        break;
+      case 'export-selected':
+        await _catalogKey.currentState?.exportSelected();
+        break;
+      case 'pdf':
+        await _catalogKey.currentState?.showSelectedPdf();
+        break;
+      case 'delete':
+        await _catalogKey.currentState?.deleteSelected();
+        break;
     }
   }
 
@@ -1154,13 +1376,70 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     final canEditProducts = user != null;
     final canAddStock = user != null;
     final isMobile = MediaQuery.sizeOf(context).width < 640;
-    final tab = GoRouterState.of(context).uri.queryParameters['tab'];
+    var tab = widget.initialMobileTab;
+    if (tab == null) {
+      try {
+        tab = GoRouterState.of(context).uri.queryParameters['tab'];
+      } catch (_) {
+        tab = null;
+      }
+    }
     final initialTabIndex = switch (tab) {
       'inventory' => 1,
       'stock' => 2,
       'categories' => 3,
       _ => 0,
     };
+    _mobileTabIndex = initialTabIndex;
+    final mobileTitle = switch (initialTabIndex) {
+      1 => 'Conteo',
+      2 => 'Stock',
+      3 => 'Categorías',
+      _ => 'Catálogo',
+    };
+
+    final pages = [
+      CatalogTab(
+        key: _catalogKey,
+        products: products,
+        loading: state.refreshing,
+        error: state.error,
+        onRefresh: _refresh,
+        onCreate: () => _openProductEditor(),
+        onImport: _importCatalog,
+        onExport: _exportCatalog,
+        onExportSelection: _exportProductsSelection,
+        onPdfSelection: _showProductsPdf,
+        onBulkDelete: _deleteProductsSelection,
+        onEdit: (product) => _openProductEditor(product: product),
+        onSetStock: _setProductStock,
+        canEditProducts: canEditProducts,
+        canAddStock: canAddStock,
+        onDelete: (product) async {
+          final allowed = await ensureAdminAuthorization(
+            context,
+            ref,
+            permission: AppPermission.editProducts,
+            reason: 'Eliminar producto',
+          );
+          if (!allowed || !context.mounted) return;
+          await ref.read(catalogControllerProvider.notifier).remove(product.id);
+        },
+      ),
+      InventoryTab(key: _inventoryKey, products: products, onRefresh: _refresh),
+      StockAdjustmentsPage(
+        key: _stockKey,
+        products: products,
+        onRefresh: _refresh,
+        onSetStock: _setProductStock,
+        canAddStock: canAddStock,
+      ),
+      CategoriesTab(
+        key: _categoriesKey,
+        products: products,
+        onRefresh: _refresh,
+      ),
+    ];
 
     return DefaultTabController(
       length: 4,
@@ -1168,91 +1447,163 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
       child: Scaffold(
         drawer: buildAdaptiveDrawer(context, currentUser: user),
         backgroundColor: _pageBackground,
-        appBar: FullTechPageHeader(
-          title: 'Inventario',
-          actions: [
-            if (isMobile)
-              IconButton.filled(
-                tooltip: 'Nuevo producto',
-                onPressed: canEditProducts ? () => _openProductEditor() : null,
-                icon: const Icon(Icons.add_rounded, size: 18),
-              )
-            else
-              FilledButton.icon(
-                onPressed: () => _openProductEditor(),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Nuevo producto'),
-              ),
-            IconButton(
-              tooltip: 'Actualizar',
-              onPressed: state.refreshing ? null : _refresh,
-              icon: state.refreshing
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.refresh_rounded),
-            ),
-            const SizedBox(width: 8),
-          ],
-          bottom: TabBar(
-            isScrollable: true,
-            labelColor: _primaryBlue,
-            unselectedLabelColor: _textSecondary,
-            indicatorColor: _primaryBlue,
-            indicatorWeight: 3,
-            labelStyle: TextStyle(
-              fontWeight: FontWeight.w900,
-              fontSize: isMobile ? 12 : 13,
-            ),
-            tabs: [
-              Tab(icon: Icon(Icons.table_rows_outlined), text: 'Catálogo'),
-              Tab(icon: Icon(Icons.dashboard_outlined), text: 'Inventario'),
-              Tab(icon: Icon(Icons.tune_outlined), text: 'Stock'),
-              Tab(icon: Icon(Icons.category_outlined), text: 'Categorías'),
-            ],
-          ),
-        ),
-        body: state.loading && products.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : TabBarView(
-                children: [
-                  CatalogTab(
-                    products: products,
-                    loading: state.refreshing,
-                    error: state.error,
-                    onRefresh: _refresh,
-                    onCreate: () => _openProductEditor(),
-                    onImport: _importCatalog,
-                    onExport: _exportCatalog,
-                    onEdit: (product) => _openProductEditor(product: product),
-                    onSetStock: _setProductStock,
-                    canEditProducts: canEditProducts,
-                    canAddStock: canAddStock,
-                    onDelete: (product) async {
-                      final allowed = await ensureAdminAuthorization(
-                        context,
-                        ref,
-                        permission: AppPermission.editProducts,
-                        reason: 'Eliminar producto',
-                      );
-                      if (!allowed || !context.mounted) return;
-                      await ref
-                          .read(catalogControllerProvider.notifier)
-                          .remove(product.id);
-                    },
+        appBar: isMobile
+            ? CustomAppBar(
+                title: mobileTitle,
+                showLogo: false,
+                showDepartmentLabel: false,
+                trailing: const SizedBox.shrink(),
+                titleWidget: _mobileSearchOpen
+                    ? _InventoryMobileSearchField(
+                        controller: _mobileSearchCtrl,
+                        hintText: 'Buscar en $mobileTitle',
+                        onChanged: _setMobileSearch,
+                        onClose: _toggleMobileSearch,
+                      )
+                    : null,
+                actions: [
+                  if (initialTabIndex != 1)
+                    _AnimatedInventoryAction(
+                      tooltip: initialTabIndex == 3
+                          ? 'Nueva categoría'
+                          : 'Nuevo producto',
+                      icon: initialTabIndex == 3
+                          ? Icons.create_new_folder_outlined
+                          : Icons.add_rounded,
+                      onPressed: canEditProducts ? _runCurrentMobileAdd : null,
+                    ),
+                  if (initialTabIndex != 1)
+                    IconButton(
+                      tooltip: _mobileSearchOpen ? 'Cerrar búsqueda' : 'Buscar',
+                      onPressed: _toggleMobileSearch,
+                      icon: Icon(
+                        _mobileSearchOpen
+                            ? Icons.close_rounded
+                            : Icons.search_rounded,
+                      ),
+                    ),
+                  IconButton(
+                    tooltip: 'Filtros',
+                    onPressed: _openCurrentMobileFilters,
+                    icon: const Icon(Icons.filter_alt_outlined),
                   ),
-                  InventoryTab(products: products, onRefresh: _refresh),
-                  StockAdjustmentsPage(
-                    products: products,
-                    onRefresh: _refresh,
-                    onSetStock: _setProductStock,
-                    canAddStock: canAddStock,
-                  ),
-                  CategoriesTab(products: products, onRefresh: _refresh),
+                  if (initialTabIndex == 0)
+                    PopupMenuButton<String>(
+                      tooltip: 'Más opciones',
+                      icon: const Icon(Icons.more_vert_rounded),
+                      onSelected: (value) =>
+                          unawaited(_handleMobileOverflow(value)),
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(
+                          value: 'import',
+                          child: ListTile(
+                            dense: true,
+                            leading: Icon(Icons.upload_file_rounded),
+                            title: Text('Importar'),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'export',
+                          child: ListTile(
+                            dense: true,
+                            leading: Icon(Icons.download_rounded),
+                            title: Text('Exportar todo'),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'export-selected',
+                          child: ListTile(
+                            dense: true,
+                            leading: Icon(Icons.file_download_outlined),
+                            title: Text('Exportar selección'),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'pdf',
+                          child: ListTile(
+                            dense: true,
+                            leading: Icon(Icons.picture_as_pdf_outlined),
+                            title: Text('PDF selección'),
+                          ),
+                        ),
+                        PopupMenuDivider(),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: ListTile(
+                            dense: true,
+                            leading: Icon(Icons.delete_outline_rounded),
+                            title: Text('Eliminar selección'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  const SizedBox(width: 4),
                 ],
+              )
+            : FullTechPageHeader(
+                title: 'Inventario',
+                actions: [
+                  FilledButton.icon(
+                    onPressed: () => _openProductEditor(),
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: const Text('Nuevo producto'),
+                  ),
+                  IconButton(
+                    tooltip: 'Actualizar',
+                    onPressed: state.refreshing ? null : _refresh,
+                    icon: state.refreshing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh_rounded),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                bottom: TabBar(
+                  isScrollable: true,
+                  labelColor: _primaryBlue,
+                  unselectedLabelColor: _textSecondary,
+                  indicatorColor: _primaryBlue,
+                  indicatorWeight: 3,
+                  labelStyle: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
+                  tabs: const [
+                    Tab(
+                      icon: Icon(Icons.table_rows_outlined),
+                      text: 'Catálogo',
+                    ),
+                    Tab(
+                      icon: Icon(Icons.dashboard_outlined),
+                      text: 'Inventario',
+                    ),
+                    Tab(icon: Icon(Icons.tune_outlined), text: 'Stock'),
+                    Tab(
+                      icon: Icon(Icons.category_outlined),
+                      text: 'Categorías',
+                    ),
+                  ],
+                ),
               ),
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: isMobile
+                  ? pages[initialTabIndex]
+                  : TabBarView(children: pages),
+            ),
+            if (state.loading)
+              const Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: LinearProgressIndicator(minHeight: 2),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -1311,6 +1662,556 @@ EdgeInsets productsResponsivePagePadding(
   return EdgeInsets.fromLTRB(horizontal, top, horizontal, bottom);
 }
 
+class _InventoryMobileSearchField extends StatelessWidget {
+  const _InventoryMobileSearchField({
+    required this.controller,
+    required this.hintText,
+    required this.onChanged,
+    required this.onClose,
+  });
+
+  final TextEditingController controller;
+  final String hintText;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 38,
+      child: TextField(
+        controller: controller,
+        autofocus: true,
+        onChanged: onChanged,
+        style: const TextStyle(
+          color: AppColors.textPrimary,
+          fontWeight: FontWeight.w700,
+          fontSize: 14,
+        ),
+        decoration: InputDecoration(
+          hintText: hintText,
+          hintStyle: const TextStyle(color: _textSecondary, fontSize: 13),
+          prefixIcon: const Icon(Icons.search_rounded, size: 19),
+          suffixIcon: IconButton(
+            tooltip: 'Cerrar',
+            onPressed: onClose,
+            icon: const Icon(Icons.close_rounded, size: 18),
+          ),
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: EdgeInsets.zero,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide.none,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AnimatedInventoryAction extends StatefulWidget {
+  const _AnimatedInventoryAction({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  @override
+  State<_AnimatedInventoryAction> createState() =>
+      _AnimatedInventoryActionState();
+}
+
+class _AnimatedInventoryActionState extends State<_AnimatedInventoryAction>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 520),
+      lowerBound: 0.96,
+      upperBound: 1.06,
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ScaleTransition(
+      scale: _controller,
+      child: IconButton.filled(
+        tooltip: widget.tooltip,
+        onPressed: widget.onPressed,
+        style: IconButton.styleFrom(
+          backgroundColor: Colors.white.withValues(alpha: 0.15),
+          foregroundColor: Colors.white,
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.24)),
+        ),
+        icon: Icon(widget.icon, size: 19),
+      ),
+    );
+  }
+}
+
+Future<T?> _showInventoryFilterDrawer<T>(
+  BuildContext context, {
+  required String title,
+  required String subtitle,
+  required Widget child,
+}) {
+  final width = MediaQuery.sizeOf(context).width;
+  final panelWidth = (width * 0.88).clamp(300.0, 370.0).toDouble();
+  return showGeneralDialog<T>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: 'Filtros',
+    barrierColor: Colors.black.withValues(alpha: 0.28),
+    transitionDuration: const Duration(milliseconds: 220),
+    pageBuilder: (dialogContext, animation, secondaryAnimation) {
+      return Align(
+        alignment: Alignment.centerRight,
+        child: SizedBox(
+          width: panelWidth,
+          child: _InventoryFilterShell(
+            title: title,
+            subtitle: subtitle,
+            child: child,
+          ),
+        ),
+      );
+    },
+    transitionBuilder: (context, animation, secondaryAnimation, child) {
+      return SlideTransition(
+        position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+            .animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+            ),
+        child: FadeTransition(opacity: animation, child: child),
+      );
+    },
+  );
+}
+
+class _InventoryFilterShell extends StatelessWidget {
+  const _InventoryFilterShell({
+    required this.title,
+    required this.subtitle,
+    required this.child,
+  });
+
+  final String title;
+  final String subtitle;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      left: false,
+      child: Material(
+        color: Colors.white,
+        borderRadius: const BorderRadius.horizontal(left: Radius.circular(22)),
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(18, 18, 12, 16),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF1957E6), Color(0xFF47A3FF)],
+                ),
+                borderRadius: BorderRadius.only(topLeft: Radius.circular(22)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.82),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Cerrar',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                    color: Colors.white,
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: DecoratedBox(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0xFFF6FAFF), Colors.white],
+                  ),
+                ),
+                child: child,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CatalogFilterDraft {
+  const _CatalogFilterDraft({
+    required this.category,
+    required this.lowStock,
+    required this.outStock,
+    this.clearSearch = false,
+  });
+
+  final String? category;
+  final bool lowStock;
+  final bool outStock;
+  final bool clearSearch;
+}
+
+class _StockFilterDraft {
+  const _StockFilterDraft({
+    required this.category,
+    required this.stockFilter,
+    this.clearSearch = false,
+  });
+
+  final String category;
+  final _StockFilter stockFilter;
+  final bool clearSearch;
+}
+
+class _CatalogMobileFilterPanel extends StatefulWidget {
+  const _CatalogMobileFilterPanel({
+    required this.categories,
+    required this.selectedCategory,
+    required this.onlyLowStock,
+    required this.onlyOutStock,
+    required this.canImport,
+    required this.onImport,
+    required this.onExport,
+  });
+
+  final List<String> categories;
+  final String? selectedCategory;
+  final bool onlyLowStock;
+  final bool onlyOutStock;
+  final bool canImport;
+  final Future<void> Function()? onImport;
+  final Future<void> Function() onExport;
+
+  @override
+  State<_CatalogMobileFilterPanel> createState() =>
+      _CatalogMobileFilterPanelState();
+}
+
+class _CatalogMobileFilterPanelState extends State<_CatalogMobileFilterPanel> {
+  String? _category;
+  late bool _lowStock;
+  late bool _outStock;
+
+  @override
+  void initState() {
+    super.initState();
+    _category = widget.selectedCategory;
+    _lowStock = widget.onlyLowStock;
+    _outStock = widget.onlyOutStock;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
+      children: [
+        _FilterBlockTitle('Categoría'),
+        DropdownButtonFormField<String?>(
+          initialValue: _category,
+          isExpanded: true,
+          items: [
+            const DropdownMenuItem<String?>(
+              value: null,
+              child: Text('Todas las categorías'),
+            ),
+            for (final category in widget.categories)
+              DropdownMenuItem(value: category, child: Text(category)),
+          ],
+          onChanged: (value) => setState(() => _category = value),
+          decoration: _inventoryTextInputDecoration('Categoría'),
+        ),
+        const SizedBox(height: 18),
+        _FilterBlockTitle('Stock'),
+        SwitchListTile.adaptive(
+          contentPadding: EdgeInsets.zero,
+          value: _lowStock,
+          onChanged: (value) => setState(() => _lowStock = value),
+          title: const Text('Stock bajo'),
+        ),
+        SwitchListTile.adaptive(
+          contentPadding: EdgeInsets.zero,
+          value: _outStock,
+          onChanged: (value) => setState(() => _outStock = value),
+          title: const Text('Agotados'),
+        ),
+        const SizedBox(height: 18),
+        _FilterBlockTitle('Herramientas'),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: widget.canImport && widget.onImport != null
+                    ? () {
+                        Navigator.of(context).pop();
+                        unawaited(widget.onImport!.call());
+                      }
+                    : null,
+                icon: const Icon(Icons.upload_file_rounded, size: 17),
+                label: const Text('Importar'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  unawaited(widget.onExport());
+                },
+                icon: const Icon(Icons.download_rounded, size: 17),
+                label: const Text('Exportar'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        OutlinedButton.icon(
+          onPressed: () => Navigator.of(context).pop(
+            const _CatalogFilterDraft(
+              category: null,
+              lowStock: false,
+              outStock: false,
+              clearSearch: true,
+            ),
+          ),
+          icon: const Icon(Icons.cleaning_services_outlined, size: 17),
+          label: const Text('Limpiar todo'),
+        ),
+        const SizedBox(height: 10),
+        FilledButton.icon(
+          onPressed: () => Navigator.of(context).pop(
+            _CatalogFilterDraft(
+              category: _category,
+              lowStock: _lowStock,
+              outStock: _outStock,
+            ),
+          ),
+          icon: const Icon(Icons.check_rounded, size: 17),
+          label: const Text('Aplicar filtros'),
+        ),
+      ],
+    );
+  }
+}
+
+class _StockMobileFilterPanel extends StatefulWidget {
+  const _StockMobileFilterPanel({
+    required this.categories,
+    required this.categoryFilter,
+    required this.stockFilter,
+  });
+
+  final List<String> categories;
+  final String categoryFilter;
+  final _StockFilter stockFilter;
+
+  @override
+  State<_StockMobileFilterPanel> createState() =>
+      _StockMobileFilterPanelState();
+}
+
+class _StockMobileFilterPanelState extends State<_StockMobileFilterPanel> {
+  late String _category;
+  late _StockFilter _stockFilter;
+
+  @override
+  void initState() {
+    super.initState();
+    _category = widget.categoryFilter;
+    _stockFilter = widget.stockFilter;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
+      children: [
+        _FilterBlockTitle('Categoría'),
+        DropdownButtonFormField<String>(
+          initialValue: _category,
+          isExpanded: true,
+          items: [
+            const DropdownMenuItem(
+              value: 'Todas las categorías',
+              child: Text('Todas las categorías'),
+            ),
+            for (final category in widget.categories)
+              DropdownMenuItem(value: category, child: Text(category)),
+          ],
+          onChanged: (value) {
+            if (value != null) setState(() => _category = value);
+          },
+          decoration: _inventoryTextInputDecoration('Categoría'),
+        ),
+        const SizedBox(height: 18),
+        _FilterBlockTitle('Estado de stock'),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final filter in _StockFilter.values)
+              ChoiceChip(
+                label: Text(filter.label),
+                selected: _stockFilter == filter,
+                onSelected: (_) => setState(() => _stockFilter = filter),
+              ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        OutlinedButton.icon(
+          onPressed: () => Navigator.of(context).pop(
+            const _StockFilterDraft(
+              category: 'Todas las categorías',
+              stockFilter: _StockFilter.all,
+              clearSearch: true,
+            ),
+          ),
+          icon: const Icon(Icons.cleaning_services_outlined, size: 17),
+          label: const Text('Limpiar todo'),
+        ),
+        const SizedBox(height: 10),
+        FilledButton.icon(
+          onPressed: () => Navigator.of(context).pop(
+            _StockFilterDraft(category: _category, stockFilter: _stockFilter),
+          ),
+          icon: const Icon(Icons.check_rounded, size: 17),
+          label: const Text('Aplicar filtros'),
+        ),
+      ],
+    );
+  }
+}
+
+class _CategoriesMobileFilterPanel extends StatelessWidget {
+  const _CategoriesMobileFilterPanel({
+    required this.managedCount,
+    required this.visibleCount,
+    required this.productCount,
+  });
+
+  final int managedCount;
+  final int visibleCount;
+  final int productCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
+      children: [
+        _FilterBlockTitle('Resumen'),
+        _DrawerMetric(label: 'Creadas', value: '$managedCount'),
+        _DrawerMetric(label: 'Visibles', value: '$visibleCount'),
+        _DrawerMetric(label: 'Productos', value: '$productCount'),
+        const SizedBox(height: 24),
+        OutlinedButton.icon(
+          onPressed: () => Navigator.of(context).pop(true),
+          icon: const Icon(Icons.cleaning_services_outlined, size: 17),
+          label: const Text('Limpiar búsqueda'),
+        ),
+      ],
+    );
+  }
+}
+
+class _FilterBlockTitle extends StatelessWidget {
+  const _FilterBlockTitle(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: AppColors.textPrimary,
+          fontWeight: FontWeight.w900,
+          fontSize: 13,
+        ),
+      ),
+    );
+  }
+}
+
+class _DrawerMetric extends StatelessWidget {
+  const _DrawerMetric({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: _textSecondary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w900)),
+        ],
+      ),
+    );
+  }
+}
+
 class CatalogTab extends StatefulWidget {
   const CatalogTab({
     super.key,
@@ -1321,6 +2222,9 @@ class CatalogTab extends StatefulWidget {
     required this.onCreate,
     required this.onImport,
     required this.onExport,
+    required this.onExportSelection,
+    required this.onPdfSelection,
+    required this.onBulkDelete,
     required this.onEdit,
     required this.onSetStock,
     required this.canEditProducts,
@@ -1335,6 +2239,9 @@ class CatalogTab extends StatefulWidget {
   final VoidCallback onCreate;
   final Future<void> Function() onImport;
   final Future<void> Function() onExport;
+  final Future<void> Function(List<ProductModel> products) onExportSelection;
+  final Future<void> Function(List<ProductModel> products) onPdfSelection;
+  final Future<void> Function(List<ProductModel> products) onBulkDelete;
   final ValueChanged<ProductModel> onEdit;
   final Future<void> Function(ProductModel product, double stock) onSetStock;
   final bool canEditProducts;
@@ -1392,11 +2299,80 @@ class _CatalogTabState extends State<CatalogTab> {
     }).toList();
   }
 
+  List<ProductModel> get _selectedProducts => widget.products
+      .where((product) => _selectedIds.contains(product.id))
+      .toList(growable: false);
+
   void _onSearchChanged(String value) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
       if (mounted) setState(() => _query = value);
     });
+  }
+
+  void setSearchQuery(String value) {
+    _debounce?.cancel();
+    if (mounted) setState(() => _query = value);
+  }
+
+  Future<void> openMobileFilters() async {
+    final result = await _showInventoryFilterDrawer<_CatalogFilterDraft>(
+      context,
+      title: 'Filtros',
+      subtitle: 'Catálogo',
+      child: _CatalogMobileFilterPanel(
+        categories: _categories,
+        selectedCategory: _validCategory(_categories),
+        onlyLowStock: _onlyLowStock,
+        onlyOutStock: _onlyOutStock,
+        canImport: widget.canEditProducts,
+        onImport: widget.onImport,
+        onExport: widget.onExport,
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _category = result.category;
+      _onlyLowStock = result.lowStock;
+      _onlyOutStock = result.outStock;
+      if (result.clearSearch) {
+        _searchCtrl.clear();
+        _query = '';
+      }
+    });
+  }
+
+  Future<void> exportSelected() => widget.onExportSelection(_selectedProducts);
+
+  Future<void> showSelectedPdf() => widget.onPdfSelection(_selectedProducts);
+
+  Future<void> deleteSelected() async {
+    final selected = _selectedProducts;
+    await widget.onBulkDelete(selected);
+    if (!mounted) return;
+    setState(() {
+      _selectedIds.removeAll(selected.map((product) => product.id));
+    });
+  }
+
+  void _openProductDetail(ProductModel product) {
+    if (MediaQuery.sizeOf(context).width >= 640) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _ProductDetailPage(
+          product: product,
+          onEdit: widget.canEditProducts ? () => widget.onEdit(product) : null,
+          onStock: widget.canAddStock
+              ? () => _showStockAdjustmentPanel(
+                  context,
+                  product: product,
+                  onSetStock: widget.onSetStock,
+                )
+              : null,
+          onDelete: () => _confirmDelete(product),
+        ),
+      ),
+    );
   }
 
   void _selectAllVisible(bool selected) {
@@ -1445,36 +2421,40 @@ class _CatalogTabState extends State<CatalogTab> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 900;
+        final mobile = constraints.maxWidth < 640;
         return RefreshIndicator(
           onRefresh: widget.onRefresh,
           child: ListView(
             padding: productsResponsivePagePadding(constraints),
             children: [
-              _CatalogToolbar(
-                controller: _searchCtrl,
-                categories: categories,
-                selectedCategory: selectedCategory,
-                onlyLowStock: _onlyLowStock,
-                onlyOutStock: _onlyOutStock,
-                selectedCount: _selectedIds.length,
-                onSearchChanged: _onSearchChanged,
-                onCategoryChanged: (value) => setState(() => _category = value),
-                onToggleLowStock: (value) =>
-                    setState(() => _onlyLowStock = value),
-                onToggleOutStock: (value) =>
-                    setState(() => _onlyOutStock = value),
-                onClearFilters: () => setState(() {
-                  _category = null;
-                  _onlyLowStock = false;
-                  _onlyOutStock = false;
-                  _searchCtrl.clear();
-                  _query = '';
-                }),
-                onCreate: widget.canEditProducts ? widget.onCreate : null,
-                onImport: widget.canEditProducts ? widget.onImport : null,
-                onExport: widget.onExport,
-              ),
-              const SizedBox(height: 12),
+              if (!mobile) ...[
+                _CatalogToolbar(
+                  controller: _searchCtrl,
+                  categories: categories,
+                  selectedCategory: selectedCategory,
+                  onlyLowStock: _onlyLowStock,
+                  onlyOutStock: _onlyOutStock,
+                  selectedCount: _selectedIds.length,
+                  onSearchChanged: _onSearchChanged,
+                  onCategoryChanged: (value) =>
+                      setState(() => _category = value),
+                  onToggleLowStock: (value) =>
+                      setState(() => _onlyLowStock = value),
+                  onToggleOutStock: (value) =>
+                      setState(() => _onlyOutStock = value),
+                  onClearFilters: () => setState(() {
+                    _category = null;
+                    _onlyLowStock = false;
+                    _onlyOutStock = false;
+                    _searchCtrl.clear();
+                    _query = '';
+                  }),
+                  onCreate: widget.canEditProducts ? widget.onCreate : null,
+                  onImport: widget.canEditProducts ? widget.onImport : null,
+                  onExport: widget.onExport,
+                ),
+                const SizedBox(height: 12),
+              ],
               if (widget.error != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
@@ -1494,6 +2474,7 @@ class _CatalogTabState extends State<CatalogTab> {
                   canEditProducts: widget.canEditProducts,
                   canAddStock: widget.canAddStock,
                   onDelete: _confirmDelete,
+                  onOpenDetail: _openProductDetail,
                 )
               else
                 _CatalogTable(
@@ -1799,6 +2780,7 @@ class _CompactCatalogList extends StatelessWidget {
     required this.canEditProducts,
     required this.canAddStock,
     required this.onDelete,
+    required this.onOpenDetail,
   });
 
   final List<ProductModel> products;
@@ -1809,6 +2791,7 @@ class _CompactCatalogList extends StatelessWidget {
   final bool canEditProducts;
   final bool canAddStock;
   final ValueChanged<ProductModel> onDelete;
+  final ValueChanged<ProductModel> onOpenDetail;
 
   @override
   Widget build(BuildContext context) {
@@ -1822,6 +2805,7 @@ class _CompactCatalogList extends StatelessWidget {
               product: product,
               selected: selectedIds.contains(product.id),
               onSelected: (value) => onToggle(product, value),
+              onTap: () => onOpenDetail(product),
               onEdit: canEditProducts ? () => onEdit(product) : null,
               onStock: canAddStock
                   ? () => _showStockAdjustmentPanel(
@@ -1838,7 +2822,7 @@ class _CompactCatalogList extends StatelessWidget {
   }
 }
 
-class InventoryTab extends StatelessWidget {
+class InventoryTab extends StatefulWidget {
   const InventoryTab({
     super.key,
     required this.products,
@@ -1849,8 +2833,82 @@ class InventoryTab extends StatelessWidget {
   final Future<void> Function() onRefresh;
 
   @override
+  State<InventoryTab> createState() => _InventoryTabState();
+}
+
+class _InventoryTabState extends State<InventoryTab> {
+  String _query = '';
+  String _categoryFilter = 'Todas las categorías';
+  _StockFilter _stockFilter = _StockFilter.all;
+
+  List<String> get _categories {
+    final values = widget.products
+        .map((product) => product.categoriaLabel.trim())
+        .where((category) => category.isNotEmpty)
+        .toSet()
+        .toList();
+    values.sort();
+    return values;
+  }
+
+  String _validCategoryFilter(List<String> categories) {
+    if (_categoryFilter == 'Todas las categorías') return _categoryFilter;
+    return categories.contains(_categoryFilter)
+        ? _categoryFilter
+        : 'Todas las categorías';
+  }
+
+  List<ProductModel> _visibleProducts(String categoryFilter) {
+    final query = _query.trim().toLowerCase();
+    return widget.products.where((product) {
+      if (!product.activo) return false;
+      if (categoryFilter != 'Todas las categorías' &&
+          product.categoriaLabel != categoryFilter) {
+        return false;
+      }
+      if (!_matchesStockFilter(product, _stockFilter)) return false;
+      if (query.isEmpty) return true;
+      return product.nombre.toLowerCase().contains(query) ||
+          (product.codigo?.toLowerCase().contains(query) ?? false) ||
+          product.categoriaLabel.toLowerCase().contains(query);
+    }).toList();
+  }
+
+  void setSearchQuery(String value) {
+    if (mounted) setState(() => _query = value);
+  }
+
+  Future<void> openMobileFilters() async {
+    final result = await _showInventoryFilterDrawer<_StockFilterDraft>(
+      context,
+      title: 'Filtros',
+      subtitle: 'Conteo',
+      child: _StockMobileFilterPanel(
+        categories: _categories,
+        categoryFilter: _validCategoryFilter(_categories),
+        stockFilter: _stockFilter,
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _categoryFilter = result.category;
+      _stockFilter = result.stockFilter;
+      if (result.clearSearch) _query = '';
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final active = products.where((product) => product.activo).toList();
+    final categories = _categories;
+    final categoryFilter = _validCategoryFilter(categories);
+    if (_categoryFilter != categoryFilter) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _categoryFilter != categoryFilter) {
+          setState(() => _categoryFilter = categoryFilter);
+        }
+      });
+    }
+    final active = _visibleProducts(categoryFilter);
     final totalCost = active.fold<double>(
       0,
       (sum, product) => sum + (_stockOf(product) * product.costo),
@@ -1863,71 +2921,307 @@ class InventoryTab extends StatelessWidget {
     final lowStock = active.where(_isLowStock).length;
     final outStock = active.where(_isOutOfStock).length;
     final profit = totalRevenue - totalCost;
-    final margin = totalCost <= 0 ? 0 : (profit / totalCost) * 100;
+    final margin = totalCost <= 0 ? 0.0 : (profit / totalCost) * 100;
+    final mobile = MediaQuery.sizeOf(context).width < 640;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         return RefreshIndicator(
-          onRefresh: onRefresh,
+          onRefresh: widget.onRefresh,
           child: ListView(
             padding: productsResponsivePagePadding(constraints),
             children: [
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  KpiCard(
-                    title: 'Inversión Total',
-                    value: formatRdCurrencyAccounting(totalCost),
-                    icon: Icons.account_balance_wallet_outlined,
-                    color: _primaryBlue,
-                  ),
-                  KpiCard(
-                    title: 'Valor de Venta',
-                    value: formatRdCurrencyAccounting(totalRevenue),
-                    icon: Icons.sell_outlined,
-                    color: const Color(0xFF16A34A),
-                  ),
-                  KpiCard(
-                    title: 'Ganancia Potencial',
-                    value: formatRdCurrencyAccounting(profit),
-                    icon: Icons.trending_up_rounded,
-                    color: const Color(0xFF7C3AED),
-                  ),
-                  KpiCard(
-                    title: 'Margen Promedio',
-                    value: '${margin.toStringAsFixed(1)}%',
-                    icon: Icons.percent_rounded,
-                    color: const Color(0xFF0F766E),
-                  ),
-                  KpiCard(
-                    title: 'Unidades en Stock',
-                    value: _stockText(totalUnits),
-                    icon: Icons.inventory_2_outlined,
-                    color: const Color(0xFF4F46E5),
-                  ),
-                  KpiCard(
-                    title: 'Productos Activos',
-                    value: '${active.length}',
-                    icon: Icons.check_circle_outline,
-                    color: const Color(0xFF0891B2),
-                  ),
-                  KpiCard(
-                    title: 'Alertas activas',
-                    value: '${lowStock + outStock}',
-                    icon: Icons.warning_amber_rounded,
-                    color: (lowStock + outStock) == 0
-                        ? const Color(0xFF16A34A)
-                        : const Color(0xFFF97316),
-                  ),
-                ],
-              ),
+              if (mobile)
+                _InventoryMobileOverview(
+                  totalCost: totalCost,
+                  totalRevenue: totalRevenue,
+                  profit: profit,
+                  margin: margin,
+                  totalUnits: totalUnits,
+                  activeCount: active.length,
+                  lowStock: lowStock,
+                  outStock: outStock,
+                )
+              else
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    KpiCard(
+                      title: 'Inversión Total',
+                      value: formatRdCurrencyAccounting(totalCost),
+                      icon: Icons.account_balance_wallet_outlined,
+                      color: _primaryBlue,
+                    ),
+                    KpiCard(
+                      title: 'Valor de Venta',
+                      value: formatRdCurrencyAccounting(totalRevenue),
+                      icon: Icons.sell_outlined,
+                      color: const Color(0xFF16A34A),
+                    ),
+                    KpiCard(
+                      title: 'Ganancia Potencial',
+                      value: formatRdCurrencyAccounting(profit),
+                      icon: Icons.trending_up_rounded,
+                      color: const Color(0xFF7C3AED),
+                    ),
+                    KpiCard(
+                      title: 'Margen Promedio',
+                      value: '${margin.toStringAsFixed(1)}%',
+                      icon: Icons.percent_rounded,
+                      color: const Color(0xFF0F766E),
+                    ),
+                    KpiCard(
+                      title: 'Unidades en Stock',
+                      value: _stockText(totalUnits),
+                      icon: Icons.inventory_2_outlined,
+                      color: const Color(0xFF4F46E5),
+                    ),
+                    KpiCard(
+                      title: 'Productos Activos',
+                      value: '${active.length}',
+                      icon: Icons.check_circle_outline,
+                      color: const Color(0xFF0891B2),
+                    ),
+                    KpiCard(
+                      title: 'Alertas activas',
+                      value: '${lowStock + outStock}',
+                      icon: Icons.warning_amber_rounded,
+                      color: (lowStock + outStock) == 0
+                          ? const Color(0xFF16A34A)
+                          : const Color(0xFFF97316),
+                    ),
+                  ],
+                ),
               const SizedBox(height: 14),
               _InventoryBreakdown(products: active),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+class _InventoryMobileOverview extends StatelessWidget {
+  const _InventoryMobileOverview({
+    required this.totalCost,
+    required this.totalRevenue,
+    required this.profit,
+    required this.margin,
+    required this.totalUnits,
+    required this.activeCount,
+    required this.lowStock,
+    required this.outStock,
+  });
+
+  final double totalCost;
+  final double totalRevenue;
+  final double profit;
+  final double margin;
+  final double totalUnits;
+  final int activeCount;
+  final int lowStock;
+  final int outStock;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxMoney = [
+      totalCost,
+      totalRevenue,
+      profit.abs(),
+    ].fold<double>(1, (max, value) => value > max ? value : max);
+    final alerts = lowStock + outStock;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _borderSoft),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Resumen de inventario',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+              ),
+              const SizedBox(height: 12),
+              _InventoryBar(
+                label: 'Costo',
+                value: totalCost,
+                maxValue: maxMoney,
+                color: _primaryBlue,
+              ),
+              _InventoryBar(
+                label: 'Venta',
+                value: totalRevenue,
+                maxValue: maxMoney,
+                color: const Color(0xFF16A34A),
+              ),
+              _InventoryBar(
+                label: 'Ganancia',
+                value: profit,
+                maxValue: maxMoney,
+                color: const Color(0xFF7C3AED),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _InventoryStatPill(
+                label: 'Unidades',
+                value: _stockText(totalUnits),
+                icon: Icons.inventory_2_outlined,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _InventoryStatPill(
+                label: 'Activos',
+                value: '$activeCount',
+                icon: Icons.check_circle_outline,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _InventoryStatPill(
+                label: 'Margen',
+                value: '${margin.toStringAsFixed(1)}%',
+                icon: Icons.percent_rounded,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _InventoryStatPill(
+                label: 'Alertas',
+                value: '$alerts',
+                icon: Icons.warning_amber_rounded,
+                color: alerts == 0
+                    ? const Color(0xFF16A34A)
+                    : AppColors.warning,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _InventoryBar extends StatelessWidget {
+  const _InventoryBar({
+    required this.label,
+    required this.value,
+    required this.maxValue,
+    required this.color,
+  });
+
+  final String label;
+  final double value;
+  final double maxValue;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = (value.abs() / maxValue).clamp(0.04, 1.0);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: _textSecondary,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              Text(
+                formatRdCurrencyAccounting(value),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: ratio,
+              minHeight: 8,
+              color: color,
+              backgroundColor: color.withValues(alpha: 0.12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InventoryStatPill extends StatelessWidget {
+  const _InventoryStatPill({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.color = _primaryBlue,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _borderSoft),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                Text(
+                  label,
+                  style: const TextStyle(color: _textSecondary, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1939,12 +3233,14 @@ class StockAdjustmentsPage extends StatefulWidget {
     required this.onRefresh,
     required this.onSetStock,
     required this.canAddStock,
+    this.onClose,
   });
 
   final List<ProductModel> products;
   final Future<void> Function() onRefresh;
   final Future<void> Function(ProductModel product, double stock) onSetStock;
   final bool canAddStock;
+  final VoidCallback? onClose;
 
   @override
   State<StockAdjustmentsPage> createState() => _StockAdjustmentsPageState();
@@ -2030,6 +3326,32 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
         .toList(growable: false);
   }
 
+  void setSearchQuery(String value) {
+    if (_searchCtrl.text != value) {
+      _searchCtrl.text = value;
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> openMobileFilters() async {
+    final result = await _showInventoryFilterDrawer<_StockFilterDraft>(
+      context,
+      title: 'Filtros',
+      subtitle: 'Stock',
+      child: _StockMobileFilterPanel(
+        categories: _categories,
+        categoryFilter: _validCategoryFilter(_categories),
+        stockFilter: _stockFilter,
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _categoryFilter = result.category;
+      _stockFilter = result.stockFilter;
+      if (result.clearSearch) _searchCtrl.clear();
+    });
+  }
+
   bool get _canSubmit {
     final selected =
         _selected ?? (_products.isNotEmpty ? _products.first : null);
@@ -2110,6 +3432,7 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
     final selected =
         _selected ?? (_products.isNotEmpty ? _products.first : null);
     final filtered = _filteredProductsFor(categoryFilter);
+    final mobile = MediaQuery.sizeOf(context).width < 640;
 
     return Column(
       children: [
@@ -2122,84 +3445,74 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
               if (_canSubmit)
                 const SingleActivator(LogicalKeyboardKey.numpadEnter):
                     _applyAdjustment,
+              if (widget.onClose != null)
+                const SingleActivator(LogicalKeyboardKey.escape):
+                    widget.onClose!,
             },
             child: Focus(
               autofocus: true,
               child: RefreshIndicator(
                 onRefresh: widget.onRefresh,
                 child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                  padding: EdgeInsets.fromLTRB(
+                    mobile ? 10 : 0,
+                    mobile ? 10 : 14,
+                    mobile ? 10 : 0,
+                    16,
+                  ),
                   children: [
-                    TextField(
-                      controller: _searchCtrl,
-                      onChanged: (_) => setState(() {}),
-                      decoration: const InputDecoration(
-                        labelText: 'Buscar producto',
-                        prefixIcon: Icon(Icons.search_rounded),
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
-                      key: ValueKey(categoryFilter),
-                      initialValue: categoryFilter,
-                      items: [
-                        const DropdownMenuItem(
-                          value: 'Todas las categorías',
-                          child: Text('Todas las categorías'),
+                    if (!mobile) ...[
+                      TextField(
+                        controller: _searchCtrl,
+                        onChanged: (_) => setState(() {}),
+                        decoration: _inventoryTextInputDecoration(
+                          'Buscar producto',
+                          prefixIcon: Icon(Icons.search_rounded),
                         ),
-                        for (final category in categories)
-                          DropdownMenuItem(
-                            value: category,
-                            child: Text(category),
-                          ),
-                      ],
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setState(() => _categoryFilter = value);
-                      },
-                      decoration: const InputDecoration(
-                        labelText: 'Categoría',
-                        border: OutlineInputBorder(),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SegmentedButton<_StockFilter>(
-                        segments: [
-                          for (final filter in _StockFilter.values)
-                            ButtonSegment(
-                              value: filter,
-                              label: Text(filter.label),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        key: ValueKey(categoryFilter),
+                        initialValue: categoryFilter,
+                        items: [
+                          const DropdownMenuItem(
+                            value: 'Todas las categorías',
+                            child: Text('Todas las categorías'),
+                          ),
+                          for (final category in categories)
+                            DropdownMenuItem(
+                              value: category,
+                              child: Text(category),
                             ),
                         ],
-                        selected: {_stockFilter},
-                        onSelectionChanged: (value) =>
-                            setState(() => _stockFilter = value.first),
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() => _categoryFilter = value);
+                        },
+                        decoration: _inventoryTextInputDecoration('Categoría'),
                       ),
-                    ),
-                    const SizedBox(height: 14),
+                      const SizedBox(height: 10),
+                      _SquareSegmentedSelector<_StockFilter>(
+                        values: _StockFilter.values,
+                        selected: _stockFilter,
+                        labelBuilder: (filter) => filter.label,
+                        onChanged: (value) =>
+                            setState(() => _stockFilter = value),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
                     if (selected != null)
                       _SelectedStockProduct(product: selected),
                     if (selected != null) ...[
                       const SizedBox(height: 12),
-                      SegmentedButton<String>(
-                        segments: const [
-                          ButtonSegment(
-                            value: 'Agregar',
-                            label: Text('Agregar stock'),
-                            icon: Icon(Icons.add_rounded),
-                          ),
-                          ButtonSegment(
-                            value: 'Disminuir',
-                            label: Text('Disminuir stock'),
-                            icon: Icon(Icons.remove_rounded),
-                          ),
-                        ],
-                        selected: {_mode},
-                        onSelectionChanged: (value) =>
-                            setState(() => _mode = value.first),
+                      _SquareSegmentedSelector<String>(
+                        values: const ['Agregar', 'Disminuir'],
+                        selected: _mode,
+                        labelBuilder: (value) => '$value stock',
+                        iconBuilder: (value) => value == 'Agregar'
+                            ? Icons.add_rounded
+                            : Icons.remove_rounded,
+                        onChanged: (value) => setState(() => _mode = value),
                       ),
                       const SizedBox(height: 10),
                       TextField(
@@ -2208,18 +3521,12 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
                           decimal: true,
                         ),
                         onChanged: (_) => setState(() {}),
-                        decoration: const InputDecoration(
-                          labelText: 'Cantidad',
-                          border: OutlineInputBorder(),
-                        ),
+                        decoration: _inventoryTextInputDecoration('Cantidad'),
                       ),
                       const SizedBox(height: 10),
                       TextField(
                         controller: _noteCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Motivo',
-                          border: OutlineInputBorder(),
-                        ),
+                        decoration: _inventoryTextInputDecoration('Motivo'),
                       ),
                       const SizedBox(height: 10),
                       _InlineInfo(
@@ -2276,6 +3583,10 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
             width: double.infinity,
             child: FilledButton.icon(
               onPressed: _canSubmit ? _applyAdjustment : null,
+              style: FilledButton.styleFrom(
+                shape: const RoundedRectangleBorder(),
+                minimumSize: const Size.fromHeight(42),
+              ),
               icon: _saving
                   ? const SizedBox(
                       width: 16,
@@ -2307,12 +3618,11 @@ class _SelectedStockProduct extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: _lightBlueHover,
-        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFFCFE0FF)),
       ),
       child: Row(
         children: [
-          ProductThumbnail(product: product, size: 48),
+          ProductThumbnail(product: product, size: 48, radius: 0),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -2359,6 +3669,107 @@ class _SelectedStockProduct extends StatelessWidget {
   }
 }
 
+class _SquareSegmentedSelector<T> extends StatelessWidget {
+  const _SquareSegmentedSelector({
+    required this.values,
+    required this.selected,
+    required this.labelBuilder,
+    required this.onChanged,
+    this.iconBuilder,
+  });
+
+  final List<T> values;
+  final T selected;
+  final String Function(T value) labelBuilder;
+  final IconData? Function(T value)? iconBuilder;
+  final ValueChanged<T> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: _borderSoft),
+      ),
+      child: Row(
+        children: [
+          for (var index = 0; index < values.length; index++) ...[
+            if (index > 0) Container(width: 1, height: 34, color: _borderSoft),
+            Expanded(
+              child: _SquareSegmentButton<T>(
+                selected: values[index] == selected,
+                label: labelBuilder(values[index]),
+                icon: iconBuilder?.call(values[index]),
+                onTap: () => onChanged(values[index]),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SquareSegmentButton<T> extends StatelessWidget {
+  const _SquareSegmentButton({
+    required this.selected,
+    required this.label,
+    required this.onTap,
+    this.icon,
+  });
+
+  final bool selected;
+  final String label;
+  final VoidCallback onTap;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = selected
+        ? const Color(0xFF0F6170)
+        : AppColors.textPrimary;
+    return Material(
+      color: selected ? const Color(0xFFD8F0F6) : Colors.white,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (selected) ...[
+                const Icon(
+                  Icons.check_rounded,
+                  size: 16,
+                  color: Color(0xFF0F6170),
+                ),
+                const SizedBox(width: 5),
+              ] else if (icon != null) ...[
+                Icon(icon, size: 15, color: foreground),
+                const SizedBox(width: 5),
+              ],
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: foreground,
+                    fontSize: 12.5,
+                    fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _StockProductRow extends StatelessWidget {
   const _StockProductRow({
     required this.product,
@@ -2378,14 +3789,11 @@ class _StockProductRow extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 6),
       child: Material(
         color: selected ? _lightBlueHover : Colors.white,
-        borderRadius: BorderRadius.circular(10),
         child: InkWell(
           onTap: onSelected,
-          borderRadius: BorderRadius.circular(10),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
               border: Border.all(
                 color: selected ? _primaryBlue : _borderSoft,
                 width: selected ? 1.2 : 1,
@@ -2393,7 +3801,7 @@ class _StockProductRow extends StatelessWidget {
             ),
             child: Row(
               children: [
-                ProductThumbnail(product: product, size: 34),
+                ProductThumbnail(product: product, size: 38, radius: 0),
                 const SizedBox(width: 9),
                 Expanded(
                   child: Column(
@@ -2444,13 +3852,15 @@ class _StockProductRow extends StatelessWidget {
                       style: TextStyle(color: _textSecondary, fontSize: 9),
                     ),
                     const SizedBox(height: 3),
-                    TextButton(
+                    OutlinedButton(
                       onPressed: onSelected,
-                      style: TextButton.styleFrom(
+                      style: OutlinedButton.styleFrom(
                         minimumSize: const Size(48, 26),
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         visualDensity: VisualDensity.compact,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: const RoundedRectangleBorder(),
+                        side: const BorderSide(color: _borderSoft),
                       ),
                       child: const Text(
                         'Ajustar',
@@ -2480,7 +3890,6 @@ class _StockLevelBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(999),
         border: Border.all(color: color.withValues(alpha: 0.22)),
       ),
       child: Text(
@@ -2592,6 +4001,35 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
     );
   }
 
+  void setSearchQuery(String value) {
+    if (mounted) setState(() => _query = value);
+  }
+
+  void openNewCategory() {
+    unawaited(_openEditor());
+  }
+
+  Future<void> openMobileFilters() async {
+    final result = await _showInventoryFilterDrawer<bool>(
+      context,
+      title: 'Filtros',
+      subtitle: 'Categorías',
+      child: _CategoriesMobileFilterPanel(
+        managedCount: ref.read(inventoryCategoriesProvider).items.length,
+        visibleCount: _mergedCategories(
+          ref.read(inventoryCategoriesProvider).items,
+        ).length,
+        productCount: _productCounts.values.fold<int>(
+          0,
+          (sum, value) => sum + value,
+        ),
+      ),
+    );
+    if (result == true && mounted) {
+      setState(() => _query = '');
+    }
+  }
+
   Future<void> _renameProductsCategory({
     required String oldName,
     required String newName,
@@ -2657,6 +4095,20 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
     }
   }
 
+  void _openCategoryDetail(InventoryCategoryModel category) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _CategoryDetailPage(
+          category: category,
+          productCount: _productCounts[category.name] ?? 0,
+          managed: !category.id.startsWith('derived-'),
+          onEdit: () => _openEditor(category: category),
+          onDelete: () => _deleteCategory(category),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final categoryState = ref.watch(inventoryCategoriesProvider);
@@ -2668,108 +4120,133 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        final mobile = constraints.maxWidth < 640;
         return RefreshIndicator(
           onRefresh: widget.onRefresh,
           child: ListView(
             padding: productsResponsivePagePadding(constraints),
             children: [
-              ProductsSurface(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Expanded(
-                          child: _SectionHeader(
-                            title: 'Categorías',
-                            subtitle: 'Administra familias, fotos y catálogo',
-                          ),
-                        ),
-                        FilledButton.icon(
-                          onPressed: categoryState.saving
-                              ? null
-                              : () => _openEditor(),
-                          icon: const Icon(Icons.add_rounded),
-                          label: const Text('Nueva categoría'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 320,
-                          child: TextField(
-                            onChanged: (value) =>
-                                setState(() => _query = value),
-                            decoration: const InputDecoration(
-                              prefixIcon: Icon(Icons.search_rounded),
-                              hintText: 'Buscar categoría',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                              filled: true,
-                              fillColor: Colors.white,
+              if (mobile)
+                if (categoryState.error != null)
+                  _InlineWarning(message: categoryState.error!)
+                else if (rows.isEmpty)
+                  const ProductsEmptyState(
+                    icon: Icons.category_outlined,
+                    title: 'Sin categorías',
+                    message: 'Crea tu primera categoría con nombre e imagen.',
+                  )
+                else
+                  for (final category in rows)
+                    _CategoryManagementCard(
+                      width: double.infinity,
+                      category: category,
+                      productCount: _productCounts[category.name] ?? 0,
+                      managed: !category.id.startsWith('derived-'),
+                      onEdit: () => _openEditor(category: category),
+                      onDelete: () => _deleteCategory(category),
+                      onOpenDetail: () => _openCategoryDetail(category),
+                    )
+              else
+                ProductsSurface(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: _SectionHeader(
+                              title: 'Categorías',
+                              subtitle: 'Administra familias, fotos y catálogo',
                             ),
                           ),
-                        ),
-                        _CategorySummaryChip(
-                          label: '${categoryState.items.length} creadas',
-                          icon: Icons.edit_note_rounded,
-                        ),
-                        _CategorySummaryChip(
-                          label: '${rows.length} visibles',
-                          icon: Icons.category_outlined,
-                        ),
-                        _CategorySummaryChip(
-                          label: '$totalProducts productos',
-                          icon: Icons.inventory_2_outlined,
-                        ),
-                      ],
-                    ),
-                    if (categoryState.error != null) ...[
-                      const SizedBox(height: 12),
-                      _InlineWarning(message: categoryState.error!),
-                    ],
-                    const SizedBox(height: 16),
-                    if (rows.isEmpty)
-                      const ProductsEmptyState(
-                        icon: Icons.category_outlined,
-                        title: 'Sin categorías',
-                        message:
-                            'Crea tu primera categoría con nombre e imagen.',
-                      )
-                    else
-                      LayoutBuilder(
-                        builder: (context, inner) {
-                          final compact = inner.maxWidth < 760;
-                          return Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: [
-                              for (final category in rows)
-                                _CategoryManagementCard(
-                                  width: compact
-                                      ? inner.maxWidth
-                                      : ((inner.maxWidth - 12) / 2)
-                                            .clamp(360.0, 560.0)
-                                            .toDouble(),
-                                  category: category,
-                                  productCount:
-                                      _productCounts[category.name] ?? 0,
-                                  managed: !category.id.startsWith('derived-'),
-                                  onEdit: () => _openEditor(category: category),
-                                  onDelete: () => _deleteCategory(category),
-                                ),
-                            ],
-                          );
-                        },
+                          FilledButton.icon(
+                            onPressed: categoryState.saving
+                                ? null
+                                : () => _openEditor(),
+                            icon: const Icon(Icons.add_rounded),
+                            label: const Text('Nueva categoría'),
+                          ),
+                        ],
                       ),
-                  ],
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 320,
+                            child: TextField(
+                              onChanged: (value) =>
+                                  setState(() => _query = value),
+                              decoration: const InputDecoration(
+                                prefixIcon: Icon(Icons.search_rounded),
+                                hintText: 'Buscar categoría',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                                filled: true,
+                                fillColor: Colors.white,
+                              ),
+                            ),
+                          ),
+                          _CategorySummaryChip(
+                            label: '${categoryState.items.length} creadas',
+                            icon: Icons.edit_note_rounded,
+                          ),
+                          _CategorySummaryChip(
+                            label: '${rows.length} visibles',
+                            icon: Icons.category_outlined,
+                          ),
+                          _CategorySummaryChip(
+                            label: '$totalProducts productos',
+                            icon: Icons.inventory_2_outlined,
+                          ),
+                        ],
+                      ),
+                      if (categoryState.error != null) ...[
+                        const SizedBox(height: 12),
+                        _InlineWarning(message: categoryState.error!),
+                      ],
+                      const SizedBox(height: 16),
+                      if (rows.isEmpty)
+                        const ProductsEmptyState(
+                          icon: Icons.category_outlined,
+                          title: 'Sin categorías',
+                          message:
+                              'Crea tu primera categoría con nombre e imagen.',
+                        )
+                      else
+                        LayoutBuilder(
+                          builder: (context, inner) {
+                            final compact = inner.maxWidth < 760;
+                            return Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              children: [
+                                for (final category in rows)
+                                  _CategoryManagementCard(
+                                    width: compact
+                                        ? inner.maxWidth
+                                        : ((inner.maxWidth - 12) / 2)
+                                              .clamp(360.0, 560.0)
+                                              .toDouble(),
+                                    category: category,
+                                    productCount:
+                                        _productCounts[category.name] ?? 0,
+                                    managed: !category.id.startsWith(
+                                      'derived-',
+                                    ),
+                                    onEdit: () =>
+                                        _openEditor(category: category),
+                                    onDelete: () => _deleteCategory(category),
+                                  ),
+                              ],
+                            );
+                          },
+                        ),
+                    ],
+                  ),
                 ),
-              ),
             ],
           ),
         );
@@ -2807,9 +4284,128 @@ class _CategoryManagementCard extends StatelessWidget {
     required this.managed,
     required this.onEdit,
     required this.onDelete,
+    this.onOpenDetail,
   });
 
   final double width;
+  final InventoryCategoryModel category;
+  final int productCount;
+  final bool managed;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback? onOpenDetail;
+
+  @override
+  Widget build(BuildContext context) {
+    final imageBytes = _decodeCategoryImage(category.imageBase64);
+    final mobile = MediaQuery.sizeOf(context).width < 640;
+    final content = Row(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            width: 74,
+            height: 58,
+            color: _lightBlueHover,
+            child: imageBytes == null
+                ? const Icon(
+                    Icons.category_outlined,
+                    size: 28,
+                    color: _primaryBlue,
+                  )
+                : Image.memory(imageBytes, fit: BoxFit.cover),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                category.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 15,
+                  color: Color(0xFF17212B),
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                '$productCount productos · ${managed ? 'Administrada' : 'Detectada'}',
+                style: const TextStyle(
+                  color: _textSecondary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        if (mobile)
+          _ProductActionsMenu(onEdit: onEdit, onDelete: onDelete)
+        else ...[
+          OutlinedButton.icon(
+            onPressed: onEdit,
+            icon: const Icon(Icons.edit_outlined, size: 16),
+            label: const Text('Editar'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(92, 36),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Eliminar',
+            onPressed: onDelete,
+            icon: const Icon(Icons.delete_outline_rounded),
+            color: FullTechDialogTokens.errorColor,
+          ),
+        ],
+      ],
+    );
+
+    return SizedBox(
+      width: width,
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(mobile ? 8 : 14),
+        child: InkWell(
+          onTap: mobile ? onOpenDetail : null,
+          borderRadius: BorderRadius.circular(mobile ? 8 : 14),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(mobile ? 8 : 14),
+              border: Border.all(color: _borderSoft),
+              boxShadow: mobile
+                  ? null
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 14,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+            ),
+            padding: EdgeInsets.all(mobile ? 10 : 12),
+            child: content,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryDetailPage extends StatelessWidget {
+  const _CategoryDetailPage({
+    required this.category,
+    required this.productCount,
+    required this.managed,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
   final InventoryCategoryModel category;
   final int productCount;
   final bool managed;
@@ -2819,94 +4415,88 @@ class _CategoryManagementCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final imageBytes = _decodeCategoryImage(category.imageBase64);
-    return SizedBox(
-      width: width,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: _borderSoft),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 14,
-              offset: const Offset(0, 6),
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: const CustomAppBar(
+        title: 'Categoría',
+        showLogo: false,
+        showDepartmentLabel: false,
+        trailing: SizedBox.shrink(),
+      ),
+      body: SafeArea(
+        top: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+          children: [
+            Container(
+              height: 220,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _borderSoft),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: imageBytes == null
+                  ? const Icon(
+                      Icons.category_outlined,
+                      size: 78,
+                      color: _primaryBlue,
+                    )
+                  : Image.memory(imageBytes, fit: BoxFit.contain),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              category.name,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _DetailInfoGrid(
+              rows: [
+                ('Productos', '$productCount'),
+                ('Estado', managed ? 'Administrada' : 'Detectada'),
+                ('Creada', _formatShortDate(category.createdAt)),
+                ('Actualizada', _formatShortDate(category.updatedAt)),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      onEdit();
+                    },
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Editar'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                IconButton.outlined(
+                  tooltip: 'Eliminar',
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    onDelete();
+                  },
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  color: AppColors.error,
+                ),
+              ],
             ),
           ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Container(
-                      width: 74,
-                      height: 58,
-                      color: _lightBlueHover,
-                      child: imageBytes == null
-                          ? const Icon(
-                              Icons.category_outlined,
-                              size: 28,
-                              color: _primaryBlue,
-                            )
-                          : Image.memory(imageBytes, fit: BoxFit.cover),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          category.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 15,
-                            color: Color(0xFF17212B),
-                          ),
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          '$productCount productos · ${managed ? 'Administrada' : 'Detectada'}',
-                          style: const TextStyle(
-                            color: _textSecondary,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: onEdit,
-                    icon: const Icon(Icons.edit_outlined, size: 16),
-                    label: const Text('Editar'),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(92, 36),
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Eliminar',
-                    onPressed: onDelete,
-                    icon: const Icon(Icons.delete_outline_rounded),
-                    color: FullTechDialogTokens.errorColor,
-                  ),
-                ],
-              ),
-            ],
-          ),
         ),
       ),
     );
   }
+}
+
+String _formatShortDate(DateTime value) {
+  if (value.millisecondsSinceEpoch == 0) return 'No registrada';
+  return '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year}';
 }
 
 Uint8List? _decodeCategoryImage(String? value) {
@@ -3199,6 +4789,7 @@ class CompactProductCard extends StatelessWidget {
     required this.product,
     this.selected = false,
     required this.onSelected,
+    this.onTap,
     this.onEdit,
     this.onStock,
     this.onDelete,
@@ -3207,6 +4798,7 @@ class CompactProductCard extends StatelessWidget {
   final ProductModel product;
   final bool selected;
   final ValueChanged<bool> onSelected;
+  final VoidCallback? onTap;
   final VoidCallback? onEdit;
   final VoidCallback? onStock;
   final VoidCallback? onDelete;
@@ -3222,36 +4814,70 @@ class CompactProductCard extends StatelessWidget {
     final mobile = MediaQuery.sizeOf(context).width < 640;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: selected ? _lightBlueHover : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: selected ? _primaryBlue : _borderSoft),
-        ),
-        child: Padding(
-          padding: EdgeInsets.all(mobile ? 8 : 0),
-          child: mobile
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+      padding: EdgeInsets.symmetric(vertical: mobile ? 3 : 5),
+      child: Material(
+        color: selected ? _lightBlueHover : Colors.white,
+        borderRadius: BorderRadius.circular(mobile ? 8 : 12),
+        child: InkWell(
+          onTap: mobile ? onTap : null,
+          borderRadius: BorderRadius.circular(mobile ? 8 : 12),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(mobile ? 8 : 12),
+              border: Border.all(color: selected ? _primaryBlue : _borderSoft),
+            ),
+            padding: EdgeInsets.all(mobile ? 7 : 0),
+            child: mobile
+                ? Row(
+                    children: [
+                      Container(width: 3, height: 66, color: statusColor),
+                      Transform.scale(
+                        scale: 0.86,
+                        child: Checkbox(
+                          value: selected,
+                          onChanged: (v) => onSelected(v ?? false),
+                        ),
+                      ),
+                      ProductThumbnail(product: product, size: 46, radius: 8),
+                      const SizedBox(width: 9),
+                      Expanded(child: _CompactProductInfo(product: product)),
+                      const SizedBox(width: 6),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _CompactMiniValue(
+                            label: 'Stock',
+                            value: _stockText(product.stock),
+                            color: statusColor,
+                          ),
+                          const SizedBox(height: 3),
+                          _CompactMiniValue(
+                            label: 'Valor',
+                            value: formatRdCurrencyAccounting(
+                              _stockOf(product) * product.precio,
+                            ),
+                          ),
+                        ],
+                      ),
+                      _ProductActionsMenu(
+                        onEdit: onEdit,
+                        onStock: onStock,
+                        onDelete: onDelete,
+                      ),
+                    ],
+                  )
+                : IntrinsicHeight(
+                    child: Row(
                       children: [
-                        Container(width: 3, height: 58, color: statusColor),
+                        Container(width: 3, color: statusColor),
                         Checkbox(
                           value: selected,
                           onChanged: (v) => onSelected(v ?? false),
                         ),
-                        ProductThumbnail(product: product, size: 44),
+                        ProductThumbnail(product: product, size: 42),
                         const SizedBox(width: 10),
                         Expanded(child: _CompactProductInfo(product: product)),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
                         _CompactMetric(
                           label: 'Stock',
                           value: _stockText(product.stock),
@@ -3266,86 +4892,127 @@ class CompactProductCard extends StatelessWidget {
                           label: 'Margen',
                           value: '${_marginOf(product).toStringAsFixed(0)}%',
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
                         if (onEdit != null)
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: onEdit,
-                              icon: const Icon(Icons.edit_outlined, size: 16),
-                              label: const Text('Editar'),
-                            ),
+                          IconButton(
+                            tooltip: 'Editar',
+                            onPressed: onEdit,
+                            icon: const Icon(Icons.edit_outlined),
                           ),
-                        if (onStock != null) ...[
-                          if (onEdit != null) const SizedBox(width: 8),
-                          Expanded(
-                            child: FilledButton.tonalIcon(
-                              onPressed: onStock,
-                              icon: const Icon(Icons.tune_outlined, size: 16),
-                              label: const Text('Stock'),
-                            ),
+                        if (onStock != null)
+                          TextButton(
+                            onPressed: onStock,
+                            child: const Text('Stock'),
                           ),
-                        ],
-                        if (onDelete != null) ...[
-                          const SizedBox(width: 8),
-                          IconButton.outlined(
-                            tooltip: 'Eliminar',
+                        if (onDelete != null)
+                          IconButton(
                             onPressed: onDelete,
                             icon: const Icon(Icons.delete_outline),
                           ),
-                        ],
                       ],
                     ),
-                  ],
-                )
-              : IntrinsicHeight(
-                  child: Row(
-                    children: [
-                      Container(width: 3, color: statusColor),
-                      Checkbox(
-                        value: selected,
-                        onChanged: (v) => onSelected(v ?? false),
-                      ),
-                      ProductThumbnail(product: product, size: 42),
-                      const SizedBox(width: 10),
-                      Expanded(child: _CompactProductInfo(product: product)),
-                      _CompactMetric(
-                        label: 'Stock',
-                        value: _stockText(product.stock),
-                      ),
-                      _CompactMetric(
-                        label: 'Valor',
-                        value: formatRdCurrencyAccounting(
-                          _stockOf(product) * product.precio,
-                        ),
-                      ),
-                      _CompactMetric(
-                        label: 'Margen',
-                        value: '${_marginOf(product).toStringAsFixed(0)}%',
-                      ),
-                      if (onEdit != null)
-                        IconButton(
-                          tooltip: 'Editar',
-                          onPressed: onEdit,
-                          icon: const Icon(Icons.edit_outlined),
-                        ),
-                      if (onStock != null)
-                        TextButton(
-                          onPressed: onStock,
-                          child: const Text('Stock'),
-                        ),
-                      if (onDelete != null)
-                        IconButton(
-                          onPressed: onDelete,
-                          icon: const Icon(Icons.delete_outline),
-                        ),
-                    ],
                   ),
-                ),
+          ),
         ),
+      ),
+    );
+  }
+}
+
+class _ProductActionsMenu extends StatelessWidget {
+  const _ProductActionsMenu({this.onEdit, this.onStock, this.onDelete});
+
+  final VoidCallback? onEdit;
+  final VoidCallback? onStock;
+  final VoidCallback? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: 'Acciones',
+      icon: const Icon(Icons.more_vert_rounded),
+      onSelected: (value) {
+        switch (value) {
+          case 'edit':
+            onEdit?.call();
+            break;
+          case 'stock':
+            onStock?.call();
+            break;
+          case 'delete':
+            onDelete?.call();
+            break;
+        }
+      },
+      itemBuilder: (context) => [
+        if (onEdit != null)
+          const PopupMenuItem(
+            value: 'edit',
+            child: ListTile(
+              dense: true,
+              leading: Icon(Icons.edit_outlined),
+              title: Text('Editar'),
+            ),
+          ),
+        if (onStock != null)
+          const PopupMenuItem(
+            value: 'stock',
+            child: ListTile(
+              dense: true,
+              leading: Icon(Icons.tune_outlined),
+              title: Text('Ajustar stock'),
+            ),
+          ),
+        if (onDelete != null)
+          const PopupMenuItem(
+            value: 'delete',
+            child: ListTile(
+              dense: true,
+              leading: Icon(Icons.delete_outline_rounded),
+              title: Text('Eliminar'),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _CompactMiniValue extends StatelessWidget {
+  const _CompactMiniValue({
+    required this.label,
+    required this.value,
+    this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 74),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color ?? AppColors.textPrimary,
+              fontWeight: FontWeight.w900,
+              fontSize: 12,
+            ),
+          ),
+          Text(
+            label,
+            style: const TextStyle(
+              color: _textSecondary,
+              fontWeight: FontWeight.w700,
+              fontSize: 9.5,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -3391,11 +5058,206 @@ class _CompactProductInfo extends StatelessWidget {
   }
 }
 
+class _ProductDetailPage extends StatelessWidget {
+  const _ProductDetailPage({
+    required this.product,
+    this.onEdit,
+    this.onStock,
+    this.onDelete,
+  });
+
+  final ProductModel product;
+  final VoidCallback? onEdit;
+  final VoidCallback? onStock;
+  final VoidCallback? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final level = _resolveStockLevel(product);
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: const CustomAppBar(
+        title: 'Detalle',
+        showLogo: false,
+        showDepartmentLabel: false,
+        trailing: SizedBox.shrink(),
+      ),
+      body: SafeArea(
+        top: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+          children: [
+            Container(
+              height: 230,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _borderSoft),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: ProductNetworkImage(
+                imageUrl: normalizeProductImageUrl(
+                  imageUrl: product.displayFotoUrl,
+                ),
+                productId: product.id,
+                productName: product.nombre,
+                originalUrl: product.displayFotoUrl,
+                fit: BoxFit.contain,
+                fallback: const Icon(
+                  Icons.inventory_2_outlined,
+                  size: 72,
+                  color: _primaryBlue,
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              product.nombre,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              product.categoriaLabel,
+              style: const TextStyle(
+                color: _textSecondary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 14),
+            _DetailInfoGrid(
+              rows: [
+                (
+                  'Código',
+                  product.codigo?.trim().isNotEmpty == true
+                      ? product.codigo!.trim()
+                      : 'Sin SKU',
+                ),
+                ('Stock', _stockText(product.stock)),
+                ('Estado', _stockLevelLabel(level)),
+                ('Costo', formatRdCurrencyAccounting(product.costo)),
+                ('Precio', formatRdCurrencyAccounting(product.precio)),
+                (
+                  'Valor inventario',
+                  formatRdCurrencyAccounting(
+                    _stockOf(product) * product.precio,
+                  ),
+                ),
+                (
+                  'Ganancia unidad',
+                  formatRdCurrencyAccounting(_profitOf(product)),
+                ),
+                ('Margen', '${_marginOf(product).toStringAsFixed(1)}%'),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                if (onEdit != null)
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        onEdit?.call();
+                      },
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Editar'),
+                    ),
+                  ),
+                if (onStock != null) ...[
+                  if (onEdit != null) const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        onStock?.call();
+                      },
+                      icon: const Icon(Icons.tune_outlined),
+                      label: const Text('Stock'),
+                    ),
+                  ),
+                ],
+                if (onDelete != null) ...[
+                  const SizedBox(width: 10),
+                  IconButton.outlined(
+                    tooltip: 'Eliminar',
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      onDelete?.call();
+                    },
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    color: AppColors.error,
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailInfoGrid extends StatelessWidget {
+  const _DetailInfoGrid({required this.rows});
+
+  final List<(String, String)> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final row in rows)
+          Container(
+            width: (MediaQuery.sizeOf(context).width - 32) / 2,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _borderSoft),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  row.$1,
+                  style: const TextStyle(
+                    color: _textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  row.$2,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class ProductThumbnail extends StatelessWidget {
-  const ProductThumbnail({super.key, required this.product, this.size = 44});
+  const ProductThumbnail({
+    super.key,
+    required this.product,
+    this.size = 44,
+    this.radius = 10,
+  });
 
   final ProductModel product;
   final double size;
+  final double radius;
 
   @override
   Widget build(BuildContext context) {
@@ -3405,7 +5267,7 @@ class ProductThumbnail extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(radius),
         border: Border.all(color: const Color(0xFFDDE6F0)),
         boxShadow: [
           BoxShadow(
@@ -3664,7 +5526,6 @@ class _InlineInfo extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: _lightBlueHover,
-        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFBFDBFE)),
       ),
       child: Row(
@@ -3742,101 +5603,128 @@ Future<void> _showStockAdjustmentPanel(
           width: panelWidth,
           height: size.height,
           child: StatefulBuilder(
-            builder: (dialogContext, setPanelState) => Material(
-              color: Colors.white,
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+            builder: (dialogContext, setPanelState) => CallbackShortcuts(
+              bindings: {
+                if (!saving)
+                  const SingleActivator(LogicalKeyboardKey.enter): () =>
+                      submit(dialogContext, setPanelState),
+                if (!saving)
+                  const SingleActivator(LogicalKeyboardKey.numpadEnter): () =>
+                      submit(dialogContext, setPanelState),
+                const SingleActivator(LogicalKeyboardKey.escape): () =>
+                    Navigator.of(dialogContext).maybePop(),
+              },
+              child: Focus(
+                autofocus: true,
+                child: Material(
+                  color: Colors.white,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 20, 0, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        ProductThumbnail(product: product, size: 56),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Row(
                             children: [
-                              Text(
-                                product.nombre,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 18,
+                              ProductThumbnail(product: product, size: 56),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      product.nombre,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 18,
+                                      ),
+                                    ),
+                                    Text(product.categoriaLabel),
+                                  ],
                                 ),
                               ),
-                              Text(product.categoriaLabel),
+                              IconButton(
+                                onPressed: () => Navigator.pop(dialogContext),
+                                icon: const Icon(Icons.close_rounded),
+                              ),
                             ],
                           ),
                         ),
-                        IconButton(
-                          onPressed: () => Navigator.pop(dialogContext),
-                          icon: const Icon(Icons.close_rounded),
+                        const SizedBox(height: 20),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: _InlineInfo(
+                            icon: Icons.inventory_2_outlined,
+                            message:
+                                'Stock actual: ${_stockText(product.stock)} · Valor: ${formatRdCurrencyAccounting(_stockOf(product) * product.precio)}',
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: SegmentedButton<String>(
+                            segments: const [
+                              ButtonSegment(
+                                value: 'Agregar',
+                                label: Text('Agregar stock'),
+                                icon: Icon(Icons.add_rounded),
+                              ),
+                              ButtonSegment(
+                                value: 'Disminuir',
+                                label: Text('Disminuir stock'),
+                                icon: Icon(Icons.remove_rounded),
+                              ),
+                            ],
+                            selected: {mode},
+                            onSelectionChanged: (value) {
+                              setPanelState(() => mode = value.first);
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        TextField(
+                          controller: qtyCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          onChanged: (_) => setPanelState(() {}),
+                          decoration: _inventoryTextInputDecoration('Cantidad'),
+                        ),
+                        const SizedBox(height: 14),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: _InlineInfo(
+                            icon: Icons.preview_outlined,
+                            message: 'Nuevo stock: ${_stockText(preview())}',
+                          ),
+                        ),
+                        const Spacer(),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              onPressed: saving
+                                  ? null
+                                  : () => submit(dialogContext, setPanelState),
+                              icon: saving
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(Icons.save_outlined),
+                              label: const Text('Guardar ajuste'),
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
-                    _InlineInfo(
-                      icon: Icons.inventory_2_outlined,
-                      message:
-                          'Stock actual: ${_stockText(product.stock)} · Valor: ${formatRdCurrencyAccounting(_stockOf(product) * product.precio)}',
-                    ),
-                    const SizedBox(height: 14),
-                    SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(
-                          value: 'Agregar',
-                          label: Text('Agregar stock'),
-                          icon: Icon(Icons.add_rounded),
-                        ),
-                        ButtonSegment(
-                          value: 'Disminuir',
-                          label: Text('Disminuir stock'),
-                          icon: Icon(Icons.remove_rounded),
-                        ),
-                      ],
-                      selected: {mode},
-                      onSelectionChanged: (value) {
-                        setPanelState(() => mode = value.first);
-                      },
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: qtyCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      onChanged: (_) => setPanelState(() {}),
-                      decoration: const InputDecoration(
-                        labelText: 'Cantidad',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    _InlineInfo(
-                      icon: Icons.preview_outlined,
-                      message: 'Nuevo stock: ${_stockText(preview())}',
-                    ),
-                    const Spacer(),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: saving
-                            ? null
-                            : () => submit(dialogContext, setPanelState),
-                        icon: saving
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.save_outlined),
-                        label: const Text('Guardar ajuste'),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -3853,6 +5741,31 @@ class ProductFormResult {
   final bool saved;
 }
 
+InputDecoration _inventoryTextInputDecoration(
+  String label, {
+  String? hintText,
+  Widget? prefixIcon,
+}) {
+  const border = OutlineInputBorder(
+    borderRadius: BorderRadius.zero,
+    borderSide: BorderSide(color: Color(0xFFD3E0E7)),
+  );
+  return InputDecoration(
+    labelText: label,
+    hintText: hintText,
+    prefixIcon: prefixIcon,
+    isDense: true,
+    filled: true,
+    fillColor: Colors.white,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    border: border,
+    enabledBorder: border,
+    focusedBorder: border.copyWith(
+      borderSide: const BorderSide(color: Color(0xFF1957E6), width: 1.3),
+    ),
+  );
+}
+
 class _InventorySidePanelScaffold extends StatelessWidget {
   const _InventorySidePanelScaffold({
     required this.title,
@@ -3860,6 +5773,7 @@ class _InventorySidePanelScaffold extends StatelessWidget {
     required this.onClose,
     required this.body,
     this.footer,
+    this.onSubmit,
   });
 
   final String title;
@@ -3867,11 +5781,16 @@ class _InventorySidePanelScaffold extends StatelessWidget {
   final VoidCallback? onClose;
   final Widget body;
   final Widget? footer;
+  final VoidCallback? onSubmit;
 
   @override
   Widget build(BuildContext context) {
     return CallbackShortcuts(
       bindings: {
+        if (onSubmit != null)
+          const SingleActivator(LogicalKeyboardKey.enter): onSubmit!,
+        if (onSubmit != null)
+          const SingleActivator(LogicalKeyboardKey.numpadEnter): onSubmit!,
         if (onClose != null)
           const SingleActivator(LogicalKeyboardKey.escape): onClose!,
       },
@@ -3905,7 +5824,7 @@ class _InventorySidePanelScaffold extends StatelessWidget {
                           height: 42,
                           decoration: BoxDecoration(
                             color: _lightBlueHover,
-                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: _borderSoft),
                           ),
                           child: Icon(icon, color: _primaryBlue),
                         ),
@@ -3965,7 +5884,9 @@ Future<ProductFormResult?> showInventoryProductEditor(
       final panelWidth = _inventorySidePanelWidth(size);
       return Stack(
         children: [
-          const _InventorySidePanelBackdrop(),
+          _InventorySidePanelBackdrop(
+            onTap: () => Navigator.of(dialogContext).maybePop(),
+          ),
           Align(
             alignment: Alignment.centerRight,
             child: SizedBox(
@@ -4013,7 +5934,9 @@ Future<void> showInventoryStockAdjustmentsPanel(
       final panelWidth = _inventorySidePanelWidth(size);
       return Stack(
         children: [
-          const _InventorySidePanelBackdrop(),
+          _InventorySidePanelBackdrop(
+            onTap: () => Navigator.of(dialogContext).maybePop(),
+          ),
           Align(
             alignment: Alignment.centerRight,
             child: SizedBox(
@@ -4028,6 +5951,7 @@ Future<void> showInventoryStockAdjustmentsPanel(
                   onRefresh: onRefresh,
                   onSetStock: onSetStock,
                   canAddStock: true,
+                  onClose: () => Navigator.of(dialogContext).pop(),
                 ),
               ),
             ),
@@ -4060,14 +5984,20 @@ double _inventorySidePanelWidth(Size size) {
 }
 
 class _InventorySidePanelBackdrop extends StatelessWidget {
-  const _InventorySidePanelBackdrop();
+  const _InventorySidePanelBackdrop({this.onTap});
+
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Positioned.fill(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 2.4, sigmaY: 2.4),
-        child: ColoredBox(color: Colors.white.withValues(alpha: 0.05)),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 2.4, sigmaY: 2.4),
+          child: ColoredBox(color: Colors.white.withValues(alpha: 0.05)),
+        ),
       ),
     );
   }
@@ -4105,6 +6035,9 @@ class _InventoryProductEditorPageState
 
   Uint8List? _imageBytes;
   String? _imageName;
+  Future<String?>? _imageUploadFuture;
+  String? _uploadedImagePath;
+  int _imageUploadToken = 0;
   bool _isSaving = false;
   bool _isPickingImage = false;
   String? _formError;
@@ -4188,7 +6121,9 @@ class _InventoryProductEditorPageState
       setState(() {
         _imageBytes = bytes;
         _imageName = file.name;
+        _uploadedImagePath = null;
       });
+      _startSelectedImageUpload(bytes: bytes, filename: file.name);
     } catch (e) {
       if (!mounted) return;
       setState(() => _formError = 'No se pudo leer la imagen: $e');
@@ -4198,6 +6133,97 @@ class _InventoryProductEditorPageState
         setState(() => _isPickingImage = false);
       }
     }
+  }
+
+  void _startSelectedImageUpload({
+    required Uint8List bytes,
+    required String filename,
+  }) {
+    final token = ++_imageUploadToken;
+    final repo = ref.read(catalogRepositoryProvider);
+    final upload = _uploadSelectedImageWithRetry(
+      repo: repo,
+      bytes: bytes,
+      filename: filename,
+    );
+    _imageUploadFuture = upload;
+    unawaited(
+      upload.then((path) {
+        if (!mounted || token != _imageUploadToken || path == null) return;
+        setState(() => _uploadedImagePath = path);
+      }),
+    );
+  }
+
+  Future<String?> _uploadSelectedImageWithRetry({
+    required CatalogRepository repo,
+    required Uint8List bytes,
+    required String filename,
+  }) async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final path = await repo.uploadImage(bytes: bytes, filename: filename);
+        final cachedUrl = buildProductImageUrl(
+          imageUrl: path,
+          baseUrl: Env.apiBaseUrl,
+        );
+        unawaited(
+          FulltechImageCacheManager.putImageBytes(
+            url: cachedUrl,
+            bytes: bytes,
+            filename: filename,
+          ),
+        );
+        return path;
+      } catch (e) {
+        debugPrint(
+          '[ProductForm#$hashCode] image upload attempt ${attempt + 1} failed: $e',
+        );
+        if (attempt < 2) {
+          await Future<void>.delayed(
+            Duration(milliseconds: 450 * (attempt + 1)),
+          );
+        }
+      }
+    }
+    return null;
+  }
+
+  void _attachImageAfterUpload({
+    required CatalogRepository repo,
+    required ProductModel saved,
+    required Future<String?> upload,
+    required String name,
+    required String code,
+    required double price,
+    required double cost,
+    required double stock,
+    required String category,
+  }) {
+    unawaited(
+      upload.then((path) async {
+        final normalizedPath = (path ?? '').trim();
+        if (normalizedPath.isEmpty) return;
+        try {
+          await repo.updateProduct(
+            id: saved.id,
+            nombre: name,
+            codigo: code.isEmpty ? null : code,
+            precio: price,
+            costo: cost,
+            stock: stock,
+            categoria: category,
+            fotoUrl: normalizedPath,
+            operationId: _newSaveOperationId(saved),
+            skipLoader: true,
+          );
+        } catch (e) {
+          debugPrint(
+            '[ProductForm#$hashCode] silent background image attach failed: $e',
+          );
+        }
+      }),
+    );
   }
 
   Future<void> _save() async {
@@ -4231,38 +6257,24 @@ class _InventoryProductEditorPageState
     final operationId = _newSaveOperationId(product);
     try {
       final repo = ref.read(catalogRepositoryProvider);
-      String? uploadedImagePath;
-      if (_imageBytes != null && _imageName != null) {
-        uploadedImagePath = await repo.uploadImage(
-          bytes: _imageBytes!,
-          filename: _imageName!,
-        );
-        final cachedUrl = buildProductImageUrl(
-          imageUrl: uploadedImagePath,
-          baseUrl: Env.apiBaseUrl,
-        );
-        unawaited(
-          FulltechImageCacheManager.putImageBytes(
-            url: cachedUrl,
-            bytes: _imageBytes!,
-            filename: _imageName,
-          ),
-        );
-      }
+      final readyImagePath = _uploadedImagePath;
+      final pendingImageUpload = _imageUploadFuture;
+      ProductModel saved;
 
       if (product == null) {
-        await repo.createProduct(
+        saved = await repo.createProduct(
           nombre: name,
           codigo: code.isEmpty ? null : code,
           precio: price,
           costo: cost,
           stock: stock,
           categoria: category,
-          fotoUrl: uploadedImagePath,
+          fotoUrl: readyImagePath,
           operationId: operationId,
+          skipLoader: true,
         );
       } else {
-        await repo.updateProduct(
+        saved = await repo.updateProduct(
           id: product.id,
           nombre: name,
           codigo: code.isEmpty ? null : code,
@@ -4270,8 +6282,23 @@ class _InventoryProductEditorPageState
           costo: cost,
           stock: stock,
           categoria: category,
-          fotoUrl: uploadedImagePath,
+          fotoUrl: readyImagePath,
           operationId: operationId,
+          skipLoader: true,
+        );
+      }
+
+      if ((readyImagePath ?? '').trim().isEmpty && pendingImageUpload != null) {
+        _attachImageAfterUpload(
+          repo: repo,
+          saved: saved,
+          upload: pendingImageUpload,
+          name: name,
+          code: code,
+          price: price,
+          cost: cost,
+          stock: stock,
+          category: category,
         );
       }
 
@@ -4294,6 +6321,35 @@ class _InventoryProductEditorPageState
     Navigator.of(context).pop(const ProductFormResult(saved: false));
   }
 
+  void _advanceFormOrSave() {
+    if (_isSaving || _isPickingImage) return;
+    if (_nameFocus.hasFocus) {
+      _codeFocus.requestFocus();
+      return;
+    }
+    if (_codeFocus.hasFocus) {
+      _priceFocus.requestFocus();
+      return;
+    }
+    if (_priceFocus.hasFocus) {
+      _costFocus.requestFocus();
+      return;
+    }
+    if (_costFocus.hasFocus) {
+      _stockFocus.requestFocus();
+      return;
+    }
+    if (_stockFocus.hasFocus) {
+      _categoryFocus.requestFocus();
+      return;
+    }
+    if (_categoryFocus.hasFocus) {
+      _save();
+      return;
+    }
+    _nameFocus.requestFocus();
+  }
+
   @override
   Widget build(BuildContext context) {
     final product = _product;
@@ -4303,38 +6359,36 @@ class _InventoryProductEditorPageState
       title: product == null ? 'Nuevo producto' : 'Editar producto',
       icon: product == null ? Icons.add_box_outlined : Icons.edit_outlined,
       onClose: _isSaving ? null : _close,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+      onSubmit: _isSaving || _isPickingImage ? null : _advanceFormOrSave,
+      body: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 14, 0, 0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (_formError != null) ...[
               _FormErrorBanner(message: _formError!),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
             ],
             TextField(
               controller: _nameCtrl,
               focusNode: _nameFocus,
               enabled: !_isSaving,
-              decoration: const InputDecoration(
-                labelText: 'Nombre del producto',
-                border: OutlineInputBorder(),
-              ),
+              textInputAction: TextInputAction.next,
+              decoration: _inventoryTextInputDecoration('Nombre del producto'),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             TextField(
               controller: _codeCtrl,
               focusNode: _codeFocus,
               enabled: !_isSaving,
               textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(
-                labelText: 'Código / código de barra (opcional)',
+              decoration: _inventoryTextInputDecoration(
+                'Código / código de barra (opcional)',
                 hintText: 'Escanea o escribe el código del producto',
                 prefixIcon: Icon(Icons.qr_code_2_outlined),
-                border: OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
@@ -4342,13 +6396,11 @@ class _InventoryProductEditorPageState
                     controller: _priceCtrl,
                     focusNode: _priceFocus,
                     enabled: !_isSaving,
+                    textInputAction: TextInputAction.next,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
-                    decoration: const InputDecoration(
-                      labelText: 'Precio',
-                      border: OutlineInputBorder(),
-                    ),
+                    decoration: _inventoryTextInputDecoration('Precio'),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -4357,39 +6409,33 @@ class _InventoryProductEditorPageState
                     controller: _costCtrl,
                     focusNode: _costFocus,
                     enabled: !_isSaving,
+                    textInputAction: TextInputAction.next,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
-                    decoration: const InputDecoration(
-                      labelText: 'Costo',
-                      border: OutlineInputBorder(),
-                    ),
+                    decoration: _inventoryTextInputDecoration('Costo'),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             TextField(
               controller: _stockCtrl,
               focusNode: _stockFocus,
               enabled: !_isSaving,
+              textInputAction: TextInputAction.next,
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              decoration: const InputDecoration(
-                labelText: 'Stock disponible',
-                border: OutlineInputBorder(),
-              ),
+              decoration: _inventoryTextInputDecoration('Stock disponible'),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             TextField(
               controller: _categoryCtrl,
               focusNode: _categoryFocus,
               enabled: !_isSaving,
-              decoration: const InputDecoration(
-                labelText: 'Categoría',
-                border: OutlineInputBorder(),
-              ),
+              textInputAction: TextInputAction.done,
+              decoration: _inventoryTextInputDecoration('Categoría'),
             ),
             if (widget.categories.isNotEmpty) ...[
               const SizedBox(height: 10),
@@ -4398,21 +6444,19 @@ class _InventoryProductEditorPageState
                 runSpacing: 6,
                 children: [
                   for (final category in widget.categories)
-                    ChoiceChip(
-                      label: Text(category),
+                    _InventoryCategoryChoiceChip(
+                      label: category,
                       selected: _categoryCtrl.text.trim() == category,
-                      onSelected: _isSaving
+                      onTap: _isSaving
                           ? null
-                          : (_) {
-                              setState(() {
-                                _categoryCtrl.text = category;
-                              });
-                            },
+                          : () => setState(() {
+                              _categoryCtrl.text = category;
+                            }),
                     ),
                 ],
               ),
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: _isSaving || _isPickingImage ? null : _pickImage,
               icon: _isPickingImage
@@ -4429,41 +6473,48 @@ class _InventoryProductEditorPageState
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
+              style: OutlinedButton.styleFrom(
+                shape: const RoundedRectangleBorder(),
+                minimumSize: const Size.fromHeight(36),
+              ),
             ),
             const SizedBox(height: 12),
-            Container(
-              height: 160,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: _lightBlueHover,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _borderSoft),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: _imageBytes != null
-                  ? Image.memory(
-                      _imageBytes!,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                    )
-                  : (product != null && existingImageUrl.isNotEmpty)
-                  ? ProductNetworkImage(
-                      imageUrl: existingImageUrl,
-                      productId: product.id,
-                      productName: product.nombre,
-                      originalUrl: product.originalFotoUrl,
-                      fit: BoxFit.cover,
-                      fallback: const Icon(
+            Expanded(
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 180),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: _lightBlueHover,
+                  borderRadius: BorderRadius.zero,
+                  border: Border.all(color: _borderSoft),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: _imageBytes != null
+                    ? Image.memory(
+                        _imageBytes!,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
+                      )
+                    : (product != null && existingImageUrl.isNotEmpty)
+                    ? ProductNetworkImage(
+                        imageUrl: existingImageUrl,
+                        productId: product.id,
+                        productName: product.nombre,
+                        originalUrl: product.originalFotoUrl,
+                        fit: BoxFit.cover,
+                        fallback: const Icon(
+                          Icons.image_outlined,
+                          size: 44,
+                          color: _textSecondary,
+                        ),
+                      )
+                    : const Icon(
                         Icons.image_outlined,
                         size: 44,
                         color: _textSecondary,
                       ),
-                    )
-                  : const Icon(
-                      Icons.image_outlined,
-                      size: 44,
-                      color: _textSecondary,
-                    ),
+              ),
             ),
           ],
         ),
@@ -4509,6 +6560,50 @@ class _FormErrorBanner extends StatelessWidget {
           style: const TextStyle(
             color: Color(0xFFB91C1C),
             fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InventoryCategoryChoiceChip extends StatelessWidget {
+  const _InventoryCategoryChoiceChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = selected ? Colors.white : AppColors.textPrimary;
+    return Material(
+      color: selected ? const Color(0xFF0F6170) : Colors.white,
+      shape: const RoundedRectangleBorder(side: BorderSide(color: _borderSoft)),
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (selected) ...[
+                const Icon(Icons.check_rounded, size: 14, color: Colors.white),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: TextStyle(
+                  color: foreground,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                ),
+              ),
+            ],
           ),
         ),
       ),

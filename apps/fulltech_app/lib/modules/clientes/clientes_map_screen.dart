@@ -174,96 +174,97 @@ class _ClientesMapScreenState extends ConsumerState<ClientesMapScreen> {
           fit: StackFit.expand,
           children: [
             Positioned.fill(
-              child: clientsState.loading && clientsState.items.isEmpty
-                  ? const Center(child: CircularProgressIndicator())
-                  : _FullscreenMapSurface(
-                      items: items,
-                      summary: summary,
-                      selectedSellerId: _selectedSellerId,
-                      selectedOrderScope: _selectedOrderScope,
-                      selectedDatePreset: _selectedDatePreset,
-                      dateFrom: _dateFrom,
-                      dateTo: _dateTo,
-                      sellerFilters: sellerFilters,
-                      hasActiveFilters: hasActiveFilters,
-                      isResolvingLocations:
-                          _resolvingLocations ||
-                          clientsState.refreshing ||
-                          ordersState.refreshing,
-                      onSelectedSellerChanged: (nextSellerId) {
-                        setState(() {
-                          _selectedSellerId = nextSellerId;
-                        });
-                      },
-                      onSelectedOrderScopeChanged: (nextScope) {
-                        setState(() {
-                          _selectedOrderScope = nextScope;
-                        });
-                      },
-                      onDatePresetChanged: (nextPreset) {
-                        setState(() {
-                          _selectedDatePreset = nextPreset;
-                          final now = DateTime.now();
-                          final end = DateTime(
-                            now.year,
-                            now.month,
-                            now.day,
-                            23,
-                            59,
-                            59,
-                            999,
-                          );
-                          switch (nextPreset) {
-                            case _MapDatePreset.all:
-                              _dateFrom = null;
-                              _dateTo = null;
-                            case _MapDatePreset.today:
-                              _dateFrom = DateTime(
-                                now.year,
-                                now.month,
-                                now.day,
-                              );
-                              _dateTo = end;
-                            case _MapDatePreset.last7Days:
-                              final start = DateTime(
-                                now.year,
-                                now.month,
-                                now.day,
-                              ).subtract(const Duration(days: 6));
-                              _dateFrom = start;
-                              _dateTo = end;
-                            case _MapDatePreset.last30Days:
-                              final start = DateTime(
-                                now.year,
-                                now.month,
-                                now.day,
-                              ).subtract(const Duration(days: 29));
-                              _dateFrom = start;
-                              _dateTo = end;
-                            case _MapDatePreset.custom:
-                              _dateFrom ??= DateTime(
-                                now.year,
-                                now.month,
-                                now.day,
-                              ).subtract(const Duration(days: 7));
-                              _dateTo ??= end;
-                          }
-                        });
-                      },
-                      onPickDateFrom: () => _pickDateFrom(context),
-                      onPickDateTo: () => _pickDateTo(context),
-                      onClearFilters: () {
-                        setState(() {
-                          _selectedSellerId = null;
-                          _selectedOrderScope = _MapOrderScope.all;
-                          _selectedDatePreset = _MapDatePreset.all;
-                          _dateFrom = null;
-                          _dateTo = null;
-                        });
-                      },
-                      onClientTap: _openClient,
-                    ),
+              child: _FullscreenMapSurface(
+                items: items,
+                summary: summary,
+                selectedSellerId: _selectedSellerId,
+                selectedOrderScope: _selectedOrderScope,
+                selectedDatePreset: _selectedDatePreset,
+                dateFrom: _dateFrom,
+                dateTo: _dateTo,
+                sellerFilters: sellerFilters,
+                hasActiveFilters: hasActiveFilters,
+                isResolvingLocations:
+                    _resolvingLocations ||
+                    clientsState.refreshing ||
+                    ordersState.refreshing,
+                onSelectedSellerChanged: (nextSellerId) {
+                  setState(() {
+                    _selectedSellerId = nextSellerId;
+                  });
+                },
+                onSelectedOrderScopeChanged: (nextScope) {
+                  setState(() {
+                    _selectedOrderScope = nextScope;
+                  });
+                },
+                onDatePresetChanged: (nextPreset) {
+                  setState(() {
+                    _selectedDatePreset = nextPreset;
+                    final now = DateTime.now();
+                    final end = DateTime(
+                      now.year,
+                      now.month,
+                      now.day,
+                      23,
+                      59,
+                      59,
+                      999,
+                    );
+                    switch (nextPreset) {
+                      case _MapDatePreset.all:
+                        _dateFrom = null;
+                        _dateTo = null;
+                      case _MapDatePreset.today:
+                        _dateFrom = DateTime(now.year, now.month, now.day);
+                        _dateTo = end;
+                      case _MapDatePreset.last7Days:
+                        final start = DateTime(
+                          now.year,
+                          now.month,
+                          now.day,
+                        ).subtract(const Duration(days: 6));
+                        _dateFrom = start;
+                        _dateTo = end;
+                      case _MapDatePreset.last30Days:
+                        final start = DateTime(
+                          now.year,
+                          now.month,
+                          now.day,
+                        ).subtract(const Duration(days: 29));
+                        _dateFrom = start;
+                        _dateTo = end;
+                      case _MapDatePreset.custom:
+                        _dateFrom ??= DateTime(
+                          now.year,
+                          now.month,
+                          now.day,
+                        ).subtract(const Duration(days: 7));
+                        _dateTo ??= end;
+                    }
+                  });
+                },
+                onPickDateFrom: () => _pickDateFrom(context),
+                onPickDateTo: () => _pickDateTo(context),
+                onClearFilters: () {
+                  setState(() {
+                    _selectedSellerId = null;
+                    _selectedOrderScope = _MapOrderScope.all;
+                    _selectedDatePreset = _MapDatePreset.all;
+                    _dateFrom = null;
+                    _dateTo = null;
+                  });
+                },
+                onClientTap: _openClient,
+              ),
             ),
+            if (clientsState.loading || ordersState.loading)
+              const Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: LinearProgressIndicator(minHeight: 2),
+              ),
             SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),

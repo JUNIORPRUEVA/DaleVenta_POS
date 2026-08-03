@@ -1757,12 +1757,8 @@ class _MisPagosHistoryScreenState
                   style: TextStyle(color: theme.colorScheme.onErrorContainer),
                 ),
               ),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.only(top: 24),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_items.isEmpty)
+            if (_loading) const LinearProgressIndicator(minHeight: 2),
+            if (_items.isEmpty)
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(18),

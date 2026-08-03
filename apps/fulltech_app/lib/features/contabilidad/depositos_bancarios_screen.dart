@@ -11,6 +11,7 @@ import '../../core/auth/auth_provider.dart';
 import '../../core/auth/role_permissions.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/routing/app_navigator.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
@@ -1464,6 +1465,7 @@ class _DepositosBancariosScreenState
     if (!canUseModule) {
       return Scaffold(
         key: _scaffoldKey,
+        backgroundColor: isCompact ? AppColors.background : null,
         appBar: CustomAppBar(
           title: 'Depósitos bancarios',
           onMenuPressed: () => _scaffoldKey.currentState?.openDrawer(),
@@ -1513,6 +1515,7 @@ class _DepositosBancariosScreenState
 
     return Scaffold(
       key: _scaffoldKey,
+      backgroundColor: isCompact ? AppColors.background : null,
       appBar: CustomAppBar(
         title: 'Depósitos bancarios',
         onMenuPressed: () => _scaffoldKey.currentState?.openDrawer(),
@@ -1565,12 +1568,8 @@ class _DepositosBancariosScreenState
               isAdmin: _isAdmin,
             ),
             const SizedBox(height: 12),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_error != null)
+            if (_loading) const LinearProgressIndicator(minHeight: 2),
+            if (_error != null)
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: Text(

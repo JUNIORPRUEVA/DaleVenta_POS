@@ -24,7 +24,7 @@ class ProfileScreen extends ConsumerWidget {
       appBar: CustomAppBar(title: 'Mi Perfil', showLogo: false),
       drawer: buildAdaptiveDrawer(context, currentUser: user),
       body: user == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: Text('Preparando perfil...'))
           : _ProfileContent(
               user: user,
               onEdit: () => _showEditDialog(context, ref, user),

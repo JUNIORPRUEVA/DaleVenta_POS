@@ -4,10 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
 
 import '../auth/auth_provider.dart';
+import '../../features/settings/data/mobile_printer_settings_repository.dart';
 import '../../features/settings/data/printer_settings_repository.dart';
 import '../../modules/ventas/sales_models.dart';
 import '../update/print_activity_tracker.dart';
+import 'mobile_print_service.dart';
 import 'models/models.dart';
+import 'printing_platform_resolver.dart';
 import 'thermal_printer_service.dart';
 
 final unifiedTicketPrinterProvider = Provider<UnifiedTicketPrinter>((ref) {
@@ -63,6 +66,21 @@ class UnifiedTicketPrinter {
       final layout = TicketLayoutConfig.fromPrinterSettings(settings);
       final builder = TicketBuilder(layout: layout, company: company);
       final pdf = await builder.buildPdf(data);
+      final platform = _ref.read(printingPlatformResolverProvider);
+      if (platform.capabilities.isMobile) {
+        final mobileResult = await _ref
+            .read(mobilePrintServiceProvider)
+            .printRaw(
+              lines: builder.buildLines(data),
+              pdfBytes: pdf,
+              documentName: 'Ticket ${data.ticketNumber}',
+            );
+        return PrintTicketResult(
+          success: mobileResult.success,
+          message: mobileResult.message,
+          ticketNumber: data.ticketNumber,
+        );
+      }
 
       final result = await _thermal.printDocument(
         bytes: pdf,
@@ -146,6 +164,23 @@ class UnifiedTicketPrinter {
     required SaleModel sale,
     List<SaleItemModel>? items,
   }) async {
+    final platform = _ref.read(printingPlatformResolverProvider);
+    if (platform.capabilities.isMobile) {
+      final mobileSettings = await _ref
+          .read(mobilePrinterSettingsRepositoryProvider)
+          .getOrCreate();
+      if (!mobileSettings.printingEnabled ||
+          !mobileSettings.autoPrintInvoices ||
+          mobileSettings.askBeforePrinting) {
+        return const PrintTicketResult(
+          success: true,
+          skipped: true,
+          message: 'Auto-print desactivado',
+        );
+      }
+      return printSaleTicket(sale: sale, items: items);
+    }
+
     final settings = await _ref
         .read(printerSettingsRepositoryProvider)
         .getOrCreate();

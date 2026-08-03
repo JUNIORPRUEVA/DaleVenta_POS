@@ -166,6 +166,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
     final isDesktop = _isDesktop(context);
 
     return Scaffold(
+      backgroundColor: isDesktop ? null : AppColors.background,
       appBar: CustomAppBar(
         title: isDesktop ? 'Lista de ventas y devoluciones' : 'Ventas',
         showLogo: false,

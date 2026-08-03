@@ -21,10 +21,17 @@ class RouteAccess {
       case Routes.publicidadGaleria:
         return null;
       case Routes.catalogo:
+      case Routes.catalogoStock:
+      case Routes.catalogoCategorias:
+      case Routes.catalogoConteo:
         return AppPermission.viewCatalog;
       case Routes.ventas:
         return AppPermission.viewSalesReports;
       case Routes.compras:
+      case Routes.comprasLista:
+      case Routes.comprasSuplidores:
+      case Routes.comprasFacturas:
+      case Routes.comprasPorComprar:
         return AppPermission.viewPurchases;
       case Routes.ventasLista:
       case Routes.ventasCreditos:

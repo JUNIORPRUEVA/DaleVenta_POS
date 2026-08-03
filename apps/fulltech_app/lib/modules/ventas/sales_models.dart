@@ -329,6 +329,20 @@ class SaleDraftItem {
       if (productId == null) 'costUnitSnapshot': costUnitSnapshot,
     };
   }
+
+  factory SaleDraftItem.fromPayload(Map<String, dynamic> json) {
+    final productId = json['productId']?.toString();
+    return SaleDraftItem(
+      productId: productId?.trim().isEmpty == true ? null : productId,
+      name: (json['productName'] ?? json['productNameSnapshot'] ?? 'Producto')
+          .toString(),
+      imageUrl: json['productImageSnapshot']?.toString(),
+      isExternal: productId == null || productId.trim().isEmpty,
+      qty: _toDouble(json['qty']),
+      priceSoldUnit: _toDouble(json['priceSoldUnit']),
+      costUnitSnapshot: _toDouble(json['costUnitSnapshot']),
+    );
+  }
 }
 
 class SalesDateRange {

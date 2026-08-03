@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +14,25 @@ class _FakeCatalogRepository extends CatalogRepository {
 
   int creates = 0;
   int updates = 0;
+  int uploads = 0;
+  Completer<String>? uploadCompleter;
+  List<ProductModel> products = [
+    _product(id: 'p-1', name: 'Auriculares Pro', category: 'Audio'),
+    _product(id: 'p-2', name: 'Adaptador HDMI', category: 'Cables'),
+  ];
+
+  @override
+  Future<List<ProductModel>> fetchProducts({
+    bool forceRefresh = false,
+    bool silent = false,
+  }) async {
+    return products;
+  }
+
+  @override
+  Future<List<ProductModel>> getCachedProducts() async {
+    return products;
+  }
 
   @override
   Future<ProductModel> createProduct({
@@ -23,6 +44,7 @@ class _FakeCatalogRepository extends CatalogRepository {
     String? fotoUrl,
     required String categoria,
     String? operationId,
+    bool skipLoader = false,
   }) async {
     creates += 1;
     await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -49,6 +71,7 @@ class _FakeCatalogRepository extends CatalogRepository {
     String? fotoUrl,
     String? categoria,
     String? operationId,
+    bool skipLoader = false,
   }) async {
     updates += 1;
     await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -62,6 +85,17 @@ class _FakeCatalogRepository extends CatalogRepository {
       categoria: categoria,
       fotoUrl: fotoUrl,
     );
+  }
+
+  @override
+  Future<String> uploadImage({
+    required List<int> bytes,
+    required String filename,
+  }) async {
+    uploads += 1;
+    final completer = uploadCompleter;
+    if (completer != null) return completer.future;
+    return '/uploads/$filename';
   }
 }
 
@@ -120,7 +154,64 @@ Future<ProductFormResult?> _pumpEditor(
   return result;
 }
 
+Future<void> _pumpMobileInventory(
+  WidgetTester tester, {
+  required _FakeCatalogRepository repo,
+  String? initialMobileTab,
+}) async {
+  tester.view.physicalSize = const Size(390, 844);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [catalogRepositoryProvider.overrideWithValue(repo)],
+      child: MaterialApp(
+        home: InventoryModulePages(initialMobileTab: initialMobileTab),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
+  testWidgets('inventario móvil no muestra selector superior de tabs', (
+    tester,
+  ) async {
+    final repo = _FakeCatalogRepository();
+    await _pumpMobileInventory(tester, repo: repo);
+
+    expect(find.byType(TabBar), findsNothing);
+    expect(find.text('Catálogo'), findsOneWidget);
+    expect(find.text('Auriculares Pro'), findsOneWidget);
+  });
+
+  testWidgets('inventario móvil abre Stock como pantalla independiente', (
+    tester,
+  ) async {
+    final repo = _FakeCatalogRepository();
+    await _pumpMobileInventory(tester, repo: repo, initialMobileTab: 'stock');
+
+    expect(find.byType(TabBar), findsNothing);
+    expect(find.text('Stock'), findsWidgets);
+    expect(find.text('Aplicar ajuste'), findsOneWidget);
+  });
+
+  testWidgets('inventario móvil abre Categorías como pantalla independiente', (
+    tester,
+  ) async {
+    final repo = _FakeCatalogRepository();
+    await _pumpMobileInventory(
+      tester,
+      repo: repo,
+      initialMobileTab: 'categories',
+    );
+
+    expect(find.byType(TabBar), findsNothing);
+    expect(find.text('Categorías'), findsWidgets);
+  });
+
   testWidgets('catálogo resetea filtro cuando desaparece la categoría', (
     tester,
   ) async {
@@ -148,6 +239,9 @@ void main() {
                       onCreate: () {},
                       onImport: () async {},
                       onExport: () async {},
+                      onExportSelection: (_) async {},
+                      onPdfSelection: (_) async {},
+                      onBulkDelete: (_) async {},
                       onEdit: (_) {},
                       onSetStock: (_, _) async {},
                       canEditProducts: true,
@@ -306,7 +400,9 @@ void main() {
     expect(repo.updates, 0);
   });
 
-  testWidgets('Enter en el campo código no crea producto', (tester) async {
+  testWidgets('Enter en el campo código avanza sin crear producto', (
+    tester,
+  ) async {
     final repo = _FakeCatalogRepository();
     await _pumpEditor(tester, repo: repo);
 
@@ -322,6 +418,27 @@ void main() {
     await tester.pump(const Duration(milliseconds: 80));
 
     expect(repo.creates, 0);
+    expect(repo.updates, 0);
+    final priceField = tester.widget<TextField>(find.byType(TextField).at(2));
+    expect(priceField.focusNode?.hasFocus, isTrue);
+  });
+
+  testWidgets('Enter en el último campo guarda el producto', (tester) async {
+    final repo = _FakeCatalogRepository();
+    await _pumpEditor(tester, repo: repo);
+
+    await tester.enterText(find.byType(TextField).at(0), 'Producto enter');
+    await tester.enterText(find.byType(TextField).at(1), 'ENT-001');
+    await tester.enterText(find.byType(TextField).at(2), '100');
+    await tester.enterText(find.byType(TextField).at(3), '60');
+    await tester.enterText(find.byType(TextField).at(4), '5');
+    await tester.enterText(find.byType(TextField).at(5), 'General');
+    await tester.tap(find.byType(TextField).at(5));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(repo.creates, 1);
     expect(repo.updates, 0);
   });
 

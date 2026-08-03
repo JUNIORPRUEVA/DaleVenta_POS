@@ -16,7 +16,9 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
+import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/fulltech_page_header.dart';
+
 import '../../core/widgets/pdf_action_menu.dart';
 import '../cash/cash_dialogs.dart';
 import 'data/ventas_repository.dart';
@@ -49,6 +51,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   late DateTime _fromDate;
   late DateTime _toDate;
   bool _loading = true;
+  bool _searchOpen = false;
   String? _error;
 
   @override
@@ -468,18 +471,52 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       drawer: buildAdaptiveDrawer(context, currentUser: user),
-      appBar: FullTechPageHeader(
-        title: 'Facturacion',
-        actions: isMobile
-            ? [
+      floatingActionButton: isMobile
+          ? FloatingActionButton(
+              onPressed: _showSummary,
+              tooltip: 'Resumen',
+              backgroundColor: AppColors.secondary,
+              foregroundColor: Colors.white,
+              child: const Icon(Icons.summarize_rounded),
+            )
+          : null,
+
+      appBar: isMobile
+          ? CustomAppBar(
+              title: 'Facturas',
+              titleWidget: _searchOpen ? _buildAppBarSearchField() : null,
+              actions: [
                 IconButton(
-                  tooltip: 'Filtros',
-                  onPressed: _openFilterPanel,
-                  icon: const Icon(Icons.filter_alt_outlined),
+                  tooltip: _searchOpen ? 'Cerrar búsqueda' : 'Buscar',
+                  onPressed: () => setState(() {
+                    _searchOpen = !_searchOpen;
+                    if (!_searchOpen) _searchController.clear();
+                  }),
+                  icon: Icon(
+                    _searchOpen ? Icons.close_rounded : Icons.search_rounded,
+                  ),
                 ),
-                const SizedBox(width: 8),
-              ]
-            : [
+                if (!_searchOpen) ...[
+                  IconButton(
+                    tooltip: 'Filtros',
+                    onPressed: _openFilterPanel,
+                    icon: const Icon(Icons.filter_alt_outlined),
+                  ),
+                  IconButton(
+                    tooltip: 'Actualizar',
+                    onPressed: _load,
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
+                ],
+              ],
+
+              trailing: const SizedBox.shrink(),
+              showLogo: false,
+              showDepartmentLabel: false,
+            )
+          : FullTechPageHeader(
+              title: 'Facturacion',
+              actions: [
                 _MetricBadge(
                   icon: Icons.receipt_long_outlined,
                   label: 'Facturas',
@@ -493,7 +530,8 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                 ),
                 const SizedBox(width: 12),
               ],
-      ),
+            ),
+
       body: Column(
         children: [
           _Toolbar(
@@ -510,11 +548,12 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
           Expanded(
             child: Padding(
               padding: EdgeInsets.fromLTRB(
-                isMobile ? 10 : 24,
-                10,
-                isMobile ? 10 : 24,
+                isMobile ? 0 : 24,
+                isMobile ? 0 : 10,
+                isMobile ? 0 : 24,
                 isMobile ? 10 : 16,
               ),
+
               child: isMobile
                   ? _InvoiceListCard(
                       loading: _loading,
@@ -579,6 +618,89 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     );
   }
 
+  Widget _buildAppBarSearchField() {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 280),
+        child: TextField(
+          controller: _searchController,
+          autofocus: true,
+          style: const TextStyle(color: Color(0xFF111827)),
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            hintText: 'Buscar factura, cliente o total',
+            hintStyle: const TextStyle(color: Color(0xFF8A9AA8)),
+            filled: true,
+            fillColor: Colors.white,
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.zero,
+              borderSide: BorderSide.none,
+            ),
+            prefixIcon: const Icon(
+              Icons.search_rounded,
+              color: Color(0xFF8A9AA8),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showSummary() {
+    final totalInvoices = _sales.length;
+    final activeInvoices = _sales.where((s) => !s.isDeleted).length;
+    final returnedInvoices = _sales.where((s) => s.isDeleted).length;
+    final totalSold = _sales.fold(0.0, (sum, sale) => sum + sale.totalSold);
+    final totalItems = _sales.fold<int>(
+      0,
+      (sum, sale) =>
+          sum +
+          sale.items.fold<int>(
+            0,
+            (itemSum, item) => itemSum + item.qty.round(),
+          ),
+    );
+    final uniqueCustomers = _sales
+        .map((s) => (s.customerName ?? '').trim())
+        .where((name) => name.isNotEmpty)
+        .toSet()
+        .length;
+
+    showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Resumen de ventas',
+      barrierColor: Colors.black.withValues(alpha: 0.32),
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return _SalesSummaryDialog(
+          totalInvoices: totalInvoices,
+          activeInvoices: activeInvoices,
+          returnedInvoices: returnedInvoices,
+          totalSold: totalSold,
+          totalItems: totalItems,
+          uniqueCustomers: uniqueCustomers,
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutBack,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return ScaleTransition(
+          scale: Tween<double>(begin: 0.86, end: 1).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
+        );
+      },
+    );
+  }
+
   Future<void> _openMobileDetail(SaleModel sale) async {
     await showModalBottomSheet<void>(
       context: context,
@@ -635,73 +757,60 @@ class _Toolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mobile = MediaQuery.sizeOf(context).width < 760;
+    final hasActiveFilters =
+        filter != _InvoiceFilter.active ||
+        paymentFilter != _PaymentFilter.all ||
+        (cashierFilter ?? '').trim().isNotEmpty;
     final searchField = SizedBox(
-      height: 42,
+      height: 46,
       child: TextField(
         controller: controller,
         decoration: InputDecoration(
           prefixIcon: const Icon(Icons.search_rounded),
-          hintText: 'Buscar por codigo, cliente o total...',
+          hintText: 'Buscar factura, cliente o total',
           filled: true,
           fillColor: Colors.white,
           contentPadding: const EdgeInsets.symmetric(horizontal: 12),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(color: Color(0xFFC9DAE6)),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(
               color: AppColors.secondary,
               width: 1.3,
             ),
           ),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );
+    if (mobile && !hasActiveFilters) return const SizedBox.shrink();
     return Container(
-      padding: EdgeInsets.fromLTRB(mobile ? 10 : 24, 12, mobile ? 10 : 24, 10),
+      padding: EdgeInsets.fromLTRB(mobile ? 12 : 24, 12, mobile ? 12 : 24, 10),
       decoration: const BoxDecoration(
         color: AppColors.surfaceSubtle,
         border: Border(bottom: BorderSide(color: Color(0xFFD8E5EE))),
       ),
       child: mobile
-          ? Column(
+          ? Row(
               children: [
-                Row(
-                  children: [
-                    _ToolbarBackButton(onBack: onBack),
-                    const SizedBox(width: 8),
-                    Expanded(child: searchField),
-                    const SizedBox(width: 8),
-                    IconButton.filled(
-                      tooltip: 'Filtros',
-                      onPressed: onOpenFilters,
-                      icon: const Icon(Icons.filter_alt_outlined),
+                Expanded(
+                  child: Text(
+                    '${DateFormat('dd/MM/yyyy').format(fromDate)} - ${DateFormat('dd/MM/yyyy').format(toDate)}',
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
                     ),
-                  ],
+                  ),
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${DateFormat('dd/MM/yyyy').format(fromDate)} - ${DateFormat('dd/MM/yyyy').format(toDate)}',
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    TextButton.icon(
-                      onPressed: onClearFilters,
-                      icon: const Icon(Icons.filter_alt_off_rounded, size: 18),
-                      label: const Text('Limpiar'),
-                    ),
-                  ],
+                TextButton.icon(
+                  onPressed: onClearFilters,
+                  icon: const Icon(Icons.filter_alt_off_rounded, size: 18),
+                  label: const Text('Limpiar'),
                 ),
               ],
             )
@@ -841,108 +950,157 @@ class _InvoiceListCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 760;
     return Card(
       margin: EdgeInsets.zero,
       elevation: 0,
       color: Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(mobile ? 0 : 8),
         side: const BorderSide(color: Color(0xFFC9D9E4)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 12, 14, 10),
-            child: Row(
-              children: [
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Listado de facturas',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF23384A),
+          if (!mobile) ...[
+            Padding(
+              padding: EdgeInsets.fromLTRB(18, 12, 14, 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 2),
+                        Text(
+                          statusText,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textMuted,
+                          ),
                         ),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        'Selecciona una factura para ver el resumen completo a la derecha.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                Text(
-                  statusText,
-                  style: const TextStyle(
-                    color: AppColors.textMuted,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
+                  IconButton(
+                    tooltip: 'Actualizar',
+                    onPressed: onReload,
+                    icon: const Icon(Icons.refresh_rounded),
                   ),
-                ),
-                IconButton(
-                  tooltip: 'Actualizar',
-                  onPressed: onReload,
-                  icon: const Icon(Icons.refresh_rounded),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const Divider(height: 1),
+            const Divider(height: 1),
+          ],
           Expanded(
             child: Builder(
               builder: (context) {
-                if (loading) {
-                  return const Center(child: CircularProgressIndicator());
-                }
                 if (error != null) {
                   return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.warning_amber_rounded, size: 34),
-                        const SizedBox(height: 8),
-                        Text(error!, textAlign: TextAlign.center),
-                        const SizedBox(height: 12),
-                        OutlinedButton.icon(
-                          onPressed: onReload,
-                          icon: const Icon(Icons.refresh_rounded),
-                          label: const Text('Reintentar'),
-                        ),
-                      ],
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.cloud_off_rounded,
+                            size: 40,
+                            color: AppColors.textMuted,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'No se pudieron cargar las facturas',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            error!,
+                            textAlign: TextAlign.center,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          OutlinedButton.icon(
+                            onPressed: onReload,
+                            icon: const Icon(Icons.refresh_rounded),
+                            label: const Text('Reintentar'),
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 }
                 if (sales.isEmpty) {
-                  return const Center(
-                    child: Text('No hay facturas para mostrar'),
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.receipt_long_outlined,
+                            size: 44,
+                            color: AppColors.textMuted,
+                          ),
+                          const SizedBox(height: 10),
+                          const Text(
+                            'No hay facturas para mostrar',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Ajusta los filtros o el rango de fechas.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          OutlinedButton.icon(
+                            onPressed: onReload,
+                            icon: const Icon(Icons.refresh_rounded),
+                            label: const Text('Actualizar'),
+                          ),
+                        ],
+                      ),
+                    ),
                   );
                 }
 
-                return ListView.separated(
-                  itemCount: sales.length,
-                  separatorBuilder: (_, __) =>
-                      const Divider(height: 1, color: AppColors.border),
-                  itemBuilder: (context, index) {
-                    final sale = sales[index];
-                    return _InvoiceRow(
-                      sale: sale,
-                      selected: sale.id == selectedId,
-                      dateFmt: dateFmt,
-                      invoiceNumber: invoiceNumber,
-                      onTap: () => onSelect(sale),
-                      onPdf: () => onPdf(sale),
-                      onPrint: () => onPrint(sale),
-                      onReturn: sale.isDeleted ? null : () => onReturn(sale),
-                    );
-                  },
+                return RefreshIndicator(
+                  onRefresh: () async => onReload(),
+                  child: ListView.separated(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.all(mobile ? 10 : 0),
+                    itemCount: sales.length,
+                    separatorBuilder: (_, __) =>
+                        SizedBox(height: mobile ? 8 : 0),
+                    itemBuilder: (context, index) {
+                      final sale = sales[index];
+                      return _InvoiceRow(
+                        sale: sale,
+                        selected: sale.id == selectedId,
+                        dateFmt: dateFmt,
+                        invoiceNumber: invoiceNumber,
+                        onTap: () => onSelect(sale),
+                        onPdf: () => onPdf(sale),
+                        onPrint: () => onPrint(sale),
+                        onReturn: sale.isDeleted ? null : () => onReturn(sale),
+                      );
+                    },
+                  ),
                 );
               },
             ),
@@ -1069,6 +1227,22 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
     });
   }
 
+  ButtonStyle _segmentedButtonStyle() {
+    return SegmentedButton.styleFrom(
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+      visualDensity: VisualDensity.compact,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+    );
+  }
+
+  Widget _segLabel(String text) {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis),
+    );
+  }
+
   void _apply() {
     Navigator.of(context).pop(
       _SalesFilterResult(
@@ -1086,220 +1260,233 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.sizeOf(context);
-    final width = media.width < 520 ? media.width : 430.0;
+    final width = (media.width * 0.6).clamp(300.0, 430.0);
     final dateFmt = DateFormat('dd/MM/yyyy', 'es_DO');
 
-    return Material(
-      color: Colors.white,
-      elevation: 18,
-      child: SizedBox(
-        width: width,
-        height: media.height,
-        child: SafeArea(
-          left: false,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEAF1FF),
-                        borderRadius: BorderRadius.circular(12),
+    return Dismissible(
+      key: const ValueKey('sales-filter-panel'),
+      direction: DismissDirection.endToStart,
+      onDismissed: (_) => Navigator.of(context).pop(),
+      child: Material(
+        color: Colors.white,
+        elevation: 18,
+        borderRadius: BorderRadius.zero,
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          width: width,
+          height: media.height,
+          child: SafeArea(
+            left: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEAF1FF),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.filter_alt_rounded,
+                          color: AppColors.secondary,
+                        ),
                       ),
-                      child: const Icon(
-                        Icons.filter_alt_rounded,
-                        color: AppColors.secondary,
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Filtros de ventas',
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Rango, cajero, estado y metodo de pago',
+                              style: TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      IconButton(
+                        tooltip: 'Cerrar',
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const Divider(height: 1, color: AppColors.border),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
+                    children: [
+                      _FilterSectionTitle('Intervalo de fecha'),
+                      SegmentedButton<_DateQuickFilter>(
+                        segments: [
+                          ButtonSegment(
+                            value: _DateQuickFilter.today,
+                            label: _segLabel('Hoy'),
+                          ),
+                          ButtonSegment(
+                            value: _DateQuickFilter.yesterday,
+                            label: _segLabel('Ayer'),
+                          ),
+                          ButtonSegment(
+                            value: _DateQuickFilter.interval,
+                            label: _segLabel('Intervalo'),
+                          ),
+                        ],
+                        selected: {_dateQuickFilter},
+                        onSelectionChanged: (value) =>
+                            _setQuickFilter(value.first),
+                        style: _segmentedButtonStyle(),
+                      ),
+                      const SizedBox(height: 8),
+
+                      Row(
                         children: [
-                          Text(
-                            'Filtros de ventas',
-                            style: TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w900,
+                          Expanded(
+                            child: _DateFilterButton(
+                              label: 'Desde',
+                              value: dateFmt.format(_fromDate),
+                              onTap: () => _pickDate(from: true),
                             ),
                           ),
-                          SizedBox(height: 2),
-                          Text(
-                            'Rango, cajero, estado y metodo de pago',
-                            style: TextStyle(
-                              color: AppColors.textMuted,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _DateFilterButton(
+                              label: 'Hasta',
+                              value: dateFmt.format(_toDate),
+                              onTap: () => _pickDate(from: false),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                    IconButton(
-                      tooltip: 'Cerrar',
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close_rounded),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1, color: AppColors.border),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-                  children: [
-                    _FilterSectionTitle('Intervalo de fecha'),
-                    SegmentedButton<_DateQuickFilter>(
-                      segments: const [
-                        ButtonSegment(
-                          value: _DateQuickFilter.today,
-                          label: Text('Hoy'),
-                        ),
-                        ButtonSegment(
-                          value: _DateQuickFilter.yesterday,
-                          label: Text('Ayer'),
-                        ),
-                        ButtonSegment(
-                          value: _DateQuickFilter.interval,
-                          label: Text('Intervalo'),
-                        ),
-                      ],
-                      selected: {_dateQuickFilter},
-                      onSelectionChanged: (value) =>
-                          _setQuickFilter(value.first),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _DateFilterButton(
-                            label: 'Desde',
-                            value: dateFmt.format(_fromDate),
-                            onTap: () => _pickDate(from: true),
+                      const SizedBox(height: 12),
+                      _FilterSectionTitle('Estado'),
+                      SegmentedButton<_InvoiceFilter>(
+                        segments: [
+                          ButtonSegment(
+                            value: _InvoiceFilter.active,
+                            label: _segLabel('Activas'),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _DateFilterButton(
-                            label: 'Hasta',
-                            value: dateFmt.format(_toDate),
-                            onTap: () => _pickDate(from: false),
+                          ButtonSegment(
+                            value: _InvoiceFilter.returned,
+                            label: _segLabel('Devueltas'),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    _FilterSectionTitle('Estado'),
-                    SegmentedButton<_InvoiceFilter>(
-                      segments: const [
-                        ButtonSegment(
-                          value: _InvoiceFilter.active,
-                          label: Text('Activas'),
-                        ),
-                        ButtonSegment(
-                          value: _InvoiceFilter.returned,
-                          label: Text('Devueltas'),
-                        ),
-                        ButtonSegment(
-                          value: _InvoiceFilter.all,
-                          label: Text('Todas'),
-                        ),
-                      ],
-                      selected: {_invoiceFilter},
-                      onSelectionChanged: (value) =>
-                          setState(() => _invoiceFilter = value.first),
-                    ),
-                    const SizedBox(height: 18),
-                    _FilterSectionTitle('Cajero'),
-                    DropdownButtonFormField<String>(
-                      initialValue: (_cashierFilter ?? '').isEmpty
-                          ? ''
-                          : _cashierFilter,
-                      isExpanded: true,
-                      decoration: _filterInputDecoration('Cajero'),
-                      items: [
-                        const DropdownMenuItem(
-                          value: '',
-                          child: Text('Todos los cajeros'),
-                        ),
-                        ...widget.cashiers.map(
-                          (cashier) => DropdownMenuItem(
-                            value: cashier,
-                            child: Text(
-                              cashier,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                          ButtonSegment(
+                            value: _InvoiceFilter.all,
+                            label: _segLabel('Todas'),
+                          ),
+                        ],
+                        selected: {_invoiceFilter},
+                        onSelectionChanged: (value) =>
+                            setState(() => _invoiceFilter = value.first),
+                        style: _segmentedButtonStyle(),
+                      ),
+
+                      const SizedBox(height: 12),
+                      _FilterSectionTitle('Cajero'),
+                      DropdownButtonFormField<String>(
+                        initialValue: (_cashierFilter ?? '').isEmpty
+                            ? ''
+                            : _cashierFilter,
+                        isExpanded: true,
+                        decoration: _filterInputDecoration('Cajero'),
+                        items: [
+                          const DropdownMenuItem(
+                            value: '',
+                            child: Text('Todos los cajeros'),
+                          ),
+                          ...widget.cashiers.map(
+                            (cashier) => DropdownMenuItem(
+                              value: cashier,
+                              child: Text(
+                                cashier,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                      onChanged: (value) => setState(
-                        () => _cashierFilter = (value ?? '').isEmpty
-                            ? null
-                            : value,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    _FilterSectionTitle('Metodo de pago'),
-                    DropdownButtonFormField<_PaymentFilter>(
-                      initialValue: _paymentFilter,
-                      isExpanded: true,
-                      decoration: _filterInputDecoration('Metodo'),
-                      items: _PaymentFilter.values
-                          .map(
-                            (value) => DropdownMenuItem(
-                              value: value,
-                              child: Text(_paymentFilterLabel(value)),
-                            ),
-                          )
-                          .toList(growable: false),
-                      onChanged: (value) => setState(
-                        () => _paymentFilter = value ?? _PaymentFilter.all,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
-                decoration: const BoxDecoration(
-                  color: AppColors.surfaceAlt,
-                  border: Border(top: BorderSide(color: AppColors.border)),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(46),
-                        ),
-                        child: const Text('Cancelar'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: _apply,
-                        icon: const Icon(Icons.check_rounded),
-                        label: const Text('Aplicar'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.secondary,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size.fromHeight(46),
+                        ],
+                        onChanged: (value) => setState(
+                          () => _cashierFilter = (value ?? '').isEmpty
+                              ? null
+                              : value,
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 12),
+                      _FilterSectionTitle('Metodo de pago'),
+                      DropdownButtonFormField<_PaymentFilter>(
+                        initialValue: _paymentFilter,
+                        isExpanded: true,
+                        decoration: _filterInputDecoration('Metodo'),
+                        items: _PaymentFilter.values
+                            .map(
+                              (value) => DropdownMenuItem(
+                                value: value,
+                                child: Text(_paymentFilterLabel(value)),
+                              ),
+                            )
+                            .toList(growable: false),
+                        onChanged: (value) => setState(
+                          () => _paymentFilter = value ?? _PaymentFilter.all,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+
+                Container(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+                  decoration: const BoxDecoration(
+                    color: AppColors.surfaceAlt,
+                    border: Border(top: BorderSide(color: AppColors.border)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(46),
+                          ),
+                          child: const Text('Cancelar'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _apply,
+                          icon: const Icon(Icons.check_rounded),
+                          label: const Text('Aplicar'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.secondary,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size.fromHeight(46),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1315,13 +1502,13 @@ class _FilterSectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Text(
         text,
         style: const TextStyle(
           color: Color(0xFF334155),
           fontWeight: FontWeight.w900,
-          fontSize: 13,
+          fontSize: 12,
         ),
       ),
     );
@@ -1343,12 +1530,12 @@ class _DateFilterButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.zero,
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: AppColors.surfaceMuted,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.zero,
           border: Border.all(color: AppColors.borderStrong),
         ),
         child: Column(
@@ -1358,25 +1545,28 @@ class _DateFilterButton extends StatelessWidget {
               label,
               style: const TextStyle(
                 color: AppColors.textMuted,
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: FontWeight.w800,
               ),
             ),
-            const SizedBox(height: 5),
+            const SizedBox(height: 4),
             Row(
               children: [
                 Expanded(
                   child: Text(
                     value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: AppColors.textPrimary,
                       fontWeight: FontWeight.w900,
+                      fontSize: 12,
                     ),
                   ),
                 ),
                 const Icon(
                   Icons.calendar_month_rounded,
-                  size: 18,
+                  size: 16,
                   color: AppColors.secondary,
                 ),
               ],
@@ -1413,6 +1603,18 @@ class _InvoiceRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final active = !sale.isDeleted;
     final mobile = MediaQuery.sizeOf(context).width < 760;
+    if (mobile) {
+      return _MobileInvoiceCard(
+        sale: sale,
+        active: active,
+        dateFmt: dateFmt,
+        invoiceNumber: invoiceNumber,
+        onTap: onTap,
+        onPdf: onPdf,
+        onPrint: onPrint,
+        onReturn: onReturn,
+      );
+    }
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -1421,200 +1623,364 @@ class _InvoiceRow extends StatelessWidget {
           horizontal: mobile ? 12 : 18,
           vertical: mobile ? 12 : 11,
         ),
-        child: mobile
-            ? Column(
+        child: Row(
+          children: [
+            Expanded(
+              flex: 18,
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Factura ${invoiceNumber(sale)}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              sale.customerName ?? 'Consumidor Final',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFF334155),
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerRight,
-                          child: Text(
-                            formatRdCurrencyAccounting(sale.totalSold),
-                            style: const TextStyle(fontWeight: FontWeight.w900),
-                          ),
-                        ),
-                      ),
-                    ],
+                  Text(
+                    'Factura ${invoiceNumber(sale)}',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text(
-                        dateFmt.format(sale.saleDate ?? DateTime.now()),
-                        style: const TextStyle(color: AppColors.textMuted),
-                      ),
-                      _StatusPill(active: active),
-                      Text(
-                        sale.userName ?? sale.userId,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: AppColors.textMuted),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: onTap,
-                          icon: const Icon(Icons.visibility_outlined, size: 17),
-                          label: const Text('Ver'),
-                          style: OutlinedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: onPdf,
-                          icon: const Icon(
-                            Icons.picture_as_pdf_outlined,
-                            size: 17,
-                          ),
-                          label: const Text('PDF'),
-                          style: OutlinedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton.outlined(
-                        tooltip: 'Imprimir',
-                        onPressed: onPrint,
-                        visualDensity: VisualDensity.compact,
-                        icon: const Icon(Icons.print_outlined, size: 19),
-                      ),
-                      const SizedBox(width: 6),
-                      IconButton.outlined(
-                        tooltip: active ? 'Devolver' : 'Factura devuelta',
-                        onPressed: onReturn,
-                        visualDensity: VisualDensity.compact,
-                        icon: const Icon(
-                          Icons.assignment_return_outlined,
-                          size: 19,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              )
-            : Row(
-                children: [
-                  Expanded(
-                    flex: 18,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Factura ${invoiceNumber(sale)}',
-                          style: const TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          sale.userName ?? sale.userId,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: AppColors.textMuted),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    flex: 18,
-                    child: Text(
-                      sale.customerName ?? 'Consumidor Final',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Expanded(
-                    flex: 14,
-                    child: Text(
-                      dateFmt.format(sale.saleDate ?? DateTime.now()),
-                      style: const TextStyle(color: AppColors.textMuted),
-                    ),
-                  ),
-                  Expanded(
-                    flex: 10,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: _StatusPill(active: active),
-                    ),
-                  ),
-                  Expanded(
-                    flex: 12,
-                    child: Text(
-                      formatRdCurrencyAccounting(sale.totalSold),
-                      textAlign: TextAlign.right,
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  IconButton(
-                    tooltip: 'Ver detalle',
-                    onPressed: onTap,
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.visibility_outlined, size: 19),
-                  ),
-                  IconButton(
-                    tooltip: 'Imprimir',
-                    onPressed: onPrint,
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.print_outlined, size: 19),
-                  ),
-                  IconButton(
-                    tooltip: 'PDF',
-                    onPressed: onPdf,
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.picture_as_pdf_outlined, size: 19),
-                    color: AppColors.error,
-                  ),
-                  IconButton(
-                    tooltip: active ? 'Devolver' : 'Factura devuelta',
-                    onPressed: onReturn,
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(
-                      Icons.assignment_return_outlined,
-                      size: 19,
-                    ),
-                    color: AppColors.warning,
+                  const SizedBox(height: 4),
+                  Text(
+                    sale.userName ?? sale.userId,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: AppColors.textMuted),
                   ),
                 ],
               ),
+            ),
+            Expanded(
+              flex: 18,
+              child: Text(
+                sale.customerName ?? 'Consumidor Final',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Expanded(
+              flex: 14,
+              child: Text(
+                dateFmt.format(sale.saleDate ?? DateTime.now()),
+                style: const TextStyle(color: AppColors.textMuted),
+              ),
+            ),
+            Expanded(
+              flex: 10,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _StatusPill(active: active),
+              ),
+            ),
+            Expanded(
+              flex: 12,
+              child: Text(
+                formatRdCurrencyAccounting(sale.totalSold),
+                textAlign: TextAlign.right,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+            const SizedBox(width: 10),
+            IconButton(
+              tooltip: 'Ver detalle',
+              onPressed: onTap,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.visibility_outlined, size: 19),
+            ),
+            IconButton(
+              tooltip: 'Imprimir',
+              onPressed: onPrint,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.print_outlined, size: 19),
+            ),
+            IconButton(
+              tooltip: 'PDF',
+              onPressed: onPdf,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 19),
+              color: AppColors.error,
+            ),
+            IconButton(
+              tooltip: active ? 'Devolver' : 'Factura devuelta',
+              onPressed: onReturn,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.assignment_return_outlined, size: 19),
+              color: AppColors.warning,
+            ),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+class _MobileInvoiceCard extends StatelessWidget {
+  const _MobileInvoiceCard({
+    required this.sale,
+    required this.active,
+    required this.dateFmt,
+    required this.invoiceNumber,
+    required this.onTap,
+    required this.onPdf,
+    required this.onPrint,
+    required this.onReturn,
+  });
+
+  final SaleModel sale;
+  final bool active;
+  final DateFormat dateFmt;
+  final String Function(SaleModel sale) invoiceNumber;
+  final VoidCallback onTap;
+  final VoidCallback onPdf;
+  final VoidCallback onPrint;
+  final VoidCallback? onReturn;
+
+  Future<void> _openActions(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return _InvoiceActionsSheet(
+          sale: sale,
+          active: active,
+          invoiceNumber: invoiceNumber(sale),
+          onView: () {
+            Navigator.of(sheetContext).pop();
+            onTap();
+          },
+          onPdf: () {
+            Navigator.of(sheetContext).pop();
+            onPdf();
+          },
+          onPrint: () {
+            Navigator.of(sheetContext).pop();
+            onPrint();
+          },
+          onReturn: onReturn == null
+              ? null
+              : () {
+                  Navigator.of(sheetContext).pop();
+                  onReturn!();
+                },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2EAF1)),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Factura ${invoiceNumber(sale)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 14,
+                              color: Color(0xFF23384A),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              formatRdCurrencyAccounting(sale.totalSold),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 14,
+                                color: Color(0xFF0E5261),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            sale.customerName ?? 'Consumidor Final',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFF334155),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _StatusPill(active: active),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${dateFmt.format(sale.saleDate ?? DateTime.now())} · ${sale.userName ?? sale.userId}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              IconButton(
+                tooltip: 'Acciones',
+                onPressed: () => _openActions(context),
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.more_vert_rounded),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InvoiceActionsSheet extends StatelessWidget {
+  const _InvoiceActionsSheet({
+    required this.sale,
+    required this.active,
+    required this.invoiceNumber,
+    required this.onView,
+    required this.onPdf,
+    required this.onPrint,
+    required this.onReturn,
+  });
+
+  final SaleModel sale;
+  final bool active;
+  final String invoiceNumber;
+  final VoidCallback onView;
+  final VoidCallback onPdf;
+  final VoidCallback onPrint;
+  final VoidCallback? onReturn;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFFD3DEE7),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Factura $invoiceNumber',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 16,
+                        color: Color(0xFF23384A),
+                      ),
+                    ),
+                  ),
+                  _StatusPill(active: active),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Divider(height: 1),
+            _ActionSheetTile(
+              icon: Icons.visibility_outlined,
+              label: 'Ver factura',
+              color: AppColors.textPrimary,
+              onTap: onView,
+            ),
+            _ActionSheetTile(
+              icon: Icons.picture_as_pdf_outlined,
+              label: 'Abrir PDF',
+              color: AppColors.error,
+              onTap: onPdf,
+            ),
+            _ActionSheetTile(
+              icon: Icons.print_outlined,
+              label: 'Imprimir',
+              color: AppColors.textPrimary,
+              onTap: onPrint,
+            ),
+            if (onReturn != null) ...[
+              const Divider(height: 1),
+              _ActionSheetTile(
+                icon: Icons.assignment_return_outlined,
+                label: 'Devolver factura',
+                color: AppColors.warning,
+                onTap: onReturn!,
+              ),
+            ],
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionSheetTile extends StatelessWidget {
+  const _ActionSheetTile({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon, color: color),
+      title: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+      onTap: onTap,
     );
   }
 }
@@ -1979,6 +2345,212 @@ class _EmptyDetail extends StatelessWidget {
   }
 }
 
+class _SalesSummaryDialog extends StatelessWidget {
+  const _SalesSummaryDialog({
+    required this.totalInvoices,
+    required this.activeInvoices,
+    required this.returnedInvoices,
+    required this.totalSold,
+    required this.totalItems,
+    required this.uniqueCustomers,
+  });
+
+  final int totalInvoices;
+  final int activeInvoices;
+  final int returnedInvoices;
+  final double totalSold;
+  final int totalItems;
+  final int uniqueCustomers;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.sizeOf(context);
+    final compact = media.width < 720;
+
+    return Dialog(
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: compact ? 18 : 28,
+        vertical: 24,
+      ),
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(compact ? 8 : 12),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 18, 12, 16),
+              decoration: const BoxDecoration(
+                color: AppColors.secondary,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.summarize_rounded,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Resumen de ventas',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Información general de la lista',
+                          style: TextStyle(
+                            color: Color(0xFFDCEBFF),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Cerrar',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded, color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+              child: Column(
+                children: [
+                  _SummaryMetric(
+                    icon: Icons.receipt_long_outlined,
+                    label: 'Total de facturas',
+                    value: '$totalInvoices',
+                    accent: AppColors.secondary,
+                  ),
+                  _SummaryMetric(
+                    icon: Icons.payments_outlined,
+                    label: 'Total vendido',
+                    value: formatRdCurrencyAccounting(totalSold),
+                    accent: const Color(0xFF059669),
+                  ),
+                  _SummaryMetric(
+                    icon: Icons.shopping_bag_outlined,
+                    label: 'Artículos vendidos',
+                    value: '$totalItems',
+                    accent: const Color(0xFF0E7490),
+                  ),
+                  _SummaryMetric(
+                    icon: Icons.check_circle_outline_rounded,
+                    label: 'Facturas activas',
+                    value: '$activeInvoices',
+                    accent: const Color(0xFF15803D),
+                  ),
+                  _SummaryMetric(
+                    icon: Icons.assignment_return_outlined,
+                    label: 'Facturas devueltas',
+                    value: '$returnedInvoices',
+                    accent: const Color(0xFFB45309),
+                  ),
+                  _SummaryMetric(
+                    icon: Icons.people_outline_rounded,
+                    label: 'Clientes distintos',
+                    value: '$uniqueCustomers',
+                    accent: const Color(0xFF7C3AED),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+              child: FilledButton.icon(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('Entendido'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.secondary,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(46),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SummaryMetric extends StatelessWidget {
+  const _SummaryMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.accent,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: accent, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w900,
+              fontSize: 15,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 String _filterLabel(_InvoiceFilter filter) {
   return switch (filter) {
     _InvoiceFilter.active => 'Mostrando facturas activas',
@@ -2029,11 +2601,11 @@ InputDecoration _filterInputDecoration(String label) {
     fillColor: AppColors.surfaceMuted,
     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
     border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.zero,
       borderSide: const BorderSide(color: AppColors.borderStrong),
     ),
     enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.zero,
       borderSide: const BorderSide(color: AppColors.borderStrong),
     ),
   );

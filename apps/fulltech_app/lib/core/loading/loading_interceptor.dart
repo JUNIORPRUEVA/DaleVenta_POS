@@ -17,10 +17,11 @@ class LoadingInterceptor extends Interceptor {
     final skip = extra['skipLoader'];
     if (skip is bool && skip) return false;
 
+    // Keep the global branded loader opt-in. Normal screen data requests should
+    // refresh quietly so navigation feels instant and the UI never gets covered
+    // by a long "Cargando..." dialog after the route is already visible.
     final show = extra['showLoader'];
-    if (show is bool && show == false) return false;
-
-    return true;
+    return show is bool && show;
   }
 
   @override

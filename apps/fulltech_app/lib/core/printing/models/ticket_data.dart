@@ -99,7 +99,7 @@ class TicketData {
       note: sale.note,
       type: sale.isDeleted ? TicketType.refund : TicketType.sale,
       isCopy: isCopy,
-      paymentMethod: paymentMethod,
+      paymentMethod: paymentMethod ?? _paymentDescription(sale),
     );
   }
 
@@ -150,5 +150,31 @@ class TicketData {
     final compact = id.replaceAll('-', '');
     if (compact.length >= 8) return compact.substring(0, 8).toUpperCase();
     return compact.toUpperCase();
+  }
+
+  static String _paymentDescription(SaleModel sale) {
+    final cash = sale.paymentCashAmount;
+    final transfer = sale.paymentTransferAmount;
+    final parts = <String>[];
+    if (cash > 0) {
+      parts.add('Efectivo ${_money(cash)}');
+    }
+    if (transfer > 0) {
+      parts.add('Transferencia ${_money(transfer)}');
+    }
+    if (parts.isNotEmpty) return parts.join(' + ');
+
+    return switch (sale.paymentMethod.trim()) {
+      'cash' => 'Efectivo',
+      'transfer' => 'Transferencia',
+      'mixed' => 'Mixto',
+      'credit' => 'Credito',
+      _ => sale.paymentMethod.trim(),
+    };
+  }
+
+  static String _money(num value) {
+    final formatted = NumberFormat('#,##0.00', 'en_US').format(value);
+    return 'RD\$ $formatted';
   }
 }

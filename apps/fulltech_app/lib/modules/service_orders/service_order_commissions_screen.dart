@@ -292,12 +292,8 @@ class ServiceOrderCommissionsScreen extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              if (state.loading && state.items.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(32),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (state.error != null && state.items.isEmpty)
+              if (state.loading) const LinearProgressIndicator(minHeight: 2),
+              if (state.error != null && state.items.isEmpty)
                 _StateMessageCard(
                   icon: Icons.error_outline_rounded,
                   title: 'No se pudieron cargar las comisiones',

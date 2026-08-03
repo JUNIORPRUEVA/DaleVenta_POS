@@ -733,8 +733,10 @@ class _ServiceOrderQuickActionsSheet extends ConsumerWidget {
     }
 
     try {
+      if (!sheetContext.mounted) return;
       final didChange = requireDetailedConfirmation
           ? await _showTechnicianStatusConfirmDialog(
+              // ignore: use_build_context_synchronously
               sheetContext,
               current: order.status,
               selected: selected,
@@ -744,6 +746,7 @@ class _ServiceOrderQuickActionsSheet extends ConsumerWidget {
                   .changeStatus(selected),
             )
           : await showServiceOrderStatusConfirmationDialog(
+              // ignore: use_build_context_synchronously
               context: sheetContext,
               status: selected,
               initialScheduledAt: order.scheduledFor,

@@ -163,6 +163,21 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const InventoryModulePages(),
           ),
           GoRoute(
+            path: Routes.catalogoStock,
+            builder: (context, state) =>
+                const InventoryModulePages(initialMobileTab: 'stock'),
+          ),
+          GoRoute(
+            path: Routes.catalogoCategorias,
+            builder: (context, state) =>
+                const InventoryModulePages(initialMobileTab: 'categories'),
+          ),
+          GoRoute(
+            path: Routes.catalogoConteo,
+            builder: (context, state) =>
+                const InventoryModulePages(initialMobileTab: 'inventory'),
+          ),
+          GoRoute(
             path: Routes.contabilidad,
             builder: (context, state) => const ContabilidadScreen(),
           ),
@@ -201,6 +216,26 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: Routes.compras,
             builder: (context, state) => const ComprasScreen(),
+          ),
+          GoRoute(
+            path: Routes.comprasLista,
+            builder: (context, state) =>
+                const ComprasScreen(initialMobileTab: 'orders'),
+          ),
+          GoRoute(
+            path: Routes.comprasSuplidores,
+            builder: (context, state) =>
+                const ComprasScreen(initialMobileTab: 'suppliers'),
+          ),
+          GoRoute(
+            path: Routes.comprasFacturas,
+            builder: (context, state) =>
+                const ComprasScreen(initialMobileTab: 'invoices'),
+          ),
+          GoRoute(
+            path: Routes.comprasPorComprar,
+            builder: (context, state) =>
+                const ComprasScreen(initialMobileTab: 'recommendations'),
           ),
           GoRoute(
             path: Routes.caja,

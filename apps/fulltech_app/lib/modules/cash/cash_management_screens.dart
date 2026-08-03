@@ -9,6 +9,7 @@ import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
+import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/fulltech_page_header.dart';
 import 'cash_dialogs.dart';
 import 'cash_models.dart';
@@ -128,7 +129,11 @@ class _CashExpenseScreenState extends ConsumerState<CashExpenseScreen> {
           body: Padding(
             padding: const EdgeInsets.all(18),
             child: session.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const _CashPanelMessage(
+                icon: Icons.point_of_sale_outlined,
+                title: 'Caja',
+                detail: 'Preparando datos del turno...',
+              ),
               error: (error, _) => _CashPanelMessage(
                 icon: Icons.info_outline_rounded,
                 title: 'No se pudo cargar caja',
@@ -206,6 +211,8 @@ class _CashMovementsHistoryScreenState
   _MovementTypeFilter _type = _MovementTypeFilter.all;
   _MovementDateFilter _date = _MovementDateFilter.today;
   DateTime? _specificDate;
+  bool _searchOpen = false;
+  bool _filtersOpen = false;
 
   @override
   void initState() {
@@ -307,11 +314,87 @@ class _CashMovementsHistoryScreenState
     });
   }
 
+  Widget _buildMovementSearchField() {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 260),
+        child: TextField(
+          controller: _searchController,
+          autofocus: true,
+          style: const TextStyle(color: Color(0xFF111827)),
+          decoration: InputDecoration(
+            hintText: 'Buscar',
+            hintStyle: const TextStyle(color: Color(0xFF8A9AA8)),
+            filled: true,
+            fillColor: Colors.white,
+            isDense: true,
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 34,
+              minHeight: 32,
+            ),
+            prefixIcon: const Icon(
+              Icons.search_rounded,
+              size: 18,
+              color: Color(0xFF52667C),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 6,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showMovementTotals(List<CashMovementModel> rows) {
+    final entries = rows
+        .where((row) => row.isIn)
+        .fold<double>(0, (sum, row) => sum + row.amount);
+    final exits = rows
+        .where((row) => !row.isIn)
+        .fold<double>(0, (sum, row) => sum + row.amount);
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Resumen',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 12),
+              _MovementStatsGrid(
+                isMobile: true,
+                entries: entries,
+                exits: exits,
+                count: rows.length,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).user;
     final history = ref.watch(cashMovementHistoryProvider);
     final isMobile = MediaQuery.sizeOf(context).width < 700;
+    final filteredForSummary = history.maybeWhen(
+      data: _filter,
+      orElse: () => const <CashMovementModel>[],
+    );
 
     return CallbackShortcuts(
       bindings: {
@@ -323,53 +406,89 @@ class _CashMovementsHistoryScreenState
         child: Scaffold(
           backgroundColor: _cashBg,
           drawer: buildAdaptiveDrawer(context, currentUser: user),
-          appBar: FullTechPageHeader(
-            title: 'Movimiento de efectivo',
-            actions: [
-              if (isMobile) ...[
-                IconButton.filledTonal(
-                  tooltip: 'Registrar ingreso',
-                  onPressed: () => _register('IN'),
-                  icon: const Icon(Icons.add_circle_outline_rounded),
+          appBar: isMobile
+              ? CustomAppBar(
+                  title: 'Movimientos',
+                  titleWidget: _searchOpen ? _buildMovementSearchField() : null,
+                  showLogo: false,
+                  showDepartmentLabel: false,
+                  actions: [
+                    IconButton(
+                      tooltip: _searchOpen ? 'Cerrar búsqueda' : 'Buscar',
+                      onPressed: () => setState(() {
+                        _searchOpen = !_searchOpen;
+                        if (!_searchOpen) _searchController.clear();
+                      }),
+                      icon: Icon(
+                        _searchOpen
+                            ? Icons.close_rounded
+                            : Icons.search_rounded,
+                      ),
+                    ),
+                    if (!_searchOpen)
+                      IconButton(
+                        tooltip: 'Filtros',
+                        onPressed: () =>
+                            setState(() => _filtersOpen = !_filtersOpen),
+                        icon: Badge(
+                          isLabelVisible:
+                              _filtersOpen ||
+                              _type != _MovementTypeFilter.all ||
+                              _date != _MovementDateFilter.today,
+                          smallSize: 8,
+                          child: const Icon(Icons.filter_alt_outlined),
+                        ),
+                      ),
+                    if (!_searchOpen)
+                      IconButton(
+                        tooltip: 'Actualizar',
+                        onPressed: () =>
+                            ref.invalidate(cashMovementHistoryProvider),
+                        icon: const Icon(Icons.refresh_rounded),
+                      ),
+                  ],
+                  trailing: const SizedBox.shrink(),
+                )
+              : FullTechPageHeader(
+                  title: 'Movimiento de efectivo',
+                  actions: [
+                    TextButton.icon(
+                      onPressed: () => _register('IN'),
+                      icon: const Icon(Icons.add_circle_outline_rounded),
+                      label: const Text('Registrar ingreso'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      onPressed: () => _register('OUT'),
+                      icon: const Icon(Icons.remove_circle_outline_rounded),
+                      label: const Text('Registrar salida'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _danger,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    IconButton.filledTonal(
+                      tooltip: 'Actualizar',
+                      onPressed: () =>
+                          ref.invalidate(cashMovementHistoryProvider),
+                      icon: const Icon(Icons.refresh_rounded),
+                    ),
+                    const SizedBox(width: 10),
+                    const CashTurnMenuButton(),
+                    const SizedBox(width: 10),
+                  ],
                 ),
-                const SizedBox(width: 6),
-                IconButton.filled(
-                  tooltip: 'Registrar salida',
-                  onPressed: () => _register('OUT'),
-                  icon: const Icon(Icons.remove_circle_outline_rounded),
-                  style: IconButton.styleFrom(
-                    backgroundColor: _danger,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ] else ...[
-                TextButton.icon(
-                  onPressed: () => _register('IN'),
-                  icon: const Icon(Icons.add_circle_outline_rounded),
-                  label: const Text('Registrar ingreso'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.icon(
-                  onPressed: () => _register('OUT'),
-                  icon: const Icon(Icons.remove_circle_outline_rounded),
-                  label: const Text('Registrar salida'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _danger,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ],
-              const SizedBox(width: 6),
-              IconButton.filledTonal(
-                tooltip: 'Actualizar',
-                onPressed: () => ref.invalidate(cashMovementHistoryProvider),
-                icon: const Icon(Icons.refresh_rounded),
-              ),
-              SizedBox(width: isMobile ? 6 : 10),
-              const CashTurnMenuButton(),
-              SizedBox(width: isMobile ? 6 : 10),
-            ],
-          ),
+          floatingActionButton: isMobile
+              ? FloatingActionButton(
+                  heroTag: 'cash_movement_totals',
+                  tooltip: 'Ver resumen',
+                  onPressed: () => _showMovementTotals(filteredForSummary),
+                  backgroundColor: _cashBlue,
+                  foregroundColor: Colors.white,
+                  child: const Icon(Icons.summarize_outlined),
+                )
+              : null,
           body: Padding(
             padding: EdgeInsets.all(isMobile ? 10 : 18),
             child: _CashCard(
@@ -379,18 +498,17 @@ class _CashMovementsHistoryScreenState
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _CashSearchField(
-                          controller: _searchController,
-                          hint: 'Buscar movimientos...',
-                        ),
-                        const SizedBox(height: 10),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: _MovementTypeSelector(
-                            selected: _type,
-                            onChanged: (value) => setState(() => _type = value),
+                        if (_filtersOpen) ...[
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: _MovementTypeSelector(
+                              selected: _type,
+                              onChanged: (value) =>
+                                  setState(() => _type = value),
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: 10),
+                        ],
                       ],
                     )
                   else
@@ -410,50 +528,52 @@ class _CashMovementsHistoryScreenState
                         ),
                       ],
                     ),
-                  const SizedBox(height: 10),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _MovementDateSelector(
-                            selected: _date,
-                            onChanged: (next) {
-                              if (next == _MovementDateFilter.specific) {
-                                _pickSpecificDate();
-                                return;
-                              }
-                              setState(() => _date = next);
-                            },
-                          ),
-                          if (_date == _MovementDateFilter.specific) ...[
-                            const SizedBox(width: 10),
-                            OutlinedButton.icon(
-                              onPressed: _pickSpecificDate,
-                              icon: const Icon(Icons.event_rounded, size: 18),
-                              label: Text(
-                                _specificDate == null
-                                    ? 'Elegir fecha'
-                                    : DateFormat(
-                                        'dd/MM/yyyy',
-                                        'es_DO',
-                                      ).format(_specificDate!),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: _cashText,
-                                minimumSize: Size(isMobile ? 118 : 132, 40),
-                                side: const BorderSide(color: _cashLine),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                  if (!isMobile || _filtersOpen) ...[
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _MovementDateSelector(
+                              selected: _date,
+                              onChanged: (next) {
+                                if (next == _MovementDateFilter.specific) {
+                                  _pickSpecificDate();
+                                  return;
+                                }
+                                setState(() => _date = next);
+                              },
+                            ),
+                            if (_date == _MovementDateFilter.specific) ...[
+                              const SizedBox(width: 10),
+                              OutlinedButton.icon(
+                                onPressed: _pickSpecificDate,
+                                icon: const Icon(Icons.event_rounded, size: 18),
+                                label: Text(
+                                  _specificDate == null
+                                      ? 'Elegir fecha'
+                                      : DateFormat(
+                                          'dd/MM/yyyy',
+                                          'es_DO',
+                                        ).format(_specificDate!),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: _cashText,
+                                  minimumSize: Size(isMobile ? 118 : 132, 40),
+                                  side: const BorderSide(color: _cashLine),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
                                 ),
                               ),
-                            ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                   const SizedBox(height: 14),
                   Expanded(
                     child: history.when(
@@ -474,13 +594,15 @@ class _CashMovementsHistoryScreenState
                             .fold<double>(0, (sum, row) => sum + row.amount);
                         return Column(
                           children: [
-                            _MovementStatsGrid(
-                              isMobile: isMobile,
-                              entries: entries,
-                              exits: exits,
-                              count: visible.length,
-                            ),
-                            const SizedBox(height: 14),
+                            if (!isMobile) ...[
+                              _MovementStatsGrid(
+                                isMobile: isMobile,
+                                entries: entries,
+                                exits: exits,
+                                count: visible.length,
+                              ),
+                              const SizedBox(height: 14),
+                            ],
                             Expanded(
                               child: visible.isEmpty
                                   ? const _CashPanelMessage(
@@ -491,7 +613,7 @@ class _CashMovementsHistoryScreenState
                                     )
                                   : ListView.separated(
                                       padding: EdgeInsets.only(
-                                        bottom: isMobile ? 8 : 0,
+                                        bottom: isMobile ? 76 : 0,
                                       ),
                                       itemCount: visible.length,
                                       separatorBuilder: (_, __) =>
@@ -825,25 +947,226 @@ class _CashExpensesHistoryScreenState
   }
 }
 
-class CashTurnHistoryScreen extends ConsumerWidget {
+class CashTurnHistoryScreen extends ConsumerStatefulWidget {
   const CashTurnHistoryScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CashTurnHistoryScreen> createState() =>
+      _CashTurnHistoryScreenState();
+}
+
+class _CashTurnHistoryScreenState extends ConsumerState<CashTurnHistoryScreen> {
+  final _searchController = TextEditingController();
+  bool _searchOpen = false;
+  DateTimeRange? _selectedRange;
+  _ShiftStatusFilter _statusFilter = _ShiftStatusFilter.all;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<CashSessionHistoryModel> _filterRows(
+    List<CashSessionHistoryModel> rows,
+  ) {
+    final query = _searchController.text.trim().toLowerCase();
+    return rows
+        .where((row) {
+          final range = _selectedRange;
+          if (range != null) {
+            final rowDate =
+                DateTime.tryParse(row.businessDate) ?? row.openedAt.toLocal();
+            final rowDay = DateTime(rowDate.year, rowDate.month, rowDate.day);
+            final start = DateTime(
+              range.start.year,
+              range.start.month,
+              range.start.day,
+            );
+            final end = DateTime(
+              range.end.year,
+              range.end.month,
+              range.end.day,
+            );
+            if (rowDay.isBefore(start) || rowDay.isAfter(end)) {
+              return false;
+            }
+          }
+          if (_statusFilter == _ShiftStatusFilter.open &&
+              row.status.toUpperCase() != 'OPEN') {
+            return false;
+          }
+          if (_statusFilter == _ShiftStatusFilter.closed &&
+              row.status.toUpperCase() == 'OPEN') {
+            return false;
+          }
+          if (query.isEmpty) return true;
+          final haystack = [
+            row.userName,
+            row.businessDate,
+            row.status,
+            row.expectedAmount.toStringAsFixed(2),
+            row.closingAmount.toStringAsFixed(2),
+          ].join(' ').toLowerCase();
+          return haystack.contains(query);
+        })
+        .toList(growable: false);
+  }
+
+  String get _rangeLabel {
+    final range = _selectedRange;
+    if (range == null) return 'Todos';
+    final today = DateTime.now();
+    final todayDay = DateTime(today.year, today.month, today.day);
+    final yesterday = todayDay.subtract(const Duration(days: 1));
+    final start = DateTime(
+      range.start.year,
+      range.start.month,
+      range.start.day,
+    );
+    final end = DateTime(range.end.year, range.end.month, range.end.day);
+    if (start == todayDay && end == todayDay) return 'Hoy';
+    if (start == yesterday && end == yesterday) return 'Ayer';
+    final fmt = DateFormat('dd/MM', 'es_DO');
+    return '${fmt.format(start)} - ${fmt.format(end)}';
+  }
+
+  Future<void> _openDateFilter() async {
+    final next = await showGeneralDialog<_ShiftHistoryFilterDraft>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Filtros de turnos',
+      barrierColor: Colors.black.withValues(alpha: 0.26),
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: _ShiftHistoryFilterDrawer(
+            initialRange: _selectedRange,
+            initialStatus: _statusFilter,
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
+        );
+      },
+    );
+    if (next == null || !mounted) return;
+    setState(() {
+      _selectedRange = next.range;
+      _statusFilter = next.status;
+    });
+  }
+
+  Widget _buildAppBarSearchField() {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 260),
+        child: TextField(
+          controller: _searchController,
+          autofocus: true,
+          style: const TextStyle(color: Color(0xFF111827)),
+          decoration: InputDecoration(
+            hintText: 'Buscar',
+            hintStyle: const TextStyle(color: Color(0xFF8A9AA8)),
+            filled: true,
+            fillColor: Colors.white,
+            isDense: true,
+            prefixIcon: const Icon(
+              Icons.search_rounded,
+              size: 18,
+              color: Color(0xFF52667C),
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).user;
     final history = ref.watch(cashTurnHistoryProvider);
+    final isMobile = MediaQuery.sizeOf(context).width < 760;
 
     return Scaffold(
       backgroundColor: _cashBg,
       drawer: buildAdaptiveDrawer(context, currentUser: user),
-      appBar: const FullTechPageHeader(
-        title: 'Historial de turnos',
-        actions: [CashTurnMenuButton(), SizedBox(width: 10)],
-      ),
+      appBar: isMobile
+          ? CustomAppBar(
+              title: 'Historial',
+              titleWidget: _searchOpen ? _buildAppBarSearchField() : null,
+              showLogo: false,
+              showDepartmentLabel: false,
+              actions: [
+                IconButton(
+                  tooltip: _searchOpen ? 'Cerrar búsqueda' : 'Buscar',
+                  onPressed: () => setState(() {
+                    _searchOpen = !_searchOpen;
+                    if (!_searchOpen) _searchController.clear();
+                  }),
+                  icon: Icon(
+                    _searchOpen ? Icons.close_rounded : Icons.search_rounded,
+                  ),
+                ),
+                if (!_searchOpen)
+                  IconButton(
+                    tooltip: 'Filtrar por día',
+                    onPressed: () {
+                      _openDateFilter();
+                    },
+                    icon: Badge(
+                      isLabelVisible:
+                          _selectedRange != null ||
+                          _statusFilter != _ShiftStatusFilter.all,
+                      smallSize: 8,
+                      child: const Icon(Icons.filter_alt_outlined),
+                    ),
+                  ),
+                if (!_searchOpen)
+                  IconButton(
+                    tooltip: 'Actualizar',
+                    onPressed: () => ref.invalidate(cashTurnHistoryProvider),
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
+              ],
+              trailing: const SizedBox.shrink(),
+            )
+          : const FullTechPageHeader(
+              title: 'Historial',
+              actions: [CashTurnMenuButton(), SizedBox(width: 10)],
+            ),
       body: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: EdgeInsets.all(isMobile ? 10 : 18),
         child: history.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const _CashCard(
+            child: _CashPanelMessage(
+              icon: Icons.history_rounded,
+              title: 'Historial',
+              detail: 'Sincronizando turnos...',
+            ),
+          ),
           error: (error, _) => _CashCard(
             child: _CashPanelMessage(
               icon: Icons.history_toggle_off_rounded,
@@ -852,79 +1175,378 @@ class CashTurnHistoryScreen extends ConsumerWidget {
             ),
           ),
           data: (rows) {
-            final totalExpected = rows.fold<double>(
+            final visibleRows = _filterRows(rows);
+            final totalExpected = visibleRows.fold<double>(
               0,
               (sum, row) => sum + row.expectedAmount,
             );
-            final totalDiff = rows.fold<double>(
+            final totalDiff = visibleRows.fold<double>(
               0,
               (sum, row) => sum + row.difference,
             );
             return Column(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: _StatCard(
-                        icon: Icons.history_rounded,
-                        label: 'Turnos cerrados',
-                        value: rows.length.toString(),
+                if (!isMobile) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _StatCard(
+                          icon: Icons.history_rounded,
+                          label: 'Turnos cerrados',
+                          value: visibleRows.length.toString(),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _StatCard(
-                        icon: Icons.account_balance_wallet_outlined,
-                        label: 'Esperado acumulado',
-                        value: formatRdCurrencyAccounting(totalExpected),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _StatCard(
+                          icon: Icons.account_balance_wallet_outlined,
+                          label: 'Esperado acumulado',
+                          value: formatRdCurrencyAccounting(totalExpected),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _StatCard(
-                        icon: Icons.compare_arrows_rounded,
-                        label: 'Diferencia',
-                        value: formatRdCurrencyAccounting(totalDiff),
-                        valueColor: totalDiff.abs() < 0.01
-                            ? _cashText
-                            : totalDiff > 0
-                            ? const Color(0xFF16A34A)
-                            : _danger,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _StatCard(
+                          icon: Icons.compare_arrows_rounded,
+                          label: 'Diferencia',
+                          value: formatRdCurrencyAccounting(totalDiff),
+                          valueColor: totalDiff.abs() < 0.01
+                              ? _cashText
+                              : totalDiff > 0
+                              ? const Color(0xFF16A34A)
+                              : _danger,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton.filledTonal(
-                      tooltip: 'Actualizar',
-                      onPressed: () => ref.invalidate(cashTurnHistoryProvider),
-                      icon: const Icon(Icons.refresh_rounded),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                Expanded(
-                  child: _CashCard(
-                    padding: EdgeInsets.zero,
-                    child: rows.isEmpty
-                        ? const _CashPanelMessage(
-                            icon: Icons.history_toggle_off_rounded,
-                            title: 'Sin turnos cerrados',
-                            detail:
-                                'Cuando cierres turnos de caja aparecerán aquí.',
-                          )
-                        : ListView.separated(
-                            padding: const EdgeInsets.all(14),
-                            itemCount: rows.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 10),
-                            itemBuilder: (context, index) =>
-                                _TurnHistoryWideCard(row: rows[index]),
-                          ),
+                      const SizedBox(width: 8),
+                      IconButton.filledTonal(
+                        tooltip: 'Actualizar',
+                        onPressed: () =>
+                            ref.invalidate(cashTurnHistoryProvider),
+                        icon: const Icon(Icons.refresh_rounded),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 14),
+                ],
+                if (isMobile && _selectedRange != null) ...[
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: InputChip(
+                      label: Text(_rangeLabel),
+                      avatar: const Icon(Icons.calendar_today_outlined),
+                      onDeleted: () => setState(() => _selectedRange = null),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                Expanded(
+                  child: visibleRows.isEmpty
+                      ? const _CashPanelMessage(
+                          icon: Icons.history_toggle_off_rounded,
+                          title: 'Sin turnos cerrados',
+                          detail:
+                              'Cuando cierres turnos de caja aparecerán aquí.',
+                        )
+                      : ListView.separated(
+                          padding: EdgeInsets.zero,
+                          itemCount: visibleRows.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 10),
+                          itemBuilder: (context, index) =>
+                              _TurnHistoryWideCard(row: visibleRows[index]),
+                        ),
                 ),
               ],
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+enum _ShiftStatusFilter { all, open, closed }
+
+class _ShiftHistoryFilterDraft {
+  const _ShiftHistoryFilterDraft({required this.range, required this.status});
+
+  final DateTimeRange? range;
+  final _ShiftStatusFilter status;
+}
+
+class _ShiftHistoryFilterDrawer extends StatefulWidget {
+  const _ShiftHistoryFilterDrawer({
+    required this.initialRange,
+    required this.initialStatus,
+  });
+
+  final DateTimeRange? initialRange;
+  final _ShiftStatusFilter initialStatus;
+
+  @override
+  State<_ShiftHistoryFilterDrawer> createState() =>
+      _ShiftHistoryFilterDrawerState();
+}
+
+class _ShiftHistoryFilterDrawerState extends State<_ShiftHistoryFilterDrawer> {
+  late DateTimeRange? _range = widget.initialRange;
+  late _ShiftStatusFilter _status = widget.initialStatus;
+
+  DateTime get _today {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  Future<void> _pickRange() async {
+    final today = _today;
+    final next = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(today.year - 5),
+      lastDate: DateTime(today.year + 1),
+      initialDateRange: _range ?? DateTimeRange(start: today, end: today),
+      locale: const Locale('es', 'DO'),
+      helpText: 'Intervalo',
+      cancelText: 'Cancelar',
+      confirmText: 'Aplicar',
+    );
+    if (next == null || !mounted) return;
+    setState(() => _range = next);
+  }
+
+  void _apply() {
+    Navigator.of(
+      context,
+    ).pop(_ShiftHistoryFilterDraft(range: _range, status: _status));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final panelWidth = width < 390 ? width * 0.90 : width * 0.84;
+    final safeBottom = MediaQuery.viewPaddingOf(context).bottom;
+    final fmt = DateFormat('dd/MM/yyyy', 'es_DO');
+    final today = _today;
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    return SafeArea(
+      child: Material(
+        color: Colors.white,
+        borderRadius: const BorderRadius.horizontal(left: Radius.circular(18)),
+        child: SizedBox(
+          width: panelWidth.clamp(286.0, 360.0),
+          height: double.infinity,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 10, 10),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: AppColors.secondarySoft,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.filter_alt_outlined,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Filtros',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          Text(
+                            'Historial de turnos',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Cerrar',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1, color: AppColors.border),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                  children: [
+                    const _FilterSectionLabel('Fecha'),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _FilterPill(
+                          label: 'Hoy',
+                          selected:
+                              _range?.start == today && _range?.end == today,
+                          onTap: () => setState(
+                            () => _range = DateTimeRange(
+                              start: today,
+                              end: today,
+                            ),
+                          ),
+                        ),
+                        _FilterPill(
+                          label: 'Ayer',
+                          selected:
+                              _range?.start == yesterday &&
+                              _range?.end == yesterday,
+                          onTap: () => setState(
+                            () => _range = DateTimeRange(
+                              start: yesterday,
+                              end: yesterday,
+                            ),
+                          ),
+                        ),
+                        _FilterPill(
+                          label: 'Todos',
+                          selected: _range == null,
+                          onTap: () => setState(() => _range = null),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: _pickRange,
+                      icon: const Icon(Icons.date_range_rounded, size: 18),
+                      label: Text(
+                        _range == null
+                            ? 'Personalizado'
+                            : '${fmt.format(_range!.start)} - ${fmt.format(_range!.end)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    const _FilterSectionLabel('Estado'),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _FilterPill(
+                          label: 'Todos',
+                          selected: _status == _ShiftStatusFilter.all,
+                          onTap: () =>
+                              setState(() => _status = _ShiftStatusFilter.all),
+                        ),
+                        _FilterPill(
+                          label: 'Abiertos',
+                          selected: _status == _ShiftStatusFilter.open,
+                          onTap: () =>
+                              setState(() => _status = _ShiftStatusFilter.open),
+                        ),
+                        _FilterPill(
+                          label: 'Cerrados',
+                          selected: _status == _ShiftStatusFilter.closed,
+                          onTap: () => setState(
+                            () => _status = _ShiftStatusFilter.closed,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(16, 10, 16, 12 + safeBottom),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(context).pop(
+                          const _ShiftHistoryFilterDraft(
+                            range: null,
+                            status: _ShiftStatusFilter.all,
+                          ),
+                        ),
+                        child: const Text('Limpiar'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: _apply,
+                        child: const Text('Aplicar'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterSectionLabel extends StatelessWidget {
+  const _FilterSectionLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: AppColors.textSecondary,
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterPill extends StatelessWidget {
+  const _FilterPill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ChoiceChip(
+      label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+      selected: selected,
+      onSelected: (_) => onTap(),
+      labelStyle: TextStyle(
+        color: selected ? Colors.white : AppColors.textPrimary,
+        fontWeight: FontWeight.w800,
+      ),
+      selectedColor: AppColors.primary,
+      backgroundColor: AppColors.surfaceMuted,
+      side: BorderSide(
+        color: selected ? AppColors.primary : AppColors.borderStrong,
       ),
     );
   }
@@ -1038,7 +1660,11 @@ class _RecentExpensesCard extends ConsumerWidget {
           const Divider(color: _cashLine),
           Expanded(
             child: history.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const _CashPanelMessage(
+                icon: Icons.receipt_long_outlined,
+                title: 'Gastos recientes',
+                detail: 'Sincronizando historial...',
+              ),
               error: (error, _) => _CashPanelMessage(
                 icon: Icons.info_outline_rounded,
                 title: 'Sin historial disponible',
@@ -1348,6 +1974,11 @@ class _TurnHistoryWideCard extends StatelessWidget {
   final CashSessionHistoryModel row;
 
   Future<void> _showDetail(BuildContext context) {
+    if (MediaQuery.sizeOf(context).width < 700) {
+      return Navigator.of(context).push<void>(
+        MaterialPageRoute(builder: (_) => _ShiftDetailPage(row: row)),
+      );
+    }
     return showDialog<void>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.34),
@@ -1357,6 +1988,7 @@ class _TurnHistoryWideCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.sizeOf(context).width < 700;
     final fmt = DateFormat('dd/MM/yyyy HH:mm', 'es_DO');
     final opened = fmt.format(row.openedAt.toLocal());
     final closed = row.closedAt == null
@@ -1369,10 +2001,10 @@ class _TurnHistoryWideCard extends StatelessWidget {
         : _danger;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      padding: EdgeInsets.fromLTRB(12, isMobile ? 12 : 10, 12, 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
         border: Border.all(color: const Color(0xFFDDE8F1)),
         boxShadow: const [
           BoxShadow(
@@ -1382,68 +2014,183 @@ class _TurnHistoryWideCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
+      child: isMobile
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEAF1FF),
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: const Icon(
+                        Icons.point_of_sale_rounded,
+                        color: _cashBlue,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _TurnInfoBlock(
+                        title: row.userName,
+                        subtitle: 'Turno ${row.businessDate}',
+                      ),
+                    ),
+                    OutlinedButton(
+                      onPressed: () => _showDetail(context),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _cashBlue,
+                        side: const BorderSide(color: Color(0xFFC7D8FF)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text('Ver'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _TurnMiniPill(label: 'Abrió', value: opened),
+                    _TurnMiniPill(label: 'Cerró', value: closed),
+                    _TurnMiniPill(
+                      label: 'Esperado',
+                      value: formatRdCurrencyAccounting(row.expectedAmount),
+                    ),
+                    _TurnMiniPill(
+                      label: 'Diferencia',
+                      value: formatRdCurrencyAccounting(row.difference),
+                      color: diffColor,
+                    ),
+                  ],
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEAF1FF),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.point_of_sale_rounded,
+                    color: _cashBlue,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: _TurnInfoBlock(
+                    title: row.userName,
+                    subtitle: 'Turno ${row.businessDate}',
+                  ),
+                ),
+                Expanded(
+                  child: _TurnInfoBlock(title: 'Abrió', subtitle: opened),
+                ),
+                Expanded(
+                  child: _TurnInfoBlock(title: 'Cerró', subtitle: closed),
+                ),
+                Expanded(
+                  child: _TurnInfoBlock(
+                    title: 'Inicial',
+                    subtitle: formatRdCurrencyAccounting(row.initialAmount),
+                  ),
+                ),
+                Expanded(
+                  child: _TurnInfoBlock(
+                    title: 'Esperado',
+                    subtitle: formatRdCurrencyAccounting(row.expectedAmount),
+                  ),
+                ),
+                Expanded(
+                  child: _TurnInfoBlock(
+                    title: 'Cierre',
+                    subtitle: formatRdCurrencyAccounting(row.closingAmount),
+                  ),
+                ),
+                Expanded(
+                  child: _TurnInfoBlock(
+                    title: 'Diferencia',
+                    subtitle: formatRdCurrencyAccounting(row.difference),
+                    color: diffColor,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _showDetail(context),
+                  icon: const Icon(Icons.visibility_outlined, size: 17),
+                  label: const Text('Ver detalle'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _cashBlue,
+                    side: const BorderSide(color: Color(0xFFC7D8FF)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 11,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+class _TurnMiniPill extends StatelessWidget {
+  const _TurnMiniPill({
+    required this.label,
+    required this.value,
+    this.color = _cashText,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FBFF),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _cashLine),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: const Color(0xFFEAF1FF),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.point_of_sale_rounded, color: _cashBlue),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 2,
-            child: _TurnInfoBlock(
-              title: row.userName,
-              subtitle: 'Turno ${row.businessDate}',
+          Text(
+            label,
+            style: const TextStyle(
+              color: _cashMuted,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
             ),
           ),
-          Expanded(
-            child: _TurnInfoBlock(title: 'Abrió', subtitle: opened),
-          ),
-          Expanded(
-            child: _TurnInfoBlock(title: 'Cerró', subtitle: closed),
-          ),
-          Expanded(
-            child: _TurnInfoBlock(
-              title: 'Inicial',
-              subtitle: formatRdCurrencyAccounting(row.initialAmount),
-            ),
-          ),
-          Expanded(
-            child: _TurnInfoBlock(
-              title: 'Esperado',
-              subtitle: formatRdCurrencyAccounting(row.expectedAmount),
-            ),
-          ),
-          Expanded(
-            child: _TurnInfoBlock(
-              title: 'Cierre',
-              subtitle: formatRdCurrencyAccounting(row.closingAmount),
-            ),
-          ),
-          Expanded(
-            child: _TurnInfoBlock(
-              title: 'Diferencia',
-              subtitle: formatRdCurrencyAccounting(row.difference),
-              color: diffColor,
-            ),
-          ),
-          const SizedBox(width: 8),
-          OutlinedButton.icon(
-            onPressed: () => _showDetail(context),
-            icon: const Icon(Icons.visibility_outlined, size: 17),
-            label: const Text('Ver detalle'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: _cashBlue,
-              side: const BorderSide(color: Color(0xFFC7D8FF)),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(9),
-              ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
             ),
           ),
         ],
@@ -1617,6 +2364,202 @@ class _TurnDetailDialog extends StatelessWidget {
   }
 }
 
+class _ShiftDetailPage extends StatelessWidget {
+  const _ShiftDetailPage({required this.row});
+
+  final CashSessionHistoryModel row;
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = DateFormat('dd/MM/yyyy HH:mm', 'es_DO');
+    final opened = fmt.format(row.openedAt.toLocal());
+    final closed = row.closedAt == null
+        ? 'Sin cierre'
+        : fmt.format(row.closedAt!.toLocal());
+    final diffColor = row.difference.abs() < 0.01
+        ? _cashBlue
+        : row.difference > 0
+        ? const Color(0xFF16A34A)
+        : _danger;
+
+    return Scaffold(
+      backgroundColor: _cashBg,
+      appBar: const CustomAppBar(
+        title: 'Shift Details',
+        showLogo: false,
+        showDepartmentLabel: false,
+        trailing: SizedBox.shrink(),
+      ),
+      body: SafeArea(
+        top: false,
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(
+            12,
+            12,
+            12,
+            18 + MediaQuery.viewPaddingOf(context).bottom,
+          ),
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: _cashLine),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: AppColors.secondarySoft,
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: const Icon(
+                      Icons.point_of_sale_rounded,
+                      color: _cashBlue,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          row.userName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            color: _cashText,
+                          ),
+                        ),
+                        Text(
+                          'Turno ${row.businessDate}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: _cashMuted,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _StatusChip(status: row.status),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            _ShiftDetailSection(
+              title: 'Resumen',
+              children: [
+                _TurnDetailLine(
+                  label: 'Base inicial',
+                  value: formatRdCurrencyAccounting(row.initialAmount),
+                ),
+                _TurnDetailLine(
+                  label: 'Efectivo esperado',
+                  value: formatRdCurrencyAccounting(row.expectedAmount),
+                ),
+                _TurnDetailLine(
+                  label: 'Efectivo contado',
+                  value: formatRdCurrencyAccounting(row.closingAmount),
+                ),
+                _TurnDetailLine(
+                  label: 'Diferencia',
+                  value: formatRdCurrencyAccounting(row.difference),
+                  color: diffColor,
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _ShiftDetailSection(
+              title: 'Tiempos',
+              children: [
+                _TurnDetailLine(label: 'Apertura', value: opened),
+                _TurnDetailLine(label: 'Cierre', value: closed),
+                _TurnDetailLine(label: 'Día negocio', value: row.businessDate),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _ShiftDetailSection(
+              title: 'Auditoría',
+              children: [
+                _TurnDetailLine(label: 'Estado', value: row.status),
+                _TurnDetailLine(label: 'ID turno', value: row.id),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ShiftDetailSection extends StatelessWidget {
+  const _ShiftDetailSection({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _cashLine),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: _cashText,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 6),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final open = status.toUpperCase() == 'OPEN';
+    final color = open ? const Color(0xFF16A34A) : _cashBlue;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        open ? 'Abierto' : 'Cerrado',
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
 class _TurnDetailAmount extends StatelessWidget {
   const _TurnDetailAmount({required this.label, required this.value});
 
@@ -1662,10 +2605,15 @@ class _TurnDetailAmount extends StatelessWidget {
 }
 
 class _TurnDetailLine extends StatelessWidget {
-  const _TurnDetailLine({required this.label, required this.value});
+  const _TurnDetailLine({
+    required this.label,
+    required this.value,
+    this.color = _cashText,
+  });
 
   final String label;
   final String value;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -1687,10 +2635,7 @@ class _TurnDetailLine extends StatelessWidget {
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style: const TextStyle(
-                color: _cashText,
-                fontWeight: FontWeight.w800,
-              ),
+              style: TextStyle(color: color, fontWeight: FontWeight.w800),
             ),
           ),
         ],

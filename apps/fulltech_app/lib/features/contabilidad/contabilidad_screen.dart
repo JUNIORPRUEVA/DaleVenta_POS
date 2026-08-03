@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/auth/role_permissions.dart';
 import '../../core/routing/routes.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 
@@ -18,6 +19,9 @@ class ContabilidadScreen extends ConsumerWidget {
 
     if (!canUseModule) {
       return Scaffold(
+        backgroundColor: MediaQuery.sizeOf(context).width < 900
+            ? AppColors.background
+            : null,
         appBar: const CustomAppBar(
           title: 'Contabilidad',
           showLogo: false,
@@ -38,13 +42,15 @@ class ContabilidadScreen extends ConsumerWidget {
     }
 
     return Scaffold(
+      backgroundColor: MediaQuery.sizeOf(context).width < 900
+          ? AppColors.background
+          : const Color(0xFFF5F7FA),
       appBar: const CustomAppBar(
         title: 'Contabilidad',
         showLogo: false,
         showDepartmentLabel: false,
       ),
       drawer: buildAdaptiveDrawer(context, currentUser: user),
-      backgroundColor: const Color(0xFFF5F7FA),
       body: const _AccountingExecutivePage(),
     );
   }

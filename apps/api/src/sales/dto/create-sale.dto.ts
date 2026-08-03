@@ -1,5 +1,15 @@
-import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsIn, IsNumber, IsOptional, IsString, IsUUID, Min, ValidateNested } from 'class-validator';
+import { Type } from "class-transformer";
+import {
+  ArrayMinSize,
+  IsArray,
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+  ValidateNested,
+} from "class-validator";
 
 export class CreateSaleItemDto {
   @IsOptional()
@@ -29,6 +39,10 @@ export class CreateSaleItemDto {
 
 export class CreateSaleDto {
   @IsOptional()
+  @IsString()
+  clientRequestId?: string;
+
+  @IsOptional()
   @IsUUID()
   customerId?: string;
 
@@ -37,8 +51,8 @@ export class CreateSaleDto {
   note?: string;
 
   @IsOptional()
-  @IsIn(['cash', 'transfer', 'mixed', 'credit'])
-  paymentMethod?: 'cash' | 'transfer' | 'mixed' | 'credit';
+  @IsIn(["cash", "transfer", "mixed", "credit"])
+  paymentMethod?: "cash" | "transfer" | "mixed" | "credit";
 
   @IsOptional()
   @Type(() => Number)

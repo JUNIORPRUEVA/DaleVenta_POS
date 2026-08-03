@@ -403,6 +403,15 @@ export class SalesService {
     }
 
     const customerId = dto.customerId?.trim() || null;
+    const clientRequestId = dto.clientRequestId?.trim() || null;
+
+    if (clientRequestId) {
+      const existing = await this.prisma.sale.findFirst({
+        where: { companyId, clientRequestId },
+        include: this.saleInclude(),
+      });
+      if (existing) return existing;
+    }
 
     if (customerId) {
       try {
@@ -531,36 +540,15 @@ export class SalesService {
       throw new BadRequestException("Debes abrir caja antes de facturar.");
     }
 
-    const paymentMethod = dto.paymentMethod ?? "cash";
-    const paymentCashAmount = new Prisma.Decimal(
-      dto.paymentCashAmount ??
-        (paymentMethod === "cash" ? totalSold.toNumber() : 0),
-    ).toDecimalPlaces(2);
-    const paymentTransferAmount = new Prisma.Decimal(
-      dto.paymentTransferAmount ??
-        (paymentMethod === "transfer" ? totalSold.toNumber() : 0),
-    ).toDecimalPlaces(2);
-    const paidAmount = paymentCashAmount.plus(paymentTransferAmount);
-    const requestedCreditAmount = new Prisma.Decimal(dto.creditAmount ?? 0);
-    const computedCreditAmount = totalSold.minus(paidAmount);
-    const creditAmount =
-      paymentMethod === "credit"
-        ? requestedCreditAmount.greaterThan(computedCreditAmount)
-          ? requestedCreditAmount
-          : computedCreditAmount
-        : new Prisma.Decimal(0);
-    const creditBalance =
-      paymentMethod === "credit" ? creditAmount : new Prisma.Decimal(0);
-    if (paymentMethod !== "credit" && paidAmount.lessThan(totalSold)) {
-      throw new BadRequestException(
-        "El monto pagado no cubre el total de la factura.",
-      );
-    }
-    if (paymentMethod === "credit" && paidAmount.greaterThan(totalSold)) {
-      throw new BadRequestException(
-        "El abono inicial no puede superar el total de la factura.",
-      );
-    }
+    const payment = this.normalizeSalePayment(dto, totalSold);
+    const {
+      paymentMethod,
+      paymentCashAmount,
+      paymentTransferAmount,
+      paidAmount,
+      creditAmount,
+      creditBalance,
+    } = payment;
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -587,6 +575,7 @@ export class SalesService {
           data: {
             userId: user.id,
             companyId,
+            clientRequestId,
             customerId,
             cashSessionId: activeSession.id,
             saleDate: new Date(),
@@ -1007,6 +996,98 @@ export class SalesService {
     if (value === null || value === undefined) return 0;
     if (typeof value === "number") return value;
     return Number(value);
+  }
+
+  private normalizeSalePayment(dto: CreateSaleDto, totalSold: Prisma.Decimal) {
+    const allowed = new Set(["cash", "transfer", "mixed", "credit"]);
+    const requestedMethod = (dto.paymentMethod ?? "cash").trim();
+    const paymentMethod = allowed.has(requestedMethod)
+      ? (requestedMethod as "cash" | "transfer" | "mixed" | "credit")
+      : "cash";
+    const cashWasProvided = dto.paymentCashAmount !== undefined;
+    const transferWasProvided = dto.paymentTransferAmount !== undefined;
+    const total = totalSold.toDecimalPlaces(2);
+
+    let paymentCashAmount = new Prisma.Decimal(
+      dto.paymentCashAmount ??
+        (paymentMethod === "cash" ? total.toNumber() : 0),
+    ).toDecimalPlaces(2);
+    let paymentTransferAmount = new Prisma.Decimal(
+      dto.paymentTransferAmount ??
+        (paymentMethod === "transfer" ? total.toNumber() : 0),
+    ).toDecimalPlaces(2);
+
+    if (paymentCashAmount.lt(0) || paymentTransferAmount.lt(0)) {
+      throw new BadRequestException(
+        "Los montos de pago no pueden ser negativos.",
+      );
+    }
+
+    if (paymentMethod === "cash") {
+      paymentCashAmount = total;
+      paymentTransferAmount = new Prisma.Decimal(0);
+    }
+
+    if (paymentMethod === "transfer") {
+      paymentCashAmount = new Prisma.Decimal(0);
+      paymentTransferAmount = total;
+    }
+
+    const paidAmount = paymentCashAmount.plus(paymentTransferAmount);
+
+    if (paymentMethod === "mixed") {
+      if (!cashWasProvided || !transferWasProvided) {
+        throw new BadRequestException(
+          "El pago mixto requiere monto en efectivo y monto por transferencia.",
+        );
+      }
+      if (paymentCashAmount.lte(0) || paymentTransferAmount.lte(0)) {
+        throw new BadRequestException(
+          "El pago mixto debe tener efectivo y transferencia mayores que cero.",
+        );
+      }
+      if (paidAmount.minus(total).abs().greaterThan(0.009)) {
+        throw new BadRequestException(
+          "En pago mixto, efectivo + transferencia debe coincidir con el total.",
+        );
+      }
+    }
+
+    const requestedCreditAmount = new Prisma.Decimal(
+      dto.creditAmount ?? 0,
+    ).toDecimalPlaces(2);
+    const computedCreditAmount = total.minus(paidAmount);
+    const creditAmount =
+      paymentMethod === "credit"
+        ? requestedCreditAmount.greaterThan(computedCreditAmount)
+          ? requestedCreditAmount
+          : computedCreditAmount
+        : new Prisma.Decimal(0);
+    const creditBalance =
+      paymentMethod === "credit" ? creditAmount : new Prisma.Decimal(0);
+
+    if (
+      paymentMethod !== "credit" &&
+      paidAmount.minus(total).abs().greaterThan(0.009)
+    ) {
+      throw new BadRequestException(
+        "El monto pagado debe coincidir con el total de la factura.",
+      );
+    }
+    if (paymentMethod === "credit" && paidAmount.greaterThan(total)) {
+      throw new BadRequestException(
+        "El abono inicial no puede superar el total de la factura.",
+      );
+    }
+
+    return {
+      paymentMethod,
+      paymentCashAmount,
+      paymentTransferAmount,
+      paidAmount,
+      creditAmount,
+      creditBalance,
+    };
   }
 
   private buildDateRange(

@@ -438,64 +438,86 @@ class _ManualInternoScreenState extends ConsumerState<ManualInternoScreen> {
                 ),
               ),
             Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _error != null
-                  ? Center(child: Text(_error!))
-                  : entries.isEmpty
-                  ? const Center(child: Text('No hay reglas para mostrar'))
-                  : RefreshIndicator(
-                      onRefresh: _loadEntries,
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final isWide = constraints.maxWidth >= 980;
-                          final listPane = _ManualEntriesList(
-                            entries: entries,
-                            selectedEntryId: selectedEntry?.id,
-                            canManage: canManage,
-                            selectedForBulkDelete: _selectedForBulkDelete,
-                            onOpenEntry: (entry) =>
-                                _openEntryDetail(entry, canManage),
-                            onEditEntry: (entry) => _openEditor(entry: entry),
-                            onDeleteEntry: _deleteEntry,
-                            onToggleBulkSelection: _toggleBulkSelection,
-                            formatDate: _formatDate,
-                          );
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: _error != null
+                        ? Center(child: Text(_error!))
+                        : entries.isEmpty
+                        ? const Center(
+                            child: Text('No hay reglas para mostrar'),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: _loadEntries,
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final isWide = constraints.maxWidth >= 980;
+                                final listPane = _ManualEntriesList(
+                                  entries: entries,
+                                  selectedEntryId: selectedEntry?.id,
+                                  canManage: canManage,
+                                  selectedForBulkDelete: _selectedForBulkDelete,
+                                  onOpenEntry: (entry) =>
+                                      _openEntryDetail(entry, canManage),
+                                  onEditEntry: (entry) =>
+                                      _openEditor(entry: entry),
+                                  onDeleteEntry: _deleteEntry,
+                                  onToggleBulkSelection: _toggleBulkSelection,
+                                  formatDate: _formatDate,
+                                );
 
-                          if (!isWide) {
-                            return listPane;
-                          }
+                                if (!isWide) {
+                                  return listPane;
+                                }
 
-                          // Desktop split view: left = list, right = detail
-                          return Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Left: List
-                                SizedBox(width: 340, child: listPane),
-                                const SizedBox(width: 22),
-                                // Right: Detail/content
-                                Expanded(
-                                  child: _ManualEntryDetailPane(
-                                    entry: selectedEntry,
-                                    canManage: canManage,
-                                    onEdit: selectedEntry == null
-                                        ? null
-                                        : () =>
-                                              _openEditor(entry: selectedEntry),
-                                    onDelete: selectedEntry == null
-                                        ? null
-                                        : () => _deleteEntry(selectedEntry),
-                                    formatDate: _formatDate,
+                                // Desktop split view: left = list, right = detail
+                                return Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    8,
+                                    16,
+                                    16,
                                   ),
-                                ),
-                              ],
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      // Left: List
+                                      SizedBox(width: 340, child: listPane),
+                                      const SizedBox(width: 22),
+                                      // Right: Detail/content
+                                      Expanded(
+                                        child: _ManualEntryDetailPane(
+                                          entry: selectedEntry,
+                                          canManage: canManage,
+                                          onEdit: selectedEntry == null
+                                              ? null
+                                              : () => _openEditor(
+                                                  entry: selectedEntry,
+                                                ),
+                                          onDelete: selectedEntry == null
+                                              ? null
+                                              : () =>
+                                                    _deleteEntry(selectedEntry),
+                                          formatDate: _formatDate,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
                             ),
-                          );
-                        },
-                      ),
+                          ),
+                  ),
+                  if (_loading)
+                    const Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      child: LinearProgressIndicator(minHeight: 2),
                     ),
+                ],
+              ),
             ),
           ],
         ),

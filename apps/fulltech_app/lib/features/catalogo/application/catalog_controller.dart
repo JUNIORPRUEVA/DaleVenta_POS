@@ -159,6 +159,23 @@ class CatalogController extends StateNotifier<CatalogState> {
     )];
   }
 
+  bool _canContinueWithoutUploadedImage(Object error) {
+    if (error is! ApiException) return false;
+    final code = error.code;
+    return code == null || code >= 500;
+  }
+
+  Future<void> _saveSnapshotSafely(
+    CatalogRepository repo,
+    List<ProductModel> items,
+  ) async {
+    try {
+      await repo.saveProductsSnapshot(items);
+    } catch (_) {
+      // La cache offline no debe bloquear el flujo principal del catálogo.
+    }
+  }
+
   Future<void> load({bool silent = false, bool forceRemote = false}) async {
     if (silent && forceRemote && _remoteRefreshInFlight) return;
     if (silent &&
@@ -204,6 +221,7 @@ class CatalogController extends StateNotifier<CatalogState> {
       final syncVersion = buildCatalogSyncVersion(merged);
       final items = applyCatalogSyncVersion(merged, syncVersion);
       state = state.copyWith(items: items, loading: false, refreshing: false);
+      unawaited(_saveSnapshotSafely(repo, items));
       Future<void>.microtask(
         () => FulltechImageCacheManager.warmImageUrls(
           items.map((item) => item.displayFotoUrl),
@@ -242,18 +260,22 @@ class CatalogController extends StateNotifier<CatalogState> {
       final repo = ref.read(catalogRepositoryProvider);
       String? path;
       if (imageBytes != null && filename != null) {
-        path = await repo.uploadImage(bytes: imageBytes, filename: filename);
-        final cachedUrl = buildProductImageUrl(
-          imageUrl: path,
-          baseUrl: Env.apiBaseUrl,
-        );
-        unawaited(
-          FulltechImageCacheManager.putImageBytes(
-            url: cachedUrl,
-            bytes: imageBytes,
-            filename: filename,
-          ),
-        );
+        try {
+          path = await repo.uploadImage(bytes: imageBytes, filename: filename);
+          final cachedUrl = buildProductImageUrl(
+            imageUrl: path,
+            baseUrl: Env.apiBaseUrl,
+          );
+          unawaited(
+            FulltechImageCacheManager.putImageBytes(
+              url: cachedUrl,
+              bytes: imageBytes,
+              filename: filename,
+            ),
+          );
+        } catch (e) {
+          if (!_canContinueWithoutUploadedImage(e)) rethrow;
+        }
       }
       final created = await repo.createProduct(
         nombre: nombre,
@@ -267,6 +289,7 @@ class CatalogController extends StateNotifier<CatalogState> {
       );
       final updated = [created, ...state.items];
       state = state.copyWith(items: updated, saving: false);
+      unawaited(_saveSnapshotSafely(repo, updated));
       await load(forceRemote: true, silent: true);
       _lastSuccessfulRemoteSyncAt = DateTime.now();
     } catch (e) {
@@ -455,21 +478,25 @@ class CatalogController extends StateNotifier<CatalogState> {
       final repo = ref.read(catalogRepositoryProvider);
       String? fotoUrl;
       if (newImageBytes != null && newFilename != null) {
-        fotoUrl = await repo.uploadImage(
-          bytes: newImageBytes,
-          filename: newFilename,
-        );
-        final cachedUrl = buildProductImageUrl(
-          imageUrl: fotoUrl,
-          baseUrl: Env.apiBaseUrl,
-        );
-        unawaited(
-          FulltechImageCacheManager.putImageBytes(
-            url: cachedUrl,
+        try {
+          fotoUrl = await repo.uploadImage(
             bytes: newImageBytes,
             filename: newFilename,
-          ),
-        );
+          );
+          final cachedUrl = buildProductImageUrl(
+            imageUrl: fotoUrl,
+            baseUrl: Env.apiBaseUrl,
+          );
+          unawaited(
+            FulltechImageCacheManager.putImageBytes(
+              url: cachedUrl,
+              bytes: newImageBytes,
+              filename: newFilename,
+            ),
+          );
+        } catch (e) {
+          if (!_canContinueWithoutUploadedImage(e)) rethrow;
+        }
       }
       final updated = await repo.updateProduct(
         id: id,
@@ -482,8 +509,19 @@ class CatalogController extends StateNotifier<CatalogState> {
         categoria: categoria,
         operationId: saveOperationId,
       );
-      final list = state.items.map((p) => p.id == id ? updated : p).toList();
+      final list = state.items
+          .map(
+            (p) => p.id == id && updated.displayFotoUrl == null
+                ? updated.copyWith(
+                    fotoUrl: p.fotoUrl,
+                    originalFotoUrl: p.originalFotoUrl,
+                    imageVersion: p.imageVersion,
+                  )
+                : (p.id == id ? updated : p),
+          )
+          .toList();
       state = state.copyWith(items: list, saving: false);
+      unawaited(_saveSnapshotSafely(repo, list));
       await load(forceRemote: true, silent: true);
       _lastSuccessfulRemoteSyncAt = DateTime.now();
     } catch (e) {
@@ -511,21 +549,43 @@ class CatalogController extends StateNotifier<CatalogState> {
   }
 
   Future<void> remove(String id) async {
-    state = state.copyWith(saving: true, actionError: null);
-    try {
-      final repo = ref.read(catalogRepositoryProvider);
-      await repo.deleteProduct(id);
-      final list = state.items.where((p) => p.id != id).toList();
-      state = state.copyWith(items: list, saving: false);
-      await load(forceRemote: true, silent: true);
-      _lastSuccessfulRemoteSyncAt = DateTime.now();
-    } catch (e) {
-      final message = e is ApiException
-          ? e.message
-          : 'No se pudo eliminar el producto';
-      state = state.copyWith(saving: false, actionError: message);
-      rethrow;
-    }
+    final currentItems = state.items;
+    final index = currentItems.indexWhere((product) => product.id == id);
+    if (index < 0) return;
+    final removed = currentItems[index];
+    final nextItems = [
+      for (final product in currentItems)
+        if (product.id != id) product,
+    ];
+    state = state.copyWith(
+      items: nextItems,
+      saving: false,
+      clearError: true,
+      actionError: null,
+    );
+
+    final repo = ref.read(catalogRepositoryProvider);
+    unawaited(
+      repo
+          .deleteProduct(id, skipLoader: true)
+          .then((_) async {
+            await load(forceRemote: true, silent: true);
+            _lastSuccessfulRemoteSyncAt = DateTime.now();
+          })
+          .catchError((Object e) {
+            final current = state.items;
+            if (current.any((product) => product.id == id)) return;
+            final restored = [...current];
+            final safeIndex = index.clamp(0, restored.length);
+            restored.insert(safeIndex, removed);
+            final message = e is ApiException
+                ? e.message
+                : 'No se pudo eliminar el producto';
+            state = state.copyWith(items: restored, actionError: message);
+            unawaited(_saveSnapshotSafely(repo, restored));
+          }),
+    );
+    unawaited(_saveSnapshotSafely(repo, nextItems));
   }
 
   Future<int> purgeAllDebug() async {

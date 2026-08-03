@@ -16,6 +16,7 @@ import '../../core/errors/api_exception.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
+import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/fulltech_page_header.dart';
 import '../../core/widgets/pdf_action_menu.dart';
 import '../cash/cash_dialogs.dart';
@@ -38,18 +39,19 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
   final _searchController = TextEditingController();
   Timer? _refreshTimer;
   String? _selectedCreditId;
+  bool _searchOpen = false;
+  bool _loading = false;
+  String? _error;
+  List<SaleModel> _credits = const [];
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(() => setState(() {}));
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      ref.invalidate(salesCreditsProvider);
-    });
+    unawaited(_loadCredits());
     _refreshTimer = Timer.periodic(const Duration(seconds: 8), (_) {
       if (!mounted) return;
-      ref.invalidate(salesCreditsProvider);
+      unawaited(_refreshCredits());
     });
   }
 
@@ -60,29 +62,139 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
     super.dispose();
   }
 
+  Future<void> _loadCredits() async {
+    if (mounted) setState(() => _loading = true);
+    try {
+      final cached = await ref.read(ventasRepositoryProvider).cachedCredits();
+      if (mounted && cached.isNotEmpty) {
+        setState(() {
+          _credits = cached;
+          _loading = false;
+        });
+      }
+    } catch (_) {}
+    await _refreshCredits();
+  }
+
+  Future<void> _refreshCredits() async {
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
+    try {
+      final rows = await ref
+          .read(ventasRepositoryProvider)
+          .listCredits(includePaid: true);
+      if (!mounted) return;
+      setState(() {
+        _credits = rows;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error is ApiException ? error.message : '$error';
+        _loading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).user;
-    final credits = ref.watch(salesCreditsProvider);
+    final isMobile = MediaQuery.sizeOf(context).width < 820;
 
     return Scaffold(
       backgroundColor: const Color(0xFFEFF6FA),
       drawer: buildAdaptiveDrawer(context, currentUser: user),
-      appBar: const FullTechPageHeader(
-        title: 'Créditos',
-        preferDrawerLeading: true,
-        actions: [CashTurnMenuButton(), SizedBox(width: 10)],
+      appBar: isMobile
+          ? CustomAppBar(
+              title: 'Créditos',
+              titleWidget: _searchOpen ? _buildAppBarSearchField() : null,
+              showLogo: false,
+              showDepartmentLabel: false,
+              actions: [
+                IconButton(
+                  tooltip: _searchOpen ? 'Cerrar búsqueda' : 'Buscar',
+                  onPressed: () => setState(() {
+                    _searchOpen = !_searchOpen;
+                    if (!_searchOpen) _searchController.clear();
+                  }),
+                  icon: Icon(
+                    _searchOpen ? Icons.close_rounded : Icons.search_rounded,
+                  ),
+                ),
+                if (!_searchOpen)
+                  IconButton(
+                    tooltip: 'Actualizar',
+                    onPressed: _refreshCredits,
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
+                if (!_searchOpen) const CashTurnMenuButton(compact: true),
+              ],
+              trailing: const SizedBox.shrink(),
+            )
+          : const FullTechPageHeader(
+              title: 'Créditos',
+              preferDrawerLeading: true,
+              actions: [CashTurnMenuButton(), SizedBox(width: 10)],
+            ),
+      body: Stack(
+        children: [
+          Positioned.fill(child: _buildContent(_credits)),
+          if (_loading)
+            const Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              child: LinearProgressIndicator(minHeight: 2),
+            ),
+          if (_error != null && _credits.isEmpty)
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: _CreditMessage(
+                  title: 'No se pudieron cargar los créditos',
+                  detail: _error!,
+                ),
+              ),
+            ),
+        ],
       ),
-      body: credits.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Padding(
-          padding: const EdgeInsets.all(18),
-          child: _CreditMessage(
-            title: 'No se pudieron cargar los créditos',
-            detail: error is ApiException ? error.message : '$error',
+    );
+  }
+
+  Widget _buildAppBarSearchField() {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 260),
+        child: TextField(
+          controller: _searchController,
+          autofocus: true,
+          style: const TextStyle(color: Color(0xFF111827)),
+          decoration: InputDecoration(
+            hintText: 'Buscar',
+            hintStyle: const TextStyle(color: Color(0xFF8A9AA8)),
+            filled: true,
+            fillColor: Colors.white,
+            isDense: true,
+            prefixIcon: const Icon(
+              Icons.search_rounded,
+              size: 18,
+              color: Color(0xFF52667C),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 9,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
           ),
         ),
-        data: _buildContent,
       ),
     );
   }
@@ -134,8 +246,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                               const SizedBox(width: 8),
                               IconButton.filledTonal(
                                 tooltip: 'Actualizar',
-                                onPressed: () =>
-                                    ref.invalidate(salesCreditsProvider),
+                                onPressed: _refreshCredits,
                                 icon: const Icon(Icons.refresh_rounded),
                               ),
                             ],
@@ -192,15 +303,17 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                           const SizedBox(width: 12),
                           IconButton.filledTonal(
                             tooltip: 'Actualizar',
-                            onPressed: () =>
-                                ref.invalidate(salesCreditsProvider),
+                            onPressed: _refreshCredits,
                             icon: const Icon(Icons.refresh_rounded),
                           ),
                         ],
                       ),
-                const SizedBox(height: 14),
-                _CreditSearchBar(controller: _searchController),
-                const SizedBox(height: 14),
+                if (!mobile) ...[
+                  const SizedBox(height: 14),
+                  _CreditSearchBar(controller: _searchController),
+                  const SizedBox(height: 14),
+                ] else
+                  const SizedBox(height: 10),
                 Expanded(
                   child: filtered.isEmpty
                       ? const _CreditMessage(
@@ -317,7 +430,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
             transferAmount: draft.transferAmount,
             note: draft.note,
           );
-      ref.invalidate(salesCreditsProvider);
+      unawaited(_refreshCredits());
       if (!mounted) return;
       showCashToast(context, settle ? 'Crédito saldado' : 'Abono registrado');
     } catch (error) {
@@ -362,7 +475,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
     if (confirmed != true) return;
     try {
       await ref.read(ventasRepositoryProvider).deleteSale(sale.id);
-      ref.invalidate(salesCreditsProvider);
+      unawaited(_refreshCredits());
       if (!mounted) return;
       setState(() {
         if (_selectedCreditId == sale.id) _selectedCreditId = null;

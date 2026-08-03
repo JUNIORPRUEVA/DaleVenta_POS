@@ -95,7 +95,7 @@ class _UserScreenState extends ConsumerState<UserScreen> {
       appBar: CustomAppBar(title: 'FullTech', showLogo: true),
       drawer: buildAdaptiveDrawer(context, currentUser: user),
       body: user == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: Text('Preparando perfil...'))
           : _UserDetailContent(
               user: user,
               onPhotoTap: _pickAndUploadProfilePhoto,

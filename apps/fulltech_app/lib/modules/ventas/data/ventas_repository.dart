@@ -5,19 +5,56 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
+import '../../../core/cache/local_json_cache.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/models/product_model.dart';
+import '../../../core/offline/sync_queue_service.dart';
 import '../../clientes/cliente_model.dart';
 import '../sales_models.dart';
 
 final ventasRepositoryProvider = Provider<VentasRepository>((ref) {
-  return VentasRepository(ref.watch(dioProvider));
+  final repository = VentasRepository(
+    ref.watch(dioProvider),
+    ref.read(syncQueueServiceProvider.notifier),
+  );
+  repository.registerSyncHandlers();
+  return repository;
 });
 
 class VentasRepository {
   final Dio _dio;
+  final SyncQueueService _syncQueue;
+  final LocalJsonCache _cache = LocalJsonCache();
+  static const String _createSaleSyncType = 'sales.create';
+  static const String _creditsCacheKey = 'sales.credits.v1';
+  bool _handlersRegistered = false;
 
-  VentasRepository(this._dio);
+  VentasRepository(this._dio, this._syncQueue);
+
+  void registerSyncHandlers() {
+    if (_handlersRegistered) return;
+    _handlersRegistered = true;
+    _syncQueue.registerHandler(_createSaleSyncType, (payload) async {
+      await _createSaleRemote(
+        customerId: payload['customerId']?.toString(),
+        note: payload['note']?.toString(),
+        paymentMethod: payload['paymentMethod']?.toString(),
+        paymentCashAmount: _nullableDouble(payload['paymentCashAmount']),
+        paymentTransferAmount: _nullableDouble(
+          payload['paymentTransferAmount'],
+        ),
+        creditAmount: _nullableDouble(payload['creditAmount']),
+        expectedTotalSold: _nullableDouble(payload['expectedTotalSold']),
+        clientRequestId: payload['clientRequestId']?.toString(),
+        items: ((payload['items'] as List?) ?? const [])
+            .whereType<Map>()
+            .map(
+              (item) => SaleDraftItem.fromPayload(item.cast<String, dynamic>()),
+            )
+            .toList(growable: false),
+      );
+    });
+  }
 
   List<dynamic> _extractRows(dynamic data) {
     if (data is List) return data;
@@ -146,6 +183,9 @@ class VentasRepository {
         options: Options(extra: const {'skipLoader': true}),
       );
       final rows = res.data is List ? (res.data as List) : const [];
+      if (includePaid) {
+        await _cache.writeMap(_creditsCacheKey, {'items': rows});
+      }
       return rows
           .whereType<Map>()
           .map((e) => SaleModel.fromJson(e.cast<String, dynamic>()))
@@ -156,6 +196,15 @@ class VentasRepository {
         e.response?.statusCode,
       );
     }
+  }
+
+  Future<List<SaleModel>> cachedCredits() async {
+    final data = await _cache.readMap(_creditsCacheKey);
+    final rows = _extractRows(data);
+    return rows
+        .whereType<Map>()
+        .map((e) => SaleModel.fromJson(e.cast<String, dynamic>()))
+        .toList(growable: false);
   }
 
   Future<SaleModel> addCreditPayment({
@@ -354,6 +403,8 @@ class VentasRepository {
 
   Future<SaleModel?> createSale({
     String? customerId,
+    String? customerName,
+    String? customerPhone,
     String? note,
     String? paymentMethod,
     double? paymentCashAmount,
@@ -366,34 +417,175 @@ class VentasRepository {
       throw ApiException('Agrega al menos un item');
     }
     final normalizedCustomerId = (customerId ?? '').trim();
+    final clientRequestId = 'sale_req_${DateTime.now().microsecondsSinceEpoch}';
+    final payload = {
+      'clientRequestId': clientRequestId,
+      if (normalizedCustomerId.isNotEmpty) 'customerId': normalizedCustomerId,
+      if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+      if ((paymentMethod ?? '').trim().isNotEmpty)
+        'paymentMethod': paymentMethod!.trim(),
+      if (paymentCashAmount != null) 'paymentCashAmount': paymentCashAmount,
+      if (paymentTransferAmount != null)
+        'paymentTransferAmount': paymentTransferAmount,
+      if (creditAmount != null) 'creditAmount': creditAmount,
+      if (expectedTotalSold != null) 'expectedTotalSold': expectedTotalSold,
+      'items': items.map((item) => item.toPayload()).toList(),
+    };
 
     try {
-      final res = await _dio.post(
-        ApiRoutes.sales,
-        data: {
-          if (normalizedCustomerId.isNotEmpty)
-            'customerId': normalizedCustomerId,
-          if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
-          if ((paymentMethod ?? '').trim().isNotEmpty)
-            'paymentMethod': paymentMethod!.trim(),
-          if (paymentCashAmount != null) 'paymentCashAmount': paymentCashAmount,
-          if (paymentTransferAmount != null)
-            'paymentTransferAmount': paymentTransferAmount,
-          if (creditAmount != null) 'creditAmount': creditAmount,
-          if (expectedTotalSold != null) 'expectedTotalSold': expectedTotalSold,
-          'items': items.map((item) => item.toPayload()).toList(),
-        },
+      return await _createSaleRemote(
+        customerId: customerId,
+        note: note,
+        paymentMethod: paymentMethod,
+        paymentCashAmount: paymentCashAmount,
+        paymentTransferAmount: paymentTransferAmount,
+        creditAmount: creditAmount,
+        expectedTotalSold: expectedTotalSold,
+        clientRequestId: clientRequestId,
+        items: items,
       );
-      if (res.data is Map) {
-        return SaleModel.fromJson((res.data as Map).cast<String, dynamic>());
-      }
-      return null;
     } on DioException catch (e) {
-      throw ApiException(
-        _extractMessage(e.response?.data, 'No se pudo guardar la venta'),
-        e.response?.statusCode,
+      if (!_shouldQueueNetworkFailure(e)) {
+        throw ApiException(
+          _extractMessage(e.response?.data, 'No se pudo guardar la venta'),
+          e.response?.statusCode,
+        );
+      }
+      final localId = 'local_sale_${DateTime.now().microsecondsSinceEpoch}';
+      await _syncQueue.enqueue(
+        id: '$_createSaleSyncType:$localId',
+        type: _createSaleSyncType,
+        scope: 'sales',
+        payload: payload,
+      );
+      return _optimisticSale(
+        id: localId,
+        customerId: normalizedCustomerId.isEmpty ? null : normalizedCustomerId,
+        customerName: customerName,
+        customerPhone: customerPhone,
+        note: note,
+        paymentMethod: paymentMethod ?? 'cash',
+        paymentCashAmount: paymentCashAmount ?? expectedTotalSold ?? 0,
+        paymentTransferAmount: paymentTransferAmount ?? 0,
+        creditAmount: creditAmount ?? 0,
+        items: items,
+        totalSold: expectedTotalSold,
       );
     }
+  }
+
+  Future<SaleModel?> _createSaleRemote({
+    String? customerId,
+    String? note,
+    String? paymentMethod,
+    double? paymentCashAmount,
+    double? paymentTransferAmount,
+    double? creditAmount,
+    double? expectedTotalSold,
+    String? clientRequestId,
+    required List<SaleDraftItem> items,
+  }) async {
+    final normalizedCustomerId = (customerId ?? '').trim();
+    final res = await _dio.post(
+      ApiRoutes.sales,
+      data: {
+        if ((clientRequestId ?? '').trim().isNotEmpty)
+          'clientRequestId': clientRequestId!.trim(),
+        if (normalizedCustomerId.isNotEmpty) 'customerId': normalizedCustomerId,
+        if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+        if ((paymentMethod ?? '').trim().isNotEmpty)
+          'paymentMethod': paymentMethod!.trim(),
+        if (paymentCashAmount != null) 'paymentCashAmount': paymentCashAmount,
+        if (paymentTransferAmount != null)
+          'paymentTransferAmount': paymentTransferAmount,
+        if (creditAmount != null) 'creditAmount': creditAmount,
+        if (expectedTotalSold != null) 'expectedTotalSold': expectedTotalSold,
+        'items': items.map((item) => item.toPayload()).toList(),
+      },
+    );
+    if (res.data is Map) {
+      return SaleModel.fromJson((res.data as Map).cast<String, dynamic>());
+    }
+    return null;
+  }
+
+  bool _shouldQueueNetworkFailure(DioException error) {
+    final status = error.response?.statusCode;
+    return status == null || status >= 500;
+  }
+
+  SaleModel _optimisticSale({
+    required String id,
+    String? customerId,
+    String? customerName,
+    String? customerPhone,
+    String? note,
+    required String paymentMethod,
+    required double paymentCashAmount,
+    required double paymentTransferAmount,
+    required double creditAmount,
+    required List<SaleDraftItem> items,
+    double? totalSold,
+  }) {
+    final saleItems = items
+        .asMap()
+        .entries
+        .map((entry) {
+          final item = entry.value;
+          return SaleItemModel(
+            id: '${id}_item_${entry.key}',
+            productId: item.productId,
+            productNameSnapshot: item.name,
+            productImageSnapshot: item.imageUrl,
+            qty: item.qty,
+            priceSoldUnit: item.priceSoldUnit,
+            costUnitSnapshot: item.costUnitSnapshot,
+            subtotalSold: item.subtotalSold,
+            subtotalCost: item.subtotalCost,
+            profit: item.profit,
+            category: item.product?.categoriaLabel,
+          );
+        })
+        .toList(growable: false);
+    final resolvedTotal =
+        totalSold ??
+        saleItems.fold<double>(0, (sum, item) => sum + item.subtotalSold);
+    final totalCost = saleItems.fold<double>(
+      0,
+      (sum, item) => sum + item.subtotalCost,
+    );
+    final totalProfit = resolvedTotal - totalCost;
+    final paid = paymentCashAmount + paymentTransferAmount;
+    final balance = paymentMethod == 'credit'
+        ? (resolvedTotal - paid).clamp(0, double.infinity).toDouble()
+        : 0.0;
+
+    return SaleModel(
+      id: id,
+      userId: '',
+      userName: 'Pendiente de sincronizar',
+      customerId: customerId,
+      customerName: customerName,
+      customerPhone: customerPhone,
+      saleDate: DateTime.now(),
+      note: note,
+      totalSold: resolvedTotal,
+      totalCost: totalCost,
+      totalProfit: totalProfit,
+      commissionAmount: totalProfit > 0 ? totalProfit * 0.1 : 0,
+      paymentMethod: paymentMethod,
+      paymentCashAmount: paymentCashAmount,
+      paymentTransferAmount: paymentTransferAmount,
+      creditAmount: creditAmount,
+      creditPaidAmount: paid,
+      creditBalance: balance,
+      creditStatus: paymentMethod == 'credit'
+          ? (balance > 0 ? 'open' : 'paid')
+          : 'none',
+      isDeleted: false,
+      deletedAt: null,
+      items: saleItems,
+    );
   }
 
   Future<List<ProductModel>> fetchProducts({bool forceRefresh = false}) async {
@@ -502,4 +694,10 @@ class VentasRepository {
     final day = date.day.toString().padLeft(2, '0');
     return '${date.year}-$month-$day';
   }
+}
+
+double? _nullableDouble(dynamic value) {
+  if (value == null) return null;
+  if (value is num) return value.toDouble();
+  return double.tryParse(value.toString());
 }

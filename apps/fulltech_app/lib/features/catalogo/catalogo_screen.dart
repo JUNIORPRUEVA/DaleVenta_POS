@@ -13,6 +13,7 @@ import '../../core/models/product_model.dart';
 import '../../core/realtime/catalog_realtime_service.dart';
 import '../../core/routing/app_route_observer.dart';
 import '../../core/routing/routes.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/utils/media_file_actions.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/string_utils.dart';
@@ -403,6 +404,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
     final isWideLayout = MediaQuery.of(context).size.width >= 720;
 
     return Scaffold(
+      backgroundColor: isWideLayout || isModal ? null : AppColors.background,
       appBar: isModal
           ? null
           : CustomAppBar(
@@ -421,14 +423,21 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                 if (canManage)
                   Padding(
                     padding: const EdgeInsets.only(right: 6),
-                    child: FilledButton.icon(
-                      onPressed: () =>
-                          _openProductForm(categories: categoryOptions),
-                      icon: const Icon(Icons.add_rounded, size: 18),
-                      label: const Text('Nuevo producto'),
-                    ),
+                    child: isWideLayout
+                        ? FilledButton.icon(
+                            onPressed: () =>
+                                _openProductForm(categories: categoryOptions),
+                            icon: const Icon(Icons.add_rounded, size: 18),
+                            label: const Text('Nuevo producto'),
+                          )
+                        : IconButton(
+                            tooltip: 'Nuevo producto',
+                            onPressed: () =>
+                                _openProductForm(categories: categoryOptions),
+                            icon: const Icon(Icons.add_rounded),
+                          ),
                   ),
-                if (canManage)
+                if (canManage && isWideLayout)
                   Padding(
                     padding: const EdgeInsets.only(right: 6),
                     child: OutlinedButton.icon(
@@ -437,7 +446,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                       label: const Text('Importar'),
                     ),
                   ),
-                if (canManage)
+                if (canManage && isWideLayout)
                   Padding(
                     padding: const EdgeInsets.only(right: 6),
                     child: OutlinedButton.icon(
@@ -445,6 +454,33 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                       icon: const Icon(Icons.download_rounded, size: 18),
                       label: const Text('Exportar'),
                     ),
+                  ),
+                if (canManage && !isWideLayout)
+                  PopupMenuButton<String>(
+                    tooltip: 'Mas opciones',
+                    onSelected: (value) {
+                      if (value == 'import') {
+                        _importProductsFromCsv();
+                      } else if (value == 'export') {
+                        _exportProductsToCsv();
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'import',
+                        child: ListTile(
+                          leading: Icon(Icons.upload_file_rounded),
+                          title: Text('Importar'),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'export',
+                        child: ListTile(
+                          leading: Icon(Icons.download_rounded),
+                          title: Text('Exportar'),
+                        ),
+                      ),
+                    ],
                   ),
                 Padding(
                   padding: const EdgeInsets.only(right: 4),
@@ -605,10 +641,6 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
             Expanded(
               child: Builder(
                 builder: (context) {
-                  if (catalog.loading && catalog.items.isEmpty) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
                   if (catalog.error != null && catalog.items.isEmpty) {
                     return Center(
                       child: Column(
@@ -691,6 +723,42 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                       }
 
                       final width = constraints.maxWidth;
+                      if (width < 560) {
+                        return RefreshIndicator(
+                          onRefresh: () => ref
+                              .read(catalogControllerProvider.notifier)
+                              .load(forceRemote: true),
+                          child: ListView.separated(
+                            padding: const EdgeInsets.only(bottom: 84),
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 8),
+                            itemBuilder: (context, i) {
+                              final p = filtered[i];
+                              return _MobileProductListTile(
+                                product: p,
+                                showCost: isAdmin,
+                                canManage: canManage,
+                                onView: () => _showProductDetails(
+                                  product: p,
+                                  showCost: isAdmin,
+                                  canManage: canManage,
+                                  onEdit: () => _openProductForm(
+                                    product: p,
+                                    categories: categoryOptions,
+                                  ),
+                                  onDelete: () => _confirmDelete(p),
+                                ),
+                                onEdit: () => _openProductForm(
+                                  product: p,
+                                  categories: categoryOptions,
+                                ),
+                                onDelete: () => _confirmDelete(p),
+                              );
+                            },
+                          ),
+                        );
+                      }
                       final columns = width >= 1320
                           ? 6
                           : width >= 1080
@@ -825,8 +893,8 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
       builder: (context) {
         return Padding(
           padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
+            left: 0,
+            right: 0,
             bottom: MediaQuery.of(context).viewInsets.bottom + 16,
             top: 16,
           ),
@@ -1558,6 +1626,158 @@ class _ProductCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _MobileProductListTile extends StatelessWidget {
+  const _MobileProductListTile({
+    required this.product,
+    required this.showCost,
+    required this.canManage,
+    required this.onView,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final ProductModel product;
+  final bool showCost;
+  final bool canManage;
+  final VoidCallback onView;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final stock = _formatStock(product.stock);
+    final imageUrl = product.displayFotoUrl;
+    return Material(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: AppColors.border),
+      ),
+      child: InkWell(
+        onTap: onView,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(7),
+                child: SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: imageUrl == null || imageUrl.isEmpty
+                      ? Container(
+                          color: AppColors.surfaceMuted,
+                          alignment: Alignment.center,
+                          child: const Icon(
+                            Icons.inventory_2_outlined,
+                            color: AppColors.textSecondary,
+                            size: 20,
+                          ),
+                        )
+                      : ProductNetworkImage(
+                          imageUrl: imageUrl,
+                          productId: product.id,
+                          productName: product.nombre,
+                          originalUrl: product.originalFotoUrl,
+                          fit: BoxFit.cover,
+                          fallback: Container(
+                            color: AppColors.surfaceMuted,
+                            alignment: Alignment.center,
+                            child: const Icon(
+                              Icons.broken_image_outlined,
+                              color: AppColors.textSecondary,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product.nombre,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      product.categoriaLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        _CatalogMiniMetric(
+                          label: 'Precio',
+                          value: formatRdAccountingAmount(product.precio),
+                        ),
+                        _CatalogMiniMetric(label: 'Stock', value: stock),
+                        if (showCost)
+                          _CatalogMiniMetric(
+                            label: 'Costo',
+                            value: formatRdAccountingAmount(product.costo),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              if (canManage)
+                PopupMenuButton<String>(
+                  tooltip: 'Acciones',
+                  onSelected: (value) {
+                    if (value == 'edit') onEdit();
+                    if (value == 'delete') onDelete();
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: 'edit', child: Text('Editar')),
+                    PopupMenuItem(value: 'delete', child: Text('Eliminar')),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CatalogMiniMetric extends StatelessWidget {
+  const _CatalogMiniMetric({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      '$label $value',
+      style: const TextStyle(
+        color: AppColors.primary,
+        fontSize: 10.5,
+        fontWeight: FontWeight.w900,
       ),
     );
   }
@@ -2447,6 +2667,31 @@ class _ProductForm extends ConsumerStatefulWidget {
   ConsumerState<_ProductForm> createState() => _ProductFormState();
 }
 
+InputDecoration _catalogProductInputDecoration(
+  String label, {
+  String? hintText,
+  Widget? prefixIcon,
+}) {
+  const border = OutlineInputBorder(
+    borderRadius: BorderRadius.zero,
+    borderSide: BorderSide(color: Color(0xFFD3E0E7)),
+  );
+  return InputDecoration(
+    labelText: label,
+    hintText: hintText,
+    prefixIcon: prefixIcon,
+    isDense: true,
+    filled: true,
+    fillColor: Colors.white,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    border: border,
+    enabledBorder: border,
+    focusedBorder: border.copyWith(
+      borderSide: const BorderSide(color: Color(0xFF1957E6), width: 1.3),
+    ),
+  );
+}
+
 class _ProductFormState extends ConsumerState<_ProductForm> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _codeCtrl;
@@ -2610,13 +2855,13 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
           const SizedBox(height: 12),
           TextField(
             controller: _nameCtrl,
-            decoration: const InputDecoration(labelText: 'Nombre'),
+            decoration: _catalogProductInputDecoration('Nombre'),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _codeCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Código / código de barra (opcional)',
+            decoration: _catalogProductInputDecoration(
+              'Código / código de barra (opcional)',
               hintText: 'Escanea o escribe el código del producto',
               prefixIcon: Icon(Icons.qr_code_2_outlined),
             ),
@@ -2625,25 +2870,25 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
           TextField(
             controller: _priceCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Precio'),
+            decoration: _catalogProductInputDecoration('Precio'),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _costCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Costo'),
+            decoration: _catalogProductInputDecoration('Costo'),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _stockCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Stock disponible'),
+            decoration: _catalogProductInputDecoration('Stock disponible'),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _categoryCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Categoría (elige o crea)',
+            decoration: _catalogProductInputDecoration(
+              'Categoría (elige o crea)',
             ),
           ),
           if (widget.categories.isNotEmpty) ...[

@@ -13,6 +13,7 @@ import '../../core/errors/api_exception.dart';
 import '../../core/models/user_model.dart';
 import '../../core/realtime/operations_realtime_service.dart';
 import '../../core/routing/routes.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/utils/app_feedback.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -362,6 +363,7 @@ class _ServiceOrdersListScreenState
         .length;
 
     return Scaffold(
+      backgroundColor: isDesktop ? null : AppColors.background,
       drawer: buildAdaptiveDrawer(context, currentUser: currentUser),
       floatingActionButton: _CreateOrderFab(onPressed: _createOrder),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,

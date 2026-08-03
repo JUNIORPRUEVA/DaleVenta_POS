@@ -7,11 +7,13 @@ import '../api/api_client.dart';
 import '../api/api_connectivity_interceptor.dart';
 import '../api/api_diagnostics_interceptor.dart';
 import '../api/api_error_mapper.dart';
+import '../api/api_offline_cache_interceptor.dart';
 import '../api/api_retry_interceptor.dart';
 import '../api/api_routes.dart';
 import '../errors/api_exception.dart';
 import '../models/user_model.dart';
 import '../network/network_reachability.dart';
+import '../offline/sync_queue_service.dart';
 import '../utils/is_flutter_test.dart';
 import 'admin_authorization_session.dart';
 import 'auth_interceptor.dart';
@@ -58,6 +60,7 @@ final dioProvider = Provider<Dio>((ref) {
   final storage = ref.watch(tokenStorageProvider);
   final sessionEvents = ref.watch(authSessionEventsProvider);
   final reachability = ref.watch(networkReachabilityProvider);
+  final offlineStore = ref.watch(offlineStoreProvider);
   api.dio.interceptors.add(AuthInterceptor(storage, sessionEvents, api.dio));
   api.dio.interceptors.add(
     InterceptorsWrapper(
@@ -77,6 +80,7 @@ final dioProvider = Provider<Dio>((ref) {
     LoadingInterceptor(ref.read(appLoadingProvider.notifier)),
   );
   api.dio.interceptors.add(ApiDiagnosticsInterceptor());
+  api.dio.interceptors.add(ApiOfflineCacheInterceptor(store: offlineStore));
   api.dio.interceptors.add(ApiRetryInterceptor(dio: api.dio));
   return api.dio;
 });

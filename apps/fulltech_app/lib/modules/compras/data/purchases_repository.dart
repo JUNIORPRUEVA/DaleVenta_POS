@@ -7,6 +7,7 @@ import 'package:http_parser/http_parser.dart';
 
 import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
+import '../../../core/cache/local_json_cache.dart';
 import '../../../core/errors/api_exception.dart';
 import '../purchase_models.dart';
 
@@ -17,6 +18,12 @@ final purchasesRepositoryProvider = Provider<PurchasesRepository>((ref) {
 class PurchasesRepository {
   PurchasesRepository(this._dio);
   final Dio _dio;
+  final LocalJsonCache _cache = LocalJsonCache();
+
+  static const _suppliersCacheKey = 'purchases.suppliers.v1';
+  static const _ordersCacheKey = 'purchases.orders.v1';
+  static const _recommendationsCacheKey = 'purchases.recommendations.v1';
+  static const _invoicesCacheKey = 'purchases.invoices.v1';
 
   List<dynamic> _rows(dynamic data) {
     if (data is List) return data;
@@ -27,6 +34,25 @@ class PurchasesRepository {
       }
     }
     return const [];
+  }
+
+  Future<List<T>> _readCachedList<T>(
+    String key,
+    T Function(Map<String, dynamic>) decode,
+  ) async {
+    final data = await _cache.readMap(key);
+    return _rows(data)
+        .whereType<Map>()
+        .map((row) => decode(Map<String, dynamic>.from(row)))
+        .toList();
+  }
+
+  Future<void> _writeCachedRows(String key, List<dynamic> rows) async {
+    try {
+      await _cache.writeMap(key, {'items': rows});
+    } catch (_) {
+      // Cache is an acceleration layer; failed writes must never block compras.
+    }
   }
 
   String _message(dynamic data, String fallback) {
@@ -42,7 +68,11 @@ class PurchasesRepository {
         ApiRoutes.purchaseSuppliers,
         queryParameters: {'q': query},
       );
-      return _rows(res.data)
+      final rows = _rows(res.data);
+      if ((query ?? '').trim().isEmpty) {
+        await _writeCachedRows(_suppliersCacheKey, rows);
+      }
+      return rows
           .whereType<Map>()
           .map((row) => SupplierModel.fromJson(Map<String, dynamic>.from(row)))
           .toList();
@@ -53,6 +83,9 @@ class PurchasesRepository {
       );
     }
   }
+
+  Future<List<SupplierModel>> cachedSuppliers() =>
+      _readCachedList(_suppliersCacheKey, SupplierModel.fromJson);
 
   Future<SupplierModel> saveSupplier(SupplierModel supplier) async {
     try {
@@ -99,7 +132,15 @@ class PurchasesRepository {
           'supplierId': supplierId,
         }..removeWhere((_, value) => value == null || '$value'.trim().isEmpty),
       );
-      return _rows(res.data)
+      final rows = _rows(res.data);
+      if ([
+        query,
+        status,
+        supplierId,
+      ].every((value) => value == null || value.toString().trim().isEmpty)) {
+        await _writeCachedRows(_ordersCacheKey, rows);
+      }
+      return rows
           .whereType<Map>()
           .map(
             (row) =>
@@ -113,6 +154,9 @@ class PurchasesRepository {
       );
     }
   }
+
+  Future<List<PurchaseOrderModel>> cachedOrders() =>
+      _readCachedList(_ordersCacheKey, PurchaseOrderModel.fromJson);
 
   Future<PurchaseOrderModel> createOrder({
     required String? supplierId,
@@ -222,7 +266,9 @@ class PurchasesRepository {
   Future<List<PurchaseRecommendationModel>> recommendations() async {
     try {
       final res = await _dio.get(ApiRoutes.purchaseRecommendations);
-      return _rows(res.data)
+      final rows = _rows(res.data);
+      await _writeCachedRows(_recommendationsCacheKey, rows);
+      return rows
           .whereType<Map>()
           .map(
             (row) => PurchaseRecommendationModel.fromJson(
@@ -237,6 +283,12 @@ class PurchasesRepository {
       );
     }
   }
+
+  Future<List<PurchaseRecommendationModel>> cachedRecommendations() =>
+      _readCachedList(
+        _recommendationsCacheKey,
+        PurchaseRecommendationModel.fromJson,
+      );
 
   Future<String> createPdfShareLink({
     required String purchaseOrderId,
@@ -280,7 +332,15 @@ class PurchasesRepository {
           'purchaseOrderId': purchaseOrderId,
         }..removeWhere((_, value) => value == null || '$value'.trim().isEmpty),
       );
-      return _rows(res.data)
+      final rows = _rows(res.data);
+      if ([
+        query,
+        supplierId,
+        purchaseOrderId,
+      ].every((value) => value == null || value.toString().trim().isEmpty)) {
+        await _writeCachedRows(_invoicesCacheKey, rows);
+      }
+      return rows
           .whereType<Map>()
           .map(
             (row) =>
@@ -294,6 +354,9 @@ class PurchasesRepository {
       );
     }
   }
+
+  Future<List<PurchaseInvoiceModel>> cachedInvoices() =>
+      _readCachedList(_invoicesCacheKey, PurchaseInvoiceModel.fromJson);
 
   Future<PurchaseInvoiceModel> uploadInvoice({
     required PlatformFile file,

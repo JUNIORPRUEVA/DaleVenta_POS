@@ -1,13 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../modules/cash/cash_dialogs.dart';
 import '../../modules/cash/cash_providers.dart';
+import '../../modules/cash/cash_repository.dart';
+
 import '../auth/admin_authorization.dart';
 import '../auth/app_permissions.dart';
 import '../auth/auth_provider.dart';
 import '../auth/app_role.dart';
 import '../models/user_model.dart';
+
 import '../design_system/icons/app_icon.dart';
 import '../design_system/icons/app_icon_sizes.dart';
 import '../design_system/icons/app_icons.dart';
@@ -18,6 +23,8 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import 'app_navigation.dart';
 
+const String _drawerCloseTurnAction = '__drawer_close_turn__';
+
 class AppDrawer extends ConsumerStatefulWidget {
   final UserModel? currentUser;
 
@@ -27,8 +34,54 @@ class AppDrawer extends ConsumerStatefulWidget {
   ConsumerState<AppDrawer> createState() => _AppDrawerState();
 }
 
+class _DrawerSettingsMenuEntry extends StatelessWidget {
+  const _DrawerSettingsMenuEntry({
+    required this.icon,
+    required this.label,
+    this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveColor = color ?? AppColors.textPrimary;
+    return SizedBox(
+      height: 42,
+      child: Row(
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: effectiveColor.withValues(alpha: 0.09),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Icon(icon, size: 17, color: effectiveColor),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.body.copyWith(
+                color: effectiveColor,
+                fontWeight: FontWeight.w600,
+                fontSize: 14.2,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _AppDrawerState extends ConsumerState<AppDrawer> {
-  int? _openGroupIndex = 0;
+  int? _openGroupIndex;
 
   void _openGroup(int index) {
     if (_openGroupIndex == index) return;
@@ -71,10 +124,48 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
     }
   }
 
+  Future<void> _closeTurnFromDrawer(BuildContext context) async {
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
+    Navigator.pop(context);
+    await Future<void>.delayed(Duration.zero);
+    if (!rootContext.mounted) return;
+
+    try {
+      final summary = await ref.read(cashRepositoryProvider).summary();
+      if (!rootContext.mounted) return;
+      final result = await showCloseShiftDialog(
+        rootContext,
+        expectedCash: summary.expectedCash,
+        onCloseShift: (amount) {
+          return ref
+              .read(activeCashSessionControllerProvider.notifier)
+              .close(amount);
+        },
+      );
+      if (!rootContext.mounted || result?.success != true) return;
+      await ref.read(activeCashSessionControllerProvider.notifier).refresh();
+      if (!rootContext.mounted) return;
+      final printResult = result?.printResult;
+      final message = printResult == null
+          ? 'Turno cerrado'
+          : printResult.success
+          ? 'Turno cerrado e impreso'
+          : 'Turno cerrado. ${printResult.message}';
+      showCashToast(rootContext, message);
+    } catch (error) {
+      if (!rootContext.mounted) return;
+      showCashToast(rootContext, resolveCashError(error), isError: true);
+    }
+  }
+
   Future<void> _handleItemTap(
     BuildContext context,
     AppNavigationItem item,
   ) async {
+    if (item.route == _drawerCloseTurnAction) {
+      await _closeTurnFromDrawer(context);
+      return;
+    }
     final permission = RouteAccess.permissionForLocation(item.route);
     final allowed = await ensureAdminAuthorization(
       context,
@@ -92,6 +183,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
       return;
     }
     final routerContext = Navigator.of(context, rootNavigator: true).context;
+
     Navigator.pop(context);
     if (!routerContext.mounted) return;
     AppNavigator.go(routerContext, item.route);
@@ -110,10 +202,13 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
     final sections = buildAppNavigationSections(ref, currentUser);
     final groups = _buildDrawerGroups(
       sections,
-      includeMobileAdminShortcuts: !isDesktop,
+      mobileLayout: !isDesktop,
       role: role,
     );
     final location = safeCurrentLocation(context);
+    final expandedGroupIndex = isDesktop
+        ? (_openGroupIndex ?? 0)
+        : _openGroupIndex;
     final panelShadow = BoxShadow(
       color: AppColors.primary.withValues(alpha: 0.08),
       blurRadius: 24,
@@ -125,123 +220,291 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: isDesktop ? AppColors.surface : const Color(0xFFF7FCFF),
+          gradient: isDesktop
+              ? null
+              : const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0xFFE6F7FF),
+                    Color(0xFFFBFEFF),
+                    Color(0xFFE9F5FF),
+                  ],
+                  stops: [0, 0.52, 1],
+                ),
           boxShadow: [panelShadow],
         ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  isCompactMobile ? 12 : 14,
-                  isCompactMobile ? 10 : 12,
-                  isCompactMobile ? 12 : 14,
-                  10,
-                ),
-                child: Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isCompactMobile ? 12 : 14,
-                    vertical: isCompactMobile ? 12 : 14,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FBFD),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFD8E5EC)),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'FullPOS Cloud',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.title.copyWith(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF102436),
+        child: Stack(
+          children: [
+            if (!isDesktop)
+              const Positioned.fill(child: _MobileDrawerPattern()),
+            SafeArea(
+              child: Column(
+                children: [
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      isDesktop ? 14 : 10,
+                      isDesktop ? 12 : 6,
+                      isDesktop ? 14 : 10,
+                      isDesktop ? 10 : 4,
+                    ),
+                    child: isDesktop
+                        ? Container(
+                            width: double.infinity,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: isCompactMobile ? 12 : 14,
+                              vertical: isCompactMobile ? 12 : 14,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FBFD),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: const Color(0xFFD8E5EC),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: isCompactMobile ? 58 : 66,
+                                  height: isCompactMobile ? 48 : 56,
+                                  child: Image.asset(
+                                    'assets/image/logo.png',
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Icon(
+                                        Icons.storefront_rounded,
+                                        color: AppColors.primary,
+                                        size: isCompactMobile ? 32 : 38,
+                                      );
+                                    },
+                                  ),
+                                ),
+                                SizedBox(width: isCompactMobile ? 8 : 10),
+                                Expanded(
+                                  child: Text(
+                                    'FullPOS Cloud',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTextStyles.title.copyWith(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF102436),
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Cerrar menú',
+                                  onPressed: () => Navigator.pop(context),
+                                  icon: AppIcon(
+                                    AppIcons.close,
+                                    size: AppIconSizes.button,
+                                    color: AppColors.textSecondary,
+                                    semanticLabel: 'Cerrar menú',
+                                  ),
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : Row(
+                            children: [
+                              const Spacer(),
+                              IconButton(
+                                tooltip: 'Cerrar menú',
+                                onPressed: () => Navigator.pop(context),
+                                icon: AppIcon(
+                                  AppIcons.close,
+                                  size: AppIconSizes.button,
+                                  color: AppColors.textSecondary,
+                                  semanticLabel: 'Cerrar menú',
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'Cerrar menú',
-                        onPressed: () => Navigator.pop(context),
-                        icon: AppIcon(
-                          AppIcons.close,
-                          size: AppIconSizes.button,
-                          color: AppColors.textSecondary,
-                          semanticLabel: 'Cerrar menú',
-                        ),
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ],
                   ),
-                ),
-              ),
-              Expanded(
-                child: ListView(
-                  padding: EdgeInsets.fromLTRB(
-                    isCompactMobile ? 8 : 10,
-                    4,
-                    isCompactMobile ? 8 : 10,
-                    8,
-                  ),
-                  children: [
-                    for (var i = 0; i < groups.length; i++)
-                      _DrawerMenuGroupTile(
-                        group: groups[i],
-                        index: i,
-                        compact: isCompactMobile,
-                        expanded: _openGroupIndex == i,
-                        selected: groups[i].containsActiveRoute(location),
-                        onHoverOpen: isDesktop && groups[i].openOnHover
-                            ? () => _openGroup(i)
-                            : null,
-                        onHoverExit: isDesktop && groups[i].openOnHover
-                            ? () => _closeGroup(i)
-                            : null,
-                        onTapHeader: () => _toggleGroup(i),
-                        itemBuilder: (item) => _DrawerMenuItem(
-                          icon: item.icon,
-                          appIcon: item.appIcon,
-                          title: item.title,
-                          compact: isCompactMobile,
-                          selected: isNavigationRouteActive(
-                            location,
-                            item.route,
-                          ),
-                          showIndicator: item.showIndicator,
-                          onTap: () => _handleItemTap(context, item),
-                        ),
+                  Expanded(
+                    child: ListView(
+                      padding: EdgeInsets.fromLTRB(
+                        isCompactMobile ? 8 : 10,
+                        4,
+                        isCompactMobile ? 8 : 10,
+                        8,
                       ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1, color: AppColors.border),
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  isCompactMobile ? 10 : 12,
-                  8,
-                  isCompactMobile ? 10 : 12,
-                  12,
-                ),
-                child: Column(
-                  children: [
-                    Row(
                       children: [
-                        Expanded(
-                          child: _DrawerMenuItem(
-                            icon: Icons.badge_outlined,
-                            title: 'Perfil',
+                        for (var i = 0; i < groups.length; i++)
+                          _DrawerMenuGroupTile(
+                            group: groups[i],
+                            index: i,
+                            compact: isCompactMobile,
+                            expanded: expandedGroupIndex == i,
+                            selected: groups[i].containsActiveRoute(location),
+                            onHoverOpen: isDesktop && groups[i].openOnHover
+                                ? () => _openGroup(i)
+                                : null,
+                            onHoverExit: isDesktop && groups[i].openOnHover
+                                ? () => _closeGroup(i)
+                                : null,
+                            onTapHeader: () => _toggleGroup(i),
+                            itemBuilder: (item) => _DrawerMenuItem(
+                              icon: item.icon,
+                              appIcon: item.appIcon,
+                              title: item.title,
+                              compact: isCompactMobile,
+                              selected: isNavigationRouteActive(
+                                location,
+                                item.route,
+                              ),
+                              showIndicator: item.showIndicator,
+                              onTap: () => _handleItemTap(context, item),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1, color: AppColors.border),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      isCompactMobile ? 10 : 12,
+                      8,
+                      isCompactMobile ? 10 : 12,
+                      12,
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _DrawerMenuItem(
+                                icon: Icons.badge_outlined,
+                                title: 'Perfil',
+                                compact: isCompactMobile,
+                                selected: isNavigationRouteActive(
+                                  location,
+                                  Routes.profile,
+                                ),
+                                onTap: () {
+                                  final routerContext = Navigator.of(
+                                    context,
+                                    rootNavigator: true,
+                                  ).context;
+                                  Navigator.pop(context);
+                                  if (routerContext.mounted) {
+                                    AppNavigator.go(
+                                      routerContext,
+                                      Routes.profile,
+                                    );
+                                  }
+                                },
+                              ),
+                            ),
+                            if (!isDesktop)
+                              PopupMenuButton<String>(
+                                tooltip: 'Configuración',
+                                constraints: const BoxConstraints(
+                                  minWidth: 230,
+                                  maxWidth: 270,
+                                ),
+                                elevation: 10,
+                                color: Colors.white,
+                                shadowColor: Colors.black26,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  side: const BorderSide(
+                                    color: Color(0xFFE1E8F0),
+                                  ),
+                                ),
+                                onSelected: (route) {
+                                  final routerContext = Navigator.of(
+                                    context,
+                                    rootNavigator: true,
+                                  ).context;
+                                  Navigator.pop(context);
+                                  if (!routerContext.mounted) return;
+                                  if (route == 'delete-account') {
+                                    ScaffoldMessenger.of(
+                                      routerContext,
+                                    ).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Eliminar mi cuenta estará disponible en configuración.',
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  AppNavigator.go(routerContext, route);
+                                },
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem(
+                                    value: Routes.actualizaciones,
+                                    child: _DrawerSettingsMenuEntry(
+                                      icon: Icons.system_update_alt_rounded,
+                                      label: 'Actualizaciones',
+                                    ),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: Routes.apps,
+                                    child: _DrawerSettingsMenuEntry(
+                                      icon: Icons.apps_rounded,
+                                      label: 'Apps',
+                                    ),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: Routes.configuracion,
+                                    child: _DrawerSettingsMenuEntry(
+                                      icon: Icons.tune_rounded,
+                                      label: 'Otros ajustes',
+                                    ),
+                                  ),
+                                  const PopupMenuDivider(),
+                                  PopupMenuItem(
+                                    value: 'delete-account',
+                                    child: _DrawerSettingsMenuEntry(
+                                      icon: Icons.delete_outline_rounded,
+                                      label: 'Eliminar mi cuenta',
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.error,
+                                    ),
+                                  ),
+                                ],
+                                icon: const Icon(
+                                  Icons.settings_outlined,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            IconButton(
+                              tooltip: 'Cerrar sesion',
+                              onPressed: () async {
+                                Navigator.pop(context);
+                                await ref
+                                    .read(authStateProvider.notifier)
+                                    .logout();
+                              },
+                              icon: AppIcon(
+                                AppIcons.logout,
+                                size: AppIconSizes.button,
+                                color: AppColors.textSecondary,
+                                semanticLabel: 'Cerrar sesión',
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (hasPermission(role, AppPermission.manageUsers)) ...[
+                          const SizedBox(height: 4),
+                          _DrawerMenuItem(
+                            icon: Icons.manage_accounts_outlined,
+                            title: 'Usuario',
                             compact: isCompactMobile,
                             selected: isNavigationRouteActive(
                               location,
-                              Routes.profile,
+                              Routes.users,
                             ),
                             onTap: () {
                               final routerContext = Navigator.of(
@@ -250,53 +513,18 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                               ).context;
                               Navigator.pop(context);
                               if (routerContext.mounted) {
-                                AppNavigator.go(routerContext, Routes.profile);
+                                AppNavigator.go(routerContext, Routes.users);
                               }
                             },
                           ),
-                        ),
-                        IconButton(
-                          tooltip: 'Cerrar sesion',
-                          onPressed: () async {
-                            Navigator.pop(context);
-                            await ref.read(authStateProvider.notifier).logout();
-                          },
-                          icon: AppIcon(
-                            AppIcons.logout,
-                            size: AppIconSizes.button,
-                            color: AppColors.textSecondary,
-                            semanticLabel: 'Cerrar sesión',
-                          ),
-                        ),
+                        ],
                       ],
                     ),
-                    if (hasPermission(role, AppPermission.manageUsers)) ...[
-                      const SizedBox(height: 4),
-                      _DrawerMenuItem(
-                        icon: Icons.manage_accounts_outlined,
-                        title: 'Usuario',
-                        compact: isCompactMobile,
-                        selected: isNavigationRouteActive(
-                          location,
-                          Routes.users,
-                        ),
-                        onTap: () {
-                          final routerContext = Navigator.of(
-                            context,
-                            rootNavigator: true,
-                          ).context;
-                          Navigator.pop(context);
-                          if (routerContext.mounted) {
-                            AppNavigator.go(routerContext, Routes.users);
-                          }
-                        },
-                      ),
-                    ],
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -305,7 +533,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
 
 List<_DrawerMenuGroup> _buildDrawerGroups(
   List<AppNavigationSection> sections, {
-  required bool includeMobileAdminShortcuts,
+  required bool mobileLayout,
   required AppRole role,
 }) {
   final itemsByRoute = <String, AppNavigationItem>{};
@@ -391,6 +619,192 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     if (purchasesItem != null) purchasesItem,
     if (reportsItem != null) reportsItem,
   ];
+
+  if (mobileLayout) {
+    if (ventasItems.isNotEmpty) {
+      groups.add(
+        _DrawerMenuGroup(
+          title: 'Ventas',
+          icon: Icons.point_of_sale_rounded,
+          items: ventasItems,
+          openOnHover: false,
+        ),
+      );
+    }
+    if (clientItems.isNotEmpty) {
+      groups.add(
+        _DrawerMenuGroup(
+          title: 'Cliente',
+          icon: Icons.groups_2_outlined,
+          items: clientItems,
+          openOnHover: false,
+        ),
+      );
+    }
+    if (cashItems.isNotEmpty) {
+      groups.add(
+        _DrawerMenuGroup(
+          title: 'Movimiento efectivo',
+          icon: Icons.account_balance_wallet_outlined,
+          items: cashItems,
+          openOnHover: false,
+        ),
+      );
+    }
+
+    final turnosItems = <AppNavigationItem>[
+      if (hasPermission(role, AppPermission.viewSales))
+        const AppNavigationItem(
+          icon: Icons.point_of_sale_outlined,
+          title: 'Turno actual',
+          route: Routes.caja,
+        ),
+      if (hasPermission(role, AppPermission.viewSales))
+        const AppNavigationItem(
+          icon: Icons.lock_clock_outlined,
+          title: 'Cerrar turno',
+          route: _drawerCloseTurnAction,
+        ),
+      pick(Routes.cajaTurnosHistorial) ??
+          const AppNavigationItem(
+            icon: Icons.history_rounded,
+            title: 'Historial de turnos',
+            route: Routes.cajaTurnosHistorial,
+          ),
+    ];
+    groups.add(
+      _DrawerMenuGroup(
+        title: 'Turno',
+        icon: Icons.schedule_outlined,
+        items: turnosItems,
+        openOnHover: false,
+      ),
+    );
+
+    discard([
+      Routes.apps,
+      Routes.licencias,
+      Routes.actualizaciones,
+      Routes.configuracionEmpresa,
+      Routes.configuracion,
+    ]);
+
+    addGroup('Contabilidad', Icons.account_balance_outlined, [
+      Routes.contabilidad,
+      Routes.nomina,
+      Routes.misPagos,
+    ]);
+    if (inventoryItems.isNotEmpty) {
+      groups.add(
+        const _DrawerMenuGroup(
+          title: 'Inventario',
+          icon: Icons.inventory_2_outlined,
+          items: [
+            AppNavigationItem(
+              icon: Icons.table_rows_outlined,
+              title: 'Catálogo',
+              route: Routes.catalogo,
+            ),
+            AppNavigationItem(
+              icon: Icons.tune_outlined,
+              title: 'Stock',
+              route: Routes.catalogoStock,
+            ),
+            AppNavigationItem(
+              icon: Icons.category_outlined,
+              title: 'Categorías',
+              route: Routes.catalogoCategorias,
+            ),
+            AppNavigationItem(
+              icon: Icons.fact_check_outlined,
+              title: 'Conteo',
+              route: Routes.catalogoConteo,
+            ),
+          ],
+          openOnHover: false,
+        ),
+      );
+    }
+    if (purchasesItem != null) {
+      groups.add(
+        const _DrawerMenuGroup(
+          title: 'Compras',
+          icon: Icons.shopping_bag_outlined,
+          items: [
+            AppNavigationItem(
+              icon: Icons.add_shopping_cart_outlined,
+              title: 'Nueva compra',
+              route: Routes.compras,
+            ),
+            AppNavigationItem(
+              icon: Icons.receipt_long_outlined,
+              title: 'Lista de compra',
+              route: Routes.comprasLista,
+            ),
+            AppNavigationItem(
+              icon: Icons.storefront_outlined,
+              title: 'Suplidores',
+              route: Routes.comprasSuplidores,
+            ),
+            AppNavigationItem(
+              icon: Icons.folder_copy_outlined,
+              title: 'Facturas',
+              route: Routes.comprasFacturas,
+            ),
+            AppNavigationItem(
+              icon: Icons.trending_up_rounded,
+              title: 'Productos por comprar',
+              route: Routes.comprasPorComprar,
+            ),
+          ],
+          openOnHover: false,
+        ),
+      );
+    }
+    if (reportsItem != null) {
+      groups.add(
+        _DrawerMenuGroup(
+          title: 'Reportes',
+          icon: Icons.analytics_outlined,
+          items: [reportsItem],
+          openOnHover: false,
+        ),
+      );
+    }
+    addGroup('Factura fiscal', Icons.fact_check_outlined, [
+      Routes.contabilidadFacturaFiscal,
+    ]);
+
+    discard([
+      Routes.ai,
+      Routes.administracion,
+      Routes.contabilidadCierresDiarios,
+      Routes.users,
+      Routes.ponche,
+      Routes.serviceOrderCommissions,
+      Routes.publicidad,
+      Routes.sitioWeb,
+      Routes.whatsapp,
+      Routes.whatsappCrm,
+      Routes.crmComercial,
+      Routes.manualInterno,
+      Routes.amonestaciones,
+    ]);
+
+    if (itemsByRoute.isNotEmpty) {
+      groups.add(
+        _DrawerMenuGroup(
+          title: 'Más módulos',
+          icon: Icons.apps_rounded,
+          items: itemsByRoute.values.toList(),
+          openOnHover: false,
+        ),
+      );
+    }
+
+    return groups;
+  }
+
   if (ventasItems.isNotEmpty) {
     groups.add(
       _DrawerMenuGroup(
@@ -423,39 +837,10 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
   }
   addDirectItems(directSalesModuleItems);
 
-  if (includeMobileAdminShortcuts) {
-    final turnosItem =
-        pick(Routes.cajaTurnosHistorial) ??
-        (hasPermission(role, AppPermission.viewSales)
-            ? const AppNavigationItem(
-                icon: Icons.schedule_outlined,
-                title: 'Turnos',
-                route: Routes.cajaTurnosHistorial,
-              )
-            : null);
-    final configuracionItem = pick(Routes.configuracion);
-    final mobileItems = <AppNavigationItem>[
-      if (turnosItem != null) turnosItem,
-      if (configuracionItem != null) configuracionItem,
-    ];
-
-    if (mobileItems.isNotEmpty) {
-      groups.add(
-        _DrawerMenuGroup(
-          title: 'APK',
-          icon: Icons.phone_android_rounded,
-          items: mobileItems,
-          openOnHover: false,
-        ),
-      );
-    }
-  }
-
   discard([
     Routes.ai,
     Routes.administracion,
     Routes.contabilidadCierresDiarios,
-    Routes.contabilidadFacturaFiscal,
     Routes.users,
     Routes.ponche,
     Routes.serviceOrderCommissions,
@@ -472,6 +857,9 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     Routes.contabilidad,
     Routes.nomina,
     Routes.misPagos,
+  ]);
+  addGroup('Factura fiscal', Icons.fact_check_outlined, [
+    Routes.contabilidadFacturaFiscal,
   ]);
   addGroup('Operaciones', Icons.work_outline_rounded, [
     Routes.serviceOrders,
@@ -526,6 +914,70 @@ Widget? buildAdaptiveDrawer(
   if (route is PageRoute && route.fullscreenDialog) return null;
 
   return AppDrawer(currentUser: currentUser);
+}
+
+class _MobileDrawerPattern extends StatelessWidget {
+  const _MobileDrawerPattern();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: CustomPaint(painter: _MobileDrawerPatternPainter()),
+    );
+  }
+}
+
+class _MobileDrawerPatternPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final topGlow = Paint()
+      ..shader =
+          const RadialGradient(
+            colors: [Color(0x662E9BFF), Color(0x002E9BFF)],
+          ).createShader(
+            Rect.fromCircle(
+              center: Offset(size.width * 0.18, size.height * 0.04),
+              radius: size.width * 0.9,
+            ),
+          );
+    canvas.drawCircle(
+      Offset(size.width * 0.18, size.height * 0.04),
+      size.width * 0.9,
+      topGlow,
+    );
+
+    final bottomGlow = Paint()
+      ..shader =
+          const RadialGradient(
+            colors: [Color(0x553E7BFA), Color(0x003E7BFA)],
+          ).createShader(
+            Rect.fromCircle(
+              center: Offset(size.width * 0.92, size.height * 0.96),
+              radius: size.width * 0.78,
+            ),
+          );
+    canvas.drawCircle(
+      Offset(size.width * 0.92, size.height * 0.96),
+      size.width * 0.78,
+      bottomGlow,
+    );
+
+    final patternPaint = Paint()
+      ..color = const Color(0x143B82F6)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.1;
+    const gap = 34.0;
+    for (double y = -gap; y < size.height + gap; y += gap) {
+      final path = Path();
+      path.moveTo(-20, y);
+      path.quadraticBezierTo(size.width * 0.26, y + 12, size.width * 0.55, y);
+      path.quadraticBezierTo(size.width * 0.82, y - 12, size.width + 20, y + 2);
+      canvas.drawPath(path, patternPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _DrawerMenuGroupTile extends StatelessWidget {

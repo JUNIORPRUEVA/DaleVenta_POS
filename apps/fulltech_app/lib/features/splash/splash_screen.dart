@@ -43,8 +43,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     final auth = ref.watch(authStateProvider);
     final size = MediaQuery.sizeOf(context);
     final compact = size.width < 560 || size.height < 680;
-    final logoSize = compact ? 82.0 : 104.0;
-    final ringSize = compact ? 136.0 : 168.0;
+    final logoSize = compact ? 116.0 : 146.0;
+    final ringSize = compact ? 154.0 : 196.0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -163,40 +163,19 @@ class _LogoMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: size,
       height: size,
-      padding: EdgeInsets.all(size * 0.10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(size * 0.20),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x241D4ED8),
-            blurRadius: 22,
-            offset: Offset(0, 12),
-          ),
-          BoxShadow(
-            color: Color(0x120F172A),
-            blurRadius: 14,
-            offset: Offset(0, 6),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(size * 0.16),
-        child: Image.asset(
-          'assets/image/logo.png',
-          fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) {
-            return const Icon(
-              Icons.storefront_rounded,
-              color: Color(0xFF2563EB),
-              size: 58,
-            );
-          },
-        ),
+      child: Image.asset(
+        'assets/image/logo.png',
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) {
+          return const Icon(
+            Icons.storefront_rounded,
+            color: Color(0xFF2563EB),
+            size: 72,
+          );
+        },
       ),
     );
   }

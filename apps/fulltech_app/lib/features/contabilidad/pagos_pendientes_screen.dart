@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/auth/role_permissions.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import 'data/contabilidad_repository.dart';
@@ -750,10 +751,11 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
                   if (!ctx.mounted) return;
                   Navigator.of(dialogContext).pop(true);
                 } catch (e) {
-                  if (ctx.mounted)
+                  if (ctx.mounted) {
                     ScaffoldMessenger.of(ctx).showSnackBar(
                       SnackBar(content: Text('No se pudo actualizar: $e')),
                     );
+                  }
                 }
               },
               child: const Text('Guardar cambios'),
@@ -775,6 +777,9 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
 
     if (!canUseModule) {
       return Scaffold(
+        backgroundColor: MediaQuery.sizeOf(context).width < 900
+            ? AppColors.background
+            : null,
         appBar: CustomAppBar(title: 'Pagos pendientes', showLogo: false),
         drawer: buildAdaptiveDrawer(context, currentUser: user),
         body: const Center(
@@ -791,8 +796,10 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
     }
 
     final isAdmin = user?.appRole.isAdmin == true;
+    final isMobile = MediaQuery.sizeOf(context).width < 900;
 
     return Scaffold(
+      backgroundColor: isMobile ? AppColors.background : null,
       appBar: CustomAppBar(
         title: 'Pagos pendientes',
         showLogo: false,
@@ -826,11 +833,22 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _error != null
-            ? _ErrorView(message: _error!, onRetry: _load)
-            : _buildContent(context, isAdmin: isAdmin),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: _error != null
+                  ? _ErrorView(message: _error!, onRetry: _load)
+                  : _buildContent(context, isAdmin: isAdmin),
+            ),
+            if (_loading)
+              const Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: LinearProgressIndicator(minHeight: 2),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -1190,8 +1208,9 @@ class _ServiceTile extends StatelessWidget {
   _DueStatus get _status {
     final now = DateTime.now();
     if (service.nextDueDate.isBefore(now)) return _DueStatus.overdue;
-    if (service.nextDueDate.isBefore(now.add(const Duration(days: 7))))
+    if (service.nextDueDate.isBefore(now.add(const Duration(days: 7)))) {
       return _DueStatus.soon;
+    }
     return _DueStatus.ok;
   }
 

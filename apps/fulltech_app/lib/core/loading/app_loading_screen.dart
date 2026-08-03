@@ -39,65 +39,74 @@ class AppLoadingScreen extends StatelessWidget {
       child: SafeArea(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
+            constraints: const BoxConstraints(maxWidth: 218),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 22),
+              padding: const EdgeInsets.symmetric(horizontal: 18),
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: scheme.surface.withValues(alpha: 0.90),
-                  borderRadius: BorderRadius.circular(20),
+                  color: scheme.surface.withValues(alpha: 0.94),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: scheme.outlineVariant.withValues(alpha: 0.55),
+                    color: scheme.outlineVariant.withValues(alpha: 0.42),
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.10),
+                      blurRadius: 24,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
                 ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 20,
+                    horizontal: 16,
+                    vertical: 14,
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(18),
+                      SizedBox(
+                        width: 126,
+                        height: 70,
                         child: Image.asset(
                           'assets/image/logo.png',
-                          width: 92,
-                          height: 92,
+                          width: 126,
+                          height: 70,
                           fit: BoxFit.contain,
                           errorBuilder: (context, error, stackTrace) {
                             return Container(
-                              width: 92,
-                              height: 92,
+                              width: 70,
+                              height: 48,
                               decoration: BoxDecoration(
                                 color: scheme.onSurface.withValues(alpha: 0.06),
-                                borderRadius: BorderRadius.circular(18),
+                                borderRadius: BorderRadius.circular(10),
                               ),
                               child: Icon(
                                 Icons.business,
-                                size: 42,
+                                size: 34,
                                 color: scheme.onSurface.withValues(alpha: 0.60),
                               ),
                             );
                           },
                         ),
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 2),
                       Text(
                         'FullPOS Cloud',
                         textAlign: TextAlign.center,
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w900,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
                           color: scheme.onSurface,
+                          letterSpacing: -0.1,
                         ),
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 3),
                       Text(
                         title,
                         textAlign: TextAlign.center,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          color: scheme.onSurface.withValues(alpha: 0.78),
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface.withValues(alpha: 0.72),
                         ),
                       ),
                       if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
@@ -137,12 +146,12 @@ class AppLoadingScreen extends StatelessWidget {
                         ),
                       ],
                       if (showProgress) ...[
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 12),
                         SizedBox(
-                          width: 26,
-                          height: 26,
+                          width: 25,
+                          height: 25,
                           child: CircularProgressIndicator.adaptive(
-                            strokeWidth: 3,
+                            strokeWidth: 2.8,
                             valueColor: AlwaysStoppedAnimation<Color>(
                               scheme.primary,
                             ),

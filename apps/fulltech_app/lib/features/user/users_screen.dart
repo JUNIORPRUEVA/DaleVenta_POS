@@ -241,6 +241,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
     AsyncValue<List<UserModel>> usersState,
   ) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: CustomAppBar(
         title: 'Usuarios y permisos',
         showLogo: false,
@@ -330,7 +331,10 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
       body: RefreshIndicator(
         onRefresh: () => ref.read(usersControllerProvider.notifier).refresh(),
         child: usersState.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => ListView(
+            padding: const EdgeInsets.all(16),
+            children: const [Center(child: Text('Sincronizando usuarios...'))],
+          ),
           error: (e, _) => ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -437,7 +441,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
       body: Container(
         color: theme.colorScheme.surfaceContainerLowest,
         child: usersState.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const Center(child: Text('Sincronizando usuarios...')),
           error: (e, _) => Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 560),
@@ -1973,7 +1977,7 @@ class _UserPermissionsScreenState extends ConsumerState<UserPermissionsScreen> {
       ),
       drawer: buildAdaptiveDrawer(context, currentUser: currentUser),
       body: usersState.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(child: Text('Sincronizando permisos...')),
         error: (e, _) => Center(child: Text('No se pudo cargar: $e')),
         data: (users) {
           final user = _findUser(users);

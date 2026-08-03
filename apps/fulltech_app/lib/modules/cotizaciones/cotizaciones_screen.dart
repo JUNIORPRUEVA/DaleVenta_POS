@@ -25,22 +25,23 @@ import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/realtime/catalog_realtime_service.dart';
 import '../../core/routing/app_route_observer.dart';
 import '../../core/routing/routes.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
+import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/fulltech_dialog.dart';
 import '../../core/widgets/fulltech_page_header.dart';
 import '../../core/widgets/pdf_action_menu.dart';
 import '../../core/widgets/responsive_shell.dart';
 import '../../core/widgets/product_network_image.dart';
 import '../../features/catalogo/application/catalog_controller.dart';
+import '../../features/catalogo/data/catalog_repository.dart';
 import '../../features/products/ui/inventory_module_pages.dart';
 import '../cash/cash_repository.dart';
 import '../cash/cash_turn_menu_button.dart';
 import '../clientes/cliente_model.dart';
 import '../clientes/cliente_form_screen.dart';
-import '../service_orders/create_service_order_screen.dart';
-import '../service_orders/service_order_models.dart';
 import '../ventas/data/ventas_repository.dart';
 import '../ventas/application/ventas_controller.dart';
 import '../ventas/sales_credit_screen.dart';
@@ -49,7 +50,6 @@ import '../ventas/utils/sales_pdf_service.dart';
 import 'ai/application/quotation_ai_controller.dart';
 import 'ai/domain/models/ai_warning.dart';
 import 'ai/domain/models/quotation_context.dart';
-import 'ai/domain/services/quotation_ai_service.dart';
 import 'ai/presentation/widgets/ai_chat_sheet.dart';
 import 'ai/presentation/widgets/ai_warning_banner.dart';
 import 'ai/presentation/widgets/quotation_rule_detail_sheet.dart';
@@ -61,7 +61,7 @@ enum _CheckoutPaymentMethod {
   cash('Efectivo', Icons.payments_outlined),
   transfer('Transferencia', Icons.account_balance_outlined),
   mixed('Mixto', Icons.call_split_rounded),
-  credit('Crédito', Icons.credit_score_outlined);
+  credit('CrÃ©dito', Icons.credit_score_outlined);
 
   const _CheckoutPaymentMethod(this.label, this.icon);
   final String label;
@@ -170,7 +170,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   bool _loadingProducts = false;
   String? _error;
-  String? _selectedCategory;
+  final Set<String> _selectedCategories = <String>{};
+
   bool _showDesktopManualItemForm = false;
   int? _desktopManualEditIndex;
 
@@ -195,6 +196,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   String? _activeDesktopTicketId;
   String? _lastPublishedDesktopFooterSignature;
   bool _showDesktopCalculator = false;
+  bool _showMobileTicketDropdown = false;
+  bool _mobileSearchOpen = false;
 
   bool _prefillFromRouteApplied = false;
   bool _routeObserverSubscribed = false;
@@ -578,7 +581,27 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       _remoteRefreshInFlight = true;
     }
 
-    if (!silent) {
+    if (_productos.isEmpty) {
+      final cached = await ref
+          .read(catalogRepositoryProvider)
+          .getCachedProducts();
+      if (cached.isNotEmpty && mounted) {
+        final catalogVersion = buildCatalogSyncVersion(cached);
+        final syncedRows = applyCatalogSyncVersion(cached, catalogVersion);
+        setState(() {
+          _productos = syncedRows;
+          _loadingProducts = false;
+          _error = null;
+        });
+        Future<void>.microtask(
+          () => FulltechImageCacheManager.warmImageUrls(
+            syncedRows.map((item) => item.displayFotoUrl),
+          ),
+        );
+      }
+    }
+
+    if (!silent && _productos.isEmpty) {
       setState(() {
         _loadingProducts = true;
         _error = null;
@@ -587,8 +610,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
     try {
       final rows = await ref
-          .read(ventasRepositoryProvider)
-          .fetchProducts(forceRefresh: forceRemote);
+          .read(catalogRepositoryProvider)
+          .fetchProducts(forceRefresh: forceRemote, silent: true);
       final catalogVersion = buildCatalogSyncVersion(rows);
       final syncedRows = applyCatalogSyncVersion(rows, catalogVersion);
       final syncedAt = DateTime.now();
@@ -645,11 +668,26 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     return values;
   }
 
+  bool get _hasCategoryFilter => _selectedCategories.isNotEmpty;
+
+  bool _setEquals(Set<String> left, Set<String> right) {
+    if (left.length != right.length) return false;
+    for (final value in left) {
+      if (!right.contains(value)) return false;
+    }
+    return true;
+  }
+
+  String? get _selectedCategoryLabel {
+    if (_selectedCategories.isEmpty) return null;
+    return _selectedCategories.join(', ');
+  }
+
   List<ProductModel> get _visibleProducts {
     final query = _searchCtrl.text.trim().toLowerCase();
     return _productos.where((product) {
-      if (_selectedCategory != null &&
-          product.categoriaLabel != _selectedCategory) {
+      if (_selectedCategories.isNotEmpty &&
+          !_selectedCategories.contains(product.categoriaLabel)) {
         return false;
       }
       if (query.isEmpty) return true;
@@ -775,7 +813,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       globalDiscountAmount: _generalDiscountAmount,
       editingId: _editingId,
       editingCreatedAt: _editingCreatedAt,
-      selectedCategory: _selectedCategory,
+      selectedCategories: _selectedCategories.toList(growable: false),
       searchQuery: _searchCtrl.text,
     );
   }
@@ -817,14 +855,16 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _generalDiscountAmount = draft.globalDiscountAmount;
     _editingId = draft.editingId;
     _editingCreatedAt = draft.editingCreatedAt;
-    _selectedCategory = draft.selectedCategory;
+    _selectedCategories
+      ..clear()
+      ..addAll(draft.selectedCategories);
     _searchCtrl.text = draft.searchQuery;
   }
 
   void _resetEditorState() {
     _items.clear();
     _searchCtrl.clear();
-    _selectedCategory = null;
+    _selectedCategories.clear();
     _selectedClientId = null;
     _selectedClientName = 'Sin cliente';
     _selectedClientPhone = null;
@@ -874,7 +914,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         _fiscalVoucherDueDate != null ||
         _generalDiscountAmount != 0 ||
         (_editingId ?? '').trim().isNotEmpty ||
-        (_selectedCategory ?? '').trim().isNotEmpty;
+        _selectedCategories.isNotEmpty;
   }
 
   bool get _fiscalVoucherRequiresTaxId {
@@ -892,12 +932,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     final type = _fiscalVoucherType.trim().toUpperCase();
     final ncf = _fiscalVoucherNumber.trim().toUpperCase();
     if (type.isEmpty) return 'Selecciona el tipo de comprobante.';
-    if (ncf.isEmpty) return 'Indica el número de comprobante / NCF.';
+    if (ncf.isEmpty) return 'Indica el nÃºmero de comprobante / NCF.';
     if (!ncf.startsWith(type)) {
       return 'El NCF debe iniciar con el tipo seleccionado ($type).';
     }
     if (!RegExp(r'^B\d{10}$').hasMatch(ncf)) {
-      return 'El NCF debe tener formato válido, ejemplo B0100000001.';
+      return 'El NCF debe tener formato vÃ¡lido, ejemplo B0100000001.';
     }
     if (_fiscalVoucherDueDate == null) {
       return 'Selecciona la fecha de vencimiento del comprobante.';
@@ -908,7 +948,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       return 'La fecha de vencimiento del comprobante no puede estar vencida.';
     }
     if (_fiscalVoucherRequiresTaxId && _fiscalCustomerTaxId.trim().isEmpty) {
-      return 'Indica el RNC o cédula fiscal del cliente.';
+      return 'Indica el RNC o cÃ©dula fiscal del cliente.';
     }
     return null;
   }
@@ -923,9 +963,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   String _fiscalVoucherTypeLabel(String type) {
     return switch (type) {
-      'B01' => 'B01 - Crédito fiscal',
+      'B01' => 'B01 - CrÃ©dito fiscal',
       'B02' => 'B02 - Consumidor final',
-      'B14' => 'B14 - Régimen especial',
+      'B14' => 'B14 - RÃ©gimen especial',
       'B15' => 'B15 - Gubernamental',
       _ => type,
     };
@@ -941,9 +981,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       if (date != null)
         'Vencimiento NCF: ${DateFormat('dd/MM/yyyy').format(date)}',
       if (_fiscalCustomerTaxId.trim().isNotEmpty)
-        'RNC/Cédula: ${_fiscalCustomerTaxId.trim()}',
+        'RNC/CÃ©dula: ${_fiscalCustomerTaxId.trim()}',
       if (_fiscalCustomerName.trim().isNotEmpty)
-        'Razón social: ${_fiscalCustomerName.trim()}',
+        'RazÃ³n social: ${_fiscalCustomerName.trim()}',
       'ITBIS ${(_itbisRate * 100).toStringAsFixed(0)}%: ${_money(_itbisAmount)}',
     ];
   }
@@ -1048,6 +1088,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       );
       _desktopTickets = [..._desktopTickets, ticket];
       _activeDesktopTicketId = ticket.id;
+      _showMobileTicketDropdown = false;
       _replaceEditorStateFromDraft(ticket);
       _writeActiveDesktopDraft();
     });
@@ -1061,6 +1102,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       final next = _findDesktopTicket(id);
       if (next == null) return;
       _activeDesktopTicketId = next.id;
+      _showMobileTicketDropdown = false;
       _replaceEditorStateFromDraft(next);
     });
     _schedulePersistEditorDraft();
@@ -1153,7 +1195,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     if (confirmed != true || !mounted) return;
 
     if (_desktopTickets.length <= 1) {
-      _commitEditorChange(_resetEditorState);
+      _commitEditorChange(() {
+        _showMobileTicketDropdown = false;
+        _resetEditorState();
+      });
       return;
     }
 
@@ -1163,6 +1208,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       if (index < 0) return;
       final nextTickets = [..._desktopTickets]..removeAt(index);
       _desktopTickets = nextTickets;
+      _showMobileTicketDropdown = nextTickets.length > 1
+          ? _showMobileTicketDropdown
+          : false;
       if (_activeDesktopTicketId == id) {
         final nextIndex = index.clamp(0, nextTickets.length - 1);
         final next = nextTickets[nextIndex];
@@ -1264,191 +1312,171 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     }
   }
 
-  Future<void> _openMobileTicketSheet() async {
-    await showGeneralDialog<void>(
+  Future<void> _openMobileActionsDrawer() async {
+    final action = await showGeneralDialog<_MobileQuickAction>(
       context: context,
-      barrierLabel: 'Tickets abiertos',
       barrierDismissible: true,
-      barrierColor: Colors.black.withValues(alpha: 0.24),
+      barrierLabel: 'Menu de acciones',
+      barrierColor: Colors.black.withValues(alpha: 0.22),
       transitionDuration: const Duration(milliseconds: 240),
-      pageBuilder: (dialogContext, animation, secondaryAnimation) {
-        final theme = Theme.of(dialogContext);
-        final media = MediaQuery.of(dialogContext);
-        final panelWidth = media.size.width * 0.88 > 360
-            ? 360.0
-            : media.size.width * 0.88;
-
-        return SafeArea(
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                width: panelWidth,
-                height: media.size.height,
-                margin: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface,
-                  borderRadius: BorderRadius.circular(28),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.16),
-                      blurRadius: 28,
-                      offset: const Offset(-8, 12),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        final theme = Theme.of(context);
+        Widget actionTile({
+          required IconData icon,
+          required String label,
+          required _MobileQuickAction value,
+          Color? color,
+          bool showDot = false,
+        }) {
+          return ListTile(
+            minTileHeight: 58,
+            dense: true,
+            visualDensity: VisualDensity.standard,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            title: Text(
+              label,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: color ?? const Color(0xFF17263A),
+                letterSpacing: 0,
+              ),
+            ),
+            leading: showDot
+                ? Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary,
+                      shape: BoxShape.circle,
                     ),
-                  ],
-                  border: Border.all(
-                    color: theme.colorScheme.outlineVariant.withValues(
-                      alpha: 0.45,
-                    ),
+                  )
+                : null,
+            trailing: Container(
+              width: 30,
+              height: 30,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: (color ?? theme.colorScheme.primary).withValues(
+                  alpha: 0.08,
+                ),
+                borderRadius: BorderRadius.circular(7),
+                border: Border.all(
+                  color: (color ?? theme.colorScheme.primary).withValues(
+                    alpha: 0.18,
                   ),
                 ),
-                child: Column(
+              ),
+              child: Icon(
+                icon,
+                color: color ?? theme.colorScheme.primary,
+                size: 18,
+              ),
+            ),
+            onTap: () => Navigator.of(context).pop(value),
+          );
+        }
+
+        return Align(
+          alignment: Alignment.centerRight,
+          child: SafeArea(
+            child: Material(
+              color: theme.colorScheme.surface,
+              child: SizedBox(
+                width: (MediaQuery.sizeOf(context).width * 0.72).clamp(
+                  270.0,
+                  318.0,
+                ),
+                height: double.infinity,
+                child: Stack(
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(18, 16, 12, 12),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Tickets abiertos',
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 12, 8, 10),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.keyboard_double_arrow_left_rounded,
+                                color: theme.colorScheme.primary,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Acciones',
+                                  textAlign: TextAlign.right,
                                   style: theme.textTheme.titleMedium?.copyWith(
                                     fontWeight: FontWeight.w900,
                                   ),
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Cambia de ticket o crea uno nuevo sin salir del editor.',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () => Navigator.of(dialogContext).pop(),
-                            icon: const Icon(Icons.close_rounded),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: () {
-                            Navigator.of(dialogContext).pop();
-                            _createNewDesktopTicket();
-                          },
-                          icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Nuevo ticket'),
-                        ),
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    Expanded(
-                      child: ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                        itemCount: _desktopTickets.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (itemContext, index) {
-                          final ticket = _desktopTickets[index];
-                          final selected = ticket.id == _activeDesktopTicketId;
-                          final lines = ticket.items.length;
-                          final clientName = ticket.selectedClientName.trim();
-                          final subtitle = [
-                            '$lines líneas',
-                            if (clientName.isNotEmpty &&
-                                clientName != 'Sin cliente')
-                              clientName,
-                          ].join(' · ');
-
-                          return Material(
-                            color: selected
-                                ? theme.colorScheme.primary.withValues(
-                                    alpha: 0.10,
-                                  )
-                                : theme.colorScheme.surfaceContainerLowest,
-                            borderRadius: BorderRadius.circular(18),
-                            child: InkWell(
-                              onTap: () {
-                                Navigator.of(dialogContext).pop();
-                                _switchDesktopTicket(ticket.id);
-                              },
-                              borderRadius: BorderRadius.circular(18),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 12,
-                                ),
-                                child: Row(
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 18,
-                                      backgroundColor: selected
-                                          ? theme.colorScheme.primary
-                                          : theme.colorScheme.surface,
-                                      child: Text(
-                                        '${index + 1}',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w900,
-                                          color: selected
-                                              ? theme.colorScheme.onPrimary
-                                              : theme.colorScheme.onSurface,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            ticket.label(index),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: theme.textTheme.bodyLarge
-                                                ?.copyWith(
-                                                  fontWeight: FontWeight.w800,
-                                                ),
-                                          ),
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            subtitle,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: theme.textTheme.bodySmall
-                                                ?.copyWith(
-                                                  color: theme
-                                                      .colorScheme
-                                                      .onSurfaceVariant,
-                                                ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Icon(
-                                      selected
-                                          ? Icons.check_circle_rounded
-                                          : Icons.chevron_right_rounded,
-                                      color: selected
-                                          ? theme.colorScheme.primary
-                                          : theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                  ],
-                                ),
                               ),
-                            ),
-                          );
-                        },
+                              IconButton(
+                                tooltip: 'Cerrar',
+                                onPressed: () => Navigator.of(context).pop(),
+                                icon: const Icon(Icons.close),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        Expanded(
+                          child: ListView(
+                            padding: const EdgeInsets.fromLTRB(6, 8, 6, 82),
+                            children: [
+                              actionTile(
+                                icon: Icons.person_outline,
+                                label: 'Cliente',
+                                value: _MobileQuickAction.client,
+                                showDot: (_selectedClientId ?? '')
+                                    .trim()
+                                    .isNotEmpty,
+                              ),
+                              actionTile(
+                                icon: Icons.add_box_outlined,
+                                label: 'Venta rapida',
+                                value: _MobileQuickAction.externalItem,
+                              ),
+                              actionTile(
+                                icon: Icons.request_quote_outlined,
+                                label: 'Cotizar',
+                                value: _MobileQuickAction.quote,
+                              ),
+                              actionTile(
+                                icon: Icons.list_alt_outlined,
+                                label: 'Lista de cotizaciones',
+                                value: _MobileQuickAction.quoteHistory,
+                              ),
+                              actionTile(
+                                icon: Icons.picture_as_pdf_outlined,
+                                label: 'Ver PDF',
+                                value: _MobileQuickAction.pdf,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    Positioned(
+                      right: 12,
+                      bottom: 12,
+                      child: SizedBox(
+                        width: 58,
+                        height: 58,
+                        child: FloatingActionButton(
+                          heroTag: 'mobile-actions-calculator',
+                          tooltip: 'Calculadora',
+                          onPressed: () => Navigator.of(
+                            context,
+                          ).pop(_MobileQuickAction.calculator),
+                          backgroundColor: theme.colorScheme.primary,
+                          foregroundColor: theme.colorScheme.onPrimary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(Icons.calculate_outlined, size: 26),
+                        ),
                       ),
                     ),
                   ],
@@ -1458,7 +1486,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           ),
         );
       },
-      transitionBuilder: (dialogContext, animation, secondaryAnimation, child) {
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
         final curved = CurvedAnimation(
           parent: animation,
           curve: Curves.easeOutCubic,
@@ -1469,7 +1497,164 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             begin: const Offset(1, 0),
             end: Offset.zero,
           ).animate(curved),
-          child: FadeTransition(opacity: curved, child: child),
+          child: child,
+        );
+      },
+    );
+
+    if (action == null || !mounted) return;
+    await _handleMobileQuickAction(action);
+  }
+
+  Future<void> _openMobileCalculator() async {
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Calculadora',
+      barrierColor: Colors.black.withValues(alpha: 0.24),
+      transitionDuration: const Duration(milliseconds: 240),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        final width = (MediaQuery.sizeOf(dialogContext).width * 0.92).clamp(
+          320.0,
+          420.0,
+        );
+        return SafeArea(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: SizedBox(
+              width: width,
+              height: double.infinity,
+              child: _DesktopCalculatorPane(
+                onClose: () => Navigator.of(dialogContext).pop(),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
+        );
+      },
+    );
+  }
+
+  Future<void> _openMobileFiscalInvoicePanel() async {
+    _commitEditorChange(() => _setItbisEnabled(true));
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Configurar ITBIS',
+      barrierColor: Colors.black.withValues(alpha: 0.24),
+      transitionDuration: const Duration(milliseconds: 240),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        final width = (MediaQuery.sizeOf(dialogContext).width * 0.92).clamp(
+          320.0,
+          430.0,
+        );
+        return SafeArea(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Material(
+              color: Colors.white,
+              child: SizedBox(
+                width: width,
+                height: double.infinity,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 10, 12),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.receipt_long_outlined,
+                            color: Color(0xFF1957E6),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'ITBIS y factura fiscal',
+                              style: Theme.of(dialogContext)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w900),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Cerrar',
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: _DesktopFiscalInvoicePanel(
+                        voucherType: _fiscalVoucherType,
+                        voucherNumber: _fiscalVoucherNumber,
+                        dueDate: _fiscalVoucherDueDate,
+                        customerTaxId: _fiscalCustomerTaxId,
+                        customerName: _fiscalCustomerName,
+                        requiresTaxId: _fiscalVoucherRequiresTaxId,
+                        onTypeChanged: (value) => _commitEditorChange(
+                          () => _fiscalVoucherType = value,
+                        ),
+                        onVoucherNumberChanged: (value) => _commitEditorChange(
+                          () => _fiscalVoucherNumber = value,
+                        ),
+                        onCustomerTaxIdChanged: (value) => _commitEditorChange(
+                          () => _fiscalCustomerTaxId = value,
+                        ),
+                        onCustomerNameChanged: (value) => _commitEditorChange(
+                          () => _fiscalCustomerName = value,
+                        ),
+                        onPickDueDate: _pickFiscalVoucherDueDate,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                          style: FilledButton.styleFrom(
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                          ),
+                          child: const Text('Listo'),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
         );
       },
     );
@@ -1486,8 +1671,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       case _MobileQuickAction.externalItem:
         await _openExternalItemDialog();
         return;
-      case _MobileQuickAction.tickets:
-        await _openMobileTicketSheet();
+      case _MobileQuickAction.calculator:
+        await _openMobileCalculator();
         return;
       case _MobileQuickAction.newTicket:
         _createNewDesktopTicket();
@@ -1495,8 +1680,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       case _MobileQuickAction.pdf:
         await _openPdfPreview();
         return;
-      case _MobileQuickAction.serviceOrder:
-        await _sendQuotationToServiceOrder();
+      case _MobileQuickAction.quote:
+        await _saveCurrentAsQuotation();
+        return;
+      case _MobileQuickAction.quoteHistory:
+        if (!mounted) return;
+        context.go(Routes.cotizacionesHistorial);
         return;
       case _MobileQuickAction.clear:
         if (!_hasEditorContent) return;
@@ -1505,94 +1694,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     }
   }
 
-  Future<void> _sendQuotationToServiceOrder() async {
-    if ((_selectedClientId ?? '').trim().isEmpty ||
-        _selectedClientName.trim() == 'Sin cliente') {
-      _showSalesNotice(
-        title: 'Cliente requerido',
-        message: 'Selecciona o crea un cliente primero.',
-        icon: Icons.person_add_alt_1_outlined,
-        accent: const Color(0xFFF59E0B),
-      );
-      return;
-    }
-
-    if ((_selectedClientPhone ?? '').trim().isEmpty) {
-      _showSalesNotice(
-        title: 'Teléfono requerido',
-        message: 'El cliente debe tener teléfono para continuar.',
-        icon: Icons.call_outlined,
-        accent: const Color(0xFFF59E0B),
-      );
-      return;
-    }
-
-    if (_items.isEmpty) {
-      _showSalesNotice(
-        title: 'Ticket vacío',
-        message: 'Agrega al menos un producto al ticket.',
-        icon: Icons.shopping_cart_outlined,
-        accent: const Color(0xFFF59E0B),
-      );
-      return;
-    }
-
-    final repository = ref.read(cotizacionesRepositoryProvider);
-    final draft = _buildDraftCotizacion();
-    final wasEditing = (_editingId ?? '').trim().isNotEmpty;
-
-    CotizacionModel savedQuotation;
-    try {
-      savedQuotation = wasEditing
-          ? await repository.update(_editingId!, draft)
-          : await repository.create(draft);
-    } catch (error) {
-      if (!mounted) return;
-      _showSalesNotice(
-        title: 'No se pudo crear la orden',
-        message: error is ApiException
-            ? error.message
-            : 'No se pudo preparar la cotización para crear la orden.',
-        icon: Icons.error_outline_rounded,
-        accent: const Color(0xFFDC2626),
-      );
-      return;
-    }
-
-    if (!mounted) return;
-
-    _commitEditorChange(() {
-      _editingId = savedQuotation.id;
-      _editingCreatedAt = savedQuotation.createdAt;
-      _selectedClientId = savedQuotation.customerId;
-      _selectedClientName = savedQuotation.customerName;
-      _selectedClientPhone = savedQuotation.customerPhone;
-    });
-    _schedulePersistEditorDraft(immediate: true);
-
-    final opened = await openCreateServiceOrderAdaptive(
-      context,
-      args: ServiceOrderCreateArgs(
-        initialQuotation: savedQuotation,
-        initialClientId: savedQuotation.customerId,
-      ),
-    );
-
-    if (!mounted) return;
-    if (opened == true) {
-      _showSalesNotice(
-        title: 'Orden creada',
-        message: 'Orden de servicio creada desde la cotización.',
-        icon: Icons.assignment_turned_in_outlined,
-        accent: const Color(0xFF1957E6),
-      );
-    }
-  }
-
   Future<void> _saveCurrentAsQuotation() async {
     if (_items.isEmpty) {
       _showSalesNotice(
-        title: 'Ticket vacío',
+        title: 'Ticket vacÃ­o',
         message: 'Agrega al menos un producto al ticket.',
         icon: Icons.shopping_cart_outlined,
         accent: const Color(0xFFF59E0B),
@@ -1630,10 +1735,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       _schedulePersistEditorDraft(immediate: true);
 
       _showSalesNotice(
-        title: 'Cotización guardada',
+        title: 'CotizaciÃ³n guardada',
         message: wasQueued
             ? 'Guardada localmente y pendiente de sincronizar.'
-            : 'La cotización se guardó correctamente.',
+            : 'La cotizaciÃ³n se guardÃ³ correctamente.',
         icon: Icons.request_quote_outlined,
         accent: const Color(0xFF1957E6),
       );
@@ -1643,7 +1748,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         title: 'No se pudo guardar',
         message: error is ApiException
             ? error.message
-            : 'No se pudo guardar la cotización.',
+            : 'No se pudo guardar la cotizaciÃ³n.',
         icon: Icons.error_outline_rounded,
         accent: const Color(0xFFDC2626),
       );
@@ -1673,8 +1778,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             productName: item.nombre,
             category:
                 official?.categoriaLabel ??
-                _selectedCategory ??
-                'Sin categoría',
+                _selectedCategoryLabel ??
+                'Sin categorÃ­a',
             qty: item.qty,
             unitPrice: item.unitPrice,
             officialUnitPrice: official?.precio,
@@ -1691,7 +1796,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     return QuotationContext(
       quotationId: (_editingId ?? '').trim().isEmpty ? null : _editingId,
       module: 'cotizaciones',
-      productType: _selectedCategory,
+      productType: _selectedCategoryLabel,
       productName: productName,
       brand: null,
       quantity: totalQuantity,
@@ -1707,7 +1812,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       extraCharges: _detectExtraCharges(),
       currentDvrType: _detectCurrentDvrType(),
       requiredDvrType: _detectRequiredDvrType(totalQuantity: totalQuantity),
-      screenName: 'Cotización',
+      screenName: 'CotizaciÃ³n',
       items: contextItems,
       metadata: {
         'clientId': _selectedClientId,
@@ -1808,7 +1913,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   Future<void> _askAiAboutWarning(AiWarning warning) {
     return _openAiAssistantSheet(
       initialPrompt:
-          'Explícame la advertencia "${warning.title}" usando únicamente la regla oficial relacionada.',
+          'ExplÃ­came la advertencia "${warning.title}" usando Ãºnicamente la regla oficial relacionada.',
     );
   }
 
@@ -1832,8 +1937,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   : _parseAccountingInput(amountCtrl.text);
               if (amount == null || amount <= 0) {
                 _showSalesNotice(
-                  title: 'Valor inválido',
-                  message: 'Ingresa un valor válido.',
+                  title: 'Valor invÃ¡lido',
+                  message: 'Ingresa un valor vÃ¡lido.',
                   icon: Icons.warning_amber_rounded,
                   accent: const Color(0xFFF59E0B),
                 );
@@ -1988,7 +2093,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       _showSalesNotice(
         title: stock <= 0 ? 'Producto sin stock' : 'Stock insuficiente',
         message:
-            '${product.nombre} se agregará al detalle marcado como fuera de stock.',
+            '${product.nombre} se agregarÃ¡ al detalle marcado como fuera de stock.',
         icon: Icons.warning_amber_rounded,
         accent: const Color(0xFFF59E0B),
       );
@@ -2324,7 +2429,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _showSalesNotice(
       title: 'Datos incompletos',
       message:
-          'Completa datos válidos: nombre, cantidad mayor que 0, costo y precio no negativos.',
+          'Completa datos vÃ¡lidos: nombre, cantidad mayor que 0, costo y precio no negativos.',
       icon: Icons.warning_amber_rounded,
       accent: const Color(0xFFF59E0B),
     );
@@ -2424,299 +2529,333 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Future<void> _pickCategory() async {
-    final selected = await showModalBottomSheet<String?>(
+    final selected = await showGeneralDialog<Set<String>>(
       context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
+      barrierDismissible: true,
+      barrierLabel: 'Filtros de categorias',
+      barrierColor: Colors.black.withValues(alpha: 0.22),
+      transitionDuration: const Duration(milliseconds: 240),
+      pageBuilder: (context, animation, secondaryAnimation) {
         final categories = _categories;
-        final options = <String?>[null, ...categories];
         final theme = Theme.of(context);
+        final draft = Set<String>.from(_selectedCategories);
 
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
-            child: Container(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.70,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.10),
-                    blurRadius: 24,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 10),
-                  Container(
-                    width: 42,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.outlineVariant,
-                      borderRadius: BorderRadius.circular(999),
+        return Align(
+          alignment: Alignment.centerRight,
+          child: StatefulBuilder(
+            builder: (context, setModalState) {
+              void toggleCategory(String category) {
+                setModalState(() {
+                  if (!draft.remove(category)) draft.add(category);
+                });
+              }
+
+              return SafeArea(
+                child: Material(
+                  color: theme.colorScheme.surface,
+                  child: SizedBox(
+                    width: (MediaQuery.sizeOf(context).width * 0.84).clamp(
+                      292.0,
+                      380.0,
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-                    child: Row(
+                    height: double.infinity,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Expanded(
-                          child: Text(
-                            'Categorias',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w900,
-                            ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 14, 10, 12),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.filter_alt_outlined,
+                                color: theme.colorScheme.primary,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Categorias',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Cerrar',
+                                onPressed: () => Navigator.pop(context),
+                                icon: const Icon(Icons.close),
+                              ),
+                            ],
                           ),
                         ),
-                        if (_selectedCategory != null)
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, null),
-                            child: const Text('Quitar filtro'),
+                        const Divider(height: 1),
+                        ListTile(
+                          leading: Icon(
+                            draft.isEmpty
+                                ? Icons.check_box
+                                : Icons.check_box_outline_blank,
+                            color: draft.isEmpty
+                                ? theme.colorScheme.primary
+                                : null,
                           ),
+                          title: const Text('Todas las categorias'),
+                          onTap: () => setModalState(draft.clear),
+                        ),
+                        Expanded(
+                          child: ListView.separated(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            itemCount: categories.length,
+                            separatorBuilder: (_, __) =>
+                                const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final category = categories[index];
+                              final selectedOption = draft.contains(category);
+                              return CheckboxListTile(
+                                value: selectedOption,
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                title: Text(
+                                  category,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    fontWeight: selectedOption
+                                        ? FontWeight.w800
+                                        : FontWeight.w600,
+                                  ),
+                                ),
+                                onChanged: (_) => toggleCategory(category),
+                              );
+                            },
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () =>
+                                      Navigator.pop(context, <String>{}),
+                                  style: OutlinedButton.styleFrom(
+                                    shape: const RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.zero,
+                                    ),
+                                  ),
+                                  child: const Text('Todas'),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: FilledButton(
+                                  onPressed: () => Navigator.pop(
+                                    context,
+                                    Set<String>.from(draft),
+                                  ),
+                                  style: FilledButton.styleFrom(
+                                    shape: const RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.zero,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    draft.isEmpty
+                                        ? 'Aplicar'
+                                        : 'Aplicar (${draft.length})',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  Flexible(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                      shrinkWrap: true,
-                      itemCount: options.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 6),
-                      itemBuilder: (context, index) {
-                        final category = options[index];
-                        final selectedOption = _selectedCategory == category;
-                        final label = category ?? 'Todas las categorias';
-
-                        return Material(
-                          color: selectedOption
-                              ? theme.colorScheme.primary.withValues(
-                                  alpha: 0.10,
-                                )
-                              : theme.colorScheme.surfaceContainerLowest,
-                          borderRadius: BorderRadius.circular(16),
-                          child: InkWell(
-                            onTap: () => Navigator.pop(context, category),
-                            borderRadius: BorderRadius.circular(16),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 10,
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 24,
-                                    height: 24,
-                                    decoration: BoxDecoration(
-                                      color: selectedOption
-                                          ? theme.colorScheme.primary
-                                          : theme.colorScheme.surface,
-                                      borderRadius: BorderRadius.circular(999),
-                                      border: Border.all(
-                                        color: selectedOption
-                                            ? theme.colorScheme.primary
-                                            : theme.colorScheme.outlineVariant,
-                                      ),
-                                    ),
-                                    child: Icon(
-                                      selectedOption
-                                          ? Icons.check_rounded
-                                          : Icons.circle_outlined,
-                                      size: 14,
-                                      color: selectedOption
-                                          ? theme.colorScheme.onPrimary
-                                          : theme.colorScheme.outline,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      label,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: theme.textTheme.bodyMedium
-                                          ?.copyWith(
-                                            fontWeight: selectedOption
-                                                ? FontWeight.w800
-                                                : FontWeight.w600,
-                                          ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
         );
       },
     );
 
-    if (!mounted) return;
-    if (selected == _selectedCategory) return;
-    _commitEditorChange(() => _selectedCategory = selected);
+    if (!mounted || selected == null) return;
+    if (_setEquals(selected, _selectedCategories)) return;
+    _commitEditorChange(() {
+      _selectedCategories
+        ..clear()
+        ..addAll(selected);
+    });
   }
 
   Future<void> _openNoteDialog() async {
     final controller = TextEditingController(text: _note);
-    bool applyingAi = false;
-
-    Future<void> requestAiSuggestion(
-      BuildContext dialogContext,
-      void Function(VoidCallback) setDialogState,
-    ) async {
-      final rawNote = controller.text.trim();
-      if (rawNote.isEmpty) {
-        _showSalesNotice(
-          title: 'Nota requerida',
-          message: 'Escribe una nota antes de usar IA.',
-          icon: Icons.sticky_note_2_outlined,
-          accent: const Color(0xFFF59E0B),
-        );
-        return;
-      }
-
-      setDialogState(() => applyingAi = true);
-      try {
-        final suggestion = await _buildAiNoteSuggestions(rawNote);
-        if (!dialogContext.mounted) return;
-        final selected = await _openAiNoteChoiceDialog(
-          original: rawNote,
-          suggestion: suggestion,
-        );
-        if (!dialogContext.mounted || selected == null) return;
-        controller.text = selected;
-        controller.selection = TextSelection.fromPosition(
-          TextPosition(offset: controller.text.length),
-        );
-      } finally {
-        if (dialogContext.mounted) {
-          setDialogState(() => applyingAi = false);
-        }
-      }
-    }
 
     String? nextNote;
     try {
       nextNote = await showDialog<String>(
         context: context,
         barrierColor: FullTechDialogTokens.overlayColor,
-        builder: (dialogContext) => StatefulBuilder(
-          builder: (dialogContext, setDialogState) => FullTechDialog(
-            title: 'Nota de cotización',
-            maxWidth: 420,
-            showCloseButton: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(
-                  controller: controller,
-                  minLines: 4,
-                  maxLines: 5,
-                  textInputAction: TextInputAction.done,
-                  decoration: InputDecoration(
-                    hintText: 'Escribe una nota para esta cotización',
-                    filled: true,
-                    fillColor: const Color(0xFFF8FBFF),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 16,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: Color(0xFFCFE0FF)),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: Color(0xFFD3E0E7)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(
-                        color: Color(0xFF0E7490),
-                        width: 1.2,
-                      ),
-                    ),
-                  ),
-                  onSubmitted: (_) => Navigator.pop(
-                    dialogContext,
-                    _autocorrectNoteText(controller.text),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: applyingAi
-                      ? null
-                      : () =>
-                            requestAiSuggestion(dialogContext, setDialogState),
-                  icon: applyingAi
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.auto_fix_high_rounded),
-                  label: Text(
-                    applyingAi ? 'Mejorando texto...' : 'Mejorar con IA',
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF0E7490),
-                    side: const BorderSide(color: Color(0xFF0E7490)),
-                    minimumSize: const Size.fromHeight(34),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    textStyle: const TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                ),
-                const SizedBox(height: 22),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+        builder: (dialogContext) => Dialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 28,
+            vertical: 32,
+          ),
+          backgroundColor: Colors.transparent,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: Material(
+              color: Colors.white,
+              elevation: 24,
+              shadowColor: Colors.black26,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+                side: const BorderSide(color: Color(0xFFD6E5EE)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    TextButton(
-                      onPressed: applyingAi
-                          ? null
-                          : () => Navigator.pop(dialogContext),
-                      child: const Text('Cancelar'),
-                    ),
-                    const SizedBox(width: 12),
-                    FilledButton(
-                      onPressed: applyingAi
-                          ? null
-                          : () => Navigator.pop(
-                              dialogContext,
-                              _autocorrectNoteText(controller.text),
+                    Row(
+                      children: [
+                        Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEAF3FF),
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(color: const Color(0xFFCFE0FF)),
+                          ),
+                          child: const Icon(
+                            Icons.sticky_note_2_outlined,
+                            color: Color(0xFF1957E6),
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Nota de cotizaciÃ³n',
+                            style: TextStyle(
+                              color: Color(0xFF0F2233),
+                              fontSize: 19,
+                              fontWeight: FontWeight.w800,
                             ),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF0E7490),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
+                          ),
                         ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(999),
+                        IconButton(
+                          tooltip: 'Cerrar',
+                          onPressed: () => Navigator.pop(dialogContext),
+                          icon: const Icon(Icons.close_rounded),
+                          color: const Color(0xFF52677A),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: controller,
+                      autofocus: true,
+                      minLines: 6,
+                      maxLines: 8,
+                      keyboardType: TextInputType.multiline,
+                      textInputAction: TextInputAction.newline,
+                      textCapitalization: TextCapitalization.sentences,
+                      autocorrect: true,
+                      enableSuggestions: true,
+                      decoration: InputDecoration(
+                        hintText: 'Escribe la nota para esta cotizaciÃ³n',
+                        filled: true,
+                        fillColor: const Color(0xFFF7FAFC),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 15,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(5),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFC6D8E3),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(5),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFC6D8E3),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(5),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF1957E6),
+                            width: 1.35,
+                          ),
+                        ),
+                        hintStyle: const TextStyle(color: Color(0xFF6D8194)),
                       ),
-                      child: const Text('Guardar'),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Se ordenan espacios, puntuaciÃ³n bÃ¡sica y algunas palabras frecuentes al guardar.',
+                      style: TextStyle(color: Color(0xFF64798C), fontSize: 12),
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialogContext),
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFF0E5F6D),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                          ),
+                          child: const Text('Cancelar'),
+                        ),
+                        const SizedBox(width: 10),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(
+                            dialogContext,
+                            _autocorrectNoteText(controller.text),
+                          ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF1957E6),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 26,
+                              vertical: 13,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            textStyle: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          child: const Text('Guardar'),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -2729,35 +2868,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _commitEditorChange(() => _note = _autocorrectNoteText(nextNote!));
   }
 
-  Future<_AiNoteSuggestion> _buildAiNoteSuggestions(String rawNote) async {
-    final aiService = ref.read(quotationAiServiceProvider);
-    try {
-      final response = await aiService.sendMessage(
-        context: _buildQuotationAiContext(noteOverride: rawNote),
-        message:
-            'Mejora esta nota de cotizacion para cliente. Corrige ortografia y redaccion sin inventar datos. '
-            'Devuelve SOLO JSON valido con esta estructura exacta: '
-            '{"corrected":"texto corregido","professional":"texto profesional"}. '
-            'Nota: $rawNote',
-      );
-      final parsed = _parseAiNoteSuggestion(response.content);
-      if (parsed != null) {
-        return parsed;
-      }
-    } catch (_) {
-      // Si falla IA (API exception), usamos sugerencia local para no bloquear al usuario.
-    }
-    return _buildLocalAiNoteSuggestion(rawNote);
-  }
-
-  _AiNoteSuggestion _buildLocalAiNoteSuggestion(String rawNote) {
-    final corrected = _autocorrectNoteText(rawNote);
-    return _AiNoteSuggestion(
-      corrected: corrected,
-      professional: _buildProfessionalNoteText(corrected),
-    );
-  }
-
   String _autocorrectNoteText(String input) {
     var text = input.trim();
     if (text.isEmpty) return text;
@@ -2766,8 +2876,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       'porfavor': 'por favor',
       'insteligencia': 'inteligencia',
       'profeiconal': 'profesional',
-      'camara': 'cámara',
-      'camaras': 'cámaras',
+      'camara': 'cÃ¡mara',
+      'camaras': 'cÃ¡maras',
     };
 
     typoFixes.forEach((wrong, right) {
@@ -2791,128 +2901,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
     final first = text[0].toUpperCase();
     return '$first${text.substring(1)}';
-  }
-
-  String _buildProfessionalNoteText(String correctedText) {
-    final core = correctedText.trim();
-    if (core.isEmpty) return core;
-    return 'Estimado cliente, favor tomar en cuenta que este presupuesto corresponde a los trabajos descritos. $core';
-  }
-
-  _AiNoteSuggestion? _parseAiNoteSuggestion(String content) {
-    final jsonText = _extractJsonObject(content);
-    if (jsonText == null) return null;
-    try {
-      final decoded = jsonDecode(jsonText);
-      if (decoded is! Map) return null;
-      final corrected = (decoded['corrected'] ?? '').toString().trim();
-      final professional = (decoded['professional'] ?? '').toString().trim();
-      if (corrected.isEmpty || professional.isEmpty) return null;
-      return _AiNoteSuggestion(
-        corrected: corrected,
-        professional: professional,
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
-  String? _extractJsonObject(String content) {
-    final normalized = content.trim();
-    if (normalized.isEmpty) return null;
-
-    final fenced = RegExp(
-      r'```(?:json)?\s*(\{[\s\S]*\})\s*```',
-      caseSensitive: false,
-    ).firstMatch(normalized);
-    if (fenced != null) {
-      return fenced.group(1)?.trim();
-    }
-
-    final start = normalized.indexOf('{');
-    final end = normalized.lastIndexOf('}');
-    if (start < 0 || end <= start) return null;
-    return normalized.substring(start, end + 1).trim();
-  }
-
-  Future<String?> _openAiNoteChoiceDialog({
-    required String original,
-    required _AiNoteSuggestion suggestion,
-  }) {
-    return showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Elige la nota sugerida'),
-        content: SizedBox(
-          width: 520,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildAiNotePreviewBlock(label: 'Original', value: original),
-                _buildAiNotePreviewBlock(
-                  label: 'Corregida por IA',
-                  value: suggestion.corrected,
-                ),
-                _buildAiNotePreviewBlock(
-                  label: 'Profesional por IA',
-                  value: suggestion.professional,
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancelar'),
-          ),
-          OutlinedButton(
-            onPressed: () => Navigator.pop(dialogContext, suggestion.corrected),
-            child: const Text('Usar corregida'),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, suggestion.professional),
-            child: const Text('Usar profesional'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAiNotePreviewBlock({
-    required String label,
-    required String value,
-  }) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: theme.textTheme.labelLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest.withValues(
-                alpha: 0.5,
-              ),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(value, style: theme.textTheme.bodyMedium),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _openClientDialog() async {
@@ -2969,19 +2957,80 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         context: context,
         barrierDismissible: true,
         barrierLabel: 'Seleccionar cliente',
-        barrierColor: Colors.black.withValues(alpha: 0.22),
+        barrierColor: Colors.transparent,
         transitionDuration: const Duration(milliseconds: 240),
         pageBuilder: (dialogContext, animation, secondaryAnimation) {
           final size = MediaQuery.sizeOf(dialogContext);
           final isDesktop = size.width >= _desktopBreakpoint;
-          final panelWidth = size.width >= 1600
-              ? 560.0
-              : size.width >= 1280
-              ? 520.0
-              : (size.width * 0.42).clamp(440.0, 540.0);
+          final panelWidth = isDesktop
+              ? size.width >= 1600
+                    ? 560.0
+                    : size.width >= 1280
+                    ? 520.0
+                    : (size.width * 0.42).clamp(440.0, 540.0)
+              : (size.width * 0.90).clamp(320.0, 430.0);
 
           return StatefulBuilder(
             builder: (context, setStateDialog) {
+              Future<ClienteModel?> openClientFormDrawer({
+                String? clienteId,
+              }) async {
+                if (isDesktop) {
+                  return openClienteFormAdaptive(
+                    context,
+                    clienteId: clienteId,
+                    useRootNavigator: true,
+                  );
+                }
+
+                return showGeneralDialog<ClienteModel>(
+                  context: context,
+                  barrierDismissible: true,
+                  barrierLabel: clienteId == null
+                      ? 'Crear cliente'
+                      : 'Editar cliente',
+                  barrierColor: Colors.black.withValues(alpha: 0.22),
+                  transitionDuration: const Duration(milliseconds: 240),
+                  pageBuilder:
+                      (formContext, formAnimation, formSecondaryAnimation) {
+                        final width =
+                            (MediaQuery.sizeOf(formContext).width * 0.92).clamp(
+                              320.0,
+                              430.0,
+                            );
+                        return SafeArea(
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: SizedBox(
+                              width: width,
+                              height: double.infinity,
+                              child: ClienteFormScreen(
+                                clienteId: clienteId,
+                                returnSavedClient: true,
+                                compactDialog: true,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                  transitionBuilder:
+                      (context, animation, secondaryAnimation, child) {
+                        final curved = CurvedAnimation(
+                          parent: animation,
+                          curve: Curves.easeOutCubic,
+                          reverseCurve: Curves.easeInCubic,
+                        );
+                        return SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(1, 0),
+                            end: Offset.zero,
+                          ).animate(curved),
+                          child: child,
+                        );
+                      },
+                );
+              }
+
               Future<void> openFilterSheet() async {
                 final selected =
                     await showModalBottomSheet<_ClientFilterSelection>(
@@ -3230,7 +3279,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     ScaffoldMessenger.maybeOf(screenContext)?.showSnackBar(
                       const SnackBar(
                         content: Text(
-                          'No se pudo abrir la información del cliente.',
+                          'No se pudo abrir la informaciÃ³n del cliente.',
                         ),
                       ),
                     );
@@ -3276,7 +3325,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   ScaffoldMessenger.maybeOf(screenContext)?.showSnackBar(
                     const SnackBar(
                       content: Text(
-                        'No se pudo abrir la información del cliente. Inténtalo nuevamente.',
+                        'No se pudo abrir la informaciÃ³n del cliente. IntÃ©ntalo nuevamente.',
                       ),
                     ),
                   );
@@ -3351,10 +3400,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                       const SizedBox(width: 8),
                       IconButton.filledTonal(
                         onPressed: () async {
-                          final created = await openClienteFormAdaptive(
-                            context,
-                            useRootNavigator: true,
-                          );
+                          final created = await openClientFormDrawer();
                           if (!mounted ||
                               !dialogOpen ||
                               !context.mounted ||
@@ -3428,7 +3474,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                       client.telefono,
                                       if (createdLabel != null)
                                         'Creado $createdLabel',
-                                    ].join(' · '),
+                                    ].join(' Â· '),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -3495,7 +3541,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                       client.telefono,
                                       if (createdLabel != null)
                                         'Creado $createdLabel',
-                                    ].join(' · '),
+                                    ].join(' Â· '),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -3543,10 +3589,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     onPressed: () async {
                       final clientId = (_selectedClientId ?? '').trim();
                       if (clientId.isEmpty) return;
-                      final updated = await openClienteFormAdaptive(
-                        context,
+                      final updated = await openClientFormDrawer(
                         clienteId: clientId,
-                        useRootNavigator: true,
                       );
                       if (!mounted ||
                           !dialogOpen ||
@@ -3566,119 +3610,133 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   ),
               ];
 
-              if (!isDesktop) {
-                return AlertDialog(
-                  title: const Text('Cliente'),
-                  content: SizedBox(width: 560, child: content),
-                  actions: actions,
+              Widget closeOnEscape({required Widget child}) {
+                return CallbackShortcuts(
+                  bindings: {
+                    const SingleActivator(LogicalKeyboardKey.escape): () =>
+                        Navigator.maybePop(context),
+                  },
+                  child: Focus(autofocus: true, child: child),
                 );
               }
 
+              final panel = SizedBox(
+                width: panelWidth,
+                height: size.height,
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color(0x260B2A3A),
+                        blurRadius: 28,
+                        offset: Offset(-10, 0),
+                      ),
+                    ],
+                  ),
+                  child: SafeArea(
+                    child: Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 18, 16, 14),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 42,
+                                height: 42,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEAF1FF),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(
+                                  Icons.person_search_outlined,
+                                  color: Color(0xFF1957E6),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Cliente',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleLarge
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                    ),
+                                    Text(
+                                      'Busca, selecciona o crea un cliente',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: const Color(0xFF617383),
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: () => Navigator.pop(context),
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: content,
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
+                          child: Row(
+                            children: [
+                              Expanded(child: actions.first),
+                              if (actions.length > 1) ...[
+                                const SizedBox(width: 10),
+                                Expanded(child: actions.last),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+
               return Material(
                 color: Colors.transparent,
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: SizedBox(
-                    width: panelWidth,
-                    height: size.height,
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Color(0x260B2A3A),
-                            blurRadius: 28,
-                            offset: Offset(-10, 0),
+                child: closeOnEscape(
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        right: panelWidth,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => Navigator.maybePop(context),
+                          child: ClipRect(
+                            child: BackdropFilter(
+                              filter: ui.ImageFilter.blur(
+                                sigmaX: 1.1,
+                                sigmaY: 1.1,
+                              ),
+                              child: Container(
+                                color: Colors.white.withValues(alpha: 0.06),
+                              ),
+                            ),
                           ),
-                        ],
-                      ),
-                      child: SafeArea(
-                        child: Column(
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                20,
-                                18,
-                                16,
-                                14,
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 42,
-                                    height: 42,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFEAF1FF),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: const Icon(
-                                      Icons.person_search_outlined,
-                                      color: Color(0xFF1957E6),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Cliente',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleLarge
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.w900,
-                                              ),
-                                        ),
-                                        Text(
-                                          'Busca, selecciona o crea un cliente',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(
-                                                color: const Color(0xFF617383),
-                                              ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  IconButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    icon: const Icon(Icons.close_rounded),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Divider(height: 1),
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.all(18),
-                                child: content,
-                              ),
-                            ),
-                            const Divider(height: 1),
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                18,
-                                12,
-                                18,
-                                16,
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(child: actions.first),
-                                  if (actions.length > 1) ...[
-                                    const SizedBox(width: 10),
-                                    Expanded(child: actions.last),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ],
                         ),
                       ),
-                    ),
+                      Align(alignment: Alignment.centerRight, child: panel),
+                    ],
                   ),
                 ),
               );
@@ -3742,21 +3800,21 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
     if (lower.contains('error interno') ||
         (error.code != null && error.code! >= 500)) {
-      return 'No se pudo enviar $target porque el proveedor de WhatsApp reportó un fallo interno temporal. Intenta nuevamente en unos minutos.';
+      return 'No se pudo enviar $target porque el proveedor de WhatsApp reportÃ³ un fallo interno temporal. Intenta nuevamente en unos minutos.';
     }
 
-    if (lower.contains('timeout') || lower.contains('tardó')) {
-      return 'No se pudo enviar $target porque el servicio de WhatsApp tardó demasiado en responder. Verifica tu conexión e intenta otra vez.';
+    if (lower.contains('timeout') || lower.contains('tardÃ³')) {
+      return 'No se pudo enviar $target porque el servicio de WhatsApp tardÃ³ demasiado en responder. Verifica tu conexiÃ³n e intenta otra vez.';
     }
 
     if (lower.contains('instancia') ||
         lower.contains('api key') ||
         lower.contains('credenciales')) {
-      return 'No se pudo enviar $target por un problema de conexión con la instancia de WhatsApp. Revisa que la sesión esté conectada e intenta nuevamente.';
+      return 'No se pudo enviar $target por un problema de conexiÃ³n con la instancia de WhatsApp. Revisa que la sesiÃ³n estÃ© conectada e intenta nuevamente.';
     }
 
     if (lower.contains('pdf') && lower.contains('pes')) {
-      return 'No se pudo enviar $target porque el PDF es demasiado pesado para WhatsApp. Reduce el tamaño del archivo e intenta de nuevo.';
+      return 'No se pudo enviar $target porque el PDF es demasiado pesado para WhatsApp. Reduce el tamaÃ±o del archivo e intenta de nuevo.';
     }
 
     return message.isNotEmpty
@@ -3795,7 +3853,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     final phone = _normalizeWhatsAppLinkPhone(cotizacion.customerPhone);
     if (phone.isEmpty) {
       throw ApiException(
-        'El cliente no tiene teléfono válido para abrir WhatsApp.',
+        'El cliente no tiene telÃ©fono vÃ¡lido para abrir WhatsApp.',
       );
     }
 
@@ -3815,14 +3873,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     await safeOpenWhatsApp(
       launchContext,
       uri,
-      copiedMessage: 'No se pudo abrir WhatsApp. Enlace de cotización copiado.',
+      copiedMessage:
+          'No se pudo abrir WhatsApp. Enlace de cotizaciÃ³n copiado.',
     );
   }
 
   String _buildAdminApprovalMessage(CotizacionModel cotizacion) {
     final sellerName = (cotizacion.createdByUserName ?? '').trim();
     final safeSellerName = sellerName.isEmpty ? 'El vendedor' : sellerName;
-    return '$safeSellerName quiere que confirme esta cotización y que esté en orden.';
+    return '$safeSellerName quiere que confirme esta cotizaciÃ³n y que estÃ© en orden.';
   }
 
   String _normalizeWhatsAppLinkPhone(String? value) {
@@ -3842,10 +3901,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     final customerName = cotizacion.customerName.trim().isEmpty
         ? 'cliente'
         : cotizacion.customerName.trim();
-    return 'Hola $customerName, te compartimos tu cotización/factura en PDF.\n'
+    return 'Hola $customerName, te compartimos tu cotizaciÃ³n/factura en PDF.\n'
         'Este documento corresponde a tu compra o solicitud en FULLTECH.\n'
         'Puedes abrir el enlace para ver o descargar tu PDF.\n'
-        'Cotización: ${cotizacion.id}\n'
+        'CotizaciÃ³n: ${cotizacion.id}\n'
         'Total: ${_money(cotizacion.total)}\n'
         'PDF: $pdfUrl';
   }
@@ -3910,7 +3969,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       return await repository.getSettings();
     } catch (error, stackTrace) {
       debugPrint(
-        'CotizacionesScreen: usando respaldo de configuración para PDF: $error\n$stackTrace',
+        'CotizacionesScreen: usando respaldo de configuraciÃ³n para PDF: $error\n$stackTrace',
       );
       final cached = await repository.getCachedSettings();
       return cached ?? CompanySettings.empty();
@@ -3952,7 +4011,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   Future<void> _openPdfPreview() async {
     if (_items.isEmpty) {
       _showSalesNotice(
-        title: 'Ticket vacío',
+        title: 'Ticket vacÃ­o',
         message: 'Agrega productos para generar PDF.',
         icon: Icons.picture_as_pdf_outlined,
         accent: const Color(0xFFF59E0B),
@@ -3997,7 +4056,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               setDialogState(() => sendingAdminApproval = true);
               try {
                 showDialogNotification(
-                  'Enviando cotización a administradores...',
+                  'Enviando cotizaciÃ³n a administradores...',
                 );
                 final persisted = await _ensurePersistedQuotationForSend(
                   cotizacion,
@@ -4007,7 +4066,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   pdfBytes: bytes,
                 ).timeout(const Duration(seconds: 25));
                 showDialogNotification(
-                  'Cotización enviada a administradores correctamente.',
+                  'CotizaciÃ³n enviada a administradores correctamente.',
                 );
               } on TimeoutException {
                 showDialogNotification(
@@ -4040,13 +4099,13 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 );
                 showDialogNotification(
                   saved
-                      ? 'Cotización descargada en la carpeta Descargas.'
-                      : 'No se pudo descargar la cotización.',
+                      ? 'CotizaciÃ³n descargada en la carpeta Descargas.'
+                      : 'No se pudo descargar la cotizaciÃ³n.',
                   isError: !saved,
                 );
               } catch (e) {
                 showDialogNotification(
-                  'No se pudo descargar la cotización: $e',
+                  'No se pudo descargar la cotizaciÃ³n: $e',
                   isError: true,
                 );
               } finally {
@@ -4133,7 +4192,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                               const SizedBox(width: 8),
                               const Expanded(
                                 child: Text(
-                                  'PDF de cotización',
+                                  'PDF de cotizaciÃ³n',
                                   style: TextStyle(fontWeight: FontWeight.w700),
                                 ),
                               ),
@@ -4312,7 +4371,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     if (!mounted) return;
     _showSalesNotice(
       title: 'Producto creado',
-      message: 'El producto se agregó al catálogo y ya está disponible aquí.',
+      message:
+          'El producto se agregÃ³ al catÃ¡logo y ya estÃ¡ disponible aquÃ­.',
       icon: Icons.check_circle_rounded,
       accent: const Color(0xFF059669),
     );
@@ -4342,6 +4402,104 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
     if (!mounted) return;
     await _loadProducts(forceRemote: true);
+  }
+
+  Future<void> _openInventoryFloatingActions() async {
+    final action = await showGeneralDialog<_InventoryFloatingAction>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Acciones de inventario',
+      barrierColor: Colors.black.withValues(alpha: 0.16),
+      transitionDuration: const Duration(milliseconds: 190),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        final width = MediaQuery.sizeOf(dialogContext).width;
+        final panelWidth = (width * 0.74).clamp(252.0, 320.0);
+        return Align(
+          alignment: Alignment.centerRight,
+          child: SafeArea(
+            child: Material(
+              color: Colors.white,
+              child: SizedBox(
+                width: panelWidth,
+                height: double.infinity,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 8, 10),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.inventory_2_outlined,
+                            color: Color(0xFF0E5261),
+                          ),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text(
+                              'Inventario',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Cerrar',
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    _InventoryActionDrawerTile(
+                      icon: Icons.add_box_outlined,
+                      title: 'Agregar producto',
+                      subtitle: 'Crear producto nuevo',
+                      onTap: () => Navigator.of(
+                        dialogContext,
+                      ).pop(_InventoryFloatingAction.addProduct),
+                    ),
+                    _InventoryActionDrawerTile(
+                      icon: Icons.tune_outlined,
+                      title: 'Ajustar stock',
+                      subtitle: 'Sumar o disminuir existencia',
+                      onTap: () => Navigator.of(
+                        dialogContext,
+                      ).pop(_InventoryFloatingAction.adjustStock),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
+        );
+      },
+    );
+
+    if (!mounted || action == null) return;
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) return;
+    switch (action) {
+      case _InventoryFloatingAction.addProduct:
+        await _openInventoryCatalog();
+      case _InventoryFloatingAction.adjustStock:
+        await _openStockAdjustments();
+    }
   }
 
   void _openSalesList() {
@@ -4455,7 +4613,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'PDF factura · ${sale.customerName ?? 'Consumidor Final'}',
+                          'PDF factura Â· ${sale.customerName ?? 'Consumidor Final'}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -4597,7 +4755,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   bool _validateCheckoutReady() {
     if (_items.isEmpty) {
       _showSalesNotice(
-        title: 'Ticket vacío',
+        title: 'Ticket vacÃ­o',
         message: 'Agrega al menos un producto al ticket.',
         icon: Icons.shopping_cart_outlined,
         accent: const Color(0xFFF59E0B),
@@ -4631,7 +4789,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       _showSalesNotice(
         title: 'Caja cerrada',
         message:
-            'La caja debe estar abierta para cobrar una venta. Puedes guardar el ticket como cotización.',
+            'La caja debe estar abierta para cobrar una venta. Puedes guardar el ticket como cotizaciÃ³n.',
         icon: Icons.lock_outline_rounded,
         accent: const Color(0xFFF59E0B),
       );
@@ -4735,7 +4893,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
       _showSalesNotice(
         title: 'Venta guardada',
-        message: 'La venta fue guardada y el stock quedó actualizado.',
+        message: 'La venta fue guardada y el stock quedÃ³ actualizado.',
         icon: Icons.check_circle_outline_rounded,
         accent: const Color(0xFF1957E6),
       );
@@ -4759,7 +4917,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   PreferredSizeWidget _buildDesktopAppBar(QuotationAiState aiState) {
     final showAiBanner = _shouldShowAiBanner(aiState);
     return FullTechPageHeader(
-      title: 'Facturación',
+      title: 'FacturaciÃ³n',
       preferDrawerLeading: true,
       actions: [
         const CashTurnMenuButton(),
@@ -4786,13 +4944,142 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
   }
 
+  Widget _buildMobileAppBarSearchField() {
+    return SizedBox(
+      height: 36,
+      child: TextField(
+        controller: _searchCtrl,
+        autofocus: true,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+        ),
+        cursorColor: Colors.white,
+        textInputAction: TextInputAction.search,
+        onChanged: (_) => _commitEditorChange(() {}),
+        onSubmitted: (_) => _submitSearchAndAddFirstVisibleProduct(),
+        decoration: InputDecoration(
+          hintText: 'Buscar producto',
+          hintStyle: TextStyle(
+            color: Colors.white.withValues(alpha: .75),
+            fontWeight: FontWeight.w600,
+          ),
+          prefixIcon: const Icon(Icons.search_rounded, color: Colors.white),
+          suffixIcon: _searchCtrl.text.trim().isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Limpiar',
+                  onPressed: () => _commitEditorChange(_searchCtrl.clear),
+                  icon: const Icon(Icons.close_rounded, color: Colors.white),
+                ),
+          filled: true,
+          fillColor: Colors.white.withValues(alpha: .14),
+          contentPadding: EdgeInsets.zero,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: Colors.white.withValues(alpha: .28)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: Colors.white.withValues(alpha: .28)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: Colors.white),
+          ),
+        ),
+      ),
+    );
+  }
+
+  PreferredSizeWidget _buildMobileAppBar(QuotationAiState aiState) {
+    final showAiBanner = _shouldShowAiBanner(aiState);
+    return CustomAppBar(
+      title: 'Facturación',
+      titleWidget: _mobileSearchOpen
+          ? _buildMobileAppBarSearchField()
+          : const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Facturación',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Realiza facturas y cotización al instante',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ],
+            ),
+      fallbackRoute: Routes.ventas,
+      preferDrawerLeading: true,
+      showLogo: false,
+      showDepartmentLabel: false,
+      trailing: const SizedBox.shrink(),
+      actions: [
+        IconButton(
+          tooltip: _mobileSearchOpen ? 'Cerrar búsqueda' : 'Buscar',
+          onPressed: () => setState(() {
+            _mobileSearchOpen = !_mobileSearchOpen;
+            if (!_mobileSearchOpen) {
+              _searchCtrl.clear();
+            }
+          }),
+          icon: Icon(
+            _mobileSearchOpen ? Icons.close_rounded : Icons.search_rounded,
+          ),
+        ),
+        if (!_mobileSearchOpen) ...[
+          IconButton(
+            tooltip: _hasCategoryFilter
+                ? 'Categorías: $_selectedCategoryLabel'
+                : 'Filtrar categorías',
+            onPressed: _pickCategory,
+            icon: Badge(
+              isLabelVisible: _hasCategoryFilter,
+              smallSize: 8,
+              child: const Icon(Icons.category_outlined),
+            ),
+          ),
+          if (showAiBanner)
+            IconButton(
+              tooltip: 'Cerrar alerta',
+              onPressed: _closeAiBanner,
+              icon: const Icon(Icons.close_rounded),
+            ),
+          IconButton(
+            tooltip: 'Acciones',
+            onPressed: _openMobileActionsDrawer,
+            icon: const Icon(Icons.menu_open_rounded),
+          ),
+        ],
+      ],
+    );
+  }
+
   Widget _buildProductStrip() {
     return Container(
-      margin: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-      padding: const EdgeInsets.fromLTRB(6, 6, 6, 4),
+      margin: const EdgeInsets.fromLTRB(10, 0, 10, 0),
+      padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: Theme.of(
             context,
@@ -4800,36 +5087,48 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         ),
       ),
       child: SizedBox(
-        height: 324,
+        height: 338,
         child: _visibleProducts.isEmpty
             ? Center(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Text(
-                    _searchCtrl.text.trim().isNotEmpty ||
-                            _selectedCategory != null
+                    _searchCtrl.text.trim().isNotEmpty || _hasCategoryFilter
                         ? 'No hay productos con este filtro'
-                        : 'El catálogo aparecerá aquí en miniatura',
+                        : 'El catálogo se mostrará aquí cuando haya productos disponibles',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
               )
-            : GridView.builder(
-                padding: EdgeInsets.zero,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 4,
-                  crossAxisSpacing: 6,
-                  mainAxisSpacing: 6,
-                  childAspectRatio: 0.78,
-                ),
-                itemCount: _visibleProducts.length,
-                itemBuilder: (context, index) {
-                  final product = _visibleProducts[index];
-                  return _ProductThumbCard(
-                    product: product,
-                    onTap: () => _addProduct(product),
-                    money: _money,
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final width = constraints.maxWidth;
+                  final columns = width < 340 ? 2 : 3;
+                  const spacing = 7.0;
+                  final cellWidth =
+                      (width - (spacing * (columns - 1))) / columns;
+                  final visibleRows = 3.0;
+                  final cellHeight =
+                      (constraints.maxHeight - (spacing * (visibleRows - 1))) /
+                      visibleRows;
+                  return GridView.builder(
+                    padding: EdgeInsets.zero,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: columns,
+                      crossAxisSpacing: spacing,
+                      mainAxisSpacing: spacing,
+                      childAspectRatio: cellWidth / cellHeight,
+                    ),
+                    itemCount: _visibleProducts.length,
+                    itemBuilder: (context, index) {
+                      final product = _visibleProducts[index];
+                      return _ProductThumbCard(
+                        product: product,
+                        onTap: () => _addProduct(product),
+                        money: _money,
+                      );
+                    },
                   );
                 },
               ),
@@ -4844,47 +5143,60 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       width: double.infinity,
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+        borderRadius: BorderRadius.zero,
       ),
       child: Column(
         children: [
           Expanded(
-            child: _items.isEmpty
-                ? const Center(
-                    child: Text(
-                      'Toca un producto arriba para agregarlo',
-                      textAlign: TextAlign.center,
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(10, 2, 10, 6),
-                    itemCount: _items.length,
-                    separatorBuilder: (context, index) => Divider(
-                      height: 6,
-                      thickness: 0.6,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.outlineVariant.withValues(alpha: 0.42),
-                    ),
-                    itemBuilder: (context, index) {
-                      final item = _items[index];
-                      return _TicketCompactItem(
-                        item: item,
-                        money: _money,
-                        showCost: isAdmin,
-                        onEditLine: () => _openLineEditor(index),
-                        onMinus: () => _setQty(index, item.qty - 1),
-                        onPlus: () => _setQty(index, item.qty + 1),
-                        onChangeQty: (value) => _setQty(index, value),
-                        onChangePrice: (value) => _setUnitPrice(index, value),
-                        onEdit: item.isExternal
-                            ? () => _openExternalItemDialog(editIndex: index)
-                            : null,
-                        onRemove: () =>
-                            _commitEditorChange(() => _items.removeAt(index)),
-                      );
-                    },
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: _items.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'Toca un producto arriba para agregarlo',
+                            textAlign: TextAlign.center,
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(10, 2, 10, 46),
+                          itemCount: _items.length,
+                          separatorBuilder: (context, index) => Divider(
+                            height: 6,
+                            thickness: 0.6,
+                            color: Theme.of(context).colorScheme.outlineVariant
+                                .withValues(alpha: 0.42),
+                          ),
+                          itemBuilder: (context, index) {
+                            final item = _items[index];
+                            return _TicketCompactItem(
+                              item: item,
+                              money: _money,
+                              showCost: isAdmin,
+                              onEditLine: () => _openLineEditor(index),
+                              onChangePrice: (value) =>
+                                  _setUnitPrice(index, value),
+                              onEdit: item.isExternal
+                                  ? () => _openExternalItemDialog(
+                                      editIndex: index,
+                                    )
+                                  : null,
+                              onRemove: () => _commitEditorChange(
+                                () => _items.removeAt(index),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+                Positioned(
+                  left: 6,
+                  bottom: 7,
+                  child: _InventoryFloatingButton(
+                    onPressed: _openInventoryFloatingActions,
                   ),
+                ),
+              ],
+            ),
           ),
           Container(
             padding: const EdgeInsets.fromLTRB(12, 5, 12, 7),
@@ -4902,14 +5214,39 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        'Sub ${_money(_subtotalBeforeDiscount)}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Sub ${_money(_subtotalBeforeDiscount)}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (_includeItbis) ...[
+                            const SizedBox(height: 2),
+                            InkWell(
+                              onTap: () =>
+                                  unawaited(_openMobileFiscalInvoicePanel()),
+                              child: Text(
+                                'ITBIS ${_money(_itbisAmount)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                     if (_discountAmount > 0)
@@ -5032,56 +5369,93 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Transform.scale(
-                      scale: 0.74,
-                      child: Switch.adaptive(
-                        value: _includeItbis,
-                        onChanged: (value) =>
-                            _commitEditorChange(() => _setItbisEnabled(value)),
+                    SizedBox(
+                      width: 48,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Transform.scale(
+                          scale: 0.76,
+                          alignment: Alignment.centerLeft,
+                          child: Switch.adaptive(
+                            value: _includeItbis,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            onChanged: (value) {
+                              if (value) {
+                                unawaited(_openMobileFiscalInvoicePanel());
+                                return;
+                              }
+                              _commitEditorChange(
+                                () => _setItbisEnabled(false),
+                              );
+                            },
+                          ),
+                        ),
                       ),
                     ),
-                    const Text(
-                      'ITBIS',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    if (_includeItbis) ...[
-                      const SizedBox(width: 6),
-                      Text(
-                        _money(_itbisAmount),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    InkWell(
+                      onTap: _includeItbis
+                          ? () => unawaited(_openMobileFiscalInvoicePanel())
+                          : null,
+                      child: const Text(
+                        'ITBIS',
+                        style: TextStyle(
+                          fontSize: 10.5,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                    ],
-                    const Spacer(),
-                    IconButton(
-                      tooltip: 'Limpiar todo',
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minHeight: 24,
-                        minWidth: 24,
-                      ),
-                      onPressed: !_hasEditorContent
-                          ? null
-                          : () {
-                              _commitEditorChange(_resetEditorState);
-                            },
-                      icon: const Icon(Icons.delete_sweep_outlined),
                     ),
-                    const SizedBox(width: 6),
+                    const Spacer(),
+                    SizedBox(
+                      width: 42,
+                      height: 38,
+                      child: IconButton(
+                        tooltip: 'Cancelar venta',
+                        visualDensity: VisualDensity.standard,
+                        padding: EdgeInsets.zero,
+                        style: IconButton.styleFrom(
+                          foregroundColor: const Color(0xFFDC2626),
+                          disabledForegroundColor: const Color(
+                            0xFFDC2626,
+                          ).withValues(alpha: 0.34),
+                          backgroundColor: const Color(
+                            0xFFDC2626,
+                          ).withValues(alpha: 0.08),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                        ),
+                        onPressed: !_hasEditorContent
+                            ? null
+                            : () => unawaited(_confirmAndClearSale()),
+                        icon: const Icon(Icons.delete_sweep_outlined, size: 22),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: FilledButton.icon(
                         onPressed: _openCheckoutDialog,
                         icon: const Icon(Icons.check_circle_outline, size: 16),
-                        label: const Text('Finalizar'),
+                        label: const Text(
+                          'Cobrar',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                         style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          minimumSize: const Size(122, 38),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
                           backgroundColor: const Color(0xFF1957E6),
                           visualDensity: VisualDensity.compact,
+                          textStyle: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(5),
+                          ),
                         ),
                       ),
                     ),
@@ -5095,225 +5469,215 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
   }
 
-  Widget _buildMobileTopBar({required bool showAiBanner}) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
-      child: Row(
-        children: [
-          Builder(
-            builder: (scaffoldContext) => _AnimatedDrawerButton(
-              onPressed: () => Scaffold.of(scaffoldContext).openDrawer(),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: SizedBox(
-              height: 40,
-              child: TextField(
-                controller: _searchCtrl,
-                onChanged: (_) => _commitEditorChange(() {}),
-                textInputAction: TextInputAction.search,
-                onSubmitted: (_) => _submitSearchAndAddFirstVisibleProduct(),
-                decoration: InputDecoration(
-                  hintText: 'Buscar',
-                  prefixIcon: const Icon(Icons.search, size: 18),
-                  isDense: true,
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 10,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Material(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            child: InkWell(
-              onTap: _pickCategory,
-              borderRadius: BorderRadius.circular(14),
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Icon(
-                  _selectedCategory == null
-                      ? Icons.filter_alt_outlined
-                      : Icons.filter_alt,
-                  size: 20,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          if (showAiBanner) ...[
-            Material(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              child: InkWell(
-                onTap: _closeAiBanner,
-                borderRadius: BorderRadius.circular(14),
-                child: const Padding(
-                  padding: EdgeInsets.all(10),
-                  child: Icon(Icons.close_rounded, size: 20),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
-          PopupMenuButton<_MobileQuickAction>(
-            tooltip: 'Más opciones',
-            color: theme.colorScheme.surface,
-            surfaceTintColor: theme.colorScheme.surface,
-            elevation: 14,
-            shadowColor: Colors.black.withValues(alpha: 0.14),
-            position: PopupMenuPosition.under,
-            offset: const Offset(0, 8),
-            constraints: const BoxConstraints(minWidth: 250),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(22),
-              side: BorderSide(
-                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
-              ),
-            ),
-            onSelected: _handleMobileQuickAction,
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                height: 52,
-                value: _MobileQuickAction.client,
-                child: _MobileQuickMenuEntry(
-                  icon: Icons.person_outline,
-                  label: 'Cliente',
-                ),
-              ),
-              const PopupMenuItem(
-                height: 52,
-                value: _MobileQuickAction.note,
-                child: _MobileQuickMenuEntry(
-                  icon: Icons.sticky_note_2_outlined,
-                  label: 'Nota',
-                ),
-              ),
-              const PopupMenuItem(
-                height: 52,
-                value: _MobileQuickAction.externalItem,
-                child: _MobileQuickMenuEntry(
-                  icon: Icons.add_box_outlined,
-                  label: 'Fuera inventario',
-                ),
-              ),
-              const PopupMenuItem(
-                height: 52,
-                value: _MobileQuickAction.tickets,
-                child: _MobileQuickMenuEntry(
-                  icon: Icons.receipt_long_outlined,
-                  label: 'Cambiar ticket',
-                ),
-              ),
-              const PopupMenuItem(
-                height: 52,
-                value: _MobileQuickAction.newTicket,
-                child: _MobileQuickMenuEntry(
-                  icon: Icons.add_circle_outline,
-                  label: 'Nuevo ticket',
-                ),
-              ),
-              const PopupMenuItem(
-                height: 52,
-                value: _MobileQuickAction.pdf,
-                child: _MobileQuickMenuEntry(
-                  icon: Icons.picture_as_pdf_outlined,
-                  label: 'PDF',
-                ),
-              ),
-              const PopupMenuItem(
-                height: 52,
-                value: _MobileQuickAction.serviceOrder,
-                child: _MobileQuickMenuEntry(
-                  icon: Icons.assignment_turned_in_outlined,
-                  label: 'Pasar a orden de servicio',
-                ),
-              ),
-              PopupMenuItem(
-                height: 52,
-                value: _MobileQuickAction.clear,
-                child: _MobileQuickMenuEntry(
-                  icon: Icons.delete_sweep_outlined,
-                  label: 'Limpiar editor',
-                  accentColor: theme.colorScheme.error,
-                ),
-              ),
-            ],
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              padding: const EdgeInsets.all(10),
-              child: const Icon(Icons.more_vert_rounded, size: 20),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildMobileTicketInfoBar() {
     final ticketNumber = _desktopTickets.indexWhere(
       (ticket) => ticket.id == _activeDesktopTicketId,
     );
-    final editingLabel = _editingId == null ? 'Nuevo' : 'Editando';
     final clientLabel = _selectedClientName.trim().isEmpty
         ? 'Sin cliente'
         : _selectedClientName.trim();
     final ticketLabel = _activeTicketLabel;
+    final hasClient = clientLabel != 'Sin cliente';
+    final primaryLabel = hasClient
+        ? clientLabel
+        : (ticketLabel.isEmpty
+              ? 'Ticket ${ticketNumber < 0 ? 1 : ticketNumber + 1}'
+              : ticketLabel);
+    final canExpandTickets = _desktopTickets.length > 1;
+    final clientPhone = (_selectedClientPhone ?? '').trim();
+    final theme = Theme.of(context);
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(10, 0, 10, 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      margin: const EdgeInsets.fromLTRB(10, 4, 10, 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.82),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: Theme.of(
-            context,
-          ).colorScheme.outlineVariant.withValues(alpha: 0.32),
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.32),
         ),
       ),
-      child: Row(
-        children: [
-          Text(
-            ticketLabel.isEmpty
-                ? 'T-${ticketNumber < 0 ? 1 : ticketNumber + 1}'
-                : ticketLabel,
-            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              clientLabel,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
+      child: InkWell(
+        onTap: canExpandTickets
+            ? () => setState(
+                () => _showMobileTicketDropdown = !_showMobileTicketDropdown,
+              )
+            : null,
+        child: Row(
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      primaryLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 10.8,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  if (hasClient && clientPhone.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        clientPhone,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontSize: 10,
+                          color: const Color(0xFF52667C),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
+            const SizedBox(width: 6),
+            if (canExpandTickets) ...[
+              Icon(
+                _showMobileTicketDropdown
+                    ? Icons.keyboard_arrow_up_rounded
+                    : Icons.keyboard_arrow_down_rounded,
+                size: 18,
+              ),
+            ],
+            if (!hasClient) ...[
+              const SizedBox(width: 6),
+              Text(
+                '${_items.length}',
+                style: theme.textTheme.bodySmall?.copyWith(fontSize: 9.5),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileTicketDropdownOverlay() {
+    final theme = Theme.of(context);
+
+    Widget ticketRow(_DesktopTicketDraft ticket, int index) {
+      final selected = ticket.id == _activeDesktopTicketId;
+      final lines = ticket.items.length;
+      final ticketClient = ticket.selectedClientName.trim();
+      final subtitle = [
+        '$lines articulo(s)',
+        if (ticketClient.isNotEmpty && ticketClient != 'Sin cliente')
+          ticketClient,
+      ].join(' Â· ');
+
+      return InkWell(
+        onTap: () => _switchDesktopTicket(ticket.id),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              Icon(
+                selected
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+                size: 18,
+                color: selected ? const Color(0xFF1957E6) : null,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      ticket.label(index),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontSize: 10,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              PopupMenuButton<_FooterTicketAction>(
+                tooltip: 'Opciones del ticket',
+                padding: EdgeInsets.zero,
+                iconSize: 18,
+                onSelected: (action) {
+                  switch (action) {
+                    case _FooterTicketAction.rename:
+                      unawaited(_renameDesktopTicket(ticket.id));
+                      return;
+                    case _FooterTicketAction.delete:
+                      unawaited(_deleteDesktopTicket(ticket.id));
+                      return;
+                  }
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                    value: _FooterTicketAction.rename,
+                    child: _FooterTicketMenuEntry(
+                      icon: Icons.edit_outlined,
+                      label: 'Editar',
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: _FooterTicketAction.delete,
+                    child: _FooterTicketMenuEntry(
+                      icon: Icons.delete_outline,
+                      label: 'Eliminar',
+                    ),
+                  ),
+                ],
+                icon: Icon(
+                  Icons.more_vert_rounded,
+                  color: selected
+                      ? const Color(0xFF1957E6)
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 6),
-          Text(
-            '$editingLabel · ${_items.length}',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(fontSize: 9.5),
+        ),
+      );
+    }
+
+    return Positioned(
+      left: 10,
+      right: 10,
+      top: 42,
+      child: Material(
+        color: Colors.white,
+        elevation: 14,
+        shadowColor: Colors.black.withValues(alpha: 0.18),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 178),
+          child: ListView.separated(
+            padding: EdgeInsets.zero,
+            shrinkWrap: true,
+            itemCount: _desktopTickets.length,
+            separatorBuilder: (_, __) => Divider(
+              height: 1,
+              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.22),
+            ),
+            itemBuilder: (context, index) =>
+                ticketRow(_desktopTickets[index], index),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -5322,23 +5686,34 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     final showAiBanner = _shouldShowAiBanner(aiState);
     return Column(
       children: [
-        _buildMobileTopBar(showAiBanner: showAiBanner),
-        _buildMobileTicketInfoBar(),
-        if (showAiBanner)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
-            child: AiWarningBanner(
-              warnings: aiState.visibleWarnings,
-              analyzing: aiState.analyzing || aiState.loadingRules,
-              onOpenRule: (warning) => _openAiRelatedRule(
-                warning.relatedRuleId,
-                warning.relatedRuleTitle,
-              ),
-              onAskAi: _askAiAboutWarning,
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildMobileTicketInfoBar(),
+                if (showAiBanner)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
+                    child: AiWarningBanner(
+                      warnings: aiState.visibleWarnings,
+                      analyzing: aiState.analyzing || aiState.loadingRules,
+                      onOpenRule: (warning) => _openAiRelatedRule(
+                        warning.relatedRuleId,
+                        warning.relatedRuleTitle,
+                      ),
+                      onAskAi: _askAiAboutWarning,
+                    ),
+                  ),
+                _buildProductStrip(),
+              ],
             ),
-          ),
-        _buildProductStrip(),
-        const SizedBox(height: 8),
+            if (_showMobileTicketDropdown && _desktopTickets.length > 1)
+              _buildMobileTicketDropdownOverlay(),
+          ],
+        ),
+        const SizedBox(height: 2),
         Expanded(child: _buildTicketPanel(currentUser)),
       ],
     );
@@ -5376,12 +5751,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   340.0,
                   390.0,
                 );
-                final reservedFiscalWidth = _includeItbis
-                    ? fiscalPaneWidth
-                    : 0.0;
                 final sidePaneWidth = quotePaneWidth;
                 final catalogOverlayWidth =
-                    constraints.maxWidth - sidePaneWidth - reservedFiscalWidth;
+                    constraints.maxWidth - sidePaneWidth;
                 final calculatorPaneWidth = catalogOverlayWidth
                     .clamp(292.0, 330.0)
                     .toDouble();
@@ -5402,7 +5774,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                         Expanded(
                           child: _DesktopCatalogPane(
                             searchController: _searchCtrl,
-                            selectedCategory: _selectedCategory,
+                            selectedCategories: _selectedCategories,
                             categories: _categories,
                             managedCategories: managedCategories,
                             allProducts: _productos,
@@ -5413,9 +5785,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                             onSearchChanged: () => _commitEditorChange(() {}),
                             onSearchSubmitted:
                                 _submitSearchAndAddFirstVisibleProduct,
-                            onSelectCategory: (category) => _commitEditorChange(
-                              () => _selectedCategory = category,
-                            ),
+                            onToggleCategory: (category) =>
+                                _commitEditorChange(() {
+                                  if (!_selectedCategories.remove(category)) {
+                                    _selectedCategories.add(category);
+                                  }
+                                }),
+                            onClearCategories: () =>
+                                _commitEditorChange(_selectedCategories.clear),
                             onAddProduct: _addProduct,
                             onAddExternalItem: () => _openExternalItemDialog(),
                             onOpenNewProduct: _openInventoryCatalog,
@@ -5471,9 +5848,25 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                             ),
                           ),
                         ),
-                        if (_includeItbis)
-                          SizedBox(
-                            width: fiscalPaneWidth,
+                      ],
+                    ),
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: fiscalPaneWidth,
+                      child: IgnorePointer(
+                        ignoring: !_includeItbis || overlayOpen,
+                        child: AnimatedSlide(
+                          duration: const Duration(milliseconds: 260),
+                          curve: Curves.easeOutCubic,
+                          offset: _includeItbis && !overlayOpen
+                              ? Offset.zero
+                              : const Offset(-1.04, 0),
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 180),
+                            curve: Curves.easeOutCubic,
+                            opacity: _includeItbis && !overlayOpen ? 1 : 0,
                             child: _DesktopFiscalInvoicePanel(
                               voucherType: _fiscalVoucherType,
                               voucherNumber: _fiscalVoucherNumber,
@@ -5501,7 +5894,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                               onPickDueDate: _pickFiscalVoucherDueDate,
                             ),
                           ),
-                      ],
+                        ),
+                      ),
                     ),
                     Positioned(
                       left: 0,
@@ -5630,9 +6024,13 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     }
 
     return Scaffold(
-      appBar: isDesktop ? _buildDesktopAppBar(aiState) : null,
+      backgroundColor: isDesktop ? null : AppColors.background,
+      appBar: isDesktop
+          ? _buildDesktopAppBar(aiState)
+          : _buildMobileAppBar(aiState),
       drawer: buildAdaptiveDrawer(context, currentUser: user),
       body: SafeArea(
+        top: false,
         child: isDesktop
             ? _buildDesktopBody(aiState, user)
             : _buildMobileBody(aiState, user),
@@ -5645,12 +6043,15 @@ enum _MobileQuickAction {
   client,
   note,
   externalItem,
-  tickets,
+  calculator,
   newTicket,
   pdf,
-  serviceOrder,
+  quote,
+  quoteHistory,
   clear,
 }
+
+enum _InventoryFloatingAction { addProduct, adjustStock }
 
 class _SalesNoticeToast extends StatelessWidget {
   const _SalesNoticeToast({
@@ -5795,6 +6196,78 @@ class _SalesNoticeToast extends StatelessWidget {
   }
 }
 
+class _InventoryFloatingButton extends StatelessWidget {
+  const _InventoryFloatingButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    const accent = Color(0xFF1957E6);
+    return Material(
+      color: Colors.white.withValues(alpha: 0.72),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(7),
+        side: const BorderSide(color: accent, width: 1.25),
+      ),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(7),
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Center(
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: const [
+                Icon(Icons.inventory_2_outlined, size: 22, color: accent),
+                Positioned(
+                  right: -5,
+                  bottom: -5,
+                  child: Icon(Icons.add_circle, size: 15, color: accent),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InventoryActionDrawerTile extends StatelessWidget {
+  const _InventoryActionDrawerTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          color: const Color(0xFFEAF1FF),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon, color: const Color(0xFF1957E6), size: 19),
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+      subtitle: Text(subtitle),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: onTap,
+    );
+  }
+}
+
 class _QuotationTopbarMenu extends StatelessWidget {
   const _QuotationTopbarMenu({
     required this.onQuote,
@@ -5839,7 +6312,7 @@ class _QuotationTopbarMenu extends StatelessWidget {
               title: 'Cotizar',
               onTap: () => _activateMenuItem(menuContext, onQuote),
               helpText:
-                  'Guarda el ticket actual como cotización para poder retomarlo, compartirlo o convertirlo en una venta más adelante sin perder los productos agregados.',
+                  'Guarda el ticket actual como cotizaciÃ³n para poder retomarlo, compartirlo o convertirlo en una venta mÃ¡s adelante sin perder los productos agregados.',
             ),
           ),
           PopupMenuItem(
@@ -6051,14 +6524,14 @@ class _AnimatedDrawerButtonState extends State<_AnimatedDrawerButton>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: active
-                    ? const [Color(0xFFFFFFFF), Color(0xFFEAF1FF)]
-                    : const [Color(0xFFFFFFFF), Color(0xFFF7FAFC)],
+                    ? const [Color(0xFFEAF1FF), Color(0xFFFFFFFF)]
+                    : const [Color(0xFFFFFFFF), Color(0xFFF4F8FF)],
               ),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: active
-                    ? const Color(0xFF9FBCFF)
-                    : const Color(0xFFD4E2EA),
+                    ? const Color(0xFF8FB4FF)
+                    : const Color(0xFFC7D9FF),
               ),
               boxShadow: [
                 BoxShadow(
@@ -6077,10 +6550,95 @@ class _AnimatedDrawerButtonState extends State<_AnimatedDrawerButton>
               child: Icon(
                 Icons.menu_rounded,
                 size: 23,
-                color: active
-                    ? const Color(0xFF1957E6)
-                    : const Color(0xFF24445A),
+                color: const Color(0xFF1957E6),
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MobileActionsButton extends StatefulWidget {
+  const _MobileActionsButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  State<_MobileActionsButton> createState() => _MobileActionsButtonState();
+}
+
+class _MobileActionsButtonState extends State<_MobileActionsButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+      lowerBound: 0,
+      upperBound: 0.12,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleTap() async {
+    await _controller.forward();
+    if (mounted) {
+      _controller.reverse();
+      widget.onPressed();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Acciones',
+      child: InkWell(
+        onTap: _handleTap,
+        child: SizedBox(
+          width: 42,
+          height: 42,
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              final t = _controller.value;
+              return Transform.translate(
+                offset: Offset(-18 * t, 0),
+                child: Transform.scale(
+                  scale: 1 + t,
+                  child: Transform.rotate(angle: t * 1.4, child: child),
+                ),
+              );
+            },
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1957E6).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(
+                      color: const Color(0xFF1957E6).withValues(alpha: 0.18),
+                    ),
+                  ),
+                ),
+                const Icon(
+                  Icons.keyboard_double_arrow_left_rounded,
+                  size: 22,
+                  color: Color(0xFF1957E6),
+                ),
+              ],
             ),
           ),
         ),
@@ -6174,7 +6732,7 @@ class _CompanyAccountMenu extends ConsumerWidget {
                 () => context.go(Routes.profile),
               ),
               helpText:
-                  'Muestra la información del usuario conectado, sus datos principales y el acceso para revisar su cuenta dentro de DaleVenta POS.',
+                  'Muestra la informaciÃ³n del usuario conectado, sus datos principales y el acceso para revisar su cuenta dentro de DaleVenta POS.',
             ),
           ),
           PopupMenuItem(
@@ -6188,7 +6746,7 @@ class _CompanyAccountMenu extends ConsumerWidget {
                 () => context.go(Routes.users),
               ),
               helpText:
-                  'Administra los usuarios de la empresa, sus roles y permisos para controlar quién puede vender, configurar o consultar información.',
+                  'Administra los usuarios de la empresa, sus roles y permisos para controlar quiÃ©n puede vender, configurar o consultar informaciÃ³n.',
             ),
           ),
           const PopupMenuDivider(height: 8),
@@ -6217,7 +6775,7 @@ class _CompanyAccountMenu extends ConsumerWidget {
                 _openSidePanel(context, const _CompanyLicensesSidePanel());
               },
               helpText:
-                  'Resume el estado de la empresa activa, el plan disponible y la preparación del sistema para trabajo multiempresa.',
+                  'Resume el estado de la empresa activa, el plan disponible y la preparaciÃ³n del sistema para trabajo multiempresa.',
             ),
           ),
           PopupMenuItem(
@@ -6231,7 +6789,7 @@ class _CompanyAccountMenu extends ConsumerWidget {
                 () => context.go(Routes.actualizaciones),
               ),
               helpText:
-                  'Permite revisar la versión instalada, buscar nuevas versiones y confirmar si hay releases disponibles para este equipo.',
+                  'Permite revisar la versiÃ³n instalada, buscar nuevas versiones y confirmar si hay releases disponibles para este equipo.',
             ),
           ),
           PopupMenuItem(
@@ -6239,13 +6797,13 @@ class _CompanyAccountMenu extends ConsumerWidget {
             padding: EdgeInsets.zero,
             child: _CompanyMenuItem(
               icon: Icons.settings_outlined,
-              label: 'Configuración',
+              label: 'ConfiguraciÃ³n',
               onTap: () => _activateMenuItem(
                 menuContext,
                 () => context.go(Routes.configuracion),
               ),
               helpText:
-                  'Abre el centro de control de la empresa con datos comerciales, documentos, impresión, backend y parámetros operativos.',
+                  'Abre el centro de control de la empresa con datos comerciales, documentos, impresiÃ³n, backend y parÃ¡metros operativos.',
             ),
           ),
           const PopupMenuDivider(height: 8),
@@ -6254,14 +6812,14 @@ class _CompanyAccountMenu extends ConsumerWidget {
             padding: EdgeInsets.zero,
             child: _CompanyMenuItem(
               icon: Icons.logout_rounded,
-              label: 'Cerrar sesión',
+              label: 'Cerrar sesiÃ³n',
               danger: true,
               onTap: () {
                 Navigator.of(menuContext).pop();
                 _logout(context, ref);
               },
               helpText:
-                  'Cierra la sesión del usuario actual en este equipo y vuelve a la pantalla de inicio para proteger el acceso de la empresa.',
+                  'Cierra la sesiÃ³n del usuario actual en este equipo y vuelve a la pantalla de inicio para proteger el acceso de la empresa.',
             ),
           ),
         ],
@@ -6300,7 +6858,7 @@ class _CompanyAppsSidePanel extends StatelessWidget {
         _CompanySideActionTile(
           icon: Icons.android_rounded,
           title: 'App Android',
-          status: 'Preparada para móviles y tablets',
+          status: 'Preparada para mÃ³viles y tablets',
           description:
               'Permite entrar a la cuenta de la empresa desde Android para consultar ventas, clientes, inventario y operaciones autorizadas.',
           actionLabel: 'Ver acceso',
@@ -6311,7 +6869,7 @@ class _CompanyAppsSidePanel extends StatelessWidget {
           title: 'App web',
           status: 'Acceso desde navegador',
           description:
-              'Abre la versión web para trabajar desde cualquier computador autorizado usando las mismas credenciales de la empresa.',
+              'Abre la versiÃ³n web para trabajar desde cualquier computador autorizado usando las mismas credenciales de la empresa.',
           actionLabel: 'Abrir web',
           onPressed: () => safeOpenUrl(context, Uri.parse(Env.appBaseUrl)),
         ),
@@ -6320,7 +6878,7 @@ class _CompanyAppsSidePanel extends StatelessWidget {
           title: 'Windows POS',
           status: 'Punto de venta instalado',
           description:
-              'Aplicación de escritorio para caja, facturación, impresión y trabajo diario del punto de venta.',
+              'AplicaciÃ³n de escritorio para caja, facturaciÃ³n, impresiÃ³n y trabajo diario del punto de venta.',
           actionLabel: 'Actualizaciones',
           onPressed: () {
             Navigator.of(context).maybePop();
@@ -6371,9 +6929,9 @@ class _CompanyLicensesSidePanel extends ConsumerWidget {
           title: 'Alcance de la licencia',
           rows: [
             ('Empresas preparadas', 'Multiempresa'),
-            ('Usuarios', 'Según permisos de la empresa'),
-            ('Módulos incluidos', 'Ventas, clientes, inventario y caja'),
-            ('Soporte', 'Operación y actualizaciones del sistema'),
+            ('Usuarios', 'SegÃºn permisos de la empresa'),
+            ('MÃ³dulos incluidos', 'Ventas, clientes, inventario y caja'),
+            ('Soporte', 'OperaciÃ³n y actualizaciones del sistema'),
           ],
         ),
       ],
@@ -7194,12 +7752,12 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
           ),
           backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
             side: const BorderSide(color: Color(0xFFDDE7EE)),
           ),
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxWidth: 780,
+              maxWidth: isMobile ? 430 : 780,
               maxHeight: media.height - (isMobile ? 24 : 40),
             ),
             child: Column(
@@ -7207,50 +7765,54 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
               children: [
                 Padding(
                   padding: EdgeInsets.fromLTRB(
-                    isMobile ? 16 : 24,
-                    16,
+                    isMobile ? 14 : 24,
+                    isMobile ? 11 : 16,
                     isMobile ? 10 : 16,
-                    14,
+                    isMobile ? 10 : 14,
                   ),
                   child: Row(
                     children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEAF1FF),
-                          borderRadius: BorderRadius.circular(7),
-                          border: Border.all(color: const Color(0xFFDDEAFF)),
+                      if (!isMobile) ...[
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEAF1FF),
+                            borderRadius: BorderRadius.circular(7),
+                            border: Border.all(color: const Color(0xFFDDEAFF)),
+                          ),
+                          child: const Icon(
+                            Icons.point_of_sale_rounded,
+                            color: Color(0xFF1957E6),
+                            size: 20,
+                          ),
                         ),
-                        child: const Icon(
-                          Icons.point_of_sale_rounded,
-                          color: Color(0xFF1957E6),
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
+                        const SizedBox(width: 12),
+                      ],
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Cobrar venta',
+                              isMobile ? 'Cobrar' : 'Cobrar venta',
                               style: TextStyle(
-                                fontSize: 18,
+                                fontSize: isMobile ? 17 : 18,
                                 fontWeight: FontWeight.w900,
                                 color: Color(0xFF0F172A),
                                 letterSpacing: 0,
                               ),
                             ),
-                            SizedBox(height: 2),
-                            Text(
-                              'Confirma el pago y genera la factura',
-                              style: TextStyle(
-                                color: Color(0xFF64748B),
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0,
+                            if (!isMobile) ...[
+                              const SizedBox(height: 2),
+                              const Text(
+                                'Confirma el pago y genera la factura',
+                                style: TextStyle(
+                                  color: Color(0xFF64748B),
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0,
+                                ),
                               ),
-                            ),
+                            ],
                           ],
                         ),
                       ),
@@ -7267,9 +7829,9 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                   child: SingleChildScrollView(
                     padding: EdgeInsets.fromLTRB(
                       isMobile ? 16 : 24,
-                      16,
+                      isMobile ? 14 : 16,
                       isMobile ? 16 : 24,
-                      16,
+                      isMobile ? 14 : 16,
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -7368,7 +7930,7 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                               if (isCredit) ...[
                                 _ReadonlyPaymentLine(
                                   icon: Icons.credit_score_outlined,
-                                  label: 'Queda a crédito',
+                                  label: 'Queda a crÃ©dito',
                                   value: widget.money(_creditAmount),
                                   strong: _creditAmount > 0,
                                 ),
@@ -7385,16 +7947,16 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                             ],
                           ),
                         ),
-                        const SizedBox(height: 18),
+                        const SizedBox(height: 14),
                         Text(
-                          'Método de pago',
+                          'MÃ©todo de pago',
                           style: theme.textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.w900,
                             color: const Color(0xFF0F172A),
                             letterSpacing: 0,
                           ),
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 8),
                         if (isMobile)
                           Column(
                             children: [
@@ -7404,10 +7966,11 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                                   method: method,
                                   selected: _method == method,
                                   onTap: () => _selectMethod(method),
+                                  compact: true,
                                 ),
                                 if (method !=
                                     _CheckoutPaymentMethod.values.last)
-                                  const SizedBox(height: 8),
+                                  const SizedBox(height: 7),
                               ],
                             ],
                           )
@@ -7436,9 +7999,9 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                 Container(
                   padding: EdgeInsets.fromLTRB(
                     isMobile ? 16 : 24,
-                    12,
+                    isMobile ? 10 : 12,
                     isMobile ? 16 : 24,
-                    16,
+                    isMobile ? 12 : 16,
                   ),
                   decoration: const BoxDecoration(
                     color: Color(0xFFF8FAFC),
@@ -7462,23 +8025,23 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                                 letterSpacing: 0,
                               ),
                             ),
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 9),
                             FilledButton.icon(
                               onPressed: _canConfirm ? _confirmCheckout : null,
                               icon: const Icon(Icons.receipt_long_outlined),
                               label: Text(
                                 _method == _CheckoutPaymentMethod.credit
-                                    ? 'Crear crédito'
+                                    ? 'Crear crÃ©dito'
                                     : 'Cobrar y facturar',
                               ),
                               style: FilledButton.styleFrom(
                                 backgroundColor: const Color(0xFF1957E6),
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(
-                                  vertical: 15,
+                                  vertical: 13,
                                 ),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
                                 textStyle: const TextStyle(
                                   fontWeight: FontWeight.w900,
@@ -7504,7 +8067,7 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                             Expanded(
                               child: Text(
                                 _canConfirm
-                                    ? 'Enter/F9 para cobrar · Esc para salir'
+                                    ? 'Enter/F9 para cobrar Â· Esc para salir'
                                     : isCredit
                                     ? 'El abono no puede superar el total de la factura'
                                     : 'Monto recibido insuficiente para completar el cobro',
@@ -7534,7 +8097,7 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                               icon: const Icon(Icons.receipt_long_outlined),
                               label: Text(
                                 _method == _CheckoutPaymentMethod.credit
-                                    ? 'Crear crédito'
+                                    ? 'Crear crÃ©dito'
                                     : 'Cobrar y facturar',
                               ),
                               style: FilledButton.styleFrom(
@@ -7709,25 +8272,27 @@ class _PaymentMethodTile extends StatelessWidget {
     required this.method,
     required this.selected,
     required this.onTap,
+    this.compact = false,
   });
 
   final _CheckoutPaymentMethod method;
   final bool selected;
   final VoidCallback onTap;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: selected ? const Color(0xFF1957E6) : const Color(0xFFFFFFFF),
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(compact ? 6 : 8),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(compact ? 6 : 8),
         child: Container(
-          height: 52,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          height: compact ? 46 : 52,
+          padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 14),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(compact ? 6 : 8),
             border: Border.all(
               color: selected
                   ? const Color(0xFF1957E6)
@@ -7738,15 +8303,16 @@ class _PaymentMethodTile extends StatelessWidget {
             children: [
               Icon(
                 method.icon,
-                size: 19,
+                size: compact ? 18 : 19,
                 color: selected ? Colors.white : const Color(0xFF1957E6),
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: compact ? 9 : 10),
               Text(
                 method.label,
                 style: TextStyle(
                   color: selected ? Colors.white : const Color(0xFF0F172A),
                   fontWeight: FontWeight.w900,
+                  fontSize: compact ? 13.5 : null,
                   letterSpacing: 0,
                 ),
               ),
@@ -7908,7 +8474,7 @@ class _RecentSalesPanelState extends State<_RecentSalesPanel> {
                         .toList(growable: false);
                     if (sales.isEmpty) {
                       return const Center(
-                        child: Text('Todavía no hay ventas recientes'),
+                        child: Text('TodavÃ­a no hay ventas recientes'),
                       );
                     }
 
@@ -8163,44 +8729,6 @@ class _ClientFilterChip extends StatelessWidget {
   }
 }
 
-class _MobileQuickMenuEntry extends StatelessWidget {
-  const _MobileQuickMenuEntry({
-    required this.icon,
-    required this.label,
-    this.accentColor,
-  });
-
-  final IconData icon;
-  final String label;
-  final Color? accentColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = accentColor ?? theme.colorScheme.onSurface;
-
-    return Row(
-      children: [
-        SizedBox(width: 24, child: Icon(icon, size: 20, color: color)),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: color,
-              letterSpacing: 0.1,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _ProductThumbCard extends StatelessWidget {
   const _ProductThumbCard({
     required this.product,
@@ -8215,13 +8743,13 @@ class _ProductThumbCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(8),
       color: Theme.of(context).colorScheme.surfaceContainerHigh,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         onTap: onTap,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -8266,8 +8794,28 @@ class _ProductThumbCard extends StatelessWidget {
                 ),
               ),
               Positioned(
+                right: 4,
+                bottom: 4,
+                child: Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1957E6),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.85),
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.add_rounded,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+              ),
+              Positioned(
                 left: 5,
-                right: 5,
+                right: 28,
                 bottom: 5,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -8278,7 +8826,7 @@ class _ProductThumbCard extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 9.4,
+                        fontSize: 10.8,
                         fontWeight: FontWeight.w800,
                         color: Colors.white,
                         height: 1.05,
@@ -8300,7 +8848,7 @@ class _ProductThumbCard extends StatelessWidget {
                         overflow: TextOverflow.fade,
                         softWrap: false,
                         style: const TextStyle(
-                          fontSize: 8.2,
+                          fontSize: 8.8,
                           color: Colors.white,
                           fontWeight: FontWeight.w600,
                           height: 1,
@@ -8313,7 +8861,7 @@ class _ProductThumbCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 8.8,
+                        fontSize: 9.8,
                         fontWeight: FontWeight.w700,
                         color: Colors.white,
                         height: 1,
@@ -8333,7 +8881,7 @@ class _ProductThumbCard extends StatelessWidget {
 class _DesktopCatalogPane extends StatefulWidget {
   const _DesktopCatalogPane({
     required this.searchController,
-    required this.selectedCategory,
+    required this.selectedCategories,
     required this.categories,
     required this.managedCategories,
     required this.allProducts,
@@ -8343,7 +8891,8 @@ class _DesktopCatalogPane extends StatefulWidget {
     required this.money,
     required this.onSearchChanged,
     required this.onSearchSubmitted,
-    required this.onSelectCategory,
+    required this.onToggleCategory,
+    required this.onClearCategories,
     required this.onAddProduct,
     required this.onAddExternalItem,
     required this.onOpenNewProduct,
@@ -8351,7 +8900,7 @@ class _DesktopCatalogPane extends StatefulWidget {
   });
 
   final TextEditingController searchController;
-  final String? selectedCategory;
+  final Set<String> selectedCategories;
   final List<String> categories;
   final List<InventoryCategoryModel> managedCategories;
   final List<ProductModel> allProducts;
@@ -8361,7 +8910,8 @@ class _DesktopCatalogPane extends StatefulWidget {
   final String Function(double) money;
   final VoidCallback onSearchChanged;
   final VoidCallback onSearchSubmitted;
-  final ValueChanged<String?> onSelectCategory;
+  final ValueChanged<String> onToggleCategory;
+  final VoidCallback onClearCategories;
   final ValueChanged<ProductModel> onAddProduct;
   final VoidCallback onAddExternalItem;
   final VoidCallback onOpenNewProduct;
@@ -8403,86 +8953,101 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
               children: [
                 Expanded(
                   child: SizedBox(
-                    height: 42,
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1957E6),
-                            borderRadius: BorderRadius.circular(5),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(
-                                  0xFF1957E6,
-                                ).withValues(alpha: 0.22),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
+                    height: 44,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(7),
+                        border: Border.all(color: const Color(0xFFD4E0E8)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(
+                              0xFF0B2A3A,
+                            ).withValues(alpha: 0.05),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
                           ),
-                          child: const Icon(
-                            Icons.search_rounded,
-                            color: Colors.white,
-                            size: 22,
-                          ),
-                        ),
-                        Expanded(
-                          child: TextField(
-                            controller: widget.searchController,
-                            onChanged: (_) => widget.onSearchChanged(),
-                            textInputAction: TextInputAction.search,
-                            onSubmitted: (_) => widget.onSearchSubmitted(),
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.2,
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            margin: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1957E6),
+                              borderRadius: BorderRadius.circular(6),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(
+                                    0xFF1957E6,
+                                  ).withValues(alpha: 0.18),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
                             ),
-                            decoration: InputDecoration(
-                              hintText:
-                                  'Buscar producto por nombre o código...',
-                              hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                                color: const Color(0xFF617383),
-                                fontWeight: FontWeight.w600,
+                            child: const Icon(
+                              Icons.search_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                          Container(
+                            width: 1,
+                            height: 24,
+                            color: const Color(0xFFE2EBF0),
+                          ),
+                          Expanded(
+                            child: TextField(
+                              controller: widget.searchController,
+                              onChanged: (_) => widget.onSearchChanged(),
+                              textInputAction: TextInputAction.search,
+                              onSubmitted: (_) => widget.onSearchSubmitted(),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
                                 letterSpacing: 0.2,
                               ),
-                              suffixIcon:
-                                  widget.searchController.text.trim().isNotEmpty
-                                  ? IconButton(
-                                      tooltip: 'Limpiar búsqueda',
-                                      onPressed: () {
-                                        widget.searchController.clear();
-                                        widget.onSearchChanged();
-                                      },
-                                      icon: const Icon(
-                                        Icons.close_rounded,
-                                        size: 18,
-                                      ),
-                                    )
-                                  : null,
-                              filled: true,
-                              fillColor: Colors.white,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 0,
-                              ),
-                              enabledBorder: const OutlineInputBorder(
-                                borderRadius: BorderRadius.zero,
-                                borderSide: BorderSide(
-                                  color: Color(0xFFD8E3EA),
+                              decoration: InputDecoration(
+                                hintText:
+                                    'Buscar producto por nombre o cÃ³digo...',
+                                hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                                  color: const Color(0xFF617383),
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.2,
                                 ),
-                              ),
-                              focusedBorder: const OutlineInputBorder(
-                                borderRadius: BorderRadius.zero,
-                                borderSide: BorderSide(
-                                  color: Color(0xFF1957E6),
-                                  width: 1.2,
+                                suffixIcon:
+                                    widget.searchController.text
+                                        .trim()
+                                        .isNotEmpty
+                                    ? IconButton(
+                                        tooltip: 'Limpiar bÃºsqueda',
+                                        onPressed: () {
+                                          widget.searchController.clear();
+                                          widget.onSearchChanged();
+                                        },
+                                        icon: const Icon(
+                                          Icons.close_rounded,
+                                          size: 18,
+                                        ),
+                                      )
+                                    : null,
+                                filled: true,
+                                fillColor: Colors.transparent,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 0,
                                 ),
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                disabledBorder: InputBorder.none,
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -8506,8 +9071,9 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
               categories: widget.categories,
               allProducts: widget.allProducts,
               managedCategories: widget.managedCategories,
-              selectedCategory: widget.selectedCategory,
-              onSelectCategory: widget.onSelectCategory,
+              selectedCategories: widget.selectedCategories,
+              onToggleCategory: widget.onToggleCategory,
+              onClearCategories: widget.onClearCategories,
             ),
             const SizedBox(height: 6),
             Expanded(
@@ -8834,7 +9400,7 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Venta puntual sin registrar en catálogo.',
+                        'Venta puntual sin registrar en catÃ¡logo.',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -9035,7 +9601,7 @@ class _DesktopCalculatorPaneState extends State<_DesktopCalculatorPane> {
         _error = null;
       });
     } catch (_) {
-      setState(() => _error = 'Revisa la operación');
+      setState(() => _error = 'Revisa la operaciÃ³n');
     }
   }
 
@@ -9134,11 +9700,11 @@ class _DesktopCalculatorPaneState extends State<_DesktopCalculatorPane> {
       'C',
       '(',
       ')',
-      '÷',
+      'Ã·',
       '7',
       '8',
       '9',
-      '×',
+      'Ã—',
       '4',
       '5',
       '6',
@@ -9149,7 +9715,7 @@ class _DesktopCalculatorPaneState extends State<_DesktopCalculatorPane> {
       '+',
       '0',
       '.',
-      '⌫',
+      'âŒ«',
       '=',
     ];
 
@@ -9273,13 +9839,13 @@ class _DesktopCalculatorPaneState extends State<_DesktopCalculatorPane> {
                   itemBuilder: (context, index) {
                     final label = buttons[index];
                     final isOperator = [
-                      '÷',
-                      '×',
+                      'Ã·',
+                      'Ã—',
                       '-',
                       '+',
                       '=',
                     ].contains(label);
-                    final isUtility = label == 'C' || label == '⌫';
+                    final isUtility = label == 'C' || label == 'âŒ«';
                     return _CalculatorButton(
                       label: label,
                       filled: label == '=',
@@ -9287,12 +9853,12 @@ class _DesktopCalculatorPaneState extends State<_DesktopCalculatorPane> {
                       utility: isUtility,
                       onPressed: () {
                         if (label == 'C') return _clear();
-                        if (label == '⌫') return _backspace();
+                        if (label == 'âŒ«') return _backspace();
                         if (label == '=') return _calculate();
                         _append(
-                          label == '×'
+                          label == 'Ã—'
                               ? '*'
-                              : label == '÷'
+                              : label == 'Ã·'
                               ? '/'
                               : label,
                         );
@@ -9381,8 +9947,8 @@ class _ExpressionEvaluator {
   _ExpressionEvaluator(String source)
     : _source = source
           .replaceAll(',', '.')
-          .replaceAll('×', '*')
-          .replaceAll('÷', '/');
+          .replaceAll('Ã—', '*')
+          .replaceAll('Ã·', '/');
 
   final String _source;
   int _index = 0;
@@ -9697,7 +10263,7 @@ class _DesktopQuotePanel extends StatelessWidget {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            'Agrega productos desde el catálogo',
+                            'Agrega productos desde el catÃ¡logo',
                             textAlign: TextAlign.center,
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
@@ -9815,35 +10381,38 @@ class _DesktopQuotePanel extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  SizedBox(
-                    width: 70,
-                    height: 64,
-                    child: OutlinedButton(
-                      onPressed: onOpenHistory,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF1957E6),
-                        side: const BorderSide(
-                          color: Color(0xFFBFD0DD),
-                          width: 1.25,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 2),
-                      ),
-                      child: const Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.receipt_long_outlined),
-                          SizedBox(height: 2),
-                          Text(
-                            'Ventas',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 11,
-                            ),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: SizedBox(
+                      width: 70,
+                      height: 64,
+                      child: OutlinedButton(
+                        onPressed: onOpenHistory,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF1957E6),
+                          side: const BorderSide(
+                            color: Color(0xFFBFD0DD),
+                            width: 1.35,
                           ),
-                        ],
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                        ),
+                        child: const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.receipt_long_outlined),
+                            SizedBox(height: 2),
+                            Text(
+                              'Ventas',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -9885,25 +10454,23 @@ class _DesktopQuotePanel extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text(
-                          'ITBIS',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF647985),
-                          ),
-                        ),
-                        Transform.scale(
-                          scale: 0.72,
-                          child: Switch.adaptive(
-                            value: includeItbis,
-                            onChanged: onToggleItbis,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
                         _DesktopPanelSwitchAction(
+                          icon: Icons.receipt_long_outlined,
+                          label: 'ITBIS',
+                          value: includeItbis,
+                          helpTitle: 'ITBIS y factura fiscal',
+                          helpMessage:
+                              'Al activar este switch se muestra el panel de factura fiscal en el lado izquierdo. AhÃ­ se configura el tipo de comprobante, NCF, vencimiento, RNC o cÃ©dula y razÃ³n social del cliente. Cuando termines, toca de nuevo el switch ITBIS para ocultar ese panel.',
+                          onTap: () => onToggleItbis(!includeItbis),
+                        ),
+                        const SizedBox(width: 6),
+                        _DesktopPanelSwitchAction(
+                          icon: Icons.sticky_note_2_outlined,
                           label: 'Notas',
                           value: hasNote,
+                          helpTitle: 'Notas de la venta',
+                          helpMessage:
+                              'Al tocar este switch se abre el editor de notas para escribir informaciÃ³n adicional de la venta. Sirve para dejar observaciones internas o detalles para el comprobante. Si ya no necesitas verla o editarla, vuelve a tocar Notas y cierra el editor al finalizar.',
                           onTap: onOpenNote,
                         ),
                       ],
@@ -10010,7 +10577,14 @@ class _DesktopFiscalInvoicePanelState
       height: double.infinity,
       decoration: const BoxDecoration(
         color: Color(0xFFF8FBFF),
-        border: Border(left: BorderSide(color: Color(0xFFD3E0E7))),
+        border: Border(right: BorderSide(color: Color(0xFFD3E0E7))),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x260B2A3A),
+            blurRadius: 28,
+            offset: Offset(10, 0),
+          ),
+        ],
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -10087,7 +10661,7 @@ class _DesktopFiscalInvoicePanelState
                       items: const [
                         DropdownMenuItem(
                           value: 'B01',
-                          child: Text('B01 - Crédito fiscal'),
+                          child: Text('B01 - CrÃ©dito fiscal'),
                         ),
                         DropdownMenuItem(
                           value: 'B02',
@@ -10095,7 +10669,7 @@ class _DesktopFiscalInvoicePanelState
                         ),
                         DropdownMenuItem(
                           value: 'B14',
-                          child: Text('B14 - Régimen especial'),
+                          child: Text('B14 - RÃ©gimen especial'),
                         ),
                         DropdownMenuItem(
                           value: 'B15',
@@ -10112,7 +10686,7 @@ class _DesktopFiscalInvoicePanelState
                       onChanged: widget.onVoucherNumberChanged,
                       textCapitalization: TextCapitalization.characters,
                       decoration: const InputDecoration(
-                        labelText: 'Número de comprobante / NCF',
+                        labelText: 'NÃºmero de comprobante / NCF',
                         hintText: 'Ej. B0100000001',
                         border: OutlineInputBorder(),
                         isDense: true,
@@ -10143,8 +10717,8 @@ class _DesktopFiscalInvoicePanelState
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
                         labelText: widget.requiresTaxId
-                            ? 'RNC / Cédula fiscal'
-                            : 'RNC / Cédula (opcional)',
+                            ? 'RNC / CÃ©dula fiscal'
+                            : 'RNC / CÃ©dula (opcional)',
                         border: const OutlineInputBorder(),
                         isDense: true,
                       ),
@@ -10154,7 +10728,7 @@ class _DesktopFiscalInvoicePanelState
                       controller: _customerNameCtrl,
                       onChanged: widget.onCustomerNameChanged,
                       decoration: const InputDecoration(
-                        labelText: 'Razón social / cliente fiscal',
+                        labelText: 'RazÃ³n social / cliente fiscal',
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
@@ -10162,7 +10736,7 @@ class _DesktopFiscalInvoicePanelState
                     if (widget.requiresTaxId) ...[
                       const SizedBox(height: 10),
                       const Text(
-                        'Este tipo de comprobante requiere RNC o cédula fiscal del cliente.',
+                        'Este tipo de comprobante requiere RNC o cÃ©dula fiscal del cliente.',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
@@ -10181,42 +10755,225 @@ class _DesktopFiscalInvoicePanelState
   }
 }
 
-class _DesktopPanelSwitchAction extends StatelessWidget {
+class _DesktopPanelSwitchAction extends StatefulWidget {
   const _DesktopPanelSwitchAction({
+    required this.icon,
     required this.label,
     required this.value,
     required this.onTap,
+    required this.helpTitle,
+    required this.helpMessage,
   });
 
+  final IconData icon;
   final String label;
   final bool value;
   final VoidCallback onTap;
+  final String helpTitle;
+  final String helpMessage;
+
+  @override
+  State<_DesktopPanelSwitchAction> createState() =>
+      _DesktopPanelSwitchActionState();
+}
+
+class _DesktopPanelSwitchActionState extends State<_DesktopPanelSwitchAction> {
+  bool _hovered = false;
+  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.only(left: 2),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: value
-                    ? const Color(0xFF1957E6)
-                    : const Color(0xFF647985),
+    final active = widget.value;
+    final interactive = _hovered || _pressed;
+    final foreground = active
+        ? const Color(0xFF1957E6)
+        : const Color(0xFF52697A);
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() {
+            _hovered = false;
+            _pressed = false;
+          }),
+          child: Listener(
+            onPointerDown: (_) => setState(() => _pressed = true),
+            onPointerCancel: (_) => setState(() => _pressed = false),
+            onPointerUp: (_) => setState(() => _pressed = false),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onTap,
+              child: AnimatedScale(
+                scale: _pressed ? 0.97 : (_hovered ? 1.015 : 1),
+                duration: const Duration(milliseconds: 120),
+                curve: Curves.easeOutCubic,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 170),
+                  curve: Curves.easeOutCubic,
+                  height: 30,
+                  padding: const EdgeInsets.fromLTRB(7, 4, 6, 4),
+                  decoration: BoxDecoration(
+                    color: active
+                        ? const Color(0xFFEAF1FF)
+                        : (interactive
+                              ? const Color(0xFFF7FAFC)
+                              : Colors.white),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: active
+                          ? const Color(0xFFB8CCFF)
+                          : const Color(0xFFE1EAF0),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(
+                          0xFF1957E6,
+                        ).withValues(alpha: active ? 0.10 : 0.035),
+                        blurRadius: interactive ? 10 : 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(widget.icon, size: 13.5, color: foreground),
+                      const SizedBox(width: 5),
+                      Text(
+                        widget.label,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          color: foreground,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                      const SizedBox(width: 7),
+                      _DesktopMiniTechToggle(value: active),
+                    ],
+                  ),
+                ),
               ),
             ),
-            Transform.scale(
-              scale: 0.72,
-              child: Switch.adaptive(value: value, onChanged: (_) => onTap()),
+          ),
+        ),
+        const SizedBox(width: 3),
+        _DesktopSwitchHelpButton(
+          title: widget.helpTitle,
+          message: widget.helpMessage,
+        ),
+      ],
+    );
+  }
+}
+
+class _DesktopSwitchHelpButton extends StatelessWidget {
+  const _DesktopSwitchHelpButton({required this.title, required this.message});
+
+  final String title;
+  final String message;
+
+  Future<void> _showHelp(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Entendido'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Ayuda',
+      child: SizedBox(
+        width: 22,
+        height: 30,
+        child: IconButton(
+          onPressed: () => _showHelp(context),
+          padding: EdgeInsets.zero,
+          iconSize: 15,
+          color: const Color(0xFF647985),
+          icon: const Icon(Icons.help_outline_rounded),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopMiniTechToggle extends StatelessWidget {
+  const _DesktopMiniTechToggle({required this.value});
+
+  final bool value;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 190),
+      curve: Curves.easeOutCubic,
+      width: 34,
+      height: 18,
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: value
+              ? const [Color(0xFF2F6BFF), Color(0xFF0E7490)]
+              : const [Color(0xFFE7EEF3), Color(0xFFD6E0E7)],
+        ),
+        border: Border.all(
+          color: value ? const Color(0xFF8FB2FF) : const Color(0xFFB7C5CE),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: (value ? const Color(0xFF1957E6) : const Color(0xFF0F2633))
+                .withValues(alpha: value ? 0.18 : 0.08),
+            blurRadius: value ? 8 : 5,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: AnimatedAlign(
+        duration: const Duration(milliseconds: 190),
+        curve: Curves.easeOutCubic,
+        alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 190),
+          curve: Curves.easeOutCubic,
+          width: 14,
+          height: 14,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: value ? 0.18 : 0.12),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 160),
+            opacity: value ? 1 : 0,
+            child: const Icon(
+              Icons.check_rounded,
+              size: 10,
+              color: Color(0xFF1957E6),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -10288,15 +11045,17 @@ class _DesktopCategoryStrip extends StatelessWidget {
     required this.categories,
     required this.allProducts,
     required this.managedCategories,
-    required this.selectedCategory,
-    required this.onSelectCategory,
+    required this.selectedCategories,
+    required this.onToggleCategory,
+    required this.onClearCategories,
   });
 
   final List<String> categories;
   final List<ProductModel> allProducts;
   final List<InventoryCategoryModel> managedCategories;
-  final String? selectedCategory;
-  final ValueChanged<String?> onSelectCategory;
+  final Set<String> selectedCategories;
+  final ValueChanged<String> onToggleCategory;
+  final VoidCallback onClearCategories;
 
   ProductModel? _thumbnailProduct(String category) {
     for (final product in allProducts) {
@@ -10315,7 +11074,7 @@ class _DesktopCategoryStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasFilter = selectedCategory != null;
+    final hasFilter = selectedCategories.isNotEmpty;
 
     return SizedBox(
       height: 40,
@@ -10352,9 +11111,7 @@ class _DesktopCategoryStrip extends StatelessWidget {
           return Row(
             children: [
               if (hasFilter) ...[
-                _DesktopCategoryClearButton(
-                  onTap: () => onSelectCategory(null),
-                ),
+                _DesktopCategoryClearButton(onTap: onClearCategories),
                 const SizedBox(width: gap),
               ],
               for (final category in visible) ...[
@@ -10363,16 +11120,16 @@ class _DesktopCategoryStrip extends StatelessWidget {
                   label: category,
                   product: _thumbnailProduct(category),
                   managedCategory: _managedCategory(category),
-                  selected: selectedCategory == category,
-                  onTap: () => onSelectCategory(category),
+                  selected: selectedCategories.contains(category),
+                  onTap: () => onToggleCategory(category),
                 ),
               ],
               if (hidden.isNotEmpty) ...[
                 if (visible.isNotEmpty) const SizedBox(width: gap),
                 _DesktopCategoryOverflowButton(
                   categories: hidden,
-                  selectedCategory: selectedCategory,
-                  onSelectCategory: onSelectCategory,
+                  selectedCategories: selectedCategories,
+                  onToggleCategory: onToggleCategory,
                 ),
               ],
               const Spacer(),
@@ -10422,13 +11179,13 @@ class _DesktopCategoryClearButton extends StatelessWidget {
 class _DesktopCategoryOverflowButton extends StatelessWidget {
   const _DesktopCategoryOverflowButton({
     required this.categories,
-    required this.selectedCategory,
-    required this.onSelectCategory,
+    required this.selectedCategories,
+    required this.onToggleCategory,
   });
 
   final List<String> categories;
-  final String? selectedCategory;
-  final ValueChanged<String?> onSelectCategory;
+  final Set<String> selectedCategories;
+  final ValueChanged<String> onToggleCategory;
 
   @override
   Widget build(BuildContext context) {
@@ -10436,12 +11193,12 @@ class _DesktopCategoryOverflowButton extends StatelessWidget {
       width: 42,
       height: 38,
       child: PopupMenuButton<String>(
-        tooltip: 'Más categorías',
+        tooltip: 'MÃ¡s categorÃ­as',
         padding: EdgeInsets.zero,
         color: Colors.white,
         surfaceTintColor: Colors.white,
         position: PopupMenuPosition.under,
-        onSelected: onSelectCategory,
+        onSelected: onToggleCategory,
         itemBuilder: (context) => [
           for (final category in categories)
             PopupMenuItem(
@@ -10449,7 +11206,7 @@ class _DesktopCategoryOverflowButton extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (selectedCategory == category)
+                  if (selectedCategories.contains(category))
                     const AppIcon(
                       AppIcons.success,
                       size: 16,
@@ -10537,40 +11294,56 @@ class _DesktopCategoryStripItem extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  width: 24,
-                  height: 24,
+                  width: 32,
+                  height: 30,
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: const Color(0xFFF4F8FC),
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: const Color(0xFFCFE0FF)),
+                    border: Border.all(
+                      color: selected
+                          ? const Color(0xFF9FC0FF)
+                          : const Color(0xFFD2E2EC),
+                    ),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF0B2A3A).withValues(alpha: 0.08),
-                        blurRadius: 6,
+                        color: const Color(0xFF0B2A3A).withValues(alpha: 0.10),
+                        blurRadius: 7,
                         offset: const Offset(0, 2),
                       ),
                     ],
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: categoryImageBytes != null
-                      ? Image.memory(categoryImageBytes, fit: BoxFit.cover)
+                      ? Transform.scale(
+                          scale: 1.08,
+                          child: Image.memory(
+                            categoryImageBytes,
+                            width: 32,
+                            height: 30,
+                            fit: BoxFit.cover,
+                            filterQuality: FilterQuality.high,
+                          ),
+                        )
                       : imageUrl.isEmpty || product == null
                       ? const Icon(
                           Icons.inventory_2_outlined,
                           color: Color(0xFF8DA2B4),
                           size: 15,
                         )
-                      : ProductNetworkImage(
-                          imageUrl: imageUrl,
-                          productId: product!.id,
-                          productName: product!.nombre,
-                          originalUrl: product!.originalFotoUrl,
-                          fit: BoxFit.cover,
-                          loading: const SizedBox.shrink(),
-                          fallback: const Icon(
-                            Icons.inventory_2_outlined,
-                            color: Color(0xFF8DA2B4),
-                            size: 15,
+                      : Transform.scale(
+                          scale: 1.08,
+                          child: ProductNetworkImage(
+                            imageUrl: imageUrl,
+                            productId: product!.id,
+                            productName: product!.nombre,
+                            originalUrl: product!.originalFotoUrl,
+                            fit: BoxFit.cover,
+                            loading: const SizedBox.shrink(),
+                            fallback: const Icon(
+                              Icons.inventory_2_outlined,
+                              color: Color(0xFF8DA2B4),
+                              size: 15,
+                            ),
                           ),
                         ),
                 ),
@@ -10843,7 +11616,7 @@ class _DesktopExternalProductCardState
   @override
   Widget build(BuildContext context) {
     final helpText =
-        'Usa venta manual para facturar productos o servicios que no están registrados en inventario. Es útil para cargos especiales, reparaciones, ajustes rápidos o artículos únicos sin afectar el stock.';
+        'Usa venta manual para facturar productos o servicios que no estÃ¡n registrados en inventario. Es Ãºtil para cargos especiales, reparaciones, ajustes rÃ¡pidos o artÃ­culos Ãºnicos sin afectar el stock.';
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
@@ -10976,7 +11749,7 @@ class _DesktopExternalProductCardState
                           ),
                           const SizedBox(height: 7),
                           const Text(
-                            'Venta rápida fuera de catálogo',
+                            'Venta rÃ¡pida fuera de catÃ¡logo',
                             maxLines: 1,
                             textAlign: TextAlign.center,
                             overflow: TextOverflow.ellipsis,
@@ -11416,6 +12189,24 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
     );
   }
 
+  Future<void> _showFullPrice() async {
+    final price = _formatAccountingInput(widget.item.unitPrice);
+    if (price.isEmpty) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Precio'),
+        content: SelectableText(price),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
@@ -11486,36 +12277,17 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            item.nombre,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12,
-                            ),
-                          ),
+                    InkWell(
+                      onTap: _showFullProductName,
+                      child: Text(
+                        item.nombre,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
                         ),
-                        Tooltip(
-                          message: 'Ver nombre completo',
-                          child: InkWell(
-                            onTap: _showFullProductName,
-                            borderRadius: BorderRadius.circular(999),
-                            child: const Padding(
-                              padding: EdgeInsets.all(3),
-                              child: AppIcon(
-                                AppIcons.visibility,
-                                size: 14.5,
-                                color: Color(0xFF1957E6),
-                                strokeWidth: 2,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                     if (hasDiscount || item.isExternal)
                       Padding(
@@ -11547,24 +12319,28 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                   ],
                 ),
               ),
-              const SizedBox(width: 5),
+              const SizedBox(width: 4),
               SizedBox(
-                width: 72,
-                child: Text(
-                  _formatAccountingInput(item.unitPrice),
-                  textAlign: TextAlign.right,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: const Color(0xFF52677C),
-                    fontWeight: FontWeight.w800,
-                    fontSize: 11,
+                width: 56,
+                child: InkWell(
+                  onTap: _showFullPrice,
+                  child: Text(
+                    _formatAccountingInput(item.unitPrice),
+                    textAlign: TextAlign.right,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: const Color(0xFF52677C),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11,
+                    ),
                   ),
                 ),
               ),
+
               if (hasDiscount)
                 Padding(
-                  padding: const EdgeInsets.only(left: 6),
+                  padding: const EdgeInsets.only(left: 3),
                   child: Text(
                     widget.money(item.effectiveOriginalUnitPrice),
                     style: theme.textTheme.bodySmall?.copyWith(
@@ -11574,15 +12350,15 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                     ),
                   ),
                 ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 2),
               _DesktopTicketQtyButton(
                 tooltip: 'Restar unidad',
                 onPressed: widget.onMinus,
                 icon: AppIcons.remove,
               ),
               SizedBox(
-                width: 38,
-                height: 34,
+                width: 30,
+                height: 30,
                 child: Center(
                   child: Text(
                     qtyText,
@@ -11592,7 +12368,7 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                     style: theme.textTheme.titleMedium?.copyWith(
                       color: const Color(0xFF183548),
                       fontWeight: FontWeight.w900,
-                      fontSize: 16,
+                      fontSize: 14,
                     ),
                   ),
                 ),
@@ -11602,9 +12378,9 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                 onPressed: widget.onPlus,
                 icon: AppIcons.add,
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 2),
               SizedBox(
-                width: 88,
+                width: 72,
                 child: Text(
                   widget.money(item.total),
                   textAlign: TextAlign.right,
@@ -11616,13 +12392,7 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                   ),
                 ),
               ),
-              if (widget.onEdit != null)
-                IconButton(
-                  tooltip: 'Editar producto manual',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: widget.onEdit,
-                  icon: const Icon(Icons.edit_outlined, size: 16),
-                ),
+              const SizedBox(width: 2),
               _DesktopTicketRemoveButton(
                 tooltip: 'Eliminar producto',
                 onPressed: widget.onRemove,
@@ -11651,8 +12421,8 @@ class _DesktopTicketQtyButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: SizedBox(
-        width: 34,
-        height: 34,
+        width: 30,
+        height: 30,
         child: IconButton(
           onPressed: onPressed,
           padding: EdgeInsets.zero,
@@ -11664,7 +12434,7 @@ class _DesktopTicketQtyButton extends StatelessWidget {
             highlightColor: const Color(0xFFDCE8FF),
             shape: const CircleBorder(),
           ),
-          icon: AppIcon(icon, size: 22, strokeWidth: 2.5),
+          icon: AppIcon(icon, size: 20, strokeWidth: 2.5),
         ),
       ),
     );
@@ -11685,8 +12455,8 @@ class _DesktopTicketRemoveButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: SizedBox(
-        width: 34,
-        height: 34,
+        width: 30,
+        height: 30,
         child: IconButton(
           onPressed: onPressed,
           padding: EdgeInsets.zero,
@@ -11698,7 +12468,7 @@ class _DesktopTicketRemoveButton extends StatelessWidget {
             highlightColor: const Color(0xFFDDE7EE),
             shape: const CircleBorder(),
           ),
-          icon: const AppIcon(AppIcons.delete, size: 19, strokeWidth: 2.3),
+          icon: const AppIcon(AppIcons.delete, size: 18, strokeWidth: 2.3),
         ),
       ),
     );
@@ -11798,38 +12568,42 @@ class _DesktopSalesTicketFooter extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Container(
-      height: 44,
-      padding: const EdgeInsets.fromLTRB(12, 3, 12, 3),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7FAFC),
-        border: Border(top: BorderSide(color: const Color(0xFFD6E1E8))),
+      height: 42,
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+      decoration: const BoxDecoration(
+        color: Color(0xFFF8FBFD),
+        border: Border(
+          top: BorderSide(color: Color(0xFFC9D8E2)),
+          bottom: BorderSide(color: Color(0xFFE4EDF2)),
+        ),
       ),
       child: Row(
         children: [
           Tooltip(
             message: 'Nuevo ticket',
             child: SizedBox(
-              width: 36,
-              height: 36,
+              width: 34,
+              height: 34,
               child: FilledButton(
                 onPressed: onCreateTicket,
                 style: FilledButton.styleFrom(
                   padding: EdgeInsets.zero,
                   backgroundColor: const Color(0xFF1957E6),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                child: const Icon(Icons.add_rounded, size: 21),
+                child: const Icon(Icons.add_rounded, size: 20),
               ),
             ),
           ),
           const SizedBox(width: 8),
+          const _TicketFooterSeparator(),
           Expanded(
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: tickets.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 6),
+              separatorBuilder: (_, __) => const _TicketFooterSeparator(),
               itemBuilder: (context, index) {
                 final ticket = tickets[index];
                 final selected = ticket.id == activeTicketId;
@@ -11845,7 +12619,8 @@ class _DesktopSalesTicketFooter extends StatelessWidget {
               },
             ),
           ),
-          const SizedBox(width: 8),
+          const _TicketFooterSeparator(),
+          const SizedBox(width: 10),
           Text(
             '${tickets.length} tickets',
             style: theme.textTheme.labelMedium?.copyWith(
@@ -11878,34 +12653,22 @@ class _DesktopFooterTicketChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = selected ? const Color(0xFFEAF1FF) : Colors.white;
-    final border = selected ? const Color(0xFF1957E6) : const Color(0xFFD6E1E8);
+    final bg = selected ? const Color(0xFFEAF1FF) : const Color(0xFFF8FBFD);
+    final border = selected ? const Color(0xFF1957E6) : Colors.transparent;
     final fg = selected ? const Color(0xFF1957E6) : const Color(0xFF183548);
     final hasItems = itemCount > 0;
 
     return Material(
       color: bg,
-      borderRadius: BorderRadius.circular(8),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
         child: SizedBox(
-          width: 150,
-          height: 36,
+          width: 148,
+          height: 42,
           child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: border),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: selected ? 0.08 : 0.04),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
+            decoration: BoxDecoration(border: Border.all(color: border)),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(9, 0, 2, 0),
+              padding: const EdgeInsets.fromLTRB(10, 0, 2, 0),
               child: Row(
                 children: [
                   AppIcon(AppIcons.ticket, size: 16.5, color: fg),
@@ -11973,6 +12736,18 @@ class _DesktopFooterTicketChip extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _TicketFooterSeparator extends StatelessWidget {
+  const _TicketFooterSeparator();
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.center,
+      child: Container(width: 1, height: 28, color: const Color(0xFFD8E5EC)),
     );
   }
 }
@@ -12074,7 +12849,7 @@ class _DesktopTicketDraft {
     required this.globalDiscountAmount,
     required this.editingId,
     required this.editingCreatedAt,
-    required this.selectedCategory,
+    this.selectedCategories = const [],
     required this.searchQuery,
   });
 
@@ -12099,7 +12874,7 @@ class _DesktopTicketDraft {
       globalDiscountAmount: 0,
       editingId: null,
       editingCreatedAt: null,
-      selectedCategory: null,
+      selectedCategories: const [],
       searchQuery: '',
     );
   }
@@ -12120,7 +12895,7 @@ class _DesktopTicketDraft {
   final double globalDiscountAmount;
   final String? editingId;
   final DateTime? editingCreatedAt;
-  final String? selectedCategory;
+  final List<String> selectedCategories;
   final String searchQuery;
 
   _DesktopTicketDraft copyWith({
@@ -12140,7 +12915,7 @@ class _DesktopTicketDraft {
     double? globalDiscountAmount,
     String? editingId,
     DateTime? editingCreatedAt,
-    String? selectedCategory,
+    List<String>? selectedCategories,
     String? searchQuery,
   }) {
     return _DesktopTicketDraft(
@@ -12160,7 +12935,7 @@ class _DesktopTicketDraft {
       globalDiscountAmount: globalDiscountAmount ?? this.globalDiscountAmount,
       editingId: editingId ?? this.editingId,
       editingCreatedAt: editingCreatedAt ?? this.editingCreatedAt,
-      selectedCategory: selectedCategory ?? this.selectedCategory,
+      selectedCategories: selectedCategories ?? this.selectedCategories,
       searchQuery: searchQuery ?? this.searchQuery,
     );
   }
@@ -12188,12 +12963,22 @@ class _DesktopTicketDraft {
     'globalDiscountAmount': globalDiscountAmount,
     'editingId': editingId,
     'editingCreatedAt': editingCreatedAt?.toIso8601String(),
-    'selectedCategory': selectedCategory,
+    'selectedCategory': selectedCategories.isEmpty
+        ? null
+        : selectedCategories.first,
+    'selectedCategories': selectedCategories,
     'searchQuery': searchQuery,
   };
 
   factory _DesktopTicketDraft.fromMap(Map<String, dynamic> map) {
     final rawItems = (map['items'] as List?) ?? const [];
+    final rawCategories = (map['selectedCategories'] as List?) ?? const [];
+    final selectedCategories = rawCategories
+        .map((item) => item.toString().trim())
+        .where((item) => item.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    final selectedCategory = map['selectedCategory']?.toString().trim();
     return _DesktopTicketDraft(
       id: (map['id'] ?? '').toString(),
       title: (map['title'] ?? '').toString(),
@@ -12220,7 +13005,12 @@ class _DesktopTicketDraft {
       editingCreatedAt: DateTime.tryParse(
         (map['editingCreatedAt'] ?? '').toString(),
       ),
-      selectedCategory: map['selectedCategory']?.toString(),
+      selectedCategories: selectedCategories.isNotEmpty
+          ? selectedCategories
+          : [
+              if (selectedCategory != null && selectedCategory.isNotEmpty)
+                selectedCategory,
+            ],
       searchQuery: (map['searchQuery'] ?? '').toString(),
     );
   }
@@ -12228,25 +13018,12 @@ class _DesktopTicketDraft {
 
 enum _DiscountType { percent, fixed }
 
-class _AiNoteSuggestion {
-  const _AiNoteSuggestion({
-    required this.corrected,
-    required this.professional,
-  });
-
-  final String corrected;
-  final String professional;
-}
-
 class _TicketCompactItem extends StatefulWidget {
   const _TicketCompactItem({
     required this.item,
     required this.money,
     required this.showCost,
     required this.onEditLine,
-    required this.onMinus,
-    required this.onPlus,
-    required this.onChangeQty,
     required this.onChangePrice,
     required this.onEdit,
     required this.onRemove,
@@ -12256,9 +13033,6 @@ class _TicketCompactItem extends StatefulWidget {
   final String Function(double) money;
   final bool showCost;
   final VoidCallback onEditLine;
-  final VoidCallback onMinus;
-  final VoidCallback onPlus;
-  final ValueChanged<double> onChangeQty;
   final ValueChanged<double> onChangePrice;
   final VoidCallback? onEdit;
   final VoidCallback onRemove;
@@ -12268,301 +13042,139 @@ class _TicketCompactItem extends StatefulWidget {
 }
 
 class _TicketCompactItemState extends State<_TicketCompactItem> {
-  late final TextEditingController _priceCtrl;
-  late final TextEditingController _qtyCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _priceCtrl = TextEditingController(
-      text: _formatAccountingInput(widget.item.unitPrice),
-    );
-    _qtyCtrl = TextEditingController(
-      text: widget.item.qty % 1 == 0
-          ? widget.item.qty.toStringAsFixed(0)
-          : widget.item.qty.toStringAsFixed(2),
-    );
-  }
-
-  @override
-  void didUpdateWidget(covariant _TicketCompactItem oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.item.unitPrice != widget.item.unitPrice) {
-      _priceCtrl.text = _formatAccountingInput(widget.item.unitPrice);
-    }
-    if (oldWidget.item.qty != widget.item.qty) {
-      _qtyCtrl.text = widget.item.qty % 1 == 0
-          ? widget.item.qty.toStringAsFixed(0)
-          : widget.item.qty.toStringAsFixed(2);
-    }
-  }
-
-  @override
-  void dispose() {
-    _priceCtrl.dispose();
-    _qtyCtrl.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
-    final hasDiscount = item.hasDiscount;
-    final discountText = widget.money(item.discountAmount);
     final theme = Theme.of(context);
-    final costSnapshot = item.costUnit ?? item.externalCostUnit;
+
+    String formatNoDecimals(num value) {
+      final v = value.toDouble();
+      return v % 1 == 0 ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
+    }
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 0.5),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onDoubleTap: widget.onEditLine,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minWidth: 670),
-            child: SizedBox(
-              height: 34,
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 24,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: (item.imageUrl ?? '').trim().isEmpty
-                          ? Container(
-                              color: item.isExternal
-                                  ? theme.colorScheme.primaryContainer
-                                  : theme.colorScheme.surfaceContainerHighest,
-                              alignment: Alignment.center,
-                              child: Icon(
-                                item.isExternal
-                                    ? Icons.edit_note_outlined
-                                    : Icons.inventory_2_outlined,
-                                size: 12,
-                                color: item.isExternal
-                                    ? theme.colorScheme.primary
-                                    : theme.colorScheme.onSurfaceVariant,
-                              ),
-                            )
-                          : ProductNetworkImage(
-                              imageUrl: item.imageUrl!,
-                              productId: item.productId,
-                              productName: item.nombre,
-                              originalUrl: item.imageUrl,
-                              fit: BoxFit.cover,
-                              loading: Container(
-                                color:
-                                    theme.colorScheme.surfaceContainerHighest,
-                              ),
-                              fallback: Container(
-                                color:
-                                    theme.colorScheme.surfaceContainerHighest,
-                                alignment: Alignment.center,
-                                child: const Icon(
-                                  Icons.broken_image_outlined,
-                                  size: 12,
-                                ),
-                              ),
+        child: SizedBox(
+          height: 42,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 30,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: (item.imageUrl ?? '').trim().isEmpty
+                      ? Container(
+                          color: item.isExternal
+                              ? theme.colorScheme.primaryContainer
+                              : theme.colorScheme.surfaceContainerHighest,
+                          alignment: Alignment.center,
+                          child: Icon(
+                            item.isExternal
+                                ? Icons.edit_note_outlined
+                                : Icons.inventory_2_outlined,
+                            size: 15,
+                            color: item.isExternal
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.onSurfaceVariant,
+                          ),
+                        )
+                      : ProductNetworkImage(
+                          imageUrl: item.imageUrl!,
+                          productId: item.productId,
+                          productName: item.nombre,
+                          originalUrl: item.imageUrl,
+                          fit: BoxFit.cover,
+                          loading: Container(
+                            color: theme.colorScheme.surfaceContainerHighest,
+                          ),
+                          fallback: Container(
+                            color: theme.colorScheme.surfaceContainerHighest,
+                            alignment: Alignment.center,
+                            child: const Icon(
+                              Icons.broken_image_outlined,
+                              size: 12,
                             ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  SizedBox(
-                    width: 150,
-                    child: Text(
-                      item.nombre,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.left,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 10.2,
-                        height: 1,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  SizedBox(
-                    width: 72,
-                    child: TextField(
-                      controller: _priceCtrl,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 9.8,
-                        fontWeight: FontWeight.w700,
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        hintText: 'Precio',
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 6,
+                          ),
                         ),
-                        border: OutlineInputBorder(),
-                      ),
-                      onSubmitted: (value) {
-                        final next = _parseAccountingInput(value);
-                        if (next != null) {
-                          widget.onChangePrice(next);
-                          _priceCtrl.text = _formatAccountingInput(next);
-                        }
-                      },
-                    ),
-                  ),
-                  if (widget.onEdit != null)
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minHeight: 20,
-                        minWidth: 20,
-                      ),
-                      splashRadius: 10,
-                      tooltip: 'Editar producto manual',
-                      onPressed: widget.onEdit,
-                      icon: const Icon(Icons.edit_outlined, size: 13),
-                    )
-                  else
-                    const SizedBox(width: 20),
-                  const SizedBox(width: 4),
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minHeight: 20,
-                      minWidth: 20,
-                    ),
-                    splashRadius: 10,
-                    onPressed: widget.onMinus,
-                    icon: const Icon(Icons.remove_circle_outline, size: 14),
-                  ),
-                  SizedBox(
-                    width: 36,
-                    child: TextField(
-                      controller: _qtyCtrl,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 9.8,
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 2,
-                          vertical: 6,
-                        ),
-                        border: OutlineInputBorder(),
-                      ),
-                      onSubmitted: (value) {
-                        final next = double.tryParse(value.trim());
-                        if (next != null) widget.onChangeQty(next);
-                      },
-                    ),
-                  ),
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minHeight: 20,
-                      minWidth: 20,
-                    ),
-                    splashRadius: 10,
-                    onPressed: widget.onPlus,
-                    icon: const Icon(Icons.add_circle_outline, size: 14),
-                  ),
-                  const SizedBox(width: 6),
-                  SizedBox(
-                    width: 78,
-                    child: Text(
-                      widget.money(item.total),
-                      textAlign: TextAlign.right,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 10.3,
-                        height: 1,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  if (hasDiscount)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 4),
-                      child: _TicketInlineMeta(
-                        label: 'Desc',
-                        value: discountText,
-                        color: Colors.red.shade700,
-                      ),
-                    ),
-                  if (widget.showCost && costSnapshot != null)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 4),
-                      child: _TicketInlineMeta(
-                        label: 'Costo',
-                        value: widget.money(costSnapshot),
-                      ),
-                    ),
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minHeight: 20,
-                      minWidth: 20,
-                    ),
-                    splashRadius: 10,
-                    onPressed: widget.onRemove,
-                    icon: const Icon(Icons.close, size: 13),
-                  ),
-                ],
+                ),
               ),
-            ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: InkWell(
+                  onTap: () => showDialog<void>(
+                    context: context,
+                    builder: (dialogContext) => AlertDialog(
+                      title: const Text('Producto'),
+                      content: Text(item.nombre),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                          child: const Text('Cerrar'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  child: Text(
+                    item.nombre,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.left,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                      height: 1,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              SizedBox(
+                width: 70,
+                child: Text(
+                  '${formatNoDecimals(item.qty)} * ${formatNoDecimals(item.unitPrice)}',
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              SizedBox(
+                width: 76,
+                child: Text(
+                  widget.money(item.total),
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12,
+                    height: 1,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 2),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minHeight: 32, minWidth: 30),
+                splashRadius: 15,
+                onPressed: widget.onRemove,
+                icon: const Icon(
+                  Icons.close_rounded,
+                  size: 17,
+                  color: Color(0xFF111827),
+                ),
+              ),
+            ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _TicketInlineMeta extends StatelessWidget {
-  const _TicketInlineMeta({
-    required this.label,
-    required this.value,
-    this.color,
-  });
-
-  final String label;
-  final String value;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    final effectiveColor =
-        color ?? Theme.of(context).colorScheme.onSurfaceVariant;
-
-    return RichText(
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      text: TextSpan(
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: effectiveColor,
-        ),
-        children: [
-          TextSpan(text: '$label '),
-          TextSpan(
-            text: value,
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-        ],
       ),
     );
   }

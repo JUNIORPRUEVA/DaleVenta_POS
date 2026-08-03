@@ -2,24 +2,46 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:printing/printing.dart';
 
+import '../../../core/printing/mobile_print_service.dart';
+import '../../../core/printing/models/models.dart';
+import '../../../core/printing/printing_platform_resolver.dart';
 import '../../../core/printing/simplified_ticket_preview_widget.dart';
 import '../../../core/printing/unified_ticket_printer.dart';
+import '../data/mobile_printer_settings_model.dart';
+import '../data/mobile_printer_settings_repository.dart';
 import '../data/printer_settings_model.dart';
 import '../data/printer_settings_repository.dart';
 
-class PrinterSettingsPage extends ConsumerStatefulWidget {
+class PrinterSettingsPage extends ConsumerWidget {
   const PrinterSettingsPage({super.key, this.embedded = false});
 
   final bool embedded;
 
   @override
-  ConsumerState<PrinterSettingsPage> createState() =>
-      _PrinterSettingsPageState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final platform = ref.watch(printingPlatformResolverProvider).capabilities;
+    if (platform.isMobile) {
+      return MobilePrinterSettingsView(embedded: embedded);
+    }
+    return WindowsPrinterSettingsView(embedded: embedded);
+  }
 }
 
-class _PrinterSettingsPageState extends ConsumerState<PrinterSettingsPage> {
+class WindowsPrinterSettingsView extends ConsumerStatefulWidget {
+  const WindowsPrinterSettingsView({super.key, this.embedded = false});
+
+  final bool embedded;
+
+  @override
+  ConsumerState<WindowsPrinterSettingsView> createState() =>
+      _WindowsPrinterSettingsViewState();
+}
+
+class _WindowsPrinterSettingsViewState
+    extends ConsumerState<WindowsPrinterSettingsView> {
   PrinterSettingsModel? _settings;
   List<Printer> _printers = const [];
   String _preview = '';
@@ -131,7 +153,7 @@ class _PrinterSettingsPageState extends ConsumerState<PrinterSettingsPage> {
   Widget _body() {
     final settings = _settings;
     if (_loading || settings == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: Text('Sincronizando impresoras...'));
     }
 
     final printerNames = _printers.map((p) => p.name).toSet().toList()..sort();
@@ -455,6 +477,676 @@ class _PrinterSettingsPageState extends ConsumerState<PrinterSettingsPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Impresora y tickets')),
       body: Padding(padding: const EdgeInsets.all(16), child: _body()),
+    );
+  }
+}
+
+class MobilePrinterSettingsView extends ConsumerStatefulWidget {
+  const MobilePrinterSettingsView({super.key, this.embedded = false});
+
+  final bool embedded;
+
+  @override
+  ConsumerState<MobilePrinterSettingsView> createState() =>
+      _MobilePrinterSettingsViewState();
+}
+
+class _MobilePrinterSettingsViewState
+    extends ConsumerState<MobilePrinterSettingsView> {
+  final _ip = TextEditingController();
+  final _port = TextEditingController();
+  final _name = TextEditingController();
+  final _footer = TextEditingController();
+  List<BluetoothInfo> _bluetoothPrinters = const [];
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _ip.dispose();
+    _port.dispose();
+    _name.dispose();
+    _footer.dispose();
+    super.dispose();
+  }
+
+  void _syncControllers(MobilePrinterSettingsModel settings) {
+    if (_ip.text != settings.networkIp) _ip.text = settings.networkIp;
+    final port = settings.networkPort.toString();
+    if (_port.text != port) _port.text = port;
+    if (_name.text != settings.printerName) _name.text = settings.printerName;
+    if (_footer.text != settings.footerMessage) {
+      _footer.text = settings.footerMessage;
+    }
+  }
+
+  Future<void> _save(MobilePrinterSettingsModel settings) async {
+    await ref.read(mobilePrinterSettingsRepositoryProvider).update(settings);
+    ref.invalidate(mobilePrinterSettingsProvider);
+  }
+
+  Future<void> _run(Future<MobilePrintServiceResult> Function() action) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final result = await action();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(result.message)));
+      ref.invalidate(mobilePrinterSettingsProvider);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo completar la acción: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _testPrint() async {
+    await _run(() async {
+      final settings = await ref
+          .read(mobilePrinterSettingsRepositoryProvider)
+          .getOrCreate();
+      final company = await ref
+          .read(companyInfoRepositoryProvider)
+          .getCurrentCompanyInfo();
+      final windowsSettings = await ref
+          .read(printerSettingsRepositoryProvider)
+          .getOrCreate();
+      final layout = TicketLayoutConfig.fromPrinterSettings(
+        windowsSettings.copyWith(
+          paperWidthMm: settings.paperWidthMm,
+          charsPerLine: settings.charsPerLine,
+          footerMessage: settings.footerMessage,
+        ),
+      );
+      final builder = TicketBuilder(layout: layout, company: company);
+      final ticket = TicketData.demo();
+      final pdf = await builder.buildPdf(ticket);
+      return ref
+          .read(mobilePrintServiceProvider)
+          .printRaw(
+            lines: builder.buildLines(ticket),
+            pdfBytes: pdf,
+            documentName: 'Ticket de prueba',
+          );
+    });
+  }
+
+  Future<void> _testNetwork(MobilePrinterSettingsModel settings) {
+    return _run(
+      () =>
+          ref.read(mobilePrintServiceProvider).testNetworkConnection(settings),
+    );
+  }
+
+  String _statusText(MobilePrinterConnectionStatus status) {
+    return switch (status) {
+      MobilePrinterConnectionStatus.notConfigured => 'No configurada',
+      MobilePrinterConnectionStatus.searching => 'Buscando',
+      MobilePrinterConnectionStatus.connecting => 'Conectando',
+      MobilePrinterConnectionStatus.connected => 'Conectada',
+      MobilePrinterConnectionStatus.disconnected => 'Desconectada',
+      MobilePrinterConnectionStatus.permissionRequired => 'Permiso requerido',
+      MobilePrinterConnectionStatus.unavailable => 'No disponible',
+      MobilePrinterConnectionStatus.error => 'Error',
+    };
+  }
+
+  String _connectionLabel(MobilePrinterConnectionType type) {
+    return switch (type) {
+      MobilePrinterConnectionType.network => 'Network/LAN',
+      MobilePrinterConnectionType.bluetooth => 'Bluetooth',
+      MobilePrinterConnectionType.systemPrinter => 'Sistema',
+      MobilePrinterConnectionType.pdfOnly => 'PDF',
+    };
+  }
+
+  Future<void> _scanBluetooth() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final service = ref.read(mobilePrintServiceProvider);
+      final permission = await service.ensureBluetoothPermissions();
+      if (!permission.success) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(permission.message)));
+        return;
+      }
+      final printers = await service.discoverBluetoothPrinters();
+      if (!mounted) return;
+      setState(() => _bluetoothPrinters = printers);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            printers.isEmpty
+                ? 'No hay impresoras emparejadas. Empareja la PT-210 en ajustes Bluetooth de Android.'
+                : 'Impresoras encontradas: ${printers.length}',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo buscar impresoras: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Widget _section({required String title, required List<Widget> children}) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFDDE7EF)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 10),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _infoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(color: Color(0xFF607080), fontSize: 12),
+            ),
+          ),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _switch({
+    required String title,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return SwitchListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      title: Text(title, style: const TextStyle(fontSize: 13)),
+      value: value,
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _content(MobilePrinterSettingsModel settings) {
+    _syncControllers(settings);
+    final lastConnected = settings.lastSuccessfulConnectionMs == null
+        ? 'Nunca'
+        : DateTime.fromMillisecondsSinceEpoch(
+            settings.lastSuccessfulConnectionMs!,
+          ).toString().split('.').first;
+    final isNetwork =
+        settings.connectionType == MobilePrinterConnectionType.network;
+    final isBluetooth =
+        settings.connectionType == MobilePrinterConnectionType.bluetooth;
+
+    Widget contentColumn() {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _section(
+            title: 'Estado',
+            children: [
+              _infoRow(
+                'Impresión',
+                settings.printingEnabled ? 'Activada' : 'Desactivada',
+              ),
+              _infoRow(
+                'Impresora',
+                settings.printerName.trim().isEmpty
+                    ? 'Sin seleccionar'
+                    : settings.printerName.trim(),
+              ),
+              _infoRow('Conexión', _connectionLabel(settings.connectionType)),
+              _infoRow('Estado', _statusText(settings.lastStatus)),
+              _infoRow('Última conexión', lastConnected),
+              if ((settings.lastError ?? '').trim().isNotEmpty)
+                Text(
+                  settings.lastError!,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                    fontSize: 12,
+                  ),
+                ),
+            ],
+          ),
+          _section(
+            title: 'Tipo de conexión',
+            children: [
+              DropdownButtonFormField<MobilePrinterConnectionType>(
+                initialValue: settings.connectionType,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Método',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: MobilePrinterConnectionType.bluetooth,
+                    child: Text('Bluetooth ESC/POS'),
+                  ),
+                  DropdownMenuItem(
+                    value: MobilePrinterConnectionType.network,
+                    child: Text('LAN ESC/POS'),
+                  ),
+                  DropdownMenuItem(
+                    value: MobilePrinterConnectionType.systemPrinter,
+                    child: Text('Sistema / AirPrint'),
+                  ),
+                  DropdownMenuItem(
+                    value: MobilePrinterConnectionType.pdfOnly,
+                    child: Text('Solo PDF'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  _save(settings.copyWith(connectionType: value));
+                },
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Bluetooth directo funciona en Android con impresoras ESC/POS emparejadas como PT-210. En iOS usa AirPrint/sistema o PDF.',
+                style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+              ),
+            ],
+          ),
+          if (isBluetooth)
+            _section(
+              title: 'Bluetooth',
+              children: [
+                _infoRow(
+                  'Seleccionada',
+                  settings.bluetoothAddress.trim().isEmpty
+                      ? 'Ninguna'
+                      : '${settings.printerName} ${settings.bluetoothAddress}',
+                ),
+                const Text(
+                  'Para la PT-210: empareja primero en Android usando el PIN 0000 si lo solicita. Luego toca Buscar y selecciónala por nombre PT-210 o por MAC.',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _busy ? null : _scanBluetooth,
+                      icon: const Icon(Icons.bluetooth_searching),
+                      label: const Text('Buscar emparejadas'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _busy
+                          ? null
+                          : () => _run(
+                              () => ref
+                                  .read(mobilePrintServiceProvider)
+                                  .testBluetoothConnection(settings),
+                            ),
+                      icon: const Icon(Icons.bluetooth_connected),
+                      label: const Text('Probar conexión'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _save(
+                        settings.copyWith(
+                          printerName: '',
+                          bluetoothAddress: '',
+                          lastStatus:
+                              MobilePrinterConnectionStatus.notConfigured,
+                          clearLastError: true,
+                        ),
+                      ),
+                      icon: const Icon(Icons.link_off_outlined),
+                      label: const Text('Olvidar'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (_bluetoothPrinters.isEmpty)
+                  const Text(
+                    'No hay resultados cargados todavía.',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                  )
+                else
+                  ..._bluetoothPrinters.map((printer) {
+                    final selected =
+                        printer.macAdress == settings.bluetoothAddress;
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      selected: selected,
+                      leading: Icon(
+                        selected ? Icons.check_circle : Icons.bluetooth,
+                        color: selected ? const Color(0xFF0B5CFF) : null,
+                      ),
+                      title: Text(
+                        printer.name.trim().isEmpty
+                            ? 'Impresora Bluetooth'
+                            : printer.name,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(printer.macAdress),
+                      onTap: () {
+                        _save(
+                          settings.copyWith(
+                            connectionType:
+                                MobilePrinterConnectionType.bluetooth,
+                            printerName: printer.name,
+                            bluetoothAddress: printer.macAdress,
+                            lastStatus:
+                                MobilePrinterConnectionStatus.disconnected,
+                            clearLastError: true,
+                          ),
+                        );
+                      },
+                    );
+                  }),
+              ],
+            ),
+          if (isNetwork)
+            _section(
+              title: 'Network/LAN',
+              children: [
+                TextField(
+                  controller: _name,
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre opcional',
+                    border: OutlineInputBorder(),
+                  ),
+                  onSubmitted: (value) =>
+                      _save(settings.copyWith(printerName: value)),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _ip,
+                  decoration: const InputDecoration(
+                    labelText: 'IP de impresora',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.number,
+                  onSubmitted: (value) =>
+                      _save(settings.copyWith(networkIp: value.trim())),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _port,
+                        decoration: const InputDecoration(
+                          labelText: 'Puerto',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                        onSubmitted: (value) => _save(
+                          settings.copyWith(
+                            networkPort:
+                                int.tryParse(value) ?? settings.networkPort,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        decoration: InputDecoration(
+                          labelText: 'Timeout',
+                          border: const OutlineInputBorder(),
+                          hintText: '${settings.timeoutSeconds}s',
+                        ),
+                        keyboardType: TextInputType.number,
+                        onSubmitted: (value) => _save(
+                          settings.copyWith(
+                            timeoutSeconds:
+                                int.tryParse(value) ?? settings.timeoutSeconds,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _busy
+                          ? null
+                          : () => _testNetwork(
+                              settings.copyWith(
+                                printerName: _name.text.trim(),
+                                networkIp: _ip.text.trim(),
+                                networkPort: int.tryParse(_port.text) ?? 9100,
+                              ),
+                            ),
+                      icon: const Icon(Icons.cable_outlined),
+                      label: const Text('Probar conexión'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _save(
+                        settings.copyWith(
+                          printerName: '',
+                          networkIp: '',
+                          networkPort: 9100,
+                          lastStatus:
+                              MobilePrinterConnectionStatus.notConfigured,
+                          clearLastError: true,
+                        ),
+                      ),
+                      icon: const Icon(Icons.clear_outlined),
+                      label: const Text('Limpiar'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          _section(
+            title: 'Preferencias',
+            children: [
+              _switch(
+                title: 'Habilitar impresión',
+                value: settings.printingEnabled,
+                onChanged: (value) =>
+                    _save(settings.copyWith(printingEnabled: value)),
+              ),
+              _switch(
+                title: 'Auto-imprimir facturas',
+                value: settings.autoPrintInvoices,
+                onChanged: (value) =>
+                    _save(settings.copyWith(autoPrintInvoices: value)),
+              ),
+              _switch(
+                title: 'Auto-imprimir cierre de turno',
+                value: settings.autoPrintShiftClosing,
+                onChanged: (value) =>
+                    _save(settings.copyWith(autoPrintShiftClosing: value)),
+              ),
+              _switch(
+                title: 'Preguntar antes de imprimir',
+                value: settings.askBeforePrinting,
+                onChanged: (value) =>
+                    _save(settings.copyWith(askBeforePrinting: value)),
+              ),
+              SegmentedButton<int>(
+                segments: const [
+                  ButtonSegment(value: 58, label: Text('58 mm')),
+                  ButtonSegment(value: 80, label: Text('80 mm')),
+                ],
+                selected: {settings.paperWidthMm},
+                onSelectionChanged: (value) =>
+                    _save(settings.copyWith(paperWidthMm: value.first)),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _footer,
+                decoration: const InputDecoration(
+                  labelText: 'Mensaje final',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 2,
+                onSubmitted: (value) =>
+                    _save(settings.copyWith(footerMessage: value)),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      initialValue: settings.copies.toString(),
+                      decoration: const InputDecoration(
+                        labelText: 'Copias',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                      onFieldSubmitted: (value) => _save(
+                        settings.copyWith(
+                          copies: int.tryParse(value) ?? settings.copies,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: settings.encoding,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Encoding',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'latin1',
+                          child: Text('Latin-1'),
+                        ),
+                        DropdownMenuItem(value: 'cp437', child: Text('CP437')),
+                        DropdownMenuItem(value: 'utf8', child: Text('UTF-8')),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        _save(settings.copyWith(encoding: value));
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              _switch(
+                title: 'Cortar papel',
+                value: settings.cutPaper,
+                onChanged: (value) => _save(settings.copyWith(cutPaper: value)),
+              ),
+              _switch(
+                title: 'Abrir gaveta',
+                value: settings.openCashDrawer,
+                onChanged: (value) =>
+                    _save(settings.copyWith(openCashDrawer: value)),
+              ),
+            ],
+          ),
+          FilledButton.icon(
+            onPressed: _busy ? null : _testPrint,
+            icon: _busy
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.print_outlined),
+            label: const Text('Ticket de prueba'),
+          ),
+        ],
+      );
+    }
+
+    if (widget.embedded) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final content = Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: contentColumn(),
+          );
+          if (!constraints.hasBoundedHeight) return content;
+          return SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            child: content,
+          );
+        },
+      );
+    }
+
+    return SafeArea(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: EdgeInsets.fromLTRB(
+              12,
+              12,
+              12,
+              12 + MediaQuery.of(context).viewPadding.bottom,
+            ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: contentColumn(),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = ref.watch(mobilePrinterSettingsProvider);
+    final body = settings.when(
+      data: _content,
+      loading: () => const Center(child: Text('Sincronizando impresora...')),
+      error: (error, _) => Center(child: Text('No se pudo cargar: $error')),
+    );
+    if (widget.embedded) {
+      return Material(color: Colors.transparent, child: body);
+    }
+    return Scaffold(
+      backgroundColor: const Color(0xFFF6FAFD),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0B5CFF),
+        foregroundColor: Colors.white,
+        title: const Text('Printer Settings'),
+      ),
+      body: body,
     );
   }
 }

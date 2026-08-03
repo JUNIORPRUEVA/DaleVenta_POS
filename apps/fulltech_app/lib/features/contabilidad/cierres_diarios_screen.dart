@@ -12,6 +12,7 @@ import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/models/close_model.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
@@ -349,6 +350,9 @@ class _CierresDiariosScreenState extends ConsumerState<CierresDiariosScreen> {
     }
 
     return Scaffold(
+      backgroundColor: MediaQuery.sizeOf(context).width < 900
+          ? AppColors.background
+          : null,
       appBar: const CustomAppBar(
         title: 'Cierres diarios',
         showLogo: false,

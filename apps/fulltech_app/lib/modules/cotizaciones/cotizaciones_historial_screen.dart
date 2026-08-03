@@ -12,8 +12,10 @@ import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/routing/routes.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
+import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../clientes/cliente_model.dart';
 import '../clientes/data/clientes_repository.dart';
@@ -85,6 +87,7 @@ class _CotizacionesHistorialScreenState
   Set<String> _ownedClientIds = const {};
   Set<String> _ownedClientPhones = const {};
   bool _autoOpened = false;
+  bool _searchOpen = false;
   String _searchQuery = '';
   String? _selectedClientKey;
   String? _selectedQuoteTag;
@@ -1183,6 +1186,39 @@ class _CotizacionesHistorialScreenState
     });
   }
 
+  Widget _buildMobileAppBarSearchField() {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 260),
+        child: TextField(
+          controller: _searchCtrl,
+          autofocus: true,
+          style: const TextStyle(color: Color(0xFF111827)),
+          decoration: InputDecoration(
+            hintText: 'Buscar',
+            hintStyle: const TextStyle(color: Color(0xFF8A9AA8)),
+            filled: true,
+            fillColor: Colors.white,
+            isDense: true,
+            prefixIcon: const Icon(
+              Icons.search_rounded,
+              size: 18,
+              color: Color(0xFF52667C),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 9,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _openSummaryPanel() async {
     final visibleItems = _visibleItems;
     final totalAmount = visibleItems.fold<double>(
@@ -1491,8 +1527,7 @@ class _CotizacionesHistorialScreenState
   ) {
     final isMobile = MediaQuery.sizeOf(context).width < 860;
     final phone = (widget.customerPhone ?? '').trim();
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) {
+    if (_error != null && _items.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -1592,6 +1627,7 @@ class _CotizacionesHistorialScreenState
     final phone = (widget.customerPhone ?? '').trim();
     final visibleItems = _visibleItems;
     final isMobile = MediaQuery.of(context).size.width < 860;
+    final user = ref.watch(authStateProvider).user;
 
     if (!isMobile) {
       // ── Desktop: AppBar + Row(list | sidebar) ──────────────────────────
@@ -1625,7 +1661,7 @@ class _CotizacionesHistorialScreenState
                 child: Column(
                   children: [
                     _buildToolbar(context, isMobile: false),
-                    if (_refreshing)
+                    if (_refreshing || _loading)
                       const LinearProgressIndicator(minHeight: 2),
                     Expanded(child: _buildListContent(context, visibleItems)),
                   ],
@@ -1708,17 +1744,63 @@ class _CotizacionesHistorialScreenState
 
     // ── Mobile ────────────────────────────────────────────────────────────
     return Scaffold(
+      backgroundColor: AppColors.background,
+      drawer: buildAdaptiveDrawer(context, currentUser: user),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _openSummaryPanel,
+        tooltip: 'Resumen',
+        backgroundColor: AppColors.secondary,
+        foregroundColor: Colors.white,
+        child: const Icon(Icons.summarize_rounded),
+      ),
+      appBar: CustomAppBar(
+        title: phone.isEmpty ? 'Cotizaciones' : 'Cotizaciones',
+        titleWidget: _searchOpen ? _buildMobileAppBarSearchField() : null,
+        fallbackRoute: Routes.cotizaciones,
+        preferDrawerLeading: true,
+        showLogo: false,
+        showDepartmentLabel: false,
+        actions: [
+          IconButton(
+            tooltip: _searchOpen ? 'Cerrar búsqueda' : 'Buscar',
+            onPressed: () => setState(() {
+              _searchOpen = !_searchOpen;
+              if (!_searchOpen) {
+                _searchCtrl.clear();
+              }
+            }),
+            icon: Icon(
+              _searchOpen ? Icons.close_rounded : Icons.search_rounded,
+            ),
+          ),
+          if (!_searchOpen) ...[
+            IconButton(
+              tooltip: 'Filtros',
+              onPressed: _openFilters,
+              icon: Badge(
+                isLabelVisible: _activeFilterCount > 0,
+                smallSize: 8,
+                child: const Icon(Icons.filter_alt_outlined),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Actualizar',
+              onPressed: _refreshing ? null : _load,
+              icon: const Icon(Icons.refresh_rounded),
+            ),
+          ],
+        ],
+        trailing: const SizedBox.shrink(),
+      ),
       body: SafeArea(
-        top: true,
+        top: false,
         bottom: false,
         child: Column(
           children: [
-            _buildToolbar(context, isMobile: true),
-            if (_refreshing) const LinearProgressIndicator(minHeight: 2),
+            if (_refreshing || _loading)
+              const LinearProgressIndicator(minHeight: 2),
             Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _error != null
+              child: _error != null && _items.isEmpty
                   ? Center(
                       child: Padding(
                         padding: const EdgeInsets.all(16),

@@ -603,11 +603,12 @@ class _ClienteDetailScreenState extends ConsumerState<ClienteDetailScreen> {
       ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
       body: SafeArea(
         bottom: false,
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _error != null
-            ? Center(child: Text(_error!))
-            : RefreshIndicator(
+        child: Stack(
+          children: [
+            if (_error != null && _cliente == null)
+              Center(child: Text(_error!))
+            else
+              RefreshIndicator(
                 onRefresh: _load,
                 child: ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
@@ -731,6 +732,15 @@ class _ClienteDetailScreenState extends ConsumerState<ClienteDetailScreen> {
                   ],
                 ),
               ),
+            if (_loading)
+              const Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: LinearProgressIndicator(minHeight: 2),
+              ),
+          ],
+        ),
       ),
     );
   }

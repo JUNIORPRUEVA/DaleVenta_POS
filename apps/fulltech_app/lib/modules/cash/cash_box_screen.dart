@@ -17,7 +17,7 @@ import 'cash_turn_menu_button.dart';
 class CashBoxScreen extends ConsumerWidget {
   const CashBoxScreen({super.key});
 
-  static const _primary = Color(0xFF0E5261);
+  static const _primary = Color(0xFF1957E6);
   static const _accent = Color(0xFF1957E6);
   static const _surface = Color(0xFFF7FBFE);
   static const _line = Color(0xFFD4E3ED);
@@ -112,28 +112,65 @@ class CashBoxScreen extends ConsumerWidget {
     final session = ref.watch(activeCashSessionControllerProvider);
     final summary = ref.watch(cashSummaryProvider);
     final movements = ref.watch(cashMovementsProvider);
+    final isMobile = MediaQuery.sizeOf(context).width < 700;
 
     return Scaffold(
       backgroundColor: const Color(0xFFEFF6FA),
       drawer: buildAdaptiveDrawer(context, currentUser: user),
       appBar: FullTechPageHeader(
-        title: 'Caja',
-        actions: [
-          const CashTurnMenuButton(),
-          const SizedBox(width: 8),
-          TextButton.icon(
-            onPressed: () => context.go(Routes.cotizaciones),
-            icon: const Icon(Icons.point_of_sale_rounded),
-            label: const Text('Entrar al POS'),
-            style: TextButton.styleFrom(foregroundColor: _accent),
-          ),
-          const SizedBox(width: 10),
-        ],
+        title: isMobile ? 'Turno actual' : 'Caja',
+        trailing: isMobile ? const SizedBox.shrink() : null,
+        actions: isMobile
+            ? [
+                Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: TextButton.icon(
+                    onPressed: () => context.go(Routes.cajaTurnosHistorial),
+                    icon: const Icon(Icons.history_rounded, size: 18),
+                    label: const Text('Historial'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.white.withValues(alpha: 0.13),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 11,
+                        vertical: 8,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(9),
+                        side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.34),
+                        ),
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+              ]
+            : [
+                const CashTurnMenuButton(),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: () => context.go(Routes.cotizaciones),
+                  icon: const Icon(Icons.point_of_sale_rounded),
+                  label: const Text('Entrar al POS'),
+                  style: TextButton.styleFrom(foregroundColor: _accent),
+                ),
+                const SizedBox(width: 10),
+              ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: isMobile
+            ? const EdgeInsets.fromLTRB(0, 6, 0, 8)
+            : const EdgeInsets.all(18),
         child: session.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const _PanelMessage(
+            icon: Icons.point_of_sale_outlined,
+            title: 'Caja',
+            detail: 'Preparando datos del turno...',
+          ),
           error: (error, _) => _CashError(error: '$error'),
           data: (active) {
             if (active == null) {
@@ -150,11 +187,19 @@ class CashBoxScreen extends ConsumerWidget {
                 );
                 final movementsPanel = _MovementsPanel(movements: movements);
                 if (constraints.maxWidth < 980) {
+                  if (isMobile) {
+                    return activePanel;
+                  }
                   return ListView(
                     children: [
-                      SizedBox(height: 620, child: activePanel),
-                      const SizedBox(height: 14),
-                      SizedBox(height: 420, child: movementsPanel),
+                      SizedBox(
+                        height: isMobile ? 690 : 620,
+                        child: activePanel,
+                      ),
+                      if (!isMobile) ...[
+                        const SizedBox(height: 14),
+                        SizedBox(height: 420, child: movementsPanel),
+                      ],
                     ],
                   );
                 }
@@ -241,47 +286,75 @@ class _ActiveCashPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.sizeOf(context).width < 700;
     return _CashCard(
+      padding: isMobile
+          ? const EdgeInsets.symmetric(horizontal: 10, vertical: 8)
+          : const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              const _IconBox(icon: Icons.account_balance_wallet_outlined),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Turno activo',
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.w900),
-                    ),
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      children: [
-                        _CashChip(
-                          icon: Icons.person_outline_rounded,
-                          label: active.userName,
-                        ),
-                        _CashChip(
-                          icon: Icons.calendar_today_outlined,
-                          label: active.businessDate,
-                        ),
-                      ],
-                    ),
-                  ],
+          if (!isMobile)
+            Row(
+              children: [
+                const _IconBox(icon: Icons.account_balance_wallet_outlined),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Turno activo',
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          _CashChip(
+                            icon: Icons.person_outline_rounded,
+                            label: active.userName,
+                          ),
+                          _CashChip(
+                            icon: Icons.calendar_today_outlined,
+                            label: active.businessDate,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
+              ],
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _CashChip(
+                      icon: Icons.person_outline_rounded,
+                      label: active.userName,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _CashChip(
+                    icon: Icons.calendar_today_outlined,
+                    label: active.businessDate,
+                  ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 18),
+            ),
+          SizedBox(height: isMobile ? 8 : 18),
           Expanded(
             child: summary.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const _PanelMessage(
+                icon: Icons.summarize_outlined,
+                title: 'Corte actual',
+                detail: 'Sincronizando resumen del turno...',
+              ),
               error: (error, _) => _PanelMessage(
                 icon: Icons.info_outline_rounded,
                 title: 'No se pudo cargar el corte',
@@ -298,7 +371,7 @@ class _ActiveCashPanel extends StatelessWidget {
                 return ListView(
                   children: [
                     _HeroTotal(summary: data),
-                    const SizedBox(height: 14),
+                    SizedBox(height: isMobile ? 8 : 14),
                     Row(
                       children: [
                         Expanded(
@@ -310,7 +383,7 @@ class _ActiveCashPanel extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 10),
+                        SizedBox(width: isMobile ? 6 : 10),
                         Expanded(
                           child: _SmallTotal(
                             icon: Icons.payments_outlined,
@@ -320,7 +393,7 @@ class _ActiveCashPanel extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 10),
+                        SizedBox(width: isMobile ? 6 : 10),
                         Expanded(
                           child: _SmallTotal(
                             icon: Icons.confirmation_number_outlined,
@@ -330,7 +403,7 @@ class _ActiveCashPanel extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 14),
+                    SizedBox(height: isMobile ? 8 : 14),
                     _CompositionCard(summary: data),
                   ],
                 );
@@ -416,7 +489,11 @@ class _MovementsPanel extends ConsumerWidget {
           const Divider(color: CashBoxScreen._line),
           Expanded(
             child: movements.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const _PanelMessage(
+                icon: Icons.receipt_long_outlined,
+                title: 'Movimientos',
+                detail: 'Sincronizando movimientos...',
+              ),
               error: (error, _) => const _PanelMessage(
                 icon: Icons.info_outline_rounded,
                 title: 'Sin movimientos disponibles',
@@ -496,12 +573,13 @@ class _HeroTotal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.sizeOf(context).width < 700;
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(isMobile ? 14 : 18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: CashBoxScreen._line),
+        borderRadius: BorderRadius.circular(isMobile ? 8 : 14),
+        border: isMobile ? null : Border.all(color: CashBoxScreen._line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -556,12 +634,16 @@ class _SmallTotal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.sizeOf(context).width < 700;
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 9 : 14,
+        vertical: isMobile ? 11 : 14,
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: CashBoxScreen._line),
+        borderRadius: BorderRadius.circular(isMobile ? 8 : 12),
+        border: isMobile ? null : Border.all(color: CashBoxScreen._line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -594,12 +676,16 @@ class _CompositionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.sizeOf(context).width < 700;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 10 : 16,
+        vertical: isMobile ? 12 : 16,
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: CashBoxScreen._line),
+        borderRadius: BorderRadius.circular(isMobile ? 8 : 14),
+        border: isMobile ? null : Border.all(color: CashBoxScreen._line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -681,18 +767,21 @@ class _CashCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.sizeOf(context).width < 700;
     return Container(
       decoration: BoxDecoration(
         color: CashBoxScreen._surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: CashBoxScreen._line),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x110B3550),
-            blurRadius: 16,
-            offset: Offset(0, 8),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(isMobile ? 0 : 16),
+        border: isMobile ? null : Border.all(color: CashBoxScreen._line),
+        boxShadow: isMobile
+            ? null
+            : const [
+                BoxShadow(
+                  color: Color(0x110B3550),
+                  blurRadius: 16,
+                  offset: Offset(0, 8),
+                ),
+              ],
       ),
       child: Padding(padding: padding, child: child),
     );
@@ -719,12 +808,17 @@ class _CashChip extends StatelessWidget {
         children: [
           Icon(icon, size: 15, color: CashBoxScreen._accent),
           const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF43566B),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 190),
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF43566B),
+              ),
             ),
           ),
         ],

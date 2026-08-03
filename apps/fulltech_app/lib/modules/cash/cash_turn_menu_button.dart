@@ -99,21 +99,27 @@ class CashTurnMenuButton extends ConsumerWidget {
 
   Future<void> _showCurrentTurn(BuildContext context, WidgetRef ref) async {
     final summary = await ref.read(cashRepositoryProvider).summary();
-    final movements = await ref.read(cashRepositoryProvider).movements();
     if (!context.mounted) return;
     final action = await showDialog<String>(
       context: context,
       builder: (dialogContext) => _CurrentTurnDialog(
         active: ref.read(activeCashSessionControllerProvider).valueOrNull,
         summary: summary,
-        movements: movements,
         onCloseTurn: () {
           Navigator.of(dialogContext).pop('close');
         },
+        onOpenHistory: () {
+          Navigator.of(dialogContext).pop('history');
+        },
       ),
     );
-    if (!context.mounted || action != 'close') return;
-    _runAfterNavigatorSettles(context, () => _closeCash(context, ref));
+
+    if (!context.mounted) return;
+    if (action == 'close') {
+      _runAfterNavigatorSettles(context, () => _closeCash(context, ref));
+    } else if (action == 'history') {
+      _runAfterNavigatorSettles(context, () => _showHistory(context, ref));
+    }
   }
 
   Future<void> _showHistory(BuildContext context, WidgetRef ref) async {
@@ -156,7 +162,7 @@ class CashTurnMenuButton extends ConsumerWidget {
     final active = session.valueOrNull;
 
     return PopupMenuButton<String>(
-      tooltip: 'Turno',
+      tooltip: 'Turno actual',
       offset: const Offset(0, 44),
       color: Colors.white,
       elevation: 8,
@@ -327,7 +333,7 @@ class _TurnTopbarButtonState extends State<_TurnTopbarButton> {
                 if (!widget.compact) ...[
                   const SizedBox(width: 8),
                   Text(
-                    'Turno',
+                    'Turno actual',
                     style: TextStyle(
                       color: active
                           ? const Color(0xFF1957E6)
@@ -504,205 +510,193 @@ class _CurrentTurnDialog extends StatelessWidget {
   const _CurrentTurnDialog({
     required this.active,
     required this.summary,
-    required this.movements,
     required this.onCloseTurn,
+    required this.onOpenHistory,
   });
 
   final ActiveCashSession? active;
   final CashSummaryModel summary;
-  final List<CashMovementModel> movements;
   final VoidCallback onCloseTurn;
+  final VoidCallback onOpenHistory;
 
   @override
   Widget build(BuildContext context) {
     final openedAt = active?.openedAt.toLocal();
     final activeDuration = openedAt == null
-        ? 'Turno activo'
+        ? 'Turno actual'
         : _formatDuration(DateTime.now().difference(openedAt));
     final dateText = openedAt == null
         ? active?.businessDate ?? ''
         : DateFormat('dd/MM HH:mm', 'es_DO').format(openedAt);
 
     final media = MediaQuery.sizeOf(context);
-    final panelWidth = media.width < 720 ? media.width : 620.0;
+    final isPhone = media.width < 520;
+    final panelWidth = media.width < 720 ? media.width : 560.0;
 
     return Dialog(
       alignment: Alignment.centerRight,
       insetPadding: EdgeInsets.zero,
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: const Color(0xFFEFF6FA),
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       child: SizedBox(
         width: panelWidth,
         height: media.height,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEAF1FF),
-                      borderRadius: BorderRadius.circular(7),
-                      border: Border.all(color: const Color(0xFFDDEAFF)),
-                    ),
-                    child: const Icon(
-                      Icons.account_balance_wallet_outlined,
-                      color: Color(0xFF1957E6),
-                      size: 21,
+        child: Stack(
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Material(
+                  color: const Color(0xFF1957E6),
+                  child: SafeArea(
+                    bottom: false,
+                    child: SizedBox(
+                      height: 56,
+                      child: Row(
+                        children: [
+                          IconButton(
+                            tooltip: 'Regresar',
+                            onPressed: () => Navigator.pop(context),
+                            color: Colors.white,
+                            icon: const Icon(Icons.arrow_back_rounded),
+                          ),
+                          const Expanded(
+                            child: Text(
+                              'Turno actual',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.only(right: 12),
+                            child: CircleAvatar(
+                              radius: 16,
+                              backgroundColor: Color(0xFFEAF1FF),
+                              child: Icon(
+                                Icons.account_balance_wallet_outlined,
+                                size: 17,
+                                color: Color(0xFF1957E6),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Corte actual',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
+                ),
+                Container(
+                  height: 32,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  color: const Color(0xFFDDEAFF),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${active?.userName ?? 'Usuario'} · $activeDuration',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
                             color: Color(0xFF0F172A),
-                            letterSpacing: 0,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
-                        Text(
-                          'Resumen del turno activo',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: const Color(0xFF52667C)),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        dateText,
+                        style: const TextStyle(
+                          color: Color(0xFF52667C),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.fromLTRB(
+                      isPhone ? 12 : 18,
+                      12,
+                      isPhone ? 12 : 18,
+                      88,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _TurnHero(summary: summary, compact: isPhone),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _MiniTurnCard(
+                                icon: Icons.radio_button_checked_rounded,
+                                value: formatRdCurrencyAccounting(
+                                  summary.openingAmount,
+                                ),
+                                label: 'Fondo',
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _MiniTurnCard(
+                                icon: Icons.account_balance_wallet_outlined,
+                                value: formatRdCurrencyAccounting(
+                                  summary.expectedCash,
+                                ),
+                                label: 'Esperado',
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _MiniTurnCard(
+                                icon: Icons.receipt_long_outlined,
+                                value: summary.totalTickets.toString(),
+                                label: 'Tickets',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        _TurnComposition(summary: summary, compact: isPhone),
+                        const SizedBox(height: 10),
+                        FilledButton.icon(
+                          onPressed: onCloseTurn,
+                          icon: const Icon(Icons.lock_rounded),
+                          label: const Text('Cerrar turno'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF1957E6),
+                            minimumSize: const Size.fromHeight(48),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _TurnChip(
-                    icon: Icons.person_outline_rounded,
-                    label: active?.userName ?? 'Usuario',
-                  ),
-                  _TurnChip(
-                    icon: Icons.schedule_rounded,
-                    label: activeDuration,
-                  ),
-                  if (dateText.trim().isNotEmpty)
-                    _TurnChip(
-                      icon: Icons.calendar_today_outlined,
-                      label: dateText,
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              _TurnHero(summary: summary),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _MiniTurnCard(
-                      icon: Icons.radio_button_checked_rounded,
-                      value: formatRdCurrencyAccounting(summary.openingAmount),
-                      label: 'Base inicial',
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _MiniTurnCard(
-                      icon: Icons.account_balance_wallet_outlined,
-                      value: formatRdCurrencyAccounting(summary.expectedCash),
-                      label: 'Efectivo esperado',
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _MiniTurnCard(
-                      icon: Icons.receipt_long_outlined,
-                      value: summary.totalTickets.toString(),
-                      label: 'Tickets',
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              _CloseTurnCard(onCloseTurn: onCloseTurn),
-              const SizedBox(height: 12),
-              _TurnComposition(summary: summary),
-              const SizedBox(height: 12),
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFDDE7EE)),
-                  ),
-                  child: movements.isEmpty
-                      ? const _EmptyMovements()
-                      : ListView.separated(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          itemCount: movements.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final item = movements[index];
-                            return ListTile(
-                              dense: true,
-                              leading: Container(
-                                width: 30,
-                                height: 30,
-                                decoration: BoxDecoration(
-                                  color: item.isIn
-                                      ? const Color(0xFFF1FAF5)
-                                      : const Color(0xFFFFF5F5),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: item.isIn
-                                        ? const Color(0xFFD8F3E2)
-                                        : const Color(0xFFFFDEDE),
-                                  ),
-                                ),
-                                child: Icon(
-                                  item.isIn
-                                      ? Icons.add_circle_outline_rounded
-                                      : Icons.remove_circle_outline_rounded,
-                                  color: item.isIn
-                                      ? const Color(0xFF16A34A)
-                                      : const Color(0xFFDC2626),
-                                  size: 18,
-                                ),
-                              ),
-                              title: Text(
-                                item.reason.isEmpty ? item.type : item.reason,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              subtitle: Text(item.movementType),
-                              trailing: Text(
-                                formatRdCurrencyAccounting(item.amount),
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  color: item.isIn
-                                      ? const Color(0xFF16A34A)
-                                      : const Color(0xFFDC2626),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
                 ),
+              ],
+            ),
+            Positioned(
+              right: 14,
+              bottom: 14 + MediaQuery.viewPaddingOf(context).bottom,
+              child: FloatingActionButton(
+                heroTag: 'current_turn_history',
+                tooltip: 'Historial de turnos',
+                onPressed: onOpenHistory,
+                backgroundColor: const Color(0xFF1957E6),
+                foregroundColor: Colors.white,
+                child: const Icon(Icons.history_rounded),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -714,41 +708,6 @@ class _CurrentTurnDialog extends StatelessWidget {
     final minutes = duration.inMinutes.remainder(60);
     if (hours <= 0) return '${minutes}m activos';
     return '${hours}h ${minutes}m activos';
-  }
-}
-
-class _TurnChip extends StatelessWidget {
-  const _TurnChip({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: const Color(0xFFDDE7EE)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: const Color(0xFF1957E6)),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFF475569),
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -766,11 +725,17 @@ class _MiniTurnCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFDDE7EE)),
+        borderRadius: BorderRadius.circular(7),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.035),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -783,6 +748,7 @@ class _MiniTurnCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: Color(0xFF0F172A),
+              fontSize: 13,
               fontWeight: FontWeight.w900,
               letterSpacing: 0,
             ),
@@ -800,144 +766,26 @@ class _MiniTurnCard extends StatelessWidget {
   }
 }
 
-class _CloseTurnCard extends StatelessWidget {
-  const _CloseTurnCard({required this.onCloseTurn});
+class _TurnHero extends StatelessWidget {
+  const _TurnHero({required this.summary, required this.compact});
 
-  final VoidCallback onCloseTurn;
+  final CashSummaryModel summary;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(compact ? 14 : 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFDDE7EE)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Cierre del turno',
-                      style: TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                    SizedBox(height: 3),
-                    Text(
-                      'Resumen y movimientos en una misma vista.',
-                      style: TextStyle(fontSize: 12, color: Color(0xFF52667C)),
-                    ),
-                  ],
-                ),
-              ),
-              OutlinedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.visibility_outlined, size: 16),
-                label: const Text('Solo vista'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF1957E6),
-                  side: const BorderSide(color: Color(0xFF9DB9F8)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.receipt_long_outlined),
-                  label: const Text('Ver corte actual'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF1957E6),
-                    side: const BorderSide(color: Color(0xFF9DB9F8)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: onCloseTurn,
-                  icon: const Icon(Icons.lock_rounded),
-                  label: const Text('Cerrar turno'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF1957E6),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _EmptyMovements extends StatelessWidget {
-  const _EmptyMovements();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(
-              Icons.inventory_2_outlined,
-              color: Color(0xFF64748B),
-            ),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'No hay movimientos manuales',
-            style: TextStyle(fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Cuando se registren entradas o retiros, aparecerán aquí.',
-            style: TextStyle(color: Color(0xFF52667C), fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TurnHero extends StatelessWidget {
-  const _TurnHero({required this.summary});
-
-  final CashSummaryModel summary;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FBFF),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFDDE7EE)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -949,7 +797,10 @@ class _TurnHero extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             formatRdCurrencyAccounting(summary.totalSales),
-            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900),
+            style: TextStyle(
+              fontSize: compact ? 27 : 30,
+              fontWeight: FontWeight.w900,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
@@ -966,68 +817,61 @@ class _TurnHero extends StatelessWidget {
 }
 
 class _TurnComposition extends StatelessWidget {
-  const _TurnComposition({required this.summary});
+  const _TurnComposition({required this.summary, required this.compact});
 
   final CashSummaryModel summary;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 12 : 14,
+        vertical: compact ? 12 : 14,
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFDDE7EE)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.035),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Composición del corte',
-                      style: TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                    SizedBox(height: 3),
-                    Text(
-                      'Total vendido incluye todos los métodos; efectivo esperado es solo gaveta.',
-                      style: TextStyle(color: Color(0xFF52667C), fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(7),
-                ),
-                child: const Text(
-                  '6',
-                  style: TextStyle(
-                    color: Color(0xFF64748B),
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ],
+          const Text(
+            'Detalle del cierre',
+            style: TextStyle(fontWeight: FontWeight.w900),
           ),
-          const SizedBox(height: 12),
+          if (!compact) ...[
+            const SizedBox(height: 3),
+            const Text(
+              'Ventas, fondo, entradas y salidas del turno activo.',
+              style: TextStyle(color: Color(0xFF52667C), fontSize: 12),
+            ),
+          ],
+          const SizedBox(height: 10),
+          _Line(
+            'Fondo de caja',
+            summary.openingAmount,
+            icon: Icons.savings_outlined,
+            color: Color(0xFF1957E6),
+          ),
+          _Line(
+            'Total vendido',
+            summary.totalSales,
+            icon: Icons.point_of_sale_rounded,
+            color: Color(0xFF1957E6),
+          ),
           _Line(
             'Ventas efectivo',
             summary.salesCashTotal,
             icon: Icons.payments_outlined,
             color: Color(0xFF16A34A),
-          ),
-          _Line(
-            'Ventas tarjeta',
-            0,
-            icon: Icons.credit_card_rounded,
-            color: Color(0xFF1957E6),
           ),
           _Line(
             'Transferencias',
@@ -1049,28 +893,34 @@ class _TurnComposition extends StatelessWidget {
               color: Color(0xFFB45309),
             ),
           _Line(
-            'Entradas manuales',
+            'Entradas de dinero',
             summary.cashInManual,
             icon: Icons.add_circle_outline_rounded,
             color: Color(0xFF16A34A),
           ),
           _Line(
-            'Salidas de caja',
+            'Salidas de dinero',
             summary.cashOutManual,
             negative: true,
             icon: Icons.remove_circle_outline_rounded,
             color: Color(0xFFDC2626),
+          ),
+          _Line(
+            'Efectivo esperado',
+            summary.expectedCash,
+            icon: Icons.account_balance_wallet_outlined,
+            color: Color(0xFF1957E6),
           ),
           if (summary.categorySummary.isNotEmpty) ...[
             const SizedBox(height: 8),
             const Divider(height: 1, color: Color(0xFFE2E8F0)),
             const SizedBox(height: 8),
             const Text(
-              'Ventas y ganancia por categoría',
+              'Categorías',
               style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
             ),
             const SizedBox(height: 6),
-            for (final item in summary.categorySummary.take(5))
+            for (final item in summary.categorySummary.take(compact ? 3 : 5))
               _CategoryLine(item: item),
           ],
         ],
@@ -1253,7 +1103,10 @@ class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.sizeOf(context);
-    final panelWidth = (media.width * 0.38).clamp(520.0, 660.0).toDouble();
+    final isPhone = media.width < 620;
+    final panelWidth = isPhone
+        ? media.width
+        : (media.width * 0.38).clamp(520.0, 660.0).toDouble();
     final rows = _filteredRows;
 
     return Dialog(
@@ -1276,7 +1129,12 @@ class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
                   onClose: () => Navigator.pop(context),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+                  padding: EdgeInsets.fromLTRB(
+                    isPhone ? 10 : 14,
+                    10,
+                    isPhone ? 10 : 14,
+                    8,
+                  ),
                   child: Column(
                     children: [
                       Row(
@@ -1327,16 +1185,17 @@ class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          SizedBox(
-                            width: 132,
-                            child: _HistoryFilterDropdown(
-                              label: 'Cajero',
-                              value: _selectedCashier,
-                              values: _cashiers,
-                              onChanged: (value) =>
-                                  setState(() => _selectedCashier = value),
+                          if (!isPhone)
+                            SizedBox(
+                              width: 132,
+                              child: _HistoryFilterDropdown(
+                                label: 'Cajero',
+                                value: _selectedCashier,
+                                values: _cashiers,
+                                onChanged: (value) =>
+                                    setState(() => _selectedCashier = value),
+                              ),
                             ),
-                          ),
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -1344,7 +1203,7 @@ class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
                         children: [
                           Expanded(
                             child: _HistoryFilterDropdown(
-                              label: 'Turno',
+                              label: 'Día',
                               value: _selectedBusinessDate,
                               values: _dates,
                               onChanged: (value) =>
@@ -1352,17 +1211,19 @@ class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          SizedBox(
-                            width: 142,
-                            child: _HistoryFilterDropdown(
-                              label: 'Estado',
-                              value: _selectedStatus,
-                              values: _statuses,
-                              onChanged: (value) =>
-                                  setState(() => _selectedStatus = value),
+                          if (!isPhone) ...[
+                            SizedBox(
+                              width: 142,
+                              child: _HistoryFilterDropdown(
+                                label: 'Estado',
+                                value: _selectedStatus,
+                                values: _statuses,
+                                onChanged: (value) =>
+                                    setState(() => _selectedStatus = value),
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
+                            const SizedBox(width: 8),
+                          ],
                           SizedBox(
                             width: 46,
                             height: 42,
@@ -1389,6 +1250,32 @@ class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
                           ),
                         ],
                       ),
+                      if (isPhone) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _HistoryFilterDropdown(
+                                label: 'Cajero',
+                                value: _selectedCashier,
+                                values: _cashiers,
+                                onChanged: (value) =>
+                                    setState(() => _selectedCashier = value),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _HistoryFilterDropdown(
+                                label: 'Estado',
+                                value: _selectedStatus,
+                                values: _statuses,
+                                onChanged: (value) =>
+                                    setState(() => _selectedStatus = value),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -1397,7 +1284,12 @@ class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
                   child: rows.isEmpty
                       ? const _HistoryEmptyState()
                       : ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(14, 12, 14, 18),
+                          padding: EdgeInsets.fromLTRB(
+                            isPhone ? 10 : 14,
+                            12,
+                            isPhone ? 10 : 14,
+                            18,
+                          ),
                           itemCount: rows.length,
                           separatorBuilder: (_, __) =>
                               const SizedBox(height: 8),
@@ -1455,7 +1347,7 @@ class _HistoryPanelHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Historial de turnos',
+                  'Historial',
                   style: TextStyle(
                     color: Color(0xFF0F172A),
                     fontSize: 18,

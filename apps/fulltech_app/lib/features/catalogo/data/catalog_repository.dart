@@ -3,17 +3,88 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
+import '../../../core/cache/local_json_cache.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/models/product_model.dart';
+import '../../../core/offline/sync_queue_service.dart';
 import '../../../core/utils/file_utils.dart';
 
 final catalogRepositoryProvider = Provider<CatalogRepository>((ref) {
-  return CatalogRepository(ref.watch(dioProvider));
+  final repository = CatalogRepository(
+    ref.watch(dioProvider),
+    ref.read(syncQueueServiceProvider.notifier),
+  );
+  repository.registerSyncHandlers();
+  return repository;
 });
 
 class CatalogRepository {
   final Dio _dio;
-  CatalogRepository(this._dio);
+  final SyncQueueService? _syncQueue;
+  final LocalJsonCache _cache = LocalJsonCache();
+
+  static const String _createSyncType = 'catalog.products.create';
+  static const String _updateSyncType = 'catalog.products.update';
+  static const String _deleteSyncType = 'catalog.products.delete';
+  static const String _productsCacheKey = 'catalog.products.snapshot';
+  static const Duration _cacheTtl = Duration(days: 7);
+
+  bool _handlersRegistered = false;
+
+  CatalogRepository(this._dio, [this._syncQueue]);
+
+  void registerSyncHandlers() {
+    final syncQueue = _syncQueue;
+    if (syncQueue == null) return;
+    if (_handlersRegistered) return;
+    _handlersRegistered = true;
+
+    syncQueue.registerHandler(_createSyncType, (payload) async {
+      await _createProductRemote(
+        nombre: (payload['nombre'] ?? '').toString(),
+        codigo: payload['codigo']?.toString(),
+        precio: _asDouble(payload['precio']),
+        costo: _asDouble(payload['costo']),
+        stock: _asDouble(payload['stock']),
+        fotoUrl: payload['fotoUrl']?.toString(),
+        categoria: (payload['categoria'] ?? '').toString(),
+        operationId: payload['operationId']?.toString(),
+        skipLoader: true,
+      );
+    });
+
+    syncQueue.registerHandler(_updateSyncType, (payload) async {
+      await _updateProductRemote(
+        id: (payload['id'] ?? '').toString(),
+        nombre: (payload['nombre'] ?? '').toString(),
+        codigo: payload['codigo']?.toString(),
+        precio: _asDouble(payload['precio']),
+        costo: _asDouble(payload['costo']),
+        stock: _asDouble(payload['stock']),
+        fotoUrl: payload['fotoUrl']?.toString(),
+        categoria: payload['categoria']?.toString(),
+        operationId: payload['operationId']?.toString(),
+        skipLoader: true,
+      );
+    });
+
+    syncQueue.registerHandler(_deleteSyncType, (payload) async {
+      await _deleteProductRemote(
+        (payload['id'] ?? '').toString(),
+        skipLoader: true,
+      );
+    });
+  }
+
+  double _asDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse((value ?? '').toString().replaceAll(',', '.')) ?? 0;
+  }
+
+  bool _shouldQueueSync(ApiException error) {
+    final code = error.code;
+    return code == null || code >= 500;
+  }
 
   List<dynamic> _extractRows(dynamic data) {
     if (data is List) return data;
@@ -71,11 +142,15 @@ class CatalogRepository {
         ),
       );
       final rows = _extractRows(res.data);
-      return rows
+      final products = rows
           .whereType<Map>()
           .map((row) => ProductModel.fromJson(Map<String, dynamic>.from(row)))
           .toList();
+      await saveProductsSnapshot(products);
+      return products;
     } on DioException catch (e) {
+      final cached = await getCachedProducts();
+      if (cached.isNotEmpty) return cached;
       throw ApiException(
         _formatDioError(e, 'No se pudieron cargar los productos'),
         e.response?.statusCode,
@@ -83,6 +158,22 @@ class CatalogRepository {
     } catch (e) {
       throw ApiException('No se pudieron cargar los productos: $e');
     }
+  }
+
+  Future<List<ProductModel>> getCachedProducts() async {
+    final cached = await _cache.readMap(_productsCacheKey, maxAge: _cacheTtl);
+    final rows = cached?['items'];
+    if (rows is! List) return const [];
+    return rows
+        .whereType<Map>()
+        .map((row) => ProductModel.fromJson(row.cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+
+  Future<void> saveProductsSnapshot(List<ProductModel> items) {
+    return _cache.writeMap(_productsCacheKey, {
+      'items': items.map((item) => item.toJson()).toList(growable: false),
+    });
   }
 
   Future<String> uploadImage({
@@ -97,7 +188,11 @@ class CatalogRepository {
           contentType: detectImageMime(filename),
         ),
       });
-      final res = await _dio.post(ApiRoutes.productsUpload, data: formData);
+      final res = await _dio.post(
+        ApiRoutes.productsUpload,
+        data: formData,
+        options: Options(extra: const {'skipLoader': true}),
+      );
       final data = res.data;
       if (data is Map && data['key'] is String) {
         return data['key'] as String;
@@ -129,32 +224,88 @@ class CatalogRepository {
     String? fotoUrl,
     required String categoria,
     String? operationId,
+    bool skipLoader = false,
   }) async {
+    final payload = _productPayload(
+      nombre: nombre,
+      codigo: codigo,
+      precio: precio,
+      costo: costo,
+      stock: stock,
+      fotoUrl: fotoUrl,
+      categoria: categoria,
+      operationId: operationId,
+    );
     try {
-      final res = await _dio.post(
-        ApiRoutes.products,
-        data: {
-          'nombre': nombre,
-          'codigo': codigo?.trim().isEmpty == true ? null : codigo?.trim(),
-          'code': codigo?.trim().isEmpty == true ? null : codigo?.trim(),
-          'sku': codigo?.trim().isEmpty == true ? null : codigo?.trim(),
-          'barcode': codigo?.trim().isEmpty == true ? null : codigo?.trim(),
-          'precio': precio,
-          'costo': costo,
-          'stock': stock,
-          if ((operationId ?? '').trim().isNotEmpty)
-            'operationId': operationId!.trim(),
-          if ((fotoUrl ?? '').trim().isNotEmpty) 'fotoUrl': fotoUrl!.trim(),
-          'categoria': categoria,
-        },
+      return await _createProductRemote(
+        nombre: nombre,
+        codigo: codigo,
+        precio: precio,
+        costo: costo,
+        stock: stock,
+        fotoUrl: fotoUrl,
+        categoria: categoria,
+        operationId: operationId,
+        skipLoader: skipLoader,
       );
-      return ProductModel.fromJson((res.data as Map).cast<String, dynamic>());
     } on DioException catch (e) {
-      throw ApiException(
+      final error = ApiException(
         _extractMessage(e.response?.data, 'No se pudo crear el producto'),
         e.response?.statusCode,
       );
+      if (!_shouldQueueSync(error) || _syncQueue == null) throw error;
+      final queueId =
+          '$_createSyncType:${operationId ?? DateTime.now().microsecondsSinceEpoch}';
+      await _syncQueue.enqueue(
+        id: queueId,
+        type: _createSyncType,
+        scope: 'catalog',
+        payload: payload,
+      );
+      return ProductModel(
+        id: 'local_product_${DateTime.now().microsecondsSinceEpoch}',
+        nombre: nombre,
+        codigo: codigo?.trim().isEmpty == true ? null : codigo?.trim(),
+        precio: precio,
+        costo: costo,
+        stock: stock,
+        fotoUrl: fotoUrl?.trim().isEmpty == true ? null : fotoUrl?.trim(),
+        originalFotoUrl: fotoUrl?.trim().isEmpty == true
+            ? null
+            : fotoUrl?.trim(),
+        categoria: categoria,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
     }
+  }
+
+  Future<ProductModel> _createProductRemote({
+    required String nombre,
+    String? codigo,
+    required double precio,
+    required double costo,
+    required double stock,
+    String? fotoUrl,
+    required String categoria,
+    String? operationId,
+    bool skipLoader = false,
+  }) async {
+    final res = await _dio.post(
+      ApiRoutes.products,
+      options: skipLoader ? Options(extra: const {'skipLoader': true}) : null,
+      data: _productPayload(
+        nombre: nombre,
+        codigo: codigo,
+        precio: precio,
+        costo: costo,
+        stock: stock,
+        fotoUrl: fotoUrl,
+        categoria: categoria,
+        operationId: operationId,
+      ),
+    );
+    return ProductModel.fromJson((res.data as Map).cast<String, dynamic>());
   }
 
   Future<ProductModel> updateProduct({
@@ -167,43 +318,143 @@ class CatalogRepository {
     String? fotoUrl,
     String? categoria,
     String? operationId,
+    bool skipLoader = false,
   }) async {
+    final payload = _productPayload(
+      id: id,
+      nombre: nombre,
+      codigo: codigo,
+      precio: precio,
+      costo: costo,
+      stock: stock,
+      fotoUrl: fotoUrl,
+      categoria: categoria,
+      operationId: operationId,
+    );
     try {
-      final res = await _dio.patch(
-        ApiRoutes.updateProduct(id),
-        data: {
-          'nombre': nombre,
-          'codigo': codigo?.trim().isEmpty == true ? null : codigo?.trim(),
-          'code': codigo?.trim().isEmpty == true ? null : codigo?.trim(),
-          'sku': codigo?.trim().isEmpty == true ? null : codigo?.trim(),
-          'barcode': codigo?.trim().isEmpty == true ? null : codigo?.trim(),
-          'precio': precio,
-          'costo': costo,
-          'stock': stock,
-          if ((operationId ?? '').trim().isNotEmpty)
-            'operationId': operationId!.trim(),
-          if ((fotoUrl ?? '').trim().isNotEmpty) 'fotoUrl': fotoUrl!.trim(),
-          'categoria': categoria,
-        },
+      return await _updateProductRemote(
+        id: id,
+        nombre: nombre,
+        codigo: codigo,
+        precio: precio,
+        costo: costo,
+        stock: stock,
+        fotoUrl: fotoUrl,
+        categoria: categoria,
+        operationId: operationId,
+        skipLoader: skipLoader,
       );
-      return ProductModel.fromJson((res.data as Map).cast<String, dynamic>());
     } on DioException catch (e) {
-      throw ApiException(
+      final error = ApiException(
         _extractMessage(e.response?.data, 'No se pudo actualizar el producto'),
         e.response?.statusCode,
+      );
+      if (!_shouldQueueSync(error) || _syncQueue == null) throw error;
+      await _syncQueue.enqueue(
+        id: '$_updateSyncType:$id',
+        type: _updateSyncType,
+        scope: 'catalog',
+        payload: payload,
+      );
+      return ProductModel(
+        id: id,
+        nombre: nombre,
+        codigo: codigo?.trim().isEmpty == true ? null : codigo?.trim(),
+        precio: precio,
+        costo: costo,
+        stock: stock,
+        fotoUrl: fotoUrl?.trim().isEmpty == true ? null : fotoUrl?.trim(),
+        originalFotoUrl: fotoUrl?.trim().isEmpty == true
+            ? null
+            : fotoUrl?.trim(),
+        categoria: categoria,
+        updatedAt: DateTime.now(),
       );
     }
   }
 
-  Future<void> deleteProduct(String id) async {
+  Future<ProductModel> _updateProductRemote({
+    required String id,
+    required String nombre,
+    String? codigo,
+    required double precio,
+    required double costo,
+    required double stock,
+    String? fotoUrl,
+    String? categoria,
+    String? operationId,
+    bool skipLoader = false,
+  }) async {
+    final res = await _dio.patch(
+      ApiRoutes.updateProduct(id),
+      options: skipLoader ? Options(extra: const {'skipLoader': true}) : null,
+      data: _productPayload(
+        nombre: nombre,
+        codigo: codigo,
+        precio: precio,
+        costo: costo,
+        stock: stock,
+        fotoUrl: fotoUrl,
+        categoria: categoria,
+        operationId: operationId,
+      ),
+    );
+    return ProductModel.fromJson((res.data as Map).cast<String, dynamic>());
+  }
+
+  Future<void> deleteProduct(String id, {bool skipLoader = false}) async {
     try {
-      await _dio.delete(ApiRoutes.deleteProduct(id));
+      await _deleteProductRemote(id, skipLoader: skipLoader);
     } on DioException catch (e) {
-      throw ApiException(
+      final error = ApiException(
         _extractMessage(e.response?.data, 'No se pudo eliminar el producto'),
         e.response?.statusCode,
       );
+      if (!_shouldQueueSync(error) || _syncQueue == null) throw error;
+      await _syncQueue.enqueue(
+        id: '$_deleteSyncType:$id',
+        type: _deleteSyncType,
+        scope: 'catalog',
+        payload: {'id': id},
+      );
     }
+  }
+
+  Future<void> _deleteProductRemote(String id, {bool skipLoader = false}) {
+    return _dio.delete(
+      ApiRoutes.deleteProduct(id),
+      options: skipLoader ? Options(extra: const {'skipLoader': true}) : null,
+    );
+  }
+
+  Map<String, dynamic> _productPayload({
+    String? id,
+    required String nombre,
+    String? codigo,
+    required double precio,
+    required double costo,
+    required double stock,
+    String? fotoUrl,
+    String? categoria,
+    String? operationId,
+  }) {
+    final cleanCode = codigo?.trim();
+    final safeCode = cleanCode?.isEmpty == true ? null : cleanCode;
+    return {
+      if ((id ?? '').trim().isNotEmpty) 'id': id!.trim(),
+      'nombre': nombre,
+      'codigo': safeCode,
+      'code': safeCode,
+      'sku': safeCode,
+      'barcode': safeCode,
+      'precio': precio,
+      'costo': costo,
+      'stock': stock,
+      if ((operationId ?? '').trim().isNotEmpty)
+        'operationId': operationId!.trim(),
+      if ((fotoUrl ?? '').trim().isNotEmpty) 'fotoUrl': fotoUrl!.trim(),
+      'categoria': categoria,
+    };
   }
 
   Future<Map<String, dynamic>> purgeAllDebug() async {

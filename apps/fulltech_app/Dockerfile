@@ -20,7 +20,7 @@ RUN git config --global --add safe.directory /sdks/flutter
 RUN flutter --version \
   && flutter config --enable-web \
   && flutter pub get \
-  && flutter build web --release --no-wasm-dry-run
+  && flutter build web --release --no-wasm-dry-run --no-source-maps --optimization-level=4
 
 FROM nginx:alpine
 

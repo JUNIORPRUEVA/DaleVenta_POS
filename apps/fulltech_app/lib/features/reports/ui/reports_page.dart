@@ -415,11 +415,8 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                   onDownloadPdf: _downloadPdf,
                 ),
                 const SizedBox(height: 12),
-                if (_loading)
-                  const Expanded(
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else if (_error != null)
+                if (_loading) const LinearProgressIndicator(minHeight: 2),
+                if (_error != null)
                   Expanded(child: Center(child: Text(_error!)))
                 else
                   Expanded(

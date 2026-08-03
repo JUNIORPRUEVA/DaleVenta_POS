@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:daleventa_pos/core/errors/api_exception.dart';
 import 'package:daleventa_pos/core/models/product_model.dart';
 import 'package:daleventa_pos/features/catalogo/application/catalog_controller.dart';
 import 'package:daleventa_pos/features/catalogo/data/catalog_repository.dart';
@@ -11,6 +14,8 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
   List<ProductModel> products;
   int creates = 0;
   int updates = 0;
+  int deletes = 0;
+  bool failDelete = false;
 
   @override
   Future<List<ProductModel>> fetchProducts({
@@ -30,6 +35,7 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
     String? fotoUrl,
     required String categoria,
     String? operationId,
+    bool skipLoader = false,
   }) async {
     creates += 1;
     final product = ProductModel(
@@ -57,6 +63,7 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
     String? fotoUrl,
     String? categoria,
     String? operationId,
+    bool skipLoader = false,
   }) async {
     updates += 1;
     final product = ProductModel(
@@ -74,6 +81,18 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
         if (item.id == id) product else item,
     ];
     return product;
+  }
+
+  @override
+  Future<void> deleteProduct(String id, {bool skipLoader = false}) async {
+    deletes += 1;
+    if (failDelete) {
+      throw ApiException('No se pudo eliminar el producto');
+    }
+    products = [
+      for (final item in products)
+        if (item.id != id) item,
+    ];
   }
 }
 
@@ -176,4 +195,58 @@ void main() {
       expect(repo.updates, 0);
     },
   );
+
+  test('eliminación optimista quita producto al instante', () async {
+    final repo = _ImportFakeCatalogRepository([
+      ProductModel(
+        id: 'p-1',
+        nombre: 'Mouse USB',
+        precio: 250,
+        costo: 100,
+        stock: 3,
+        categoria: 'COMPUTADORAS Y POS',
+      ),
+    ]);
+    final container = ProviderContainer(
+      overrides: [catalogRepositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+
+    final controller = container.read(catalogControllerProvider.notifier);
+    await controller.load();
+
+    unawaited(controller.remove('p-1'));
+    expect(container.read(catalogControllerProvider).items, isEmpty);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(repo.deletes, 1);
+    expect(container.read(catalogControllerProvider).items, isEmpty);
+  });
+
+  test('eliminación optimista restaura producto si falla servidor', () async {
+    final product = ProductModel(
+      id: 'p-1',
+      nombre: 'Mouse USB',
+      precio: 250,
+      costo: 100,
+      stock: 3,
+      categoria: 'COMPUTADORAS Y POS',
+    );
+    final repo = _ImportFakeCatalogRepository([product])..failDelete = true;
+    final container = ProviderContainer(
+      overrides: [catalogRepositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+
+    final controller = container.read(catalogControllerProvider.notifier);
+    await controller.load();
+
+    unawaited(controller.remove('p-1'));
+    expect(container.read(catalogControllerProvider).items, isEmpty);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(repo.deletes, 1);
+    expect(container.read(catalogControllerProvider).items.single.id, 'p-1');
+    expect(container.read(catalogControllerProvider).actionError, isNotNull);
+  });
 }

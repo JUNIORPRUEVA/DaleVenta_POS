@@ -11,6 +11,9 @@ class Routes {
   static const ponche = '/ponche';
   static const poncheHistorial = '/ponche/historial';
   static const catalogo = '/catalogo';
+  static const catalogoStock = '/catalogo/stock';
+  static const catalogoCategorias = '/catalogo/categorias';
+  static const catalogoConteo = '/catalogo/conteo';
   static const contabilidad = '/contabilidad';
   static const contabilidadCierresDiarios = '/contabilidad/cierres-diarios';
   static const contabilidadDepositos = '/contabilidad/depositos-bancarios';
@@ -21,6 +24,10 @@ class Routes {
   static const ventasLista = '/ventas/lista';
   static const ventasCreditos = '/ventas/creditos';
   static const compras = '/ventas/compras';
+  static const comprasLista = '/ventas/compras/lista';
+  static const comprasSuplidores = '/ventas/compras/suplidores';
+  static const comprasFacturas = '/ventas/compras/facturas';
+  static const comprasPorComprar = '/ventas/compras/por-comprar';
   static const caja = '/caja';
   static const cajaRegistrarIngreso = '/caja/registrar-ingreso';
   static const cajaRegistrarSalida = '/caja/registrar-salida';

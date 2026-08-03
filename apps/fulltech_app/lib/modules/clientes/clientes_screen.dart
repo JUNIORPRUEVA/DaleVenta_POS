@@ -9,13 +9,19 @@ import '../../core/auth/auth_provider.dart';
 import '../../core/debug/debug_admin_action.dart';
 import '../../core/routing/app_navigator.dart';
 import '../../core/routing/routes.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/utils/money_formatters.dart';
+import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/app_navigation.dart';
+import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/sync_status_banner.dart';
+
 import 'application/clientes_controller.dart';
 import 'cliente_form_screen.dart';
 import 'cliente_model.dart';
 import 'data/clientes_repository.dart';
 import '../service_orders/service_order_models.dart';
+import '../ventas/data/ventas_repository.dart';
 
 bool _shouldUseClientesDesktopLayout(double width) {
   if (width >= kDesktopShellBreakpoint) return true;
@@ -51,24 +57,59 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   Timer? _debounce;
   bool _purgingAllDebug = false;
+  bool _searchOpen = false;
   String? _selectedClientId;
 
   Future<void> _openFilters(ClientesState state) async {
-    final next = await showModalBottomSheet<_ClientesFilterState>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) {
-        return _ClientesFiltersSheet(
-          initialState: _ClientesFilterState(
-            order: state.order,
-            correoFilter: state.correoFilter,
-            estadoFilter: state.estadoFilter,
-            ownerFilter: state.ownerFilter,
-          ),
-        );
-      },
+    final isDesktop = _shouldUseClientesDesktopLayout(
+      MediaQuery.sizeOf(context).width,
     );
+    final initialState = _ClientesFilterState(
+      order: state.order,
+      correoFilter: state.correoFilter,
+      estadoFilter: state.estadoFilter,
+      ownerFilter: state.ownerFilter,
+    );
+
+    final _ClientesFilterState? next;
+    if (isDesktop) {
+      next = await showModalBottomSheet<_ClientesFilterState>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (sheetContext) {
+          return _ClientesFiltersBottomSheet(initialState: initialState);
+        },
+      );
+    } else {
+      next = await showGeneralDialog<_ClientesFilterState>(
+        context: context,
+        barrierDismissible: true,
+        barrierLabel: 'Filtros de clientes',
+        barrierColor: Colors.black.withValues(alpha: 0.26),
+        transitionDuration: const Duration(milliseconds: 180),
+        pageBuilder: (dialogContext, animation, secondaryAnimation) {
+          return Align(
+            alignment: Alignment.centerRight,
+            child: _ClientesFiltersSheet(initialState: initialState),
+          );
+        },
+        transitionBuilder: (context, animation, secondaryAnimation, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(1, 0),
+              end: Offset.zero,
+            ).animate(curved),
+            child: FadeTransition(opacity: curved, child: child),
+          );
+        },
+      );
+    }
 
     if (next == null || !mounted) return;
 
@@ -136,6 +177,69 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
     }
   }
 
+  Future<void> _showSummary(ClientesState state) async {
+    final items = state.items;
+    final totalClients = items.length;
+    final activeClients = items.where((c) => !c.isDeleted).length;
+    final deletedClients = items.where((c) => c.isDeleted).length;
+    final withEmail = items
+        .where((c) => (c.correo ?? '').trim().isNotEmpty)
+        .length;
+    final withPhone = items.where((c) => c.telefono.trim().isNotEmpty).length;
+    final withAddress = items
+        .where((c) => (c.direccion ?? '').trim().isNotEmpty)
+        .length;
+
+    final totalPurchasedFuture = _loadTotalPurchased();
+
+    if (!mounted) return;
+    showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Resumen de clientes',
+      barrierColor: Colors.black.withValues(alpha: 0.32),
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return _ClientesSummaryDialog(
+          totalClients: totalClients,
+          activeClients: activeClients,
+          deletedClients: deletedClients,
+          withEmail: withEmail,
+          withPhone: withPhone,
+          withAddress: withAddress,
+          totalPurchasedFuture: totalPurchasedFuture,
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutBack,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return ScaleTransition(
+          scale: Tween<double>(begin: 0.86, end: 1).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
+        );
+      },
+    );
+  }
+
+  Future<double> _loadTotalPurchased() async {
+    try {
+      final now = DateTime.now();
+      final sales = await ref
+          .read(ventasRepositoryProvider)
+          .listInvoices(
+            from: DateTime(now.year - 5, now.month, now.day),
+            to: now,
+            includeDeleted: true,
+          );
+      return sales.fold<double>(0.0, (sum, sale) => sum + sale.totalSold);
+    } catch (_) {
+      return 0;
+    }
+  }
+
   Future<void> _openCreateClientFlow() async {
     final created = await openClienteFormAdaptive(context);
     if (created == null || !mounted) return;
@@ -162,6 +266,53 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
     ].where((active) => active).length;
 
     return Scaffold(
+      backgroundColor: AppColors.background,
+      drawer: buildAdaptiveDrawer(context, currentUser: currentUser),
+      floatingActionButton: !isDesktop
+          ? FloatingActionButton(
+              onPressed: () => _showSummary(state),
+              tooltip: 'Resumen',
+              backgroundColor: AppColors.secondary,
+              foregroundColor: Colors.white,
+              child: const Icon(Icons.summarize_rounded),
+            )
+          : null,
+
+      appBar: !isDesktop
+          ? CustomAppBar(
+              title: 'Clientes',
+              titleWidget: _searchOpen ? _buildAppBarSearchField() : null,
+              actions: [
+                IconButton(
+                  tooltip: _searchOpen ? 'Cerrar búsqueda' : 'Buscar',
+                  onPressed: () => setState(() {
+                    _searchOpen = !_searchOpen;
+                    if (!_searchOpen) _searchCtrl.clear();
+                  }),
+                  icon: Icon(
+                    _searchOpen ? Icons.close_rounded : Icons.search_rounded,
+                  ),
+                ),
+                if (!_searchOpen) ...[
+                  IconButton(
+                    tooltip: 'Filtros',
+                    onPressed: () => _openFilters(state),
+                    icon: const Icon(Icons.filter_alt_outlined),
+                  ),
+                  IconButton(
+                    tooltip: 'Actualizar',
+                    onPressed: () {
+                      if (!state.refreshing) controller.refresh();
+                    },
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
+                ],
+              ],
+              trailing: const SizedBox.shrink(),
+              showLogo: false,
+              showDepartmentLabel: false,
+            )
+          : null,
       body: SafeArea(
         bottom: false,
         child: isDesktop
@@ -217,6 +368,40 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
     );
   }
 
+  Widget _buildAppBarSearchField() {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 280),
+        child: TextField(
+          controller: _searchCtrl,
+          autofocus: true,
+          style: const TextStyle(color: Color(0xFF111827)),
+          textInputAction: TextInputAction.search,
+          onChanged: _handleSearch,
+          decoration: InputDecoration(
+            hintText: 'Buscar clientes',
+            hintStyle: const TextStyle(color: Color(0xFF8A9AA8)),
+            filled: true,
+            fillColor: Colors.white,
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.zero,
+              borderSide: BorderSide.none,
+            ),
+            prefixIcon: const Icon(
+              Icons.search_rounded,
+              color: Color(0xFF8A9AA8),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildClientesMainColumn({
     required ClientesState state,
     required ClientesController controller,
@@ -228,56 +413,53 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
   }) {
     return Column(
       children: [
-        Padding(
-          padding: EdgeInsets.fromLTRB(
-            desktopLayout ? 12 : 0,
-            10,
-            desktopLayout ? 12 : 0,
-            8,
+        if (desktopLayout)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            child: _ClientesTopPanel(
+              searchController: _searchCtrl,
+              refreshing: state.refreshing,
+              purgingAllDebug: _purgingAllDebug,
+              activeFilterCount: activeFilterCount,
+              canShowDebugAction: canShowDebugAction,
+              onBack: () =>
+                  AppNavigator.goBack(context, fallbackRoute: Routes.home),
+              onSearchChanged: _handleSearch,
+              onOpenMap: () => context.push(Routes.clientesMapa),
+              onOpenFilters: () => _openFilters(state),
+              onMenuActionSelected: (action) async {
+                switch (action) {
+                  case _ClientesTopAction.newClient:
+                    await _openCreateClientFlow();
+                    break;
+                  case _ClientesTopAction.refresh:
+                    if (!state.refreshing) {
+                      await controller.refresh();
+                    }
+                    break;
+                  case _ClientesTopAction.clearFilters:
+                    await controller.applyFilters(
+                      order: ClientesOrder.az,
+                      correoFilter: CorreoFilter.todos,
+                      estadoFilter: EstadoFilter.activos,
+                      ownerFilter: OwnerFilter.todos,
+                    );
+                    break;
+                  case _ClientesTopAction.purgeDebug:
+                    if (!_purgingAllDebug) {
+                      await _purgeAllDebug();
+                    }
+                    break;
+                }
+              },
+              showClearFiltersAction: activeFilterCount > 0,
+            ),
           ),
-          child: _ClientesTopPanel(
-            searchController: _searchCtrl,
-            refreshing: state.refreshing,
-            purgingAllDebug: _purgingAllDebug,
-            activeFilterCount: activeFilterCount,
-            canShowDebugAction: canShowDebugAction,
-            onBack: () =>
-                AppNavigator.goBack(context, fallbackRoute: Routes.home),
-            onSearchChanged: _handleSearch,
-            onOpenMap: () => context.push(Routes.clientesMapa),
-            onOpenFilters: () => _openFilters(state),
-            onMenuActionSelected: (action) async {
-              switch (action) {
-                case _ClientesTopAction.newClient:
-                  await _openCreateClientFlow();
-                  break;
-                case _ClientesTopAction.refresh:
-                  if (!state.refreshing) {
-                    await controller.refresh();
-                  }
-                  break;
-                case _ClientesTopAction.clearFilters:
-                  await controller.applyFilters(
-                    order: ClientesOrder.az,
-                    correoFilter: CorreoFilter.todos,
-                    estadoFilter: EstadoFilter.activos,
-                    ownerFilter: OwnerFilter.todos,
-                  );
-                  break;
-                case _ClientesTopAction.purgeDebug:
-                  if (!_purgingAllDebug) {
-                    await _purgeAllDebug();
-                  }
-                  break;
-              }
-            },
-            showClearFiltersAction: activeFilterCount > 0,
-          ),
-        ),
         SyncStatusBanner(
           visible: state.refreshing,
           label: 'Sincronizando clientes...',
         ),
+
         if (state.error != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
@@ -307,9 +489,10 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
             ),
           ),
         Expanded(
-          child: state.loading
-              ? const Center(child: CircularProgressIndicator())
-              : RefreshIndicator(
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: RefreshIndicator(
                   onRefresh: controller.refresh,
                   child: state.items.isEmpty
                       ? ListView(
@@ -353,6 +536,16 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                           },
                         ),
                 ),
+              ),
+              if (state.loading)
+                const Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  child: LinearProgressIndicator(minHeight: 2),
+                ),
+            ],
+          ),
         ),
       ],
     );
@@ -1284,16 +1477,18 @@ class _ClientesFilterState {
   }
 }
 
-class _ClientesFiltersSheet extends StatefulWidget {
-  const _ClientesFiltersSheet({required this.initialState});
+class _ClientesFiltersBottomSheet extends StatefulWidget {
+  const _ClientesFiltersBottomSheet({required this.initialState});
 
   final _ClientesFilterState initialState;
 
   @override
-  State<_ClientesFiltersSheet> createState() => _ClientesFiltersSheetState();
+  State<_ClientesFiltersBottomSheet> createState() =>
+      _ClientesFiltersBottomSheetState();
 }
 
-class _ClientesFiltersSheetState extends State<_ClientesFiltersSheet> {
+class _ClientesFiltersBottomSheetState
+    extends State<_ClientesFiltersBottomSheet> {
   late _ClientesFilterState _draft = widget.initialState;
 
   @override
@@ -1402,6 +1597,207 @@ class _ClientesFiltersSheetState extends State<_ClientesFiltersSheet> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ClientesFiltersSheet extends StatefulWidget {
+  const _ClientesFiltersSheet({required this.initialState});
+
+  final _ClientesFilterState initialState;
+
+  @override
+  State<_ClientesFiltersSheet> createState() => _ClientesFiltersSheetState();
+}
+
+class _ClientesFiltersSheetState extends State<_ClientesFiltersSheet> {
+  late _ClientesFilterState _draft = widget.initialState;
+
+  void _apply() {
+    Navigator.of(context).pop(_draft);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.sizeOf(context);
+    final width = (media.width * 0.6).clamp(300.0, 430.0);
+
+    return Dismissible(
+      key: const ValueKey('clientes-filter-panel'),
+      direction: DismissDirection.endToStart,
+      onDismissed: (_) => Navigator.of(context).pop(),
+      child: Material(
+        color: Colors.white,
+        elevation: 18,
+        borderRadius: BorderRadius.zero,
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          width: width,
+          height: media.height,
+          child: SafeArea(
+            left: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEAF1FF),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.filter_alt_rounded,
+                          color: AppColors.secondary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Filtros de clientes',
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Orden, correo, estado y propietario',
+                              style: TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Cerrar',
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, color: AppColors.border),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                    children: [
+                      _FilterSection<ClientesOrder>(
+                        title: 'Orden',
+                        value: _draft.order,
+                        options: const [ClientesOrder.az, ClientesOrder.za],
+                        labelBuilder: _clientesOrderLabel,
+                        onSelected: (value) {
+                          setState(
+                            () => _draft = _draft.copyWith(order: value),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _FilterSection<CorreoFilter>(
+                        title: 'Correo',
+                        value: _draft.correoFilter,
+                        options: const [
+                          CorreoFilter.todos,
+                          CorreoFilter.conCorreo,
+                          CorreoFilter.sinCorreo,
+                        ],
+                        labelBuilder: _correoFilterLabel,
+                        onSelected: (value) {
+                          setState(
+                            () => _draft = _draft.copyWith(correoFilter: value),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _FilterSection<EstadoFilter>(
+                        title: 'Estado',
+                        value: _draft.estadoFilter,
+                        options: const [
+                          EstadoFilter.activos,
+                          EstadoFilter.eliminados,
+                          EstadoFilter.todos,
+                        ],
+                        labelBuilder: _estadoFilterLabel,
+                        onSelected: (value) {
+                          setState(
+                            () => _draft = _draft.copyWith(estadoFilter: value),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _FilterSection<OwnerFilter>(
+                        title: 'Clientes',
+                        value: _draft.ownerFilter,
+                        options: const [OwnerFilter.todos, OwnerFilter.mine],
+                        labelBuilder: _ownerFilterLabel,
+                        onSelected: (value) {
+                          setState(
+                            () => _draft = _draft.copyWith(ownerFilter: value),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+                  decoration: const BoxDecoration(
+                    color: AppColors.surfaceAlt,
+                    border: Border(top: BorderSide(color: AppColors.border)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            Navigator.of(context).pop(
+                              const _ClientesFilterState(
+                                order: ClientesOrder.az,
+                                correoFilter: CorreoFilter.todos,
+                                estadoFilter: EstadoFilter.activos,
+                                ownerFilter: OwnerFilter.todos,
+                              ),
+                            );
+                          },
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(46),
+                          ),
+                          child: const Text('Limpiar'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _apply,
+                          icon: const Icon(Icons.check_rounded),
+                          label: const Text('Aplicar'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.secondary,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size.fromHeight(46),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -1530,5 +1926,228 @@ String _ownerFilterLabel(OwnerFilter filter) {
       return 'Todos los clientes';
     case OwnerFilter.mine:
       return 'Mis clientes';
+  }
+}
+
+class _ClientesSummaryDialog extends StatelessWidget {
+  const _ClientesSummaryDialog({
+    required this.totalClients,
+    required this.activeClients,
+    required this.deletedClients,
+    required this.withEmail,
+    required this.withPhone,
+    required this.withAddress,
+    required this.totalPurchasedFuture,
+  });
+
+  final int totalClients;
+  final int activeClients;
+  final int deletedClients;
+  final int withEmail;
+  final int withPhone;
+  final int withAddress;
+  final Future<double> totalPurchasedFuture;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.sizeOf(context);
+    final compact = media.width < 720;
+
+    return Dialog(
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: compact ? 18 : 28,
+        vertical: 24,
+      ),
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(compact ? 8 : 12),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 18, 12, 16),
+              decoration: const BoxDecoration(
+                color: AppColors.secondary,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.summarize_rounded,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Resumen de clientes',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Información general de la lista',
+                          style: TextStyle(
+                            color: Color(0xFFDCEBFF),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Cerrar',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded, color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+              child: Column(
+                children: [
+                  _ClientesSummaryMetric(
+                    icon: Icons.people_outline_rounded,
+                    label: 'Total de clientes',
+                    value: '$totalClients',
+                    accent: AppColors.secondary,
+                  ),
+                  FutureBuilder<double>(
+                    future: totalPurchasedFuture,
+                    builder: (context, snapshot) {
+                      final value = snapshot.hasData ? snapshot.data! : 0.0;
+                      return _ClientesSummaryMetric(
+                        icon: Icons.payments_outlined,
+                        label: 'Monto total comprado',
+                        value:
+                            snapshot.connectionState == ConnectionState.waiting
+                            ? 'Calculando...'
+                            : formatRdCurrencyAccounting(value),
+                        accent: const Color(0xFF059669),
+                      );
+                    },
+                  ),
+                  _ClientesSummaryMetric(
+                    icon: Icons.check_circle_outline_rounded,
+                    label: 'Clientes activos',
+                    value: '$activeClients',
+                    accent: const Color(0xFF15803D),
+                  ),
+                  _ClientesSummaryMetric(
+                    icon: Icons.delete_outline_rounded,
+                    label: 'Clientes eliminados',
+                    value: '$deletedClients',
+                    accent: const Color(0xFFB45309),
+                  ),
+                  _ClientesSummaryMetric(
+                    icon: Icons.email_outlined,
+                    label: 'Con correo',
+                    value: '$withEmail',
+                    accent: const Color(0xFF0E7490),
+                  ),
+                  _ClientesSummaryMetric(
+                    icon: Icons.phone_outlined,
+                    label: 'Con teléfono',
+                    value: '$withPhone',
+                    accent: const Color(0xFF7C3AED),
+                  ),
+                  _ClientesSummaryMetric(
+                    icon: Icons.place_outlined,
+                    label: 'Con dirección',
+                    value: '$withAddress',
+                    accent: const Color(0xFFDB2777),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+              child: FilledButton.icon(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('Entendido'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.secondary,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(46),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ClientesSummaryMetric extends StatelessWidget {
+  const _ClientesSummaryMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.accent,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: accent, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w900,
+              fontSize: 15,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

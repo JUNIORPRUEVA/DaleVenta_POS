@@ -169,6 +169,10 @@ class AppNavigator {
         path == Routes.contabilidadPagosPendientes) {
       return Routes.contabilidad;
     }
+    if (path.startsWith('${Routes.configuracion}/') &&
+        path != Routes.configuracion) {
+      return Routes.configuracion;
+    }
     if (path.startsWith('/publicidad/') && path != Routes.publicidad) {
       return Routes.publicidad;
     }

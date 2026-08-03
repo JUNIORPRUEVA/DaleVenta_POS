@@ -25,10 +25,7 @@
     html, body {
       margin: 0;
       min-height: 100%;
-      background:
-        radial-gradient(circle at top left, rgba(16, 98, 136, 0.14), transparent 34%),
-        radial-gradient(circle at bottom right, rgba(27, 144, 168, 0.10), transparent 38%),
-        linear-gradient(135deg, #f7fbfd 0%, #edf6f8 52%, #ffffff 100%);
+      background: linear-gradient(180deg, #eff6ff 0%, #f8fafc 58%, #f7fee7 100%);
     }
 
     body {
@@ -53,79 +50,99 @@
       pointer-events: none;
     }
 
+    #app-loader::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        repeating-radial-gradient(ellipse at 50% 24%, rgba(37, 99, 235, 0.055) 0 1px, transparent 1px 86px),
+        linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0));
+      pointer-events: none;
+    }
+
     .loader-shell {
-      width: min(100%, 420px);
-      border: 1px solid rgba(15, 23, 42, 0.07);
-      border-radius: 28px;
-      background: rgba(255, 255, 255, 0.78);
-      backdrop-filter: blur(18px);
-      box-shadow: 0 22px 64px rgba(15, 23, 42, 0.10);
-      padding: 28px 24px;
+      width: min(100%, 440px);
+      padding: 24px;
+      text-align: center;
+      position: relative;
+      animation: loader-intro 520ms ease-out both;
     }
 
     .loader-mark {
-      width: 68px;
-      height: 68px;
-      border-radius: 22px;
-      background: linear-gradient(135deg, #0f6a90 0%, #1aa7a1 100%);
+      width: 154px;
+      height: 154px;
+      margin: 0 auto;
+      border-radius: 999px;
       display: grid;
       place-items: center;
-      color: #ffffff;
-      font-size: 22px;
-      font-weight: 800;
-      letter-spacing: 1px;
-      box-shadow: 0 16px 36px rgba(15, 106, 144, 0.26);
+      position: relative;
+    }
+
+    .loader-mark::before,
+    .loader-mark::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      border: 2px solid rgba(37, 99, 235, 0.14);
+    }
+
+    .loader-mark::after {
+      border-color: transparent;
+      border-top-color: #2563eb;
+      border-right-color: #14b8a6;
+      animation: loader-ring 1.1s linear infinite;
+    }
+
+    .loader-logo {
+      width: 116px;
+      height: 116px;
+      object-fit: contain;
+      animation: loader-pulse 1.8s ease-in-out infinite;
     }
 
     .loader-title {
-      margin: 18px 0 6px;
+      margin: 16px 0 6px;
       color: #0f172a;
-      font-size: 26px;
-      font-weight: 800;
-      letter-spacing: 0.02em;
+      font-size: 23px;
+      font-weight: 900;
+      letter-spacing: 0;
     }
 
     .loader-copy {
       margin: 0;
-      color: #475569;
-      font-size: 14px;
-      line-height: 1.5;
+      color: #64748b;
+      font-size: 12px;
+      line-height: 1.35;
+      font-weight: 700;
     }
 
     .loader-bar {
       margin-top: 18px;
-      height: 8px;
+      width: 170px;
+      height: 4px;
+      margin-left: auto;
+      margin-right: auto;
       border-radius: 999px;
-      background: rgba(15, 23, 42, 0.08);
+      background: #e2e8f0;
       overflow: hidden;
       position: relative;
     }
 
     .loader-progress {
       height: 100%;
-      width: 12%;
+      width: 38%;
       border-radius: inherit;
-      background: linear-gradient(90deg, #0f6a90 0%, #1aa7a1 100%);
-      box-shadow: 0 0 18px rgba(15, 106, 144, 0.18);
-      transition: width 180ms ease;
+      background: linear-gradient(90deg, #2563eb 0%, #14b8a6 100%);
+      animation: loader-track 1.05s ease-in-out infinite;
     }
 
     .loader-bar::after {
-      content: "";
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      width: 96px;
-      background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.45) 50%, transparent 100%);
-      animation: loader-glow 1.4s linear infinite;
+      display: none;
     }
 
     .loader-meta {
-      margin-top: 12px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
+      display: none;
     }
 
     .loader-footnote {
@@ -141,13 +158,29 @@
       letter-spacing: 0.06em;
     }
 
-    @keyframes loader-glow {
+    @keyframes loader-intro {
       0% {
-        transform: translateX(-120%);
+        opacity: 0;
+        transform: translateY(18px) scale(0.94);
       }
       100% {
-        transform: translateX(420%);
+        opacity: 1;
+        transform: translateY(0) scale(1);
       }
+    }
+
+    @keyframes loader-ring {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes loader-pulse {
+      0%, 100% { transform: scale(0.985); }
+      50% { transform: scale(1.015); }
+    }
+
+    @keyframes loader-track {
+      0% { transform: translateX(-120%); }
+      100% { transform: translateX(290%); }
     }
 
     @media (max-width: 640px) {
@@ -267,21 +300,23 @@
 
   <title>FULLTECH</title>
   <link rel="manifest" href="manifest.json">
+  <link rel="preload" href="main.dart.js" as="script">
+  <link rel="preload" href="assets/assets/image/logo.png" as="image">
 </head>
 <body>
   <div id="app-loader" aria-live="polite">
     <div class="loader-shell">
-      <div class="loader-mark">FT</div>
-      <h1 class="loader-title">FULLTECH</h1>
-      <p class="loader-copy">
-        Cargando la aplicacion y conectando tu configuracion inicial.
-      </p>
+      <div class="loader-mark">
+        <img class="loader-logo" src="assets/assets/image/logo.png" alt="FULLTECH">
+      </div>
+      <h1 class="loader-title">FullPOS Cloud</h1>
+      <p class="loader-copy">Preparando tu punto de venta</p>
       <div class="loader-bar">
         <div id="loader-progress" class="loader-progress"></div>
       </div>
       <div class="loader-meta">
-        <div id="loader-status" class="loader-footnote">Preparando recursos iniciales...</div>
-        <div id="loader-percent" class="loader-percent">12%</div>
+        <div id="loader-status" class="loader-footnote"></div>
+        <div id="loader-percent" class="loader-percent"></div>
       </div>
     </div>
   </div>
@@ -375,6 +410,7 @@
       var activeVariant = null;
       var updatePending = false;
       var autoReloadingForUpdate = false;
+      var flutterBooted = false;
       var banner = document.getElementById('pwa-banner');
       var title = document.getElementById('pwa-banner-title');
       var copy = document.getElementById('pwa-banner-copy');
@@ -500,6 +536,10 @@
       }
 
       function maybeShowInstallPrompt() {
+        if (!flutterBooted) {
+          return;
+        }
+
         if (updatePending) {
           showVariant('update');
           return;
@@ -574,7 +614,7 @@
       window.addEventListener('beforeinstallprompt', function (event) {
         event.preventDefault();
         deferredInstallPrompt = event;
-        maybeShowInstallPrompt();
+        window.setTimeout(maybeShowInstallPrompt, 900);
       });
 
       window.addEventListener('appinstalled', function () {
@@ -651,7 +691,10 @@
         });
       }
 
-      window.setTimeout(maybeShowInstallPrompt, 1800);
+      window.addEventListener('flutter-first-frame', function () {
+        flutterBooted = true;
+        window.setTimeout(maybeShowInstallPrompt, 1200);
+      });
     })();
   </script>
   <script src="flutter_bootstrap.js" async></script>

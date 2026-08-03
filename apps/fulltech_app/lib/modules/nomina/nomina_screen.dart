@@ -15,6 +15,7 @@ import '../../core/debug/trace_log.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/models/user_model.dart';
 import '../../core/routing/routes.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/utils/app_feedback.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
@@ -174,122 +175,125 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
       ),
       child: RefreshIndicator(
         onRefresh: ref.read(nominaHomeControllerProvider.notifier).load,
-        child: state.loading && state.periods.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 980),
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 22),
-                    children: [
-                      _NominaPremiumHeroCard(
-                        title:
-                            openPeriod?.title ?? 'Nomina sin quincena abierta',
-                        range: openPeriod == null
-                            ? 'Abre una quincena para comenzar'
-                            : '${DateFormat('dd/MM/yyyy').format(openPeriod.startDate)} - ${DateFormat('dd/MM/yyyy').format(openPeriod.endDate)}',
-                        totalLabel: money.format(state.openPeriodTotal ?? 0),
-                        activeEmployees: activeEmployees,
-                        onHistory: state.loading
-                            ? null
-                            : () => _openPayrollHistoryDialog(
-                                context,
-                                ref,
-                                state,
-                              ),
-                        onTotals: state.loading
-                            ? null
-                            : () => _openOpenPeriodTotalsDialog(
-                                context,
-                                ref,
-                                state,
-                              ),
-                        onPdf: state.loading
-                            ? null
-                            : () => _exportOpenPeriodPdf(context, ref, state),
-                        onSendAllPayroll:
-                            state.loading ||
-                                _sendingPayrollToAll ||
-                                openPeriod == null
-                            ? null
-                            : () => _sendOpenPeriodPayrollToAll(
-                                context,
-                                ref,
-                                state,
-                              ),
-                        onAddEmployee: () => _showEmployeeDialog(context, ref),
-                        onClosePeriod: openPeriod == null
-                            ? null
-                            : () =>
-                                  _confirmClosePeriod(context, ref, openPeriod),
-                        onCreatePeriod: openPeriod == null
-                            ? () => _showCreatePeriodDialog(context, ref)
-                            : null,
-                        compact: true,
-                      ),
-                      if (state.error != null) ...[
-                        const SizedBox(height: 10),
-                        _NominaErrorBanner(message: state.error!),
-                      ],
+        child: Stack(
+          children: [
+            Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 980),
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 22),
+                  children: [
+                    _NominaPremiumHeroCard(
+                      title: openPeriod?.title ?? 'Nomina sin quincena abierta',
+                      range: openPeriod == null
+                          ? 'Abre una quincena para comenzar'
+                          : '${DateFormat('dd/MM/yyyy').format(openPeriod.startDate)} - ${DateFormat('dd/MM/yyyy').format(openPeriod.endDate)}',
+                      totalLabel: money.format(state.openPeriodTotal ?? 0),
+                      activeEmployees: activeEmployees,
+                      onHistory: state.loading
+                          ? null
+                          : () =>
+                                _openPayrollHistoryDialog(context, ref, state),
+                      onTotals: state.loading
+                          ? null
+                          : () => _openOpenPeriodTotalsDialog(
+                              context,
+                              ref,
+                              state,
+                            ),
+                      onPdf: state.loading
+                          ? null
+                          : () => _exportOpenPeriodPdf(context, ref, state),
+                      onSendAllPayroll:
+                          state.loading ||
+                              _sendingPayrollToAll ||
+                              openPeriod == null
+                          ? null
+                          : () => _sendOpenPeriodPayrollToAll(
+                              context,
+                              ref,
+                              state,
+                            ),
+                      onAddEmployee: () => _showEmployeeDialog(context, ref),
+                      onClosePeriod: openPeriod == null
+                          ? null
+                          : () => _confirmClosePeriod(context, ref, openPeriod),
+                      onCreatePeriod: openPeriod == null
+                          ? () => _showCreatePeriodDialog(context, ref)
+                          : null,
+                      compact: true,
+                    ),
+                    if (state.error != null) ...[
                       const SizedBox(height: 10),
-                      _NominaPrimaryBoard(
-                        openPeriod: openPeriod,
-                        totalAbierto: state.openPeriodTotal ?? 0,
-                        payrollBase: payrollBase,
-                        payrollQuota: payrollQuota,
-                        activeEmployees: activeEmployees,
-                        money: money,
-                        compact: true,
-                      ),
-                      const SizedBox(height: 10),
-                      _NominaUsersSectionCard(
-                        expanded: _showEmployeesSection,
-                        employees: activePayrollEmployees,
-                        onToggle: () => setState(
-                          () => _showEmployeesSection = !_showEmployeesSection,
-                        ),
-                        onAdd: () => _showEmployeeDialog(context, ref),
-                        child: activePayrollEmployees.isEmpty
-                            ? _NominaEmptyState(
-                                icon: Icons.groups_outlined,
-                                title: 'No hay usuarios en nomina',
-                                message:
-                                    'Agrega un usuario nuevo cuando lo necesites.',
-                                actionLabel: 'Agregar usuario',
-                                onAction: () =>
-                                    _showEmployeeDialog(context, ref),
-                              )
-                            : Column(
-                                children: activePayrollEmployees
-                                    .map(
-                                      (employee) => _EmployeeCard(
-                                        employee: employee,
-                                        onManage: () =>
-                                            _showEmployeePayrollDialog(
-                                              context,
-                                              ref,
-                                              employee,
-                                            ),
-                                        onEdit: () => _showEmployeeDialog(
-                                          context,
-                                          ref,
-                                          employee: employee,
-                                        ),
-                                        onDelete: () => _confirmDeleteEmployee(
-                                          context,
-                                          ref,
-                                          employee,
-                                        ),
-                                      ),
-                                    )
-                                    .toList(growable: false),
-                              ),
-                      ),
+                      _NominaErrorBanner(message: state.error!),
                     ],
-                  ),
+                    const SizedBox(height: 10),
+                    _NominaPrimaryBoard(
+                      openPeriod: openPeriod,
+                      totalAbierto: state.openPeriodTotal ?? 0,
+                      payrollBase: payrollBase,
+                      payrollQuota: payrollQuota,
+                      activeEmployees: activeEmployees,
+                      money: money,
+                      compact: true,
+                    ),
+                    const SizedBox(height: 10),
+                    _NominaUsersSectionCard(
+                      expanded: _showEmployeesSection,
+                      employees: activePayrollEmployees,
+                      onToggle: () => setState(
+                        () => _showEmployeesSection = !_showEmployeesSection,
+                      ),
+                      onAdd: () => _showEmployeeDialog(context, ref),
+                      child: activePayrollEmployees.isEmpty
+                          ? _NominaEmptyState(
+                              icon: Icons.groups_outlined,
+                              title: 'No hay usuarios en nomina',
+                              message:
+                                  'Agrega un usuario nuevo cuando lo necesites.',
+                              actionLabel: 'Agregar usuario',
+                              onAction: () => _showEmployeeDialog(context, ref),
+                            )
+                          : Column(
+                              children: activePayrollEmployees
+                                  .map(
+                                    (employee) => _EmployeeCard(
+                                      employee: employee,
+                                      onManage: () =>
+                                          _showEmployeePayrollDialog(
+                                            context,
+                                            ref,
+                                            employee,
+                                          ),
+                                      onEdit: () => _showEmployeeDialog(
+                                        context,
+                                        ref,
+                                        employee: employee,
+                                      ),
+                                      onDelete: () => _confirmDeleteEmployee(
+                                        context,
+                                        ref,
+                                        employee,
+                                      ),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                            ),
+                    ),
+                  ],
                 ),
               ),
+            ),
+            if (state.loading)
+              const Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: LinearProgressIndicator(minHeight: 2),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -322,6 +326,9 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
       return Theme(
         data: nominaTheme,
         child: Scaffold(
+          backgroundColor: MediaQuery.sizeOf(context).width < 900
+              ? AppColors.background
+              : null,
           appBar: const CustomAppBar(
             title: 'Nómina',
             showLogo: false,
@@ -365,6 +372,7 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
     return Theme(
       data: nominaTheme,
       child: Scaffold(
+        backgroundColor: isDesktop ? null : AppColors.background,
         appBar: CustomAppBar(
           title: 'Nómina',
           showLogo: false,
@@ -3088,49 +3096,63 @@ class _PayrollUserPickerDialogState
               ),
             SizedBox(
               height: 300,
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : visible.isEmpty
-                  ? const Center(child: Text('No hay usuarios para mostrar'))
-                  : RadioGroup<String>(
-                      groupValue: _selected?.id,
-                      onChanged: (value) {
-                        if (!mounted) return;
-                        if (value == null) return;
-                        UserModel? next;
-                        for (final u in visible) {
-                          if (u.id == value) {
-                            next = u;
-                            break;
-                          }
-                        }
-                        if (next == null) return;
-                        setState(() => _selected = next);
-                      },
-                      child: ListView.separated(
-                        itemCount: visible.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final user = visible[index];
-                          return RadioListTile<String>(
-                            value: user.id,
-                            dense: true,
-                            title: Text(
-                              user.nombreCompleto,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: visible.isEmpty
+                        ? const Center(
+                            child: Text('No hay usuarios para mostrar'),
+                          )
+                        : RadioGroup<String>(
+                            groupValue: _selected?.id,
+                            onChanged: (value) {
+                              if (!mounted) return;
+                              if (value == null) return;
+                              UserModel? next;
+                              for (final u in visible) {
+                                if (u.id == value) {
+                                  next = u;
+                                  break;
+                                }
+                              }
+                              if (next == null) return;
+                              setState(() => _selected = next);
+                            },
+                            child: ListView.separated(
+                              itemCount: visible.length,
+                              separatorBuilder: (_, __) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final user = visible[index];
+                                return RadioListTile<String>(
+                                  value: user.id,
+                                  dense: true,
+                                  title: Text(
+                                    user.nombreCompleto,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  subtitle: Text(
+                                    user.telefono.isEmpty
+                                        ? user.email
+                                        : '${user.telefono} · ${user.email}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                );
+                              },
                             ),
-                            subtitle: Text(
-                              user.telefono.isEmpty
-                                  ? user.email
-                                  : '${user.telefono} · ${user.email}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          );
-                        },
-                      ),
+                          ),
+                  ),
+                  if (_loading)
+                    const Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      child: LinearProgressIndicator(minHeight: 2),
                     ),
+                ],
+              ),
             ),
           ],
         ),
@@ -5534,40 +5556,54 @@ class _HistoryInlineDetail extends StatelessWidget {
 
         // ── Employee rows ─────────────────────────────────────────────
         Expanded(
-          child: loading
-              ? const Center(child: CircularProgressIndicator())
-              : error != null
-              ? Center(
-                  child: Text(error!, style: TextStyle(color: scheme.error)),
-                )
-              : filteredRows.isEmpty
-              ? Center(
-                  child: Text(
-                    'Sin empleados con este filtro.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
-                  itemCount: filteredRows.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 6),
-                  itemBuilder: (context, index) {
-                    final row = filteredRows[index];
-                    return _PayrollPeriodEmployeeCard(
-                      row: row,
-                      money: money,
-                      onSendPayroll: () => onSendPayroll(row),
-                      onSchedulePayroll: () => onSchedulePayroll(row),
-                      onPreviewPayroll: () => onPreviewPayroll(row),
-                      onEditPayroll: () => onEditPayroll(row),
-                      onMarkPaid: row.paymentStatus.isPaid
-                          ? null
-                          : () => onMarkPaid(row),
-                    );
-                  },
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: error != null
+                    ? Center(
+                        child: Text(
+                          error!,
+                          style: TextStyle(color: scheme.error),
+                        ),
+                      )
+                    : filteredRows.isEmpty
+                    ? Center(
+                        child: Text(
+                          'Sin empleados con este filtro.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
+                        itemCount: filteredRows.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 6),
+                        itemBuilder: (context, index) {
+                          final row = filteredRows[index];
+                          return _PayrollPeriodEmployeeCard(
+                            row: row,
+                            money: money,
+                            onSendPayroll: () => onSendPayroll(row),
+                            onSchedulePayroll: () => onSchedulePayroll(row),
+                            onPreviewPayroll: () => onPreviewPayroll(row),
+                            onEditPayroll: () => onEditPayroll(row),
+                            onMarkPaid: row.paymentStatus.isPaid
+                                ? null
+                                : () => onMarkPaid(row),
+                          );
+                        },
+                      ),
+              ),
+              if (loading)
+                const Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  child: LinearProgressIndicator(minHeight: 2),
                 ),
+            ],
+          ),
         ),
       ],
     );

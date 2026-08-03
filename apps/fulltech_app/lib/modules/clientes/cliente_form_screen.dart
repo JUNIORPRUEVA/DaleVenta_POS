@@ -320,14 +320,23 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
         showLogo: false,
         showDepartmentLabel: false,
       ),
-      body: _loadingInitial
-          ? const Center(child: CircularProgressIndicator())
-          : SafeArea(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: formContent,
-              ),
+      body: Stack(
+        children: [
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: formContent,
             ),
+          ),
+          if (_loadingInitial)
+            const Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              child: LinearProgressIndicator(minHeight: 2),
+            ),
+        ],
+      ),
     );
   }
 

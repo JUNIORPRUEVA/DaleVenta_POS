@@ -2,19 +2,25 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_provider.dart';
 import '../../core/cache/fulltech_cache_manager.dart';
+
 import '../../core/models/product_model.dart';
+
 import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/realtime/catalog_realtime_service.dart';
 import '../../core/routing/app_route_observer.dart';
 import '../../core/routing/routes.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
+
 import '../../core/widgets/product_network_image.dart';
 import '../../core/widgets/fulltech_dialog.dart';
+import '../cash/cash_dialogs.dart';
 import '../clientes/cliente_model.dart';
 import 'application/ventas_controller.dart';
 import 'data/ventas_repository.dart';
@@ -49,7 +55,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   DateTime? _lastSuccessfulRemoteSyncAt;
   List<ProductModel> _products = const [];
   List<SaleDraftItem> _cart = [];
-  String? _selectedCategory;
+  Set<String> _selectedCategories = <String>{};
+  bool _searchOpen = false;
 
   ClienteModel? _selectedClient;
 
@@ -62,7 +69,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       final matchesText =
           q.isEmpty || p.nombre.toLowerCase().contains(q) || code.contains(q);
       final matchesCategory =
-          _selectedCategory == null || p.categoriaLabel == _selectedCategory;
+          _selectedCategories.isEmpty ||
+          _selectedCategories.contains(p.categoriaLabel);
       return matchesText && matchesCategory;
     }).toList();
   }
@@ -108,6 +116,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
 
   double get _totalSold =>
       _cart.fold(0, (sum, item) => sum + item.subtotalSold);
+
+  double get _totalUnits => _cart.fold(0, (sum, item) => sum + item.qty);
 
   @override
   void initState() {
@@ -302,107 +312,184 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     await _loadProducts();
   }
 
-  Future<void> _pickCategoryFilter() async {
-    final selected = await showModalBottomSheet<String?>(
+  Future<T?> _showRightDrawer<T>({
+    required String barrierLabel,
+    required WidgetBuilder builder,
+  }) {
+    return showGeneralDialog<T>(
       context: context,
-      showDragHandle: true,
-      builder: (context) {
-        final categories = _availableCategories;
-        final theme = Theme.of(context);
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.category_outlined,
-                      size: 20,
-                      color: theme.colorScheme.primary,
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Filtrar por categoría',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  children: [
-                    ListTile(
-                      leading: Icon(
-                        _selectedCategory == null
-                            ? Icons.check_circle
-                            : Icons.list_alt_outlined,
-                        color: _selectedCategory == null
-                            ? theme.colorScheme.primary
-                            : null,
-                      ),
-                      title: Text(
-                        'Todas las categorías',
-                        style: TextStyle(
-                          fontWeight: _selectedCategory == null
-                              ? FontWeight.w700
-                              : FontWeight.w500,
-                          color: _selectedCategory == null
-                              ? theme.colorScheme.primary
-                              : null,
-                        ),
-                      ),
-                      onTap: () => Navigator.pop(context, null),
-                    ),
-                    if (categories.isNotEmpty) ...[
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16),
-                        child: Divider(height: 1),
-                      ),
-                      for (final category in categories)
-                        ListTile(
-                          leading: Icon(
-                            _selectedCategory == category
-                                ? Icons.check_circle
-                                : Icons.category_outlined,
-                            color: _selectedCategory == category
-                                ? theme.colorScheme.primary
-                                : null,
-                          ),
-                          title: Text(
-                            category,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontWeight: _selectedCategory == category
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                              color: _selectedCategory == category
-                                  ? theme.colorScheme.primary
-                                  : null,
-                            ),
-                          ),
-                          onTap: () => Navigator.pop(context, category),
-                        ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
+      barrierDismissible: true,
+      barrierLabel: barrierLabel,
+      barrierColor: Colors.black.withValues(alpha: 0.22),
+      transitionDuration: const Duration(milliseconds: 240),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Align(alignment: Alignment.centerRight, child: builder(context));
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
         );
       },
     );
+  }
 
-    if (!mounted) return;
-    if (selected == _selectedCategory) return;
-    setState(() => _selectedCategory = selected);
+  Future<void> _openCategoryDrawer() async {
+    final next = await _showRightDrawer<Set<String>>(
+      barrierLabel: 'Filtros de categoria',
+      builder: (context) => _CategoryFilterDrawer(
+        categories: _availableCategories,
+        selectedCategories: _selectedCategories,
+      ),
+    );
+
+    if (!mounted || next == null) return;
+    setState(() => _selectedCategories = next);
+  }
+
+  Future<void> _openActionsDrawer() async {
+    await _showRightDrawer<void>(
+      barrierLabel: 'Menu de acciones',
+      builder: (context) => _SalesActionsDrawer(
+        hasCart: _cart.isNotEmpty,
+        hasClient: _selectedClient != null,
+        onNewTicket: () {
+          Navigator.of(context).pop();
+          setState(() {
+            _cart = [];
+            _selectedClient = null;
+            _noteCtrl.clear();
+          });
+        },
+        onSelectClient: () {
+          Navigator.of(context).pop();
+          _openClientPickerDialog();
+        },
+        onNewClient: () {
+          Navigator.of(context).pop();
+          _createQuickClient();
+        },
+        onCreateQuotation: () {
+          Navigator.of(context).pop();
+          context.go(Routes.cotizaciones);
+        },
+        onQuotationList: () {
+          Navigator.of(context).pop();
+          context.go(Routes.cotizacionesHistorial);
+        },
+        onSalesList: () {
+          Navigator.of(context).pop();
+          context.go(Routes.ventasLista);
+        },
+        onAddNote: () {
+          Navigator.of(context).pop();
+          _openNoteDialog();
+        },
+        onExternalSale: () {
+          Navigator.of(context).pop();
+          _openExternalItemDialog();
+        },
+        onRefreshProducts: () {
+          Navigator.of(context).pop();
+          _loadProducts(forceRemote: true);
+        },
+        onClearCache: () {
+          Navigator.of(context).pop();
+          _clearAllProductCache();
+        },
+      ),
+    );
+  }
+
+  Widget _buildMobileAppBarSearchField() {
+    return SizedBox(
+      height: 36,
+      child: TextField(
+        controller: _searchCtrl,
+        focusNode: _searchFocus,
+        autofocus: true,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+        ),
+        cursorColor: Colors.white,
+        textInputAction: TextInputAction.search,
+        onChanged: (_) => setState(() {}),
+        onSubmitted: _submitProductSearch,
+        decoration: InputDecoration(
+          hintText: 'Buscar producto',
+          hintStyle: TextStyle(
+            color: Colors.white.withValues(alpha: .75),
+            fontWeight: FontWeight.w600,
+          ),
+          prefixIcon: const Icon(Icons.search_rounded, color: Colors.white),
+          suffixIcon: _searchCtrl.text.trim().isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Limpiar',
+                  onPressed: () {
+                    _searchCtrl.clear();
+                    setState(() {});
+                    _searchFocus.requestFocus();
+                  },
+                  icon: const Icon(Icons.close_rounded, color: Colors.white),
+                ),
+          filled: true,
+          fillColor: Colors.white.withValues(alpha: .14),
+          contentPadding: EdgeInsets.zero,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: Colors.white.withValues(alpha: .28)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: Colors.white.withValues(alpha: .28)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: Colors.white),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileAppBarTitle() {
+    return const Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Facturación',
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0,
+          ),
+        ),
+        SizedBox(height: 2),
+        Text(
+          'Factura y cotiza',
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 11.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0,
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -416,12 +503,18 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     final maxContentWidth = isWide ? 1180.0 : double.infinity;
 
     return Scaffold(
+      backgroundColor: isWide ? null : AppColors.background,
       appBar: CustomAppBar(
-        title: 'Registrar Venta',
+        title: isWide ? 'Registrar Venta' : 'Facturación',
+        titleWidget: !isWide
+            ? (_searchOpen
+                  ? _buildMobileAppBarSearchField()
+                  : _buildMobileAppBarTitle())
+            : null,
         fallbackRoute: Routes.ventas,
         preferDrawerLeading: true,
         showLogo: false,
-        showDepartmentLabel: false,
+        showDepartmentLabel: isWide,
         actions: isWide
             ? [
                 IconButton(
@@ -439,7 +532,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                   itemBuilder: (context) => const [
                     PopupMenuItem(
                       value: 'clear_cache',
-                      child: Text('Limpiar caché de productos'),
+                      child: Text('Limpiar cache de productos'),
                     ),
                   ],
                 ),
@@ -453,19 +546,19 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                       autofocus: true,
                       onChanged: (_) => setState(() {}),
                       onSubmitted: _submitProductSearch,
-                      decoration: InputDecoration(
-                        hintText: 'Buscar o escanear código...',
-                        prefixIcon: const Icon(
+                      decoration: const InputDecoration(
+                        hintText: 'Buscar o escanear codigo...',
+                        prefixIcon: Icon(
                           Icons.qr_code_scanner_outlined,
                           size: 18,
                         ),
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
+                        contentPadding: EdgeInsets.symmetric(
                           horizontal: 8,
                           vertical: 8,
                         ),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.zero,
                           borderSide: BorderSide.none,
                         ),
                         filled: true,
@@ -475,128 +568,610 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                 ),
               ]
             : [
+                if (!_searchOpen)
+                  IconButton(
+                    tooltip: 'Producto externo',
+                    onPressed: _openExternalItemDialog,
+                    icon: const Icon(Icons.add_rounded),
+                  ),
                 IconButton(
-                  tooltip: 'Recargar productos',
-                  onPressed: () => _loadProducts(forceRemote: true),
-                  icon: const Icon(Icons.refresh),
-                ),
-                PopupMenuButton<String>(
-                  tooltip: 'Opciones',
-                  onSelected: (value) {
-                    if (value == 'clear_cache') {
-                      _clearAllProductCache();
+                  tooltip: _searchOpen ? 'Cerrar búsqueda' : 'Buscar',
+                  onPressed: () {
+                    setState(() {
+                      _searchOpen = !_searchOpen;
+                      if (!_searchOpen) {
+                        _searchCtrl.clear();
+                      }
+                    });
+                    if (_searchOpen) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) _searchFocus.requestFocus();
+                      });
                     }
                   },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(
-                      value: 'clear_cache',
-                      child: Text('Limpiar caché de productos'),
+                  icon: Icon(
+                    _searchOpen ? Icons.close_rounded : Icons.search_rounded,
+                  ),
+                ),
+                if (!_searchOpen) ...[
+                  IconButton(
+                    tooltip: _selectedCategories.isEmpty
+                        ? 'Filtros'
+                        : '${_selectedCategories.length} filtro(s)',
+                    onPressed: _openCategoryDrawer,
+                    icon: Badge(
+                      isLabelVisible: _selectedCategories.isNotEmpty,
+                      smallSize: 8,
+                      child: const Icon(Icons.filter_alt_outlined),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Acciones',
+                    onPressed: _openActionsDrawer,
+                    icon: const Icon(Icons.tune_rounded),
+                  ),
+                ],
+              ],
+        trailing: !isWide ? const SizedBox.shrink() : null,
+      ),
+      drawer: buildAdaptiveDrawer(context, currentUser: user),
+      body: SafeArea(
+        top: false,
+        bottom: false,
+        child: Column(
+          children: [
+            if (_loadingProducts) const LinearProgressIndicator(minHeight: 2),
+            if (!isWide) _buildMobileInvoiceModeBar(),
+            if (!isWide && _selectedCategories.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${_selectedCategories.length} categoria(s) activa(s)',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () =>
+                          setState(() => _selectedCategories = <String>{}),
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                      child: const Text('Limpiar'),
                     ),
                   ],
                 ),
-              ],
-      ),
-      drawer: buildAdaptiveDrawer(context, currentUser: user),
-      body: Column(
-        children: [
-          if (!isWide)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-              child: TextField(
-                controller: _searchCtrl,
-                focusNode: _searchFocus,
-                autofocus: true,
-                onChanged: (_) => setState(() {}),
-                onSubmitted: _submitProductSearch,
-                decoration: InputDecoration(
-                  hintText: 'Buscar producto o escanear código...',
-                  prefixIcon: const Icon(Icons.qr_code_scanner_outlined),
-                  suffixIcon: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_searchCtrl.text.isNotEmpty)
-                        IconButton(
-                          tooltip: 'Limpiar búsqueda',
-                          onPressed: () {
-                            _searchCtrl.clear();
-                            setState(() {});
-                          },
-                          icon: const Icon(Icons.close),
-                        ),
-                      IconButton(
-                        tooltip: _selectedCategory == null
-                            ? 'Filtrar por categoría'
-                            : 'Categoría: $_selectedCategory',
-                        onPressed: _pickCategoryFilter,
-                        icon: Icon(
-                          _selectedCategory == null
-                              ? Icons.filter_alt_outlined
-                              : Icons.filter_alt,
-                        ),
-                      ),
-                    ],
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 10,
+              ),
+            Expanded(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: maxContentWidth),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      const dividerHeight = 1.0;
+                      final available = constraints.maxHeight;
+                      final contentHeight = (available - dividerHeight).clamp(
+                        160.0,
+                        available,
+                      );
+
+                      final panelRatio = isWide
+                          ? 0.42
+                          : screenHeight < 720
+                          ? 0.60
+                          : 0.62;
+                      final panelHeight = contentHeight * panelRatio;
+                      final productHeight = contentHeight - panelHeight;
+
+                      return Column(
+                        children: [
+                          SizedBox(
+                            height: productHeight,
+                            child: _buildProductGrid(isCompact: isCompact),
+                          ),
+                          Container(
+                            height: dividerHeight,
+                            color: Theme.of(context).dividerColor,
+                          ),
+                          SizedBox(
+                            height: panelHeight,
+                            child: Align(
+                              alignment: Alignment.topCenter,
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth: isWide ? 720 : double.infinity,
+                                ),
+                                child: _buildCartPanel(
+                                  isCompact: isCompact,
+                                  showInlineTotals: showInlineTotals,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProductGrid({required bool isCompact}) {
+    final visible = _filteredProducts;
+
+    if (visible.isEmpty) {
+      return const Center(child: Text('No hay productos para mostrar'));
+    }
+
+    final mobileGridSurface = MediaQuery.sizeOf(context).width < 700;
+    final grid = LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final height = constraints.maxHeight;
+        final mobileGrid = width < 560;
+        final crossAxisCount = width < 340
+            ? 2
+            : mobileGrid
+            ? 3
+            : width < 900
+            ? 4
+            : 5;
+        final compactCard = width < 900;
+        final gridPadding = mobileGridSurface ? 0.0 : 8.0;
+        const gridSpacing = 7.0;
+        final cellWidth =
+            (width - (gridPadding * 2) - (gridSpacing * (crossAxisCount - 1))) /
+            crossAxisCount;
+        final twoRowHeight = (height - (gridPadding * 2) - gridSpacing) / 2;
+        final aspectRatio = mobileGrid
+            ? (cellWidth / twoRowHeight.clamp(92.0, 150.0))
+            : compactCard
+            ? 1.0
+            : 1.08;
+
+        return GridView.builder(
+          padding: EdgeInsets.all(gridPadding),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            crossAxisSpacing: gridSpacing,
+            mainAxisSpacing: gridSpacing,
+            childAspectRatio: aspectRatio,
+          ),
+          itemCount: visible.length,
+          itemBuilder: (context, index) {
+            final product = visible[index];
+            return _SaleProductGridCard(
+              product: product,
+              money: _money,
+              mobileGrid: mobileGrid,
+              compactCard: compactCard,
+              onTap: () => _addProduct(product),
+            );
+          },
+        );
+      },
+    );
+
+    if (mobileGridSurface) {
+      return Container(
+        margin: const EdgeInsets.fromLTRB(10, 0, 10, 0),
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: Theme.of(
+              context,
+            ).colorScheme.outlineVariant.withValues(alpha: .45),
+          ),
+        ),
+        child: grid,
+      );
+    }
+
+    return Column(children: [Expanded(child: grid)]);
+  }
+
+  Widget _buildMobileInvoiceModeBar() {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: .86),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: .34),
+        ),
+      ),
+      child: InkWell(
+        onTap: _openActionsDrawer,
+        child: Row(
+          children: [
+            const Text(
+              'Factura',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _selectedClient?.nombre.trim().isNotEmpty == true
+                    ? _selectedClient!.nombre.trim()
+                    : 'Consumidor final',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontSize: 10,
+                  color: const Color(0xFF52667C),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Text(
+              '${_cart.length}',
+              style: theme.textTheme.bodySmall?.copyWith(fontSize: 9.5),
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileCartPanel() {
+    final theme = Theme.of(context);
+    final hasClient = _selectedClient != null;
+    return Container(
+      color: theme.colorScheme.surface,
+      child: Column(
+        children: [
           Expanded(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: maxContentWidth),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    const dividerHeight = 1.0;
-                    final available = constraints.maxHeight;
-                    final contentHeight = (available - dividerHeight).clamp(
-                      160.0,
-                      available,
-                    );
-
-                    final panelRatio = isWide
-                        ? 0.42
-                        : screenHeight < 720
-                        ? 0.58
-                        : 0.54;
-                    final panelHeight = contentHeight * panelRatio;
-                    final productHeight = contentHeight - panelHeight;
-
-                    return Column(
-                      children: [
-                        SizedBox(
-                          height: productHeight,
-                          child: _buildProductGrid(isCompact: isCompact),
+            child: _cart.isEmpty
+                ? Center(
+                    child: Text(
+                      'Agrega productos para iniciar la factura',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(10, 2, 10, 46),
+                    itemCount: _cart.length,
+                    separatorBuilder: (_, __) => Divider(
+                      height: 6,
+                      thickness: .6,
+                      color: theme.colorScheme.outlineVariant.withValues(
+                        alpha: .42,
+                      ),
+                    ),
+                    itemBuilder: (context, index) {
+                      final item = _cart[index];
+                      final qtyValue = item.qty % 1 == 0
+                          ? item.qty.toInt().toString()
+                          : item.qty.toStringAsFixed(2);
+                      return ListTile(
+                        dense: true,
+                        minLeadingWidth: 26,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 0,
+                          vertical: 1,
                         ),
-                        Container(
-                          height: dividerHeight,
-                          color: Theme.of(context).dividerColor,
+                        leading: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: SizedBox(
+                            width: 32,
+                            height: 32,
+                            child: (item.imageUrl ?? '').trim().isEmpty
+                                ? ColoredBox(
+                                    color: const Color(0xFFEAF1FF),
+                                    child: Icon(
+                                      item.isExternal
+                                          ? Icons.receipt_long_outlined
+                                          : Icons.inventory_2_outlined,
+                                      color: const Color(0xFF52667C),
+                                      size: 18,
+                                    ),
+                                  )
+                                : ProductNetworkImage(
+                                    imageUrl: item.imageUrl!,
+                                    productId: item.productId ?? item.name,
+                                    productName: item.name,
+                                    originalUrl: item.product?.originalFotoUrl,
+                                    fit: BoxFit.cover,
+                                    fallback: const ColoredBox(
+                                      color: Color(0xFFEAF1FF),
+                                      child: Icon(
+                                        Icons.inventory_2_outlined,
+                                        color: Color(0xFF52667C),
+                                        size: 18,
+                                      ),
+                                    ),
+                                  ),
+                          ),
                         ),
-                        SizedBox(
-                          height: panelHeight,
-                          child: Align(
-                            alignment: Alignment.topCenter,
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(
-                                maxWidth: isWide ? 720 : double.infinity,
+                        title: Text(
+                          item.name.toUpperCase(),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            height: 1.08,
+                          ),
+                        ),
+                        subtitle: Text(
+                          '$qtyValue x ${_money(item.priceSoldUnit)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontSize: 10.5,
+                            color: const Color(0xFF60758A),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        trailing: SizedBox(
+                          width: 98,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  _money(item.subtotalSold),
+                                  textAlign: TextAlign.end,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
                               ),
-                              child: _buildCartPanel(
-                                isCompact: isCompact,
-                                showInlineTotals: showInlineTotals,
+                              SizedBox(
+                                width: 28,
+                                height: 28,
+                                child: IconButton(
+                                  tooltip: 'Editar',
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  onPressed: () =>
+                                      _openEditCartItemDialog(index),
+                                  icon: const Icon(
+                                    Icons.edit_outlined,
+                                    size: 15,
+                                    color: Color(0xFF52667C),
+                                  ),
+                                ),
                               ),
+                              SizedBox(
+                                width: 24,
+                                height: 28,
+                                child: IconButton(
+                                  tooltip: 'Quitar',
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  onPressed: () => setState(
+                                    () => _cart = [..._cart]..removeAt(index),
+                                  ),
+                                  icon: const Icon(
+                                    Icons.close_rounded,
+                                    size: 16,
+                                    color: Color(0xFF52667C),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        onTap: () => _openEditCartItemDialog(index),
+                      );
+                    },
+                  ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 5, 12, 7),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              border: Border(
+                top: BorderSide(color: theme.colorScheme.outlineVariant),
+              ),
+            ),
+            child: SafeArea(
+              top: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Sub ${_money(_totalSold)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '${_totalUnits.toStringAsFixed(_totalUnits % 1 == 0 ? 0 : 2)} uds',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: TextButton.icon(
+                          onPressed: _openClientPickerDialog,
+                          style: TextButton.styleFrom(
+                            alignment: Alignment.centerLeft,
+                            padding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          icon: Icon(
+                            hasClient
+                                ? Icons.person_rounded
+                                : Icons.person_add_alt_1_rounded,
+                            size: 16,
+                          ),
+                          label: Text(
+                            hasClient
+                                ? _selectedClient!.nombre
+                                : 'Cliente requerido',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                         ),
-                      ],
-                    );
-                  },
-                ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'TOTAL',
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                          Text(
+                            _money(_totalSold),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              height: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 7),
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 42,
+                        height: 38,
+                        child: IconButton(
+                          tooltip: 'Limpiar factura',
+                          visualDensity: VisualDensity.standard,
+                          padding: EdgeInsets.zero,
+                          style: IconButton.styleFrom(
+                            foregroundColor: const Color(0xFFDC2626),
+                            disabledForegroundColor: const Color(
+                              0xFFDC2626,
+                            ).withValues(alpha: .34),
+                            backgroundColor: const Color(
+                              0xFFDC2626,
+                            ).withValues(alpha: .08),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                          ),
+                          onPressed: _cart.isEmpty
+                              ? null
+                              : () => setState(() {
+                                  _cart = [];
+                                  _selectedClient = null;
+                                  _noteCtrl.clear();
+                                }),
+                          icon: const Icon(Icons.delete_sweep_outlined),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _openNoteDialog,
+                          icon: Icon(
+                            _noteCtrl.text.trim().isEmpty
+                                ? Icons.note_add_outlined
+                                : Icons.sticky_note_2_outlined,
+                            size: 16,
+                          ),
+                          label: Text(
+                            _noteCtrl.text.trim().isEmpty ? 'Nota' : 'Con nota',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(92, 38),
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            visualDensity: VisualDensity.compact,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _saving || !hasClient || _cart.isEmpty
+                              ? null
+                              : _saveSale,
+                          icon: _saving
+                              ? const SizedBox.square(
+                                  dimension: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.check_circle_outline,
+                                  size: 16,
+                                ),
+                          label: const Text(
+                            'Generar',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(112, 38),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            backgroundColor: const Color(0xFF1957E6),
+                            visualDensity: VisualDensity.compact,
+                            textStyle: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w800,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
@@ -605,206 +1180,19 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     );
   }
 
-  Widget _buildProductGrid({required bool isCompact}) {
-    if (_loadingProducts && _products.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    final filtered = _filteredProducts;
-    final visible = filtered;
-
-    if (visible.isEmpty) {
-      return const Center(child: Text('No hay productos para mostrar'));
-    }
-
-    return Column(
-      children: [
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final width = constraints.maxWidth;
-              final crossAxisCount = width < 340
-                  ? 2
-                  : width < 560
-                  ? 3
-                  : width < 900
-                  ? 4
-                  : 5;
-              final compactCard = width < 900;
-              final aspectRatio = width < 380
-                  ? 0.92
-                  : compactCard
-                  ? 1.0
-                  : 1.08;
-
-              return GridView.builder(
-                padding: const EdgeInsets.all(8),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: crossAxisCount,
-                  crossAxisSpacing: 6,
-                  mainAxisSpacing: 6,
-                  childAspectRatio: aspectRatio,
-                ),
-                itemCount: visible.length,
-                itemBuilder: (context, index) {
-                  final p = visible[index];
-
-                  return InkWell(
-                    borderRadius: BorderRadius.circular(10),
-                    onTap: () => _addProduct(p),
-                    child: Card(
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        side: BorderSide(
-                          color: Theme.of(
-                            context,
-                          ).dividerColor.withValues(alpha: 0.25),
-                        ),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          if ((p.displayFotoUrl ?? '').isEmpty)
-                            Container(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.surfaceContainerHighest,
-                              child: const Center(
-                                child: Icon(Icons.inventory_2_outlined),
-                              ),
-                            )
-                          else
-                            ProductNetworkImage(
-                              imageUrl: p.displayFotoUrl!,
-                              productId: p.id,
-                              productName: p.nombre,
-                              originalUrl: p.originalFotoUrl,
-                              fit: BoxFit.cover,
-                              loading: Container(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.surfaceContainerHighest,
-                                child: const Center(
-                                  child: Icon(Icons.inventory_2_outlined),
-                                ),
-                              ),
-                              fallback: Container(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.surfaceContainerHighest,
-                                child: const Center(
-                                  child: Icon(Icons.broken_image_outlined),
-                                ),
-                              ),
-                            ),
-                          const Positioned.fill(
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    Color(0x00000000),
-                                    Color(0xAA000000),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            left: 6,
-                            right: 6,
-                            bottom: 6,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  p.nombre,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: width < 380
-                                        ? 9.5
-                                        : compactCard
-                                        ? 10
-                                        : 11,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                // Categoría con badge elegante - sin corte de texto
-                                Container(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: compactCard ? 4 : 5,
-                                    vertical: compactCard ? 1.5 : 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.18),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    p.categoriaLabel,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.fade,
-                                    softWrap: false,
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: width < 380
-                                          ? 8
-                                          : compactCard
-                                          ? 8.5
-                                          : 9.5,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.2,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  _money(p.precio),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: width < 380
-                                        ? 8.5
-                                        : compactCard
-                                        ? 9
-                                        : 10,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildCartPanel({
     required bool isCompact,
     required bool showInlineTotals,
   }) {
     final isWide = MediaQuery.of(context).size.width >= 1024;
+    if (!isWide) return _buildMobileCartPanel();
     final hasClient = _selectedClient != null;
     return Padding(
       padding: EdgeInsets.all(isCompact ? 10 : (isWide ? 8 : 12)),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.zero,
           border: Border.all(
             color: Theme.of(context).dividerColor.withValues(alpha: 0.25),
           ),
@@ -866,18 +1254,21 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                               return Material(
                                 color: Colors.transparent,
                                 child: InkWell(
-                                  borderRadius: BorderRadius.circular(8),
                                   onTap: () => _openEditCartItemDialog(index),
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 3,
+                                      horizontal: 8,
+                                      vertical: 6,
                                     ),
                                     decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(8),
                                       color: Theme.of(
                                         context,
                                       ).colorScheme.surfaceContainerHighest,
+                                      border: Border.all(
+                                        color: Theme.of(
+                                          context,
+                                        ).dividerColor.withValues(alpha: 0.20),
+                                      ),
                                     ),
                                     child: Row(
                                       children: [
@@ -885,26 +1276,27 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                           qtyValue,
                                           style: const TextStyle(
                                             fontWeight: FontWeight.w700,
-                                            fontSize: 11,
+                                            fontSize: 12,
                                           ),
                                           maxLines: 1,
                                         ),
-                                        const SizedBox(width: 4),
+                                        const SizedBox(width: 6),
                                         Expanded(
                                           child: Text(
                                             item.name,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
-                                              fontSize: 11,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
                                             ),
                                           ),
                                         ),
-                                        const SizedBox(width: 4),
+                                        const SizedBox(width: 6),
                                         Text(
                                           _money(item.subtotalSold),
                                           style: const TextStyle(
-                                            fontSize: 11,
+                                            fontSize: 12,
                                             fontWeight: FontWeight.w700,
                                           ),
                                           maxLines: 1,
@@ -1027,7 +1419,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                           style: FilledButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 10),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.zero,
                             ),
                           ),
                           child: _saving
@@ -1061,7 +1453,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                               vertical: 10,
                             ),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.zero,
                             ),
                             side: BorderSide(
                               color: Theme.of(context).colorScheme.error,
@@ -1212,6 +1604,144 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     if (selected != null && mounted) {
       setState(() => _selectedClient = selected);
     }
+  }
+
+  Future<void> _openExternalItemDialog() async {
+    final nameCtrl = TextEditingController();
+    final qtyCtrl = TextEditingController(text: '1');
+    final priceCtrl = TextEditingController();
+    final costCtrl = TextEditingController(text: '0');
+    String? errorText;
+
+    final item = await showDialog<SaleDraftItem>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          return AlertDialog(
+            title: const Text('Vender fuera del inventario'),
+            content: SizedBox(
+              width: 340,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Nombre del item',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: qtyCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: 'Cantidad',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: priceCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: 'Precio',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: costCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: 'Costo',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  if (errorText != null) ...[
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        errorText!,
+                        style: TextStyle(
+                          color: Theme.of(dialogContext).colorScheme.error,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final name = nameCtrl.text.trim();
+                  final qty = double.tryParse(qtyCtrl.text.trim());
+                  final price = double.tryParse(priceCtrl.text.trim());
+                  final cost = double.tryParse(costCtrl.text.trim()) ?? 0;
+
+                  if (name.isEmpty) {
+                    setDialogState(
+                      () => errorText = 'Escribe el nombre del item',
+                    );
+                    return;
+                  }
+                  if (qty == null ||
+                      qty <= 0 ||
+                      price == null ||
+                      price < 0 ||
+                      cost < 0) {
+                    setDialogState(
+                      () => errorText = 'Revisa cantidad, precio y costo',
+                    );
+                    return;
+                  }
+
+                  Navigator.of(dialogContext).pop(
+                    SaleDraftItem(
+                      name: name,
+                      imageUrl: null,
+                      isExternal: true,
+                      qty: qty,
+                      priceSoldUnit: price,
+                      costUnitSnapshot: cost,
+                    ),
+                  );
+                },
+                child: const Text('Agregar'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    nameCtrl.dispose();
+    qtyCtrl.dispose();
+    priceCtrl.dispose();
+    costCtrl.dispose();
+
+    if (item == null || !mounted) return;
+    setState(() => _cart = [..._cart, item]);
   }
 
   void _addProduct(ProductModel product) {
@@ -1441,13 +1971,26 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       return;
     }
 
+    final payment = await showDialog<_SalePaymentDraft>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => _SalePaymentDialog(total: _totalSold),
+    );
+    if (payment == null) return;
+
     setState(() => _saving = true);
     try {
       final created = await ref
           .read(ventasRepositoryProvider)
           .createSale(
             customerId: _selectedClient!.id,
+            customerName: _selectedClient!.nombre,
+            customerPhone: _selectedClient!.telefono,
             note: _noteCtrl.text,
+            paymentMethod: payment.method,
+            paymentCashAmount: payment.cashAmount,
+            paymentTransferAmount: payment.transferAmount,
+            expectedTotalSold: _totalSold,
             items: _cart,
           );
       if (created != null) {
@@ -1485,6 +2028,691 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+}
+
+class _SaleProductGridCard extends StatelessWidget {
+  const _SaleProductGridCard({
+    required this.product,
+    required this.money,
+    required this.mobileGrid,
+    required this.compactCard,
+    required this.onTap,
+  });
+
+  final ProductModel product;
+  final String Function(double value) money;
+  final bool mobileGrid;
+  final bool compactCard;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: onTap,
+      child: Card(
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(
+            color: Theme.of(context).dividerColor.withValues(alpha: 0.25),
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if ((product.displayFotoUrl ?? '').isEmpty)
+              Container(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: const Center(child: Icon(Icons.inventory_2_outlined)),
+              )
+            else
+              ProductNetworkImage(
+                imageUrl: product.displayFotoUrl!,
+                productId: product.id,
+                productName: product.nombre,
+                originalUrl: product.originalFotoUrl,
+                fit: BoxFit.cover,
+                loading: Container(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  child: const Center(child: Icon(Icons.inventory_2_outlined)),
+                ),
+                fallback: Container(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  child: const Center(child: Icon(Icons.broken_image_outlined)),
+                ),
+              ),
+            const Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0x00000000), Color(0xAA000000)],
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              right: 4,
+              bottom: 4,
+              child: Container(
+                width: mobileGrid ? 20 : 24,
+                height: mobileGrid ? 20 : 24,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1957E6),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: .85),
+                  ),
+                ),
+                child: const Icon(
+                  Icons.add_rounded,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
+            ),
+            Positioned(
+              left: 6,
+              right: mobileGrid ? 28 : 32,
+              bottom: 6,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    product.nombre,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: mobileGrid
+                          ? 10.8
+                          : compactCard
+                          ? 10.5
+                          : 11,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: compactCard ? 4 : 5,
+                      vertical: compactCard ? 1.5 : 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      product.categoriaLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.fade,
+                      softWrap: false,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: mobileGrid
+                            ? 8.8
+                            : compactCard
+                            ? 8.5
+                            : 9.5,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    money(product.precio),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: mobileGrid
+                          ? 9.8
+                          : compactCard
+                          ? 9
+                          : 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SalePaymentDraft {
+  const _SalePaymentDraft({
+    required this.method,
+    required this.cashAmount,
+    required this.transferAmount,
+  });
+
+  final String method;
+  final double cashAmount;
+  final double transferAmount;
+}
+
+class _SalePaymentDialog extends StatefulWidget {
+  const _SalePaymentDialog({required this.total});
+
+  final double total;
+
+  @override
+  State<_SalePaymentDialog> createState() => _SalePaymentDialogState();
+}
+
+class _SalePaymentDialogState extends State<_SalePaymentDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _cashCtrl;
+  late final TextEditingController _transferCtrl;
+  String _method = 'cash';
+
+  @override
+  void initState() {
+    super.initState();
+    _cashCtrl = TextEditingController(text: widget.total.toStringAsFixed(2));
+    _transferCtrl = TextEditingController(text: '0.00');
+  }
+
+  @override
+  void dispose() {
+    _cashCtrl.dispose();
+    _transferCtrl.dispose();
+    super.dispose();
+  }
+
+  void _selectMethod(String method) {
+    setState(() {
+      _method = method;
+      if (method == 'cash') {
+        _cashCtrl.text = widget.total.toStringAsFixed(2);
+        _transferCtrl.text = '0.00';
+      } else if (method == 'transfer') {
+        _cashCtrl.text = '0.00';
+        _transferCtrl.text = widget.total.toStringAsFixed(2);
+      } else {
+        final cash = parseDominicanAmount(_cashCtrl.text) ?? 0;
+        final safeCash = cash <= 0 || cash >= widget.total
+            ? widget.total / 2
+            : cash;
+        _cashCtrl.text = safeCash.toStringAsFixed(2);
+        _transferCtrl.text = (widget.total - safeCash).toStringAsFixed(2);
+      }
+    });
+  }
+
+  void _syncTransferFromCash() {
+    if (_method != 'mixed') return;
+    final cash = parseDominicanAmount(_cashCtrl.text);
+    if (cash == null) return;
+    final transfer = widget.total - cash;
+    if (transfer < 0) return;
+    _transferCtrl.text = transfer.toStringAsFixed(2);
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+    final cash = parseDominicanAmount(_cashCtrl.text) ?? 0;
+    final transfer = parseDominicanAmount(_transferCtrl.text) ?? 0;
+    Navigator.of(context).pop(
+      _SalePaymentDraft(
+        method: _method,
+        cashAmount: double.parse(cash.toStringAsFixed(2)),
+        transferAmount: double.parse(transfer.toStringAsFixed(2)),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final total = widget.total;
+    final cash = parseDominicanAmount(_cashCtrl.text) ?? 0;
+    final transfer = parseDominicanAmount(_transferCtrl.text) ?? 0;
+    final paid = cash + transfer;
+    final remaining = total - paid;
+
+    return AlertDialog(
+      title: const Text('Cobrar venta'),
+      content: SizedBox(
+        width: 420,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                formatRdCurrencyAccounting(total),
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 14),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: 'cash',
+                    icon: Icon(Icons.payments_outlined),
+                    label: Text('Efectivo'),
+                  ),
+                  ButtonSegment(
+                    value: 'transfer',
+                    icon: Icon(Icons.sync_alt_rounded),
+                    label: Text('Transferencia'),
+                  ),
+                  ButtonSegment(
+                    value: 'mixed',
+                    icon: Icon(Icons.call_split_rounded),
+                    label: Text('Mixto'),
+                  ),
+                ],
+                selected: {_method},
+                onSelectionChanged: (value) => _selectMethod(value.first),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _cashCtrl,
+                enabled: _method != 'transfer',
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                onChanged: (_) {
+                  _syncTransferFromCash();
+                  setState(() {});
+                },
+                decoration: const InputDecoration(
+                  labelText: 'Efectivo',
+                  prefixText: r'RD$ ',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) => _validatePaymentAmounts(),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _transferCtrl,
+                enabled: _method != 'cash',
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  labelText: 'Transferencia',
+                  prefixText: r'RD$ ',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) => _validatePaymentAmounts(),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                remaining.abs() < 0.01
+                    ? 'Pago completo'
+                    : 'Diferencia: ${formatRdCurrencyAccounting(remaining)}',
+                style: TextStyle(
+                  color: remaining.abs() < 0.01
+                      ? const Color(0xFF047857)
+                      : theme.colorScheme.error,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('Guardar e imprimir'),
+        ),
+      ],
+    );
+  }
+
+  String? _validatePaymentAmounts() {
+    final cash = parseDominicanAmount(_cashCtrl.text);
+    final transfer = parseDominicanAmount(_transferCtrl.text);
+    if (cash == null || transfer == null) return 'Monto inválido';
+    if (_method == 'cash' && (cash - widget.total).abs() >= 0.01) {
+      return 'El efectivo debe cubrir el total';
+    }
+    if (_method == 'transfer' && (transfer - widget.total).abs() >= 0.01) {
+      return 'La transferencia debe cubrir el total';
+    }
+    if (_method == 'mixed' && (cash <= 0 || transfer <= 0)) {
+      return 'El pago mixto requiere ambos montos';
+    }
+    if ((cash + transfer - widget.total).abs() >= 0.01) {
+      return 'Efectivo + transferencia debe igualar el total';
+    }
+    return null;
+  }
+}
+
+class _CategoryFilterDrawer extends StatefulWidget {
+  const _CategoryFilterDrawer({
+    required this.categories,
+    required this.selectedCategories,
+  });
+
+  final List<String> categories;
+  final Set<String> selectedCategories;
+
+  @override
+  State<_CategoryFilterDrawer> createState() => _CategoryFilterDrawerState();
+}
+
+class _CategoryFilterDrawerState extends State<_CategoryFilterDrawer> {
+  late Set<String> _draft;
+
+  @override
+  void initState() {
+    super.initState();
+    _draft = {...widget.selectedCategories};
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final drawerWidth = (MediaQuery.sizeOf(context).width * 0.82).clamp(
+      280.0,
+      360.0,
+    );
+    return SafeArea(
+      child: Material(
+        color: theme.colorScheme.surface,
+        child: SizedBox(
+          width: drawerWidth,
+          height: double.infinity,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _RightDrawerHeader(
+                icon: Icons.filter_alt_outlined,
+                title: 'Categorias',
+                subtitle: _draft.isEmpty
+                    ? 'Todas visibles'
+                    : '${_draft.length} seleccionada(s)',
+                onClose: () => Navigator.of(context).pop(),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Icon(
+                  _draft.isEmpty
+                      ? Icons.check_box
+                      : Icons.check_box_outline_blank,
+                  color: _draft.isEmpty ? theme.colorScheme.primary : null,
+                ),
+                title: const Text('Todas las categorias'),
+                onTap: () => setState(_draft.clear),
+              ),
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  itemCount: widget.categories.length,
+                  separatorBuilder: (context, index) =>
+                      const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final category = widget.categories[index];
+                    final selected = _draft.contains(category);
+                    return CheckboxListTile(
+                      value: selected,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      title: Text(
+                        category,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: selected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
+                      ),
+                      onChanged: (_) => setState(() {
+                        if (selected) {
+                          _draft.remove(category);
+                        } else {
+                          _draft.add(category);
+                        }
+                      }),
+                    );
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                child: FilledButton(
+                  onPressed: () => Navigator.of(context).pop(_draft),
+                  style: FilledButton.styleFrom(
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                  ),
+                  child: const Text('Aplicar filtros'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SalesActionsDrawer extends StatelessWidget {
+  const _SalesActionsDrawer({
+    required this.hasCart,
+    required this.hasClient,
+    required this.onNewTicket,
+    required this.onSelectClient,
+    required this.onNewClient,
+    required this.onCreateQuotation,
+    required this.onQuotationList,
+    required this.onSalesList,
+    required this.onAddNote,
+    required this.onExternalSale,
+    required this.onRefreshProducts,
+    required this.onClearCache,
+  });
+
+  final bool hasCart;
+  final bool hasClient;
+  final VoidCallback onNewTicket;
+  final VoidCallback onSelectClient;
+  final VoidCallback onNewClient;
+  final VoidCallback onCreateQuotation;
+  final VoidCallback onQuotationList;
+  final VoidCallback onSalesList;
+  final VoidCallback onAddNote;
+  final VoidCallback onExternalSale;
+  final VoidCallback onRefreshProducts;
+  final VoidCallback onClearCache;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final drawerWidth = (MediaQuery.sizeOf(context).width * 0.84).clamp(
+      292.0,
+      380.0,
+    );
+    return SafeArea(
+      child: Material(
+        color: theme.colorScheme.surface,
+        child: SizedBox(
+          width: drawerWidth,
+          height: double.infinity,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _RightDrawerHeader(
+                icon: Icons.tune_outlined,
+                title: 'Acciones',
+                subtitle: hasCart ? 'Ticket en proceso' : 'Ticket nuevo',
+                onClose: () => Navigator.of(context).pop(),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  children: [
+                    _ActionDrawerTile(
+                      icon: Icons.add_box_outlined,
+                      title: 'Crear nuevo ticket',
+                      subtitle: 'Limpia la venta actual',
+                      onTap: onNewTicket,
+                    ),
+                    _ActionDrawerTile(
+                      icon: Icons.person_search_outlined,
+                      title: hasClient ? 'Cambiar cliente' : 'Cliente',
+                      subtitle: 'Seleccionar cliente del ticket',
+                      onTap: onSelectClient,
+                    ),
+                    _ActionDrawerTile(
+                      icon: Icons.person_add_alt_1,
+                      title: 'Crear cliente',
+                      subtitle: 'Cliente rapido para esta venta',
+                      onTap: onNewClient,
+                    ),
+                    _ActionDrawerTile(
+                      icon: Icons.request_quote_outlined,
+                      title: 'Cotizaciones',
+                      subtitle: 'Crear una cotizacion',
+                      onTap: onCreateQuotation,
+                    ),
+                    _ActionDrawerTile(
+                      icon: Icons.list_alt_outlined,
+                      title: 'Lista de cotizaciones',
+                      subtitle: 'Ver historial de cotizaciones',
+                      onTap: onQuotationList,
+                    ),
+                    _ActionDrawerTile(
+                      icon: Icons.receipt_long_outlined,
+                      title: 'Lista de ventas',
+                      subtitle: 'Ver ventas registradas',
+                      onTap: onSalesList,
+                    ),
+                    _ActionDrawerTile(
+                      icon: Icons.sticky_note_2_outlined,
+                      title: 'Agregar una nota',
+                      subtitle: 'Nota interna de la venta',
+                      onTap: onAddNote,
+                    ),
+                    _ActionDrawerTile(
+                      icon: Icons.inventory_2_outlined,
+                      title: 'Vender fuera del inventario',
+                      subtitle: 'Item manual sin producto',
+                      onTap: onExternalSale,
+                    ),
+                    const Divider(height: 18),
+                    _ActionDrawerTile(
+                      icon: Icons.refresh,
+                      title: 'Recargar productos',
+                      subtitle: 'Sincronizar catalogo',
+                      onTap: onRefreshProducts,
+                    ),
+                    _ActionDrawerTile(
+                      icon: Icons.cleaning_services_outlined,
+                      title: 'Limpiar cache de productos',
+                      subtitle: 'Forzar imagenes y catalogo fresco',
+                      onTap: onClearCache,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RightDrawerHeader extends StatelessWidget {
+  const _RightDrawerHeader({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onClose,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 10, 12),
+      child: Row(
+        children: [
+          Icon(icon, color: theme.colorScheme.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Cerrar',
+            onPressed: onClose,
+            icon: const Icon(Icons.close),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionDrawerTile extends StatelessWidget {
+  const _ActionDrawerTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+      subtitle: Text(subtitle),
+      onTap: onTap,
+    );
   }
 }
 
