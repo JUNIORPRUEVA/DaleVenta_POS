@@ -10,7 +10,6 @@ import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/auth/role_permissions.dart';
 import '../../core/errors/api_exception.dart';
-import '../../core/routing/app_navigator.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -184,16 +183,114 @@ class _DepositosBancariosScreenState
 
   Future<void> _clearDateRange() => _applyDateRange(null);
 
-  Future<void> _pickDateRangeFromAppBar() async {
-    final now = DateTime.now();
-    final picked = await showDateRangePicker(
+  Future<void> _openFilters() async {
+    final result = await showGeneralDialog<_DepositFilterResult>(
       context: context,
-      initialDateRange: _dateRange,
-      firstDate: DateTime(now.year - 3),
-      lastDate: DateTime(now.year + 1, 12, 31),
+      barrierDismissible: true,
+      barrierLabel: 'Filtros de depósitos',
+      barrierColor: Colors.black.withValues(alpha: 0.26),
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: _DepositsFiltersSheet(
+            initialFilter: _viewFilter,
+            initialDateRange: _dateRange,
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
+        );
+      },
     );
-    if (picked == null) return;
-    await _applyDateRange(picked);
+    if (result == null || !mounted) return;
+    final changed =
+        result.filter != _viewFilter || result.dateRange != _dateRange;
+    if (!changed) return;
+    setState(() {
+      _viewFilter = result.filter;
+      _dateRange = result.dateRange;
+    });
+    await _load();
+  }
+
+  void _showSummary() {
+    final total = _orders.length;
+    final pending = _orders.where((item) => item.isPending).length;
+    final executed = _orders.where((item) => item.isExecuted).length;
+    final cancelled = _orders.where((item) => item.isCancelled).length;
+    final corrections = _orders.where((item) => item.isCorrection).length;
+    final depositedTotal = _orders
+        .where((item) => item.isExecuted)
+        .fold<double>(0, (sum, item) => sum + item.depositTotal);
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Resumen de depósitos',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 12),
+              _DepositSummaryStat(
+                label: 'Total',
+                value: '$total',
+                icon: Icons.receipt_long_outlined,
+              ),
+              const SizedBox(height: 8),
+              _DepositSummaryStat(
+                label: 'Pendientes',
+                value: '$pending',
+                icon: Icons.schedule_outlined,
+              ),
+              const SizedBox(height: 8),
+              _DepositSummaryStat(
+                label: 'Ejecutadas',
+                value: '$executed',
+                icon: Icons.verified_outlined,
+              ),
+              const SizedBox(height: 8),
+              _DepositSummaryStat(
+                label: 'Rechazadas/Anuladas',
+                value: '$cancelled',
+                icon: Icons.block_outlined,
+              ),
+              const SizedBox(height: 8),
+              _DepositSummaryStat(
+                label: 'Correcciones',
+                value: '$corrections',
+                icon: Icons.content_copy_outlined,
+              ),
+              const SizedBox(height: 8),
+              _DepositSummaryStat(
+                label: 'Depositado',
+                value: _money.format(depositedTotal),
+                icon: Icons.account_balance_outlined,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _showSnack(String message) async {
@@ -1442,174 +1539,132 @@ class _DepositosBancariosScreenState
   Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).user;
     final canUseModule = canAccessContabilidadByRole(user?.role);
-    final pendingCount = _orders
-        .where((item) => item.status == DepositOrderStatus.pending)
-        .length;
-    final executedCount = _orders
-        .where((item) => item.status == DepositOrderStatus.executed)
-        .length;
-    final cancelledCount = _orders
-        .where((item) => item.status == DepositOrderStatus.cancelled)
-        .length;
-    final correctionCount = _orders.where((item) => item.isCorrection).length;
-    final executedOrders = _orders
-        .where((item) => item.status == DepositOrderStatus.executed)
-        .toList(growable: false);
     final visibleOrders = _visibleOrders();
     final isCompact = MediaQuery.sizeOf(context).width < 760;
-    final executedTotal = executedOrders.fold<double>(
-      0,
-      (sum, item) => sum + item.depositTotal,
-    );
 
     if (!canUseModule) {
       return Scaffold(
         key: _scaffoldKey,
         backgroundColor: isCompact ? AppColors.background : null,
         appBar: CustomAppBar(
-          title: 'Depósitos bancarios',
+          title: 'Depósitos',
           onMenuPressed: () => _scaffoldKey.currentState?.openDrawer(),
+          showLogo: false,
+          showDepartmentLabel: false,
+          trailing: const SizedBox.shrink(),
         ),
         drawer: buildAdaptiveDrawer(context, currentUser: user),
-        body: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _AppBarBackButton(onPressed: () => AppNavigator.goBack(context)),
-              const SizedBox(height: 16),
-              const Expanded(
-                child: Center(
-                  child: Text(
-                    'Este módulo está disponible solo para usuarios autorizados.',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-            ],
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'Este módulo está disponible solo para usuarios autorizados.',
+              textAlign: TextAlign.center,
+            ),
           ),
         ),
       );
     }
 
-    final summaryPanel = _isAssistant
-        ? _AppBarBackButton(onPressed: () => AppNavigator.goBack(context))
-        : Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _AppBarBackButton(onPressed: () => AppNavigator.goBack(context)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _DepositsSummaryBar(
-                  total: _orders.length,
-                  pending: pendingCount,
-                  executed: executedCount,
-                  cancelled: cancelledCount,
-                  corrections: correctionCount,
-                  depositedTotal: executedTotal,
-                  money: _money,
-                ),
-              ),
-            ],
-          );
+    final hasActiveFilters =
+        _viewFilter != _DepositViewFilter.all || _dateRange != null;
 
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: isCompact ? AppColors.background : null,
       appBar: CustomAppBar(
-        title: 'Depósitos bancarios',
+        title: 'Depósitos',
         onMenuPressed: () => _scaffoldKey.currentState?.openDrawer(),
+        showLogo: false,
+        showDepartmentLabel: false,
         actions: [
           IconButton(
-            tooltip: _dateRange == null ? 'Filtrar' : 'Cambiar filtro',
-            onPressed: _pickDateRangeFromAppBar,
+            tooltip: hasActiveFilters ? 'Cambiar filtro' : 'Filtros',
+            onPressed: _openFilters,
             icon: Badge(
-              isLabelVisible: _dateRange != null,
+              isLabelVisible: hasActiveFilters,
               smallSize: 8,
               child: const Icon(Icons.filter_alt_outlined),
             ),
           ),
+          IconButton(
+            tooltip: 'Actualizar',
+            onPressed: _loading ? null : _load,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+          IconButton(
+            tooltip: 'Nuevo depósito',
+            onPressed: _openEditor,
+            icon: const Icon(Icons.add_rounded),
+          ),
         ],
+        trailing: const SizedBox.shrink(),
       ),
       drawer: buildAdaptiveDrawer(context, currentUser: user),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openEditor(),
-        icon: const Icon(Icons.add),
-        label: const Text('Nuevo depósito'),
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'deposits_summary',
+        tooltip: 'Ver resumen',
+        backgroundColor: AppColors.secondary,
+        foregroundColor: Colors.white,
+        onPressed: _showSummary,
+        child: const Icon(Icons.summarize_rounded),
       ),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
+        child: Stack(
           children: [
-            if (_isAssistant) ...[
-              const _AssistantNoticeCard(),
-              const SizedBox(height: 12),
-            ],
-            summaryPanel,
-            const SizedBox(height: 12),
-            if (_dateRange != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: InputChip(
-                    avatar: const Icon(Icons.date_range_outlined, size: 18),
-                    label: Text(
-                      '${_dateFmt.format(_dateRange!.start)} - ${_dateFmt.format(_dateRange!.end)}',
-                    ),
-                    onDeleted: _clearDateRange,
-                  ),
-                ),
-              ),
-            _DepositFilterBar(
-              currentFilter: _viewFilter,
-              onSelected: (filter) => setState(() => _viewFilter = filter),
-              isAdmin: _isAdmin,
-            ),
-            const SizedBox(height: 12),
-            if (_loading) const LinearProgressIndicator(minHeight: 2),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              )
-            else if (visibleOrders.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  _isAssistant
-                      ? 'No hay depósitos pendientes por ahora.'
-                      : 'No hay depósitos para el filtro seleccionado.',
-                ),
-              )
-            else
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: const Color(0xFFD9E0E8)),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x0F0F172A),
-                      blurRadius: 16,
-                      offset: Offset(0, 6),
-                    ),
+            Positioned.fill(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
+                children: [
+                  if (_isAssistant) ...[
+                    const _AssistantNoticeCard(),
+                    const SizedBox(height: 12),
                   ],
-                ),
-                child: Column(
-                  children: [
-                    if (!isCompact) _DepositListHeader(isAdmin: _isAdmin),
+                  if (_dateRange != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: InputChip(
+                          avatar: const Icon(
+                            Icons.date_range_outlined,
+                            size: 18,
+                          ),
+                          label: Text(
+                            '${_dateFmt.format(_dateRange!.start)} - ${_dateFmt.format(_dateRange!.end)}',
+                          ),
+                          onDeleted: _clearDateRange,
+                        ),
+                      ),
+                    ),
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        _error!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    )
+                  else if (visibleOrders.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        _isAssistant
+                            ? 'No hay depósitos pendientes por ahora.'
+                            : 'No hay depósitos para el filtro seleccionado.',
+                      ),
+                    )
+                  else
                     for (
                       var index = 0;
                       index < visibleOrders.length;
                       index++
                     ) ...[
-                      if (index > 0) const Divider(height: 1),
-                      _DepositOrderTile(
+                      if (index > 0) const SizedBox(height: 10),
+                      _DepositCard(
                         item: visibleOrders[index],
                         money: _money,
                         statusColor: _statusColor(visibleOrders[index].status),
@@ -1620,8 +1675,15 @@ class _DepositosBancariosScreenState
                             _handleTileAction(visibleOrders[index], action),
                       ),
                     ],
-                  ],
-                ),
+                ],
+              ),
+            ),
+            if (_loading)
+              const Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: LinearProgressIndicator(minHeight: 2),
               ),
           ],
         ),
@@ -1630,205 +1692,116 @@ class _DepositosBancariosScreenState
   }
 }
 
-class _DepositsSummaryBar extends StatelessWidget {
-  const _DepositsSummaryBar({
-    required this.total,
-    required this.pending,
-    required this.executed,
-    required this.cancelled,
-    required this.corrections,
-    required this.depositedTotal,
+class _DepositCard extends StatelessWidget {
+  const _DepositCard({
+    required this.item,
     required this.money,
+    required this.statusColor,
+    required this.isAdmin,
+    required this.canUploadVoucher,
+    required this.onTap,
+    required this.onSelectedAction,
   });
-  final int total;
-  final int pending;
-  final int executed;
-  final int cancelled;
-  final int corrections;
-  final double depositedTotal;
+
+  final DepositOrderModel item;
   final NumberFormat money;
+  final Color statusColor;
+  final bool isAdmin;
+  final bool canUploadVoucher;
+  final VoidCallback onTap;
+  final ValueChanged<_DepositTileMenuAction> onSelectedAction;
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 760;
-        final items = <Widget>[
-          _SummaryPill(label: 'Total', value: '$total'),
-          _SummaryPill(label: 'Pendiente', value: '$pending'),
-          _SummaryPill(label: 'Ejecutada', value: '$executed'),
-          _SummaryPill(label: 'Anulados', value: '$cancelled'),
-          _SummaryPill(label: 'Correcciones', value: '$corrections'),
-          _SummaryPill(
-            label: 'Depositado',
-            value: money.format(depositedTotal),
-          ),
-        ];
-
-        return DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF0F172A), Color(0xFF1E3A5F)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(22),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x1F0F172A),
-                blurRadius: 18,
-                offset: Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: compact
-                ? Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final item in items)
-                        SizedBox(
-                          width: (constraints.maxWidth - 24) / 2,
-                          child: item,
-                        ),
-                    ],
-                  )
-                : Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(child: items[0]),
-                          const SizedBox(width: 8),
-                          Expanded(child: items[1]),
-                          const SizedBox(width: 8),
-                          Expanded(child: items[2]),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(child: items[3]),
-                          const SizedBox(width: 8),
-                          Expanded(child: items[4]),
-                          const SizedBox(width: 8),
-                          Expanded(child: items[5]),
-                        ],
-                      ),
-                    ],
-                  ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _AppBarBackButton extends StatelessWidget {
-  const _AppBarBackButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
-        boxShadow: const [
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.55),
+        ),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x24000000),
+            color: colorScheme.shadow.withValues(alpha: 0.04),
             blurRadius: 14,
-            offset: Offset(0, 5),
+            offset: const Offset(0, 6),
           ),
         ],
       ),
-      child: SizedBox(
-        width: 52,
-        height: 52,
-        child: IconButton(
-          tooltip: 'Regresar',
-          onPressed: onPressed,
-          icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF0F172A)),
-        ),
+      clipBehavior: Clip.antiAlias,
+      child: _DepositOrderTile(
+        item: item,
+        money: money,
+        statusColor: statusColor,
+        isAdmin: isAdmin,
+        canUploadVoucher: canUploadVoucher,
+        onTap: onTap,
+        onSelectedAction: onSelectedAction,
       ),
     );
   }
 }
 
-class _SummaryPill extends StatelessWidget {
-  const _SummaryPill({required this.label, required this.value});
+class _DepositSummaryStat extends StatelessWidget {
+  const _DepositSummaryStat({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
 
   final String label;
   final String value;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DepositListHeader extends StatelessWidget {
-  const _DepositListHeader({required this.isAdmin});
-
-  final bool isAdmin;
-
-  @override
-  Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.labelMedium?.copyWith(
-      color: const Color(0xFF64748B),
-      fontWeight: FontWeight.w800,
-    );
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 12, 12),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.55),
+        ),
       ),
       child: Row(
         children: [
-          Expanded(flex: 3, child: Text('Banco', style: style)),
-          Expanded(flex: 2, child: Text('Responsable', style: style)),
-          Expanded(
-            child: Text('Monto', style: style, textAlign: TextAlign.end),
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: colorScheme.primary.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: colorScheme.primary, size: 20),
           ),
-          SizedBox(
-            width: isAdmin ? 48 : 44,
-            child: Text('Más', style: style, textAlign: TextAlign.end),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -2249,40 +2222,6 @@ class _AssistantNoticeCard extends StatelessWidget {
   }
 }
 
-class _DepositFilterBar extends StatelessWidget {
-  const _DepositFilterBar({
-    required this.currentFilter,
-    required this.onSelected,
-    this.isAdmin = false,
-  });
-
-  final _DepositViewFilter currentFilter;
-  final ValueChanged<_DepositViewFilter> onSelected;
-  final bool isAdmin;
-
-  @override
-  Widget build(BuildContext context) {
-    final filters = isAdmin
-        ? _DepositViewFilter.values
-        : _DepositViewFilter.values
-              .where((f) => f != _DepositViewFilter.executed)
-              .toList(growable: false);
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: filters
-          .map(
-            (filter) => ChoiceChip(
-              label: Text(filter.label),
-              selected: currentFilter == filter,
-              onSelected: (_) => onSelected(filter),
-            ),
-          )
-          .toList(growable: false),
-    );
-  }
-}
-
 class _DetailInfoCard extends StatelessWidget {
   const _DetailInfoCard({
     required this.title,
@@ -2356,6 +2295,351 @@ class _DetailRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _DepositFilterResult {
+  const _DepositFilterResult({required this.filter, this.dateRange});
+
+  final _DepositViewFilter filter;
+  final DateTimeRange? dateRange;
+}
+
+class _DepositsFiltersSheet extends StatefulWidget {
+  const _DepositsFiltersSheet({
+    required this.initialFilter,
+    required this.initialDateRange,
+  });
+
+  final _DepositViewFilter initialFilter;
+  final DateTimeRange? initialDateRange;
+
+  @override
+  State<_DepositsFiltersSheet> createState() => _DepositsFiltersSheetState();
+}
+
+class _DepositsFiltersSheetState extends State<_DepositsFiltersSheet> {
+  late _DepositViewFilter _filter = widget.initialFilter;
+  late DateTimeRange? _dateRange = widget.initialDateRange;
+  final _dateFmt = DateFormat('dd/MM/yyyy');
+
+  void _apply() {
+    Navigator.of(
+      context,
+    ).pop(_DepositFilterResult(filter: _filter, dateRange: _dateRange));
+  }
+
+  Future<void> _pickDateRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      initialDateRange: _dateRange,
+      firstDate: DateTime(now.year - 3),
+      lastDate: DateTime(now.year + 1, 12, 31),
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _dateRange = picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.sizeOf(context);
+    final width = (media.width * 0.85).clamp(340.0, 540.0);
+
+    return Dismissible(
+      key: const ValueKey('deposits-filter-panel'),
+      direction: DismissDirection.endToStart,
+      onDismissed: (_) => Navigator.of(context).pop(),
+      child: Material(
+        color: Colors.white,
+        elevation: 18,
+        borderRadius: const BorderRadius.horizontal(left: Radius.circular(26)),
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          width: width,
+          height: media.height,
+          child: SafeArea(
+            left: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEAF1FF),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.filter_alt_rounded,
+                          color: AppColors.secondary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Filtros de depósitos',
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Estado y rango de fechas',
+                              style: TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Cerrar',
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, color: AppColors.border),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                    children: [
+                      _DepositFilterSection<_DepositViewFilter>(
+                        title: 'Estado',
+                        value: _filter,
+                        options: _DepositViewFilter.values,
+                        labelBuilder: (filter) => filter.label,
+                        onSelected: (value) {
+                          setState(() => _filter = value);
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _DateRangeFilterSection(
+                        dateRange: _dateRange,
+                        dateFmt: _dateFmt,
+                        onPick: _pickDateRange,
+                        onClear: () => setState(() => _dateRange = null),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+                  decoration: const BoxDecoration(
+                    color: AppColors.surfaceAlt,
+                    border: Border(top: BorderSide(color: AppColors.border)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            Navigator.of(context).pop(
+                              const _DepositFilterResult(
+                                filter: _DepositViewFilter.all,
+                                dateRange: null,
+                              ),
+                            );
+                          },
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(46),
+                          ),
+                          child: const Text('Limpiar'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _apply,
+                          icon: const Icon(Icons.check_rounded),
+                          label: const Text('Aplicar'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.secondary,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size.fromHeight(46),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DepositFilterSection<T> extends StatelessWidget {
+  const _DepositFilterSection({
+    required this.title,
+    required this.value,
+    required this.options,
+    required this.labelBuilder,
+    required this.onSelected,
+  });
+
+  final String title;
+  final T value;
+  final List<T> options;
+  final String Function(T value) labelBuilder;
+  final ValueChanged<T> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Column(
+          children: [
+            for (var index = 0; index < options.length; index++) ...[
+              if (index > 0) const SizedBox(height: 8),
+              Material(
+                color: options[index] == value
+                    ? theme.colorScheme.primaryContainer.withValues(alpha: 0.6)
+                    : theme.colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.25,
+                      ),
+                borderRadius: BorderRadius.circular(16),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () => onSelected(options[index]),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          options[index] == value
+                              ? Icons.radio_button_checked_rounded
+                              : Icons.radio_button_off_rounded,
+                          size: 18,
+                          color: options[index] == value
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            labelBuilder(options[index]),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: options[index] == value
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _DateRangeFilterSection extends StatelessWidget {
+  const _DateRangeFilterSection({
+    required this.dateRange,
+    required this.dateFmt,
+    required this.onPick,
+    required this.onClear,
+  });
+
+  final DateTimeRange? dateRange;
+  final DateFormat dateFmt;
+  final VoidCallback onPick;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Rango de fechas',
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Material(
+          color: theme.colorScheme.surfaceContainerHighest.withValues(
+            alpha: 0.25,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onPick,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.date_range_outlined,
+                    size: 18,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      dateRange == null
+                          ? 'Todos los períodos'
+                          : '${dateFmt.format(dateRange!.start)} - ${dateFmt.format(dateRange!.end)}',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: dateRange == null
+                            ? FontWeight.w500
+                            : FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  if (dateRange != null)
+                    IconButton(
+                      tooltip: 'Quitar rango',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: onClear,
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                    )
+                  else
+                    const Icon(Icons.chevron_right_rounded, size: 18),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

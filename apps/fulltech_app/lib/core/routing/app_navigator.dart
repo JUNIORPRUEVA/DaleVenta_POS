@@ -73,13 +73,9 @@ class AppNavigator {
         ? currentLocation(context)
         : (_routerLocation(router) ?? currentLocation(context));
     final fallback = fallbackRoute ?? effectiveFallbackRouteFor(location);
-    if (router != null &&
-        _shouldUseShellFallbackBeforePop(location, fallback)) {
-      _consumeBackFallback(location, fallback!);
-      router.go(fallback);
-      return;
-    }
 
+    // First try to pop the real navigation stack so screens opened with
+    // push() go back to the exact previous screen.
     if (router?.canPop() ?? false) {
       router!.pop();
       return;
@@ -88,6 +84,13 @@ class AppNavigator {
     final navigator = Navigator.maybeOf(context);
     if (_canUseNavigatorPop(context, location)) {
       navigator!.pop();
+      return;
+    }
+
+    if (router != null &&
+        _shouldUseShellFallbackBeforePop(location, fallback)) {
+      _consumeBackFallback(location, fallback!);
+      router.go(fallback);
       return;
     }
 
@@ -103,13 +106,9 @@ class AppNavigator {
         ? currentLocation(context)
         : (_routerLocation(router) ?? currentLocation(context));
     final shellFallback = effectiveFallbackRouteFor(location);
-    if (router != null &&
-        _shouldUseShellFallbackBeforePop(location, shellFallback)) {
-      _consumeBackFallback(location, shellFallback!);
-      router.go(shellFallback);
-      return false;
-    }
 
+    // First try to pop the real navigation stack so screens opened with
+    // push() go back to the exact previous screen.
     if (router?.canPop() ?? false) {
       router!.pop();
       return false;
@@ -118,6 +117,13 @@ class AppNavigator {
     final navigator = Navigator.maybeOf(context);
     if (_canUseNavigatorPop(context, location)) {
       navigator!.pop();
+      return false;
+    }
+
+    if (router != null &&
+        _shouldUseShellFallbackBeforePop(location, shellFallback)) {
+      _consumeBackFallback(location, shellFallback!);
+      router.go(shellFallback);
       return false;
     }
 
@@ -133,6 +139,9 @@ class AppNavigator {
 
   static String? effectiveFallbackRouteFor(String location) {
     final normalized = _normalizeLocation(location);
+
+    // Prefer the real previous screen the user came from over a
+    // hardcoded module fallback (e.g. drawer navigation).
     final previous = _previousShellLocation;
     if (previous != null &&
         previous != normalized &&
@@ -140,7 +149,10 @@ class AppNavigator {
         _isShellLocation(normalized)) {
       return previous;
     }
-    return fallbackRouteFor(normalized);
+
+    final explicitFallback = fallbackRouteFor(normalized);
+    if (explicitFallback != null) return explicitFallback;
+    return null;
   }
 
   static String? fallbackRouteFor(String location) {
@@ -152,9 +164,40 @@ class AppNavigator {
     if (path == Routes.poncheHistorial) return Routes.ponche;
     if (path == Routes.registrarVenta) return Routes.ventas;
     if (path == Routes.compras) return Routes.cotizaciones;
+    if (path == Routes.comprasLista ||
+        path == Routes.comprasSuplidores ||
+        path == Routes.comprasFacturas ||
+        path == Routes.comprasPorComprar) {
+      return Routes.compras;
+    }
+    if (path == Routes.ventasLista || path == Routes.ventasCreditos) {
+      return Routes.registrarVenta;
+    }
+    if (path == Routes.catalogoStock ||
+        path == Routes.catalogoCategorias ||
+        path == Routes.catalogoConteo) {
+      return Routes.catalogo;
+    }
+    if (path == Routes.cajaRegistrarIngreso ||
+        path == Routes.cajaRegistrarSalida ||
+        path == Routes.cajaMovimientos ||
+        path == Routes.cajaRegistrarGasto ||
+        path == Routes.cajaGastosHistorial ||
+        path == Routes.cajaTurnosHistorial) {
+      return Routes.caja;
+    }
+    if (path == Routes.serviceOrderCommissions ||
+        path == Routes.mediaGallery ||
+        path == Routes.galeriaPublicidad) {
+      return Routes.serviceOrders;
+    }
+    if (path == Routes.userPermissions || path.startsWith('/users/')) {
+      return Routes.users;
+    }
     if (path == Routes.serviceOrderCreate) return Routes.serviceOrders;
     if (path == Routes.cotizacionesHistorial) return Routes.cotizaciones;
     if (path == Routes.clienteNuevo) return Routes.clientes;
+    if (path == Routes.clientesMapa) return Routes.clientes;
     if (path == Routes.ai) return Routes.serviceOrders;
     if (path.startsWith('/clientes/') && path.endsWith('/editar')) {
       return Routes.clientes;
@@ -176,6 +219,11 @@ class AppNavigator {
     if (path.startsWith('/publicidad/') && path != Routes.publicidad) {
       return Routes.publicidad;
     }
+    if (path.startsWith('${Routes.administracion}/') &&
+        path != Routes.administracion) {
+      return Routes.administracion;
+    }
+    if (path == Routes.misPagos) return Routes.nomina;
 
     return null;
   }

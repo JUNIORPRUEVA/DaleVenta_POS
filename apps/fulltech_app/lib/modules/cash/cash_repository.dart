@@ -304,6 +304,21 @@ class CashRepository {
     }
   }
 
+  Future<CashSessionDetailModel> sessionDetail(String id) async {
+    try {
+      final res = await _dio.get(
+        ApiRoutes.cashSessionDetail(id),
+        options: Options(extra: const {'skipLoader': true}),
+      );
+      final data = res.data is Map ? res.data as Map : const <String, dynamic>{};
+      return CashSessionDetailModel.fromJson(data.cast<String, dynamic>());
+    } on DioException catch (e) {
+      throw ApiException(
+        _message(e.response?.data, 'No se pudo cargar el detalle del turno'),
+      );
+    }
+  }
+
   Future<void> addMovement({
     required String type,
     required double amount,

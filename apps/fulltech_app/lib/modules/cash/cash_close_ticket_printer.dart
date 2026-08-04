@@ -1,10 +1,9 @@
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../core/printing/printing_platform_resolver.dart';
 import '../../core/printing/models/receipt_text_utils.dart';
 import '../../core/printing/unified_ticket_printer.dart';
-import '../../features/settings/data/mobile_printer_settings_repository.dart';
 import 'cash_models.dart';
 
 final cashCloseTicketPrinterProvider = Provider<CashCloseTicketPrinter>((ref) {
@@ -41,21 +40,8 @@ class CashCloseTicketPrinter {
     CashCloseTicketSnapshot snapshot, {
     bool automatic = true,
   }) async {
-    final platform = _ref.read(printingPlatformResolverProvider).capabilities;
-    if (automatic && platform.isMobile) {
-      final settings = await _ref
-          .read(mobilePrinterSettingsRepositoryProvider)
-          .getOrCreate();
-      if (!settings.printingEnabled ||
-          !settings.autoPrintShiftClosing ||
-          settings.askBeforePrinting) {
-        return const PrintTicketResult(
-          success: true,
-          skipped: true,
-          message: 'Auto-print de cierre desactivado',
-        );
-      }
-    }
+    // El cierre de turno siempre imprime el ticket (térmico o diálogo del
+    // sistema como respaldo) para que salga de inmediato en móvil y PC.
     return _ref
         .read(unifiedTicketPrinterProvider)
         .printCustomLines(

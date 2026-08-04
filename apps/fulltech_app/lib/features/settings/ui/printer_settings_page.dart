@@ -499,6 +499,7 @@ class _MobilePrinterSettingsViewState
   final _footer = TextEditingController();
   List<BluetoothInfo> _bluetoothPrinters = const [];
   bool _busy = false;
+  bool _showAllBluetoothDevices = false;
 
   @override
   void dispose() {
@@ -619,13 +620,16 @@ class _MobilePrinterSettingsViewState
       }
       final printers = await service.discoverBluetoothPrinters();
       if (!mounted) return;
-      setState(() => _bluetoothPrinters = printers);
+      setState(() {
+        _bluetoothPrinters = MobilePrintService.sortBluetoothPrinters(printers);
+        _showAllBluetoothDevices = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             printers.isEmpty
-                ? 'No hay impresoras emparejadas. Empareja la PT-210 en ajustes Bluetooth de Android.'
-                : 'Impresoras encontradas: ${printers.length}',
+                ? 'No hay impresoras emparejadas. Empareja la PT-210 con PIN 0000 en Bluetooth de Android.'
+                : 'Encontré ${printers.length} dispositivo(s). Te muestro primero las impresoras probables.',
           ),
         ),
       );
@@ -634,6 +638,73 @@ class _MobilePrinterSettingsViewState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudo buscar impresoras: $error')),
       );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _autoConnectBluetooth(MobilePrinterSettingsModel settings) {
+    return _run(() async {
+      final service = ref.read(mobilePrintServiceProvider);
+      final result = await service.autoConnectBluetoothPrinter(settings);
+      final printers = await service.discoverBluetoothPrinters();
+      if (mounted) {
+        setState(() {
+          _bluetoothPrinters = printers;
+          _showAllBluetoothDevices = false;
+        });
+      }
+      return result;
+    });
+  }
+
+  Future<void> _selectBluetoothPrinter(
+    MobilePrinterSettingsModel settings,
+    BluetoothInfo printer,
+  ) async {
+    if (_busy) return;
+    final selected = settings.copyWith(
+      connectionType: MobilePrinterConnectionType.bluetooth,
+      printerName: printer.name.trim().isEmpty
+          ? 'Impresora Bluetooth'
+          : printer.name.trim(),
+      bluetoothAddress: printer.macAdress.trim(),
+      paperWidthMm:
+          printer.name.toLowerCase().contains('pt-210') ||
+              printer.name.toLowerCase().contains('pt210') ||
+              printer.name.toLowerCase().contains('58')
+          ? 58
+          : settings.paperWidthMm,
+      lastStatus: MobilePrinterConnectionStatus.disconnected,
+      clearLastError: true,
+    );
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(mobilePrinterSettingsRepositoryProvider)
+          .update(
+            selected.copyWith(
+              lastStatus: MobilePrinterConnectionStatus.connecting,
+            ),
+          );
+      final result = await ref
+          .read(mobilePrintServiceProvider)
+          .testBluetoothConnection(selected);
+      if (!result.success) {
+        await ref
+            .read(mobilePrinterSettingsRepositoryProvider)
+            .update(
+              settings.copyWith(
+                lastStatus: MobilePrinterConnectionStatus.error,
+                lastError: result.message,
+              ),
+            );
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(result.message)));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -712,6 +783,14 @@ class _MobilePrinterSettingsViewState
         settings.connectionType == MobilePrinterConnectionType.network;
     final isBluetooth =
         settings.connectionType == MobilePrinterConnectionType.bluetooth;
+    final likelyBluetoothPrinters = _bluetoothPrinters
+        .where(MobilePrintService.isLikelyBluetoothPrinter)
+        .toList(growable: false);
+    final visibleBluetoothPrinters = _showAllBluetoothDevices
+        ? _bluetoothPrinters
+        : likelyBluetoothPrinters;
+    final hiddenBluetoothDevices =
+        _bluetoothPrinters.length - visibleBluetoothPrinters.length;
 
     Widget contentColumn() {
       return Column(
@@ -785,7 +864,7 @@ class _MobilePrinterSettingsViewState
           ),
           if (isBluetooth)
             _section(
-              title: 'Bluetooth',
+              title: 'Bluetooth rápido',
               children: [
                 _infoRow(
                   'Seleccionada',
@@ -794,55 +873,115 @@ class _MobilePrinterSettingsViewState
                       : '${settings.printerName} ${settings.bluetoothAddress}',
                 ),
                 const Text(
-                  'Para la PT-210: empareja primero en Android usando el PIN 0000 si lo solicita. Luego toca Buscar y selecciónala por nombre PT-210 o por MAC.',
+                  'Enciende la impresora y toca Conectar. Si Android pide PIN para PT-210 usa 0000. La app prioriza PT-210, impresoras térmicas, POS, 58 mm y ESC/POS.',
                   style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                 ),
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    OutlinedButton.icon(
-                      onPressed: _busy ? null : _scanBluetooth,
-                      icon: const Icon(Icons.bluetooth_searching),
-                      label: const Text('Buscar emparejadas'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: _busy
-                          ? null
-                          : () => _run(
-                              () => ref
-                                  .read(mobilePrintServiceProvider)
-                                  .testBluetoothConnection(settings),
-                            ),
-                      icon: const Icon(Icons.bluetooth_connected),
-                      label: const Text('Probar conexión'),
-                    ),
-                    TextButton.icon(
-                      onPressed: () => _save(
-                        settings.copyWith(
-                          printerName: '',
-                          bluetoothAddress: '',
-                          lastStatus:
-                              MobilePrinterConnectionStatus.notConfigured,
-                          clearLastError: true,
-                        ),
+                    SizedBox(
+                      height: 48,
+                      child: FilledButton.icon(
+                        onPressed: _busy
+                            ? null
+                            : () => _autoConnectBluetooth(settings),
+                        icon: _busy
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.bluetooth_connected_rounded),
+                        label: const Text('Conectar automáticamente'),
                       ),
-                      icon: const Icon(Icons.link_off_outlined),
-                      label: const Text('Olvidar'),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 48,
+                            child: OutlinedButton.icon(
+                              onPressed: _busy ? null : _scanBluetooth,
+                              icon: const Icon(Icons.bluetooth_searching),
+                              label: const Text('Buscar'),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: SizedBox(
+                            height: 48,
+                            child: OutlinedButton.icon(
+                              onPressed: _busy
+                                  ? null
+                                  : () => _run(
+                                      () => ref
+                                          .read(mobilePrintServiceProvider)
+                                          .testBluetoothConnection(settings),
+                                    ),
+                              icon: const Icon(Icons.bluetooth_connected),
+                              label: const Text('Probar conexión'),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: _busy
+                            ? null
+                            : () => _save(
+                                settings.copyWith(
+                                  printerName: '',
+                                  bluetoothAddress: '',
+                                  lastStatus: MobilePrinterConnectionStatus
+                                      .notConfigured,
+                                  clearLastError: true,
+                                ),
+                              ),
+                        icon: const Icon(Icons.link_off_outlined),
+                        label: const Text('Olvidar'),
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 if (_bluetoothPrinters.isEmpty)
                   const Text(
-                    'No hay resultados cargados todavía.',
+                    'No hay resultados cargados. Toca Conectar o Buscar.',
                     style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                   )
+                else if (visibleBluetoothPrinters.isEmpty)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'No vi una impresora térmica clara en los dispositivos emparejados.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: () =>
+                            setState(() => _showAllBluetoothDevices = true),
+                        icon: const Icon(Icons.list_rounded),
+                        label: const Text('Ver todos los dispositivos'),
+                      ),
+                    ],
+                  )
                 else
-                  ..._bluetoothPrinters.map((printer) {
+                  ...visibleBluetoothPrinters.map((printer) {
                     final selected =
                         printer.macAdress == settings.bluetoothAddress;
+                    final score = MobilePrintService.bluetoothPrinterScore(
+                      printer,
+                    );
                     return ListTile(
                       dense: true,
                       contentPadding: EdgeInsets.zero,
@@ -857,22 +996,32 @@ class _MobilePrinterSettingsViewState
                             : printer.name,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      subtitle: Text(printer.macAdress),
-                      onTap: () {
-                        _save(
-                          settings.copyWith(
-                            connectionType:
-                                MobilePrinterConnectionType.bluetooth,
-                            printerName: printer.name,
-                            bluetoothAddress: printer.macAdress,
-                            lastStatus:
-                                MobilePrinterConnectionStatus.disconnected,
-                            clearLastError: true,
-                          ),
-                        );
-                      },
+                      subtitle: Text(
+                        '${printer.macAdress} · compatibilidad $score',
+                      ),
+                      trailing: selected
+                          ? const Text(
+                              'Lista',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            )
+                          : null,
+                      onTap: _busy
+                          ? null
+                          : () => _selectBluetoothPrinter(settings, printer),
                     );
                   }),
+                if (!_showAllBluetoothDevices && hiddenBluetoothDevices > 0)
+                  TextButton.icon(
+                    onPressed: () =>
+                        setState(() => _showAllBluetoothDevices = true),
+                    icon: const Icon(Icons.expand_more_rounded),
+                    label: Text(
+                      'Ver $hiddenBluetoothDevices dispositivo(s) más',
+                    ),
+                  ),
               ],
             ),
           if (isNetwork)
@@ -1087,6 +1236,7 @@ class _MobilePrinterSettingsViewState
                 : const Icon(Icons.print_outlined),
             label: const Text('Ticket de prueba'),
           ),
+          SizedBox(height: 24 + MediaQuery.of(context).viewPadding.bottom),
         ],
       );
     }
@@ -1144,7 +1294,7 @@ class _MobilePrinterSettingsViewState
       appBar: AppBar(
         backgroundColor: const Color(0xFF0B5CFF),
         foregroundColor: Colors.white,
-        title: const Text('Printer Settings'),
+        title: const Text('Impresora'),
       ),
       body: body,
     );

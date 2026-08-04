@@ -102,6 +102,16 @@ class VentasRepository {
       );
 
       final rows = res.data is List ? (res.data as List) : const [];
+      await _cache.writeMap(
+        _salesListCacheKey(
+          from: from,
+          to: to,
+          userId: userId,
+          customerId: customerId,
+          includeDeleted: includeDeleted,
+        ),
+        {'items': rows},
+      );
       return rows
           .whereType<Map>()
           .map((e) => SaleModel.fromJson(e.cast<String, dynamic>()))
@@ -112,6 +122,29 @@ class VentasRepository {
         e.response?.statusCode,
       );
     }
+  }
+
+  Future<List<SaleModel>> cachedSales({
+    required DateTime from,
+    required DateTime to,
+    String? userId,
+    String? customerId,
+    bool includeDeleted = false,
+  }) async {
+    final data = await _cache.readMap(
+      _salesListCacheKey(
+        from: from,
+        to: to,
+        userId: userId,
+        customerId: customerId,
+        includeDeleted: includeDeleted,
+      ),
+    );
+    final rows = _extractRows(data);
+    return rows
+        .whereType<Map>()
+        .map((e) => SaleModel.fromJson(e.cast<String, dynamic>()))
+        .toList(growable: false);
   }
 
   Future<List<SaleModel>> listInvoices({
@@ -134,16 +167,53 @@ class VentasRepository {
       );
 
       final rows = res.data is List ? (res.data as List) : const [];
+      await _cache.writeMap(
+        _salesInvoicesCacheKey(
+          from: from,
+          to: to,
+          customerId: customerId,
+          includeDeleted: includeDeleted,
+        ),
+        {'items': rows},
+      );
       return rows
           .whereType<Map>()
           .map((e) => SaleModel.fromJson(e.cast<String, dynamic>()))
           .toList(growable: false);
     } on DioException catch (e) {
+      final cached = await cachedInvoices(
+        from: from,
+        to: to,
+        customerId: customerId,
+        includeDeleted: includeDeleted,
+      );
+      if (cached.isNotEmpty) return cached;
       throw ApiException(
         _extractMessage(e.response?.data, 'No se pudieron cargar las facturas'),
         e.response?.statusCode,
       );
     }
+  }
+
+  Future<List<SaleModel>> cachedInvoices({
+    required DateTime from,
+    required DateTime to,
+    String? customerId,
+    bool includeDeleted = true,
+  }) async {
+    final data = await _cache.readMap(
+      _salesInvoicesCacheKey(
+        from: from,
+        to: to,
+        customerId: customerId,
+        includeDeleted: includeDeleted,
+      ),
+    );
+    final rows = _extractRows(data);
+    return rows
+        .whereType<Map>()
+        .map((e) => SaleModel.fromJson(e.cast<String, dynamic>()))
+        .toList(growable: false);
   }
 
   Future<SalesSummaryModel> summary({
@@ -164,15 +234,41 @@ class VentasRepository {
         },
         options: Options(extra: const {'skipLoader': true}),
       );
-      return SalesSummaryModel.fromJson(
-        (res.data as Map).cast<String, dynamic>(),
+      final data = (res.data as Map).cast<String, dynamic>();
+      await _cache.writeMap(
+        _salesSummaryCacheKey(
+          from: from,
+          to: to,
+          userId: userId,
+          customerId: customerId,
+        ),
+        data,
       );
+      return SalesSummaryModel.fromJson(data);
     } on DioException catch (e) {
       throw ApiException(
         _extractMessage(e.response?.data, 'No se pudo cargar el resumen'),
         e.response?.statusCode,
       );
     }
+  }
+
+  Future<SalesSummaryModel?> cachedSummary({
+    required DateTime from,
+    required DateTime to,
+    String? userId,
+    String? customerId,
+  }) async {
+    final data = await _cache.readMap(
+      _salesSummaryCacheKey(
+        from: from,
+        to: to,
+        userId: userId,
+        customerId: customerId,
+      ),
+    );
+    if (data == null) return null;
+    return SalesSummaryModel.fromJson(data);
   }
 
   Future<List<SaleModel>> listCredits({bool includePaid = false}) async {
@@ -693,6 +789,44 @@ class VentasRepository {
     final month = date.month.toString().padLeft(2, '0');
     final day = date.day.toString().padLeft(2, '0');
     return '${date.year}-$month-$day';
+  }
+
+  String _salesListCacheKey({
+    required DateTime from,
+    required DateTime to,
+    String? userId,
+    String? customerId,
+    required bool includeDeleted,
+  }) {
+    final user = _cacheKeyPart(userId);
+    final customer = _cacheKeyPart(customerId);
+    return 'sales.list.v1.${_dateOnly(from)}.${_dateOnly(to)}.$user.$customer.$includeDeleted';
+  }
+
+  String _salesSummaryCacheKey({
+    required DateTime from,
+    required DateTime to,
+    String? userId,
+    String? customerId,
+  }) {
+    final user = _cacheKeyPart(userId);
+    final customer = _cacheKeyPart(customerId);
+    return 'sales.summary.v1.${_dateOnly(from)}.${_dateOnly(to)}.$user.$customer';
+  }
+
+  String _salesInvoicesCacheKey({
+    required DateTime from,
+    required DateTime to,
+    String? customerId,
+    required bool includeDeleted,
+  }) {
+    final customer = _cacheKeyPart(customerId);
+    return 'sales.invoices.v1.${_dateOnly(from)}.${_dateOnly(to)}.$customer.$includeDeleted';
+  }
+
+  String _cacheKeyPart(String? value) {
+    final normalized = (value ?? '').trim();
+    return normalized.isEmpty ? 'all' : normalized;
   }
 }
 

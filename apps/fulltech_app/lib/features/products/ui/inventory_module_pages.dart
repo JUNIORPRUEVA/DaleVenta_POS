@@ -1462,7 +1462,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                       )
                     : null,
                 actions: [
-                  if (initialTabIndex != 1)
+                  if (initialTabIndex == 0 || initialTabIndex == 3)
                     _AnimatedInventoryAction(
                       tooltip: initialTabIndex == 3
                           ? 'Nueva categoría'
@@ -5208,6 +5208,7 @@ class _DetailInfoGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 700;
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -5215,11 +5216,13 @@ class _DetailInfoGrid extends StatelessWidget {
         for (final row in rows)
           Container(
             width: (MediaQuery.sizeOf(context).width - 32) / 2,
-            padding: const EdgeInsets.all(12),
+            padding: mobile
+                ? const EdgeInsets.symmetric(horizontal: 2, vertical: 8)
+                : const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: _borderSoft),
+              color: mobile ? Colors.transparent : Colors.white,
+              borderRadius: BorderRadius.circular(mobile ? 0 : 10),
+              border: mobile ? null : Border.all(color: _borderSoft),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

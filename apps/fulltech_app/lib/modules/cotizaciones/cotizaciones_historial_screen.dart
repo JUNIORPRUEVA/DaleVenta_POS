@@ -19,8 +19,6 @@ import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../clientes/cliente_model.dart';
 import '../clientes/data/clientes_repository.dart';
-import '../service_orders/create_service_order_screen.dart';
-import '../service_orders/service_order_models.dart';
 import '../ventas/data/ventas_repository.dart';
 import 'cotizacion_models.dart';
 import 'data/cotizaciones_repository.dart';
@@ -133,44 +131,6 @@ class _CotizacionesHistorialScreenState
 
     final quotationId = Uri.encodeQueryComponent(item.id);
     await context.push('${Routes.cotizaciones}?quotationId=$quotationId');
-  }
-
-  Future<void> _sendToServiceOrder(CotizacionModel item) async {
-    final customerId = (item.customerId ?? '').trim();
-    if (customerId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('La cotización no tiene cliente asociado.'),
-        ),
-      );
-      return;
-    }
-
-    if (item.items.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'La cotización no tiene productos para crear la orden.',
-          ),
-        ),
-      );
-      return;
-    }
-
-    final opened = await openCreateServiceOrderAdaptive(
-      context,
-      args: ServiceOrderCreateArgs(
-        initialQuotation: item,
-        initialClientId: customerId,
-      ),
-    );
-
-    if (!mounted || opened != true) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Orden de servicio creada desde la cotización.'),
-      ),
-    );
   }
 
   void _selectQuotation(CotizacionModel item) {
@@ -934,235 +894,39 @@ class _CotizacionesHistorialScreenState
   }
 
   Future<void> _openFilters() async {
-    final result = await showModalBottomSheet<_HistorialFilterState>(
+    final result = await showGeneralDialog<_HistorialFilterState>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) {
-        var clientKey = _selectedClientKey;
-        var quoteTag = _selectedQuoteTag;
-        var fromDate = _fromDate;
-        var toDate = _toDate;
-
-        Future<DateTime?> pickDate(DateTime? initialDate) async {
-          final now = DateTime.now();
-          return showDatePicker(
-            context: context,
-            initialDate: initialDate ?? now,
-            firstDate: DateTime(now.year - 5),
-            lastDate: DateTime(now.year + 2),
-            locale: const Locale('es', 'DO'),
-          );
-        }
-
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            final compactDecoration = InputDecoration(
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            );
-
-            return SafeArea(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  14,
-                  6,
-                  14,
-                  MediaQuery.of(context).viewInsets.bottom + 12,
-                ),
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(height: 4),
-                      DropdownButtonFormField<String?>(
-                        isExpanded: true,
-                        initialValue: clientKey,
-                        decoration: compactDecoration.copyWith(
-                          hintText: 'Cliente',
-                          prefixIcon: const Icon(Icons.person_search_outlined),
-                        ),
-                        items: [
-                          const DropdownMenuItem<String?>(
-                            value: null,
-                            child: Text(
-                              'Todos los clientes',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          ..._clientOptions.map(
-                            (option) => DropdownMenuItem<String?>(
-                              value: option.key,
-                              child: Text(
-                                option.label,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                        ],
-                        onChanged: (value) =>
-                            setSheetState(() => clientKey = value),
-                      ),
-                      const SizedBox(height: 10),
-                      DropdownButtonFormField<String?>(
-                        isExpanded: true,
-                        initialValue: quoteTag,
-                        decoration: compactDecoration.copyWith(
-                          hintText: 'Categoria / tipo de servicio',
-                          prefixIcon: const Icon(Icons.category_outlined),
-                        ),
-                        items: [
-                          const DropdownMenuItem<String?>(
-                            value: null,
-                            child: Text(
-                              'Todas las categorias',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          ..._availableTags.map(
-                            (tag) => DropdownMenuItem<String?>(
-                              value: tag,
-                              child: Text(
-                                tag,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                        ],
-                        onChanged: (value) =>
-                            setSheetState(() => quoteTag = value),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () async {
-                                final picked = await pickDate(fromDate);
-                                if (picked == null) return;
-                                setSheetState(() {
-                                  fromDate = picked;
-                                  if (toDate != null &&
-                                      toDate!.isBefore(picked)) {
-                                    toDate = picked;
-                                  }
-                                });
-                              },
-                              style: OutlinedButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                minimumSize: const Size(0, 40),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 8,
-                                ),
-                              ),
-                              icon: const Icon(Icons.event_outlined, size: 18),
-                              label: Text(
-                                fromDate == null
-                                    ? 'Desde'
-                                    : DateFormat(
-                                        'dd/MM/yy',
-                                        'es_DO',
-                                      ).format(fromDate!),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () async {
-                                final picked = await pickDate(toDate);
-                                if (picked == null) return;
-                                setSheetState(() {
-                                  toDate = picked;
-                                  if (fromDate != null &&
-                                      fromDate!.isAfter(picked)) {
-                                    fromDate = picked;
-                                  }
-                                });
-                              },
-                              style: OutlinedButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                minimumSize: const Size(0, 40),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 8,
-                                ),
-                              ),
-                              icon: const Icon(
-                                Icons.event_available_outlined,
-                                size: 18,
-                              ),
-                              label: Text(
-                                toDate == null
-                                    ? 'Hasta'
-                                    : DateFormat(
-                                        'dd/MM/yy',
-                                        'es_DO',
-                                      ).format(toDate!),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pop(
-                                context,
-                                const _HistorialFilterState.clear(),
-                              );
-                            },
-                            child: const Text('Limpiar filtros'),
-                          ),
-                          const Spacer(),
-                          FilledButton.icon(
-                            style: FilledButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 10,
-                              ),
-                            ),
-                            onPressed: () {
-                              Navigator.pop(
-                                context,
-                                _HistorialFilterState(
-                                  clientKey: clientKey,
-                                  quoteTag: quoteTag,
-                                  fromDate: fromDate,
-                                  toDate: toDate,
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.check_rounded),
-                            label: const Text('Aplicar'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
+      barrierDismissible: true,
+      barrierLabel: 'Filtros de cotizaciones',
+      barrierColor: Colors.black.withValues(alpha: 0.26),
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: _HistorialFiltersSheet(
+            initialState: _HistorialFilterState(
+              clientKey: _selectedClientKey,
+              quoteTag: _selectedQuoteTag,
+              fromDate: _fromDate,
+              toDate: _toDate,
+            ),
+            clientOptions: _clientOptions,
+            availableTags: _availableTags,
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
         );
       },
     );
@@ -1419,105 +1183,401 @@ class _CotizacionesHistorialScreenState
     final canEditOrDelete = _canEditOrDelete(item);
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Detalle de cotización'),
-        content: SizedBox(
-          width: 420,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+      builder: (context) {
+        final theme = Theme.of(context);
+        final size = MediaQuery.sizeOf(context);
+        final phone = (item.customerPhone ?? '').trim();
+        final createdBy = (item.createdByUserName ?? '').trim();
+        final note = item.note.trim();
+        final customerName = item.customerName.trim().isEmpty
+            ? 'Cliente sin nombre'
+            : item.customerName.trim();
+        final quoteCode = item.id.length >= 8
+            ? item.id.substring(0, 8).toUpperCase()
+            : (item.id.isEmpty ? 'S/N' : item.id.toUpperCase());
+        String qty(double value) =>
+            value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(2);
+        final itbisPct =
+            (item.itbisRate * 100).toStringAsFixed(item.itbisRate % 1 == 0 ? 0 : 1);
+
+        Widget docMeta(IconData icon, String label, String value) {
+          return Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(
               children: [
-                Text('Cliente: ${item.customerName}'),
-                if ((item.customerPhone ?? '').trim().isNotEmpty)
-                  Text('Teléfono: ${item.customerPhone}'),
-                Text(
-                  'Fecha: ${DateFormat('dd/MM/yyyy h:mm a', 'es_DO').format(item.createdAt)}',
-                ),
-                if ((item.createdByUserName ?? '').trim().isNotEmpty)
-                  Text('Creada por: ${item.createdByUserName}'),
-                if (item.note.trim().isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text('Nota: ${item.note}'),
-                ],
-                const Divider(height: 18),
-                ...item.items.map(
-                  (line) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Row(
+                Icon(icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      text: '$label: ',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
+                      ),
                       children: [
-                        Expanded(
-                          child: Text(
-                            '${line.nombre} x${line.qty.toStringAsFixed(line.qty % 1 == 0 ? 0 : 2)}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                        TextSpan(
+                          text: value,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
-                        Text(_money(line.total)),
+                      ],
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Dialog(
+          insetPadding: const EdgeInsets.all(10),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          clipBehavior: Clip.antiAlias,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: (size.width * 0.97).clamp(320.0, 920.0),
+              maxHeight: size.height * 0.97,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ── Document header ────────────────────────────────────────
+                Container(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 12, 18),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        theme.colorScheme.primary,
+                        theme.colorScheme.primary.withValues(alpha: 0.80),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(
+                          Icons.request_quote_outlined,
+                          color: Colors.white,
+                          size: 26,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'COTIZACIÓN',
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1.4,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'N.º $quoteCode',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: Colors.white.withValues(alpha: 0.92),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Cerrar',
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+                // ── Scrollable body ────────────────────────────────────────
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Client summary card
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: theme.colorScheme.outlineVariant.withValues(
+                                alpha: 0.6,
+                              ),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 38,
+                                    height: 38,
+                                    decoration: BoxDecoration(
+                                      color: theme.colorScheme.primary.withValues(
+                                        alpha: 0.12,
+                                      ),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Icon(
+                                      Icons.person_rounded,
+                                      color: theme.colorScheme.primary,
+                                      size: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      customerName,
+                                      style: theme.textTheme.titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (phone.isNotEmpty)
+                                docMeta(Icons.call_outlined, 'Teléfono', phone),
+                              docMeta(
+                                Icons.event_outlined,
+                                'Fecha',
+                                DateFormat(
+                                  'dd/MM/yyyy h:mm a',
+                                  'es_DO',
+                                ).format(item.createdAt),
+                              ),
+                              if (createdBy.isNotEmpty)
+                                docMeta(Icons.badge_outlined, 'Creada por', createdBy),
+                            ],
+                          ),
+                        ),
+                        if (note.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          _DetailNote(note: note),
+                        ],
+                        const SizedBox(height: 20),
+                        // Items table header
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 6,
+                              child: Text(
+                                'DESCRIPCIÓN',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.4,
+                                ),
+                              ),
+                            ),
+                            SizedBox(
+                              width: 84,
+                              child: Text(
+                                'CANT.',
+                                textAlign: TextAlign.center,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.4,
+                                ),
+                              ),
+                            ),
+                            SizedBox(
+                              width: 104,
+                              child: Text(
+                                'TOTAL',
+                                textAlign: TextAlign.end,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        for (final line in item.items)
+                          Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: theme.colorScheme.outlineVariant
+                                      .withValues(alpha: 0.35),
+                                ),
+                              ),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  flex: 6,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        line.nombre,
+                                        style: theme.textTheme.bodyMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '${qty(line.qty)} x ${_money(line.unitPrice)}',
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              color: theme
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 84,
+                                  child: Text(
+                                    qty(line.qty),
+                                    textAlign: TextAlign.center,
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 104,
+                                  child: Text(
+                                    _money(line.total),
+                                    textAlign: TextAlign.end,
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        const SizedBox(height: 16),
+                        // Totals box
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: 0.05,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: theme.colorScheme.primary.withValues(
+                                alpha: 0.18,
+                              ),
+                            ),
+                          ),
+                          child: Column(
+                            children: [
+                              _DetailTotalRow(
+                                label: 'Subtotal',
+                                value: _money(item.subtotal),
+                              ),
+                              _DetailTotalRow(
+                                label: item.includeItbis
+                                    ? 'ITBIS $itbisPct%'
+                                    : 'ITBIS (no aplicado)',
+                                value: _money(item.itbisAmount),
+                              ),
+                              if (item.globalDiscountAmount > 0)
+                                _DetailTotalRow(
+                                  label: 'Descuento',
+                                  value: '-${_money(item.globalDiscountAmount)}',
+                                ),
+                              const Divider(height: 18),
+                              _DetailTotalRow(
+                                label: 'Total',
+                                value: _money(item.total),
+                                strong: true,
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 ),
-                const Divider(height: 18),
-                Row(
-                  children: [
-                    const Expanded(child: Text('Subtotal')),
-                    Text(_money(item.subtotal)),
-                  ],
-                ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'ITBIS ${item.includeItbis ? '(18%)' : '(no aplicado)'}',
+                // ── Footer actions ─────────────────────────────────────────
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerLow,
+                    border: Border(
+                      top: BorderSide(
+                        color: theme.colorScheme.outlineVariant.withValues(
+                          alpha: 0.55,
+                        ),
                       ),
                     ),
-                    Text(_money(item.itbisAmount)),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Total',
-                        style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (canEditOrDelete) ...[
+                        TextButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _editQuotation(item);
+                          },
+                          icon: const Icon(Icons.edit_outlined),
+                          label: const Text('Editar'),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      TextButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _openPdfPreview(item);
+                        },
+                        icon: const Icon(Icons.picture_as_pdf_outlined),
+                        label: const Text('Ver PDF'),
                       ),
-                    ),
-                    Text(
-                      _money(item.total),
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                  ],
+                      const SizedBox(width: 4),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cerrar'),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-        ),
-        actions: [
-          if (canEditOrDelete)
-            TextButton.icon(
-              onPressed: () {
-                Navigator.pop(context);
-                _editQuotation(item);
-              },
-              icon: const Icon(Icons.edit_outlined),
-              label: const Text('Editar'),
-            ),
-          TextButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              _openPdfPreview(item);
-            },
-            icon: const Icon(Icons.picture_as_pdf_outlined),
-            label: const Text('Ver PDF'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cerrar'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -1612,7 +1672,6 @@ class _CotizacionesHistorialScreenState
             onTap: () => isMobile ? _viewDetail(item) : _selectQuotation(item),
             onView: () => _viewDetail(item),
             onPdf: () => _openPdfPreview(item),
-            onSendToServiceOrder: () => _sendToServiceOrder(item),
             onEdit: canEditOrDelete ? () => _editQuotation(item) : null,
             onDuplicate: () => _duplicateQuotation(item),
             onDelete: canEditOrDelete ? () => _delete(item) : null,
@@ -1730,8 +1789,6 @@ class _CotizacionesHistorialScreenState
                         onDuplicate: () =>
                             _duplicateQuotation(selectedQuotation),
                         onPdf: () => _openPdfPreview(selectedQuotation),
-                        onServiceOrder: () =>
-                            _sendToServiceOrder(selectedQuotation),
                         onSalesTicket: () =>
                             _openAsSalesTicket(selectedQuotation),
                       ),
@@ -1881,8 +1938,6 @@ class _CotizacionesHistorialScreenState
                             onTap: () => _viewDetail(item),
                             onView: () => _viewDetail(item),
                             onPdf: () => _openPdfPreview(item),
-                            onSendToServiceOrder: () =>
-                                _sendToServiceOrder(item),
                             onEdit: canEdit ? () => _editQuotation(item) : null,
                             onDuplicate: () => _duplicateQuotation(item),
                             onDelete: canEditOrDelete
@@ -1901,6 +1956,347 @@ class _CotizacionesHistorialScreenState
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Filters drawer (column like the client screen)
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _HistorialFiltersSheet extends StatefulWidget {
+  const _HistorialFiltersSheet({
+    required this.initialState,
+    required this.clientOptions,
+    required this.availableTags,
+  });
+
+  final _HistorialFilterState initialState;
+  final List<_ClientFilterOption> clientOptions;
+  final List<String> availableTags;
+
+  @override
+  State<_HistorialFiltersSheet> createState() => _HistorialFiltersSheetState();
+}
+
+class _HistorialFiltersSheetState extends State<_HistorialFiltersSheet> {
+  late String? _clientKey = widget.initialState.clientKey;
+  late String? _quoteTag = widget.initialState.quoteTag;
+  late DateTime? _fromDate = widget.initialState.fromDate;
+  late DateTime? _toDate = widget.initialState.toDate;
+
+  Future<DateTime?> _pickDate(DateTime? initialDate) async {
+    final now = DateTime.now();
+    return showDatePicker(
+      context: context,
+      initialDate: initialDate ?? now,
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 2),
+      locale: const Locale('es', 'DO'),
+    );
+  }
+
+  void _apply() {
+    Navigator.of(
+      context,
+    ).pop(
+      _HistorialFilterState(
+        clientKey: _clientKey,
+        quoteTag: _quoteTag,
+        fromDate: _fromDate,
+        toDate: _toDate,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.sizeOf(context);
+    final width = (media.width * 0.6).clamp(300.0, 430.0);
+    final compactDecoration = InputDecoration(
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+    );
+
+    return Dismissible(
+      key: const ValueKey('historial-filters-panel'),
+      direction: DismissDirection.endToStart,
+      onDismissed: (_) => Navigator.of(context).pop(),
+      child: Material(
+        color: Colors.white,
+        elevation: 18,
+        borderRadius: BorderRadius.zero,
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          width: width,
+          height: media.height,
+          child: SafeArea(
+            left: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEAF1FF),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.filter_alt_rounded,
+                          color: AppColors.secondary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Filtros de cotizaciones',
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Cliente, categoría y rango de fechas',
+                              style: TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Cerrar',
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, color: AppColors.border),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                    children: [
+                      const _HistorialFilterSectionLabel('Cliente'),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String?>(
+                        isExpanded: true,
+                        initialValue: _clientKey,
+                        decoration: compactDecoration.copyWith(
+                          hintText: 'Cliente',
+                          prefixIcon: const Icon(Icons.person_search_outlined),
+                        ),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text(
+                              'Todos los clientes',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          ...widget.clientOptions.map(
+                            (option) => DropdownMenuItem<String?>(
+                              value: option.key,
+                              child: Text(
+                                option.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) =>
+                            setState(() => _clientKey = value),
+                      ),
+                      const SizedBox(height: 18),
+                      const _HistorialFilterSectionLabel(
+                        'Categoría / tipo de servicio',
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String?>(
+                        isExpanded: true,
+                        initialValue: _quoteTag,
+                        decoration: compactDecoration.copyWith(
+                          hintText: 'Categoria / tipo de servicio',
+                          prefixIcon: const Icon(Icons.category_outlined),
+                        ),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text(
+                              'Todas las categorías',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          ...widget.availableTags.map(
+                            (tag) => DropdownMenuItem<String?>(
+                              value: tag,
+                              child: Text(
+                                tag,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) =>
+                            setState(() => _quoteTag = value),
+                      ),
+                      const SizedBox(height: 18),
+                      const _HistorialFilterSectionLabel('Rango de fechas'),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                final picked = await _pickDate(_fromDate);
+                                if (picked == null) return;
+                                setState(() {
+                                  _fromDate = picked;
+                                  if (_toDate != null &&
+                                      _toDate!.isBefore(picked)) {
+                                    _toDate = picked;
+                                  }
+                                });
+                              },
+                              style: OutlinedButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                minimumSize: const Size(0, 44),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                              ),
+                              icon: const Icon(Icons.event_outlined, size: 18),
+                              label: Text(
+                                _fromDate == null
+                                    ? 'Desde'
+                                    : DateFormat(
+                                        'dd/MM/yy',
+                                        'es_DO',
+                                      ).format(_fromDate!),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                final picked = await _pickDate(_toDate);
+                                if (picked == null) return;
+                                setState(() {
+                                  _toDate = picked;
+                                  if (_fromDate != null &&
+                                      _fromDate!.isAfter(picked)) {
+                                    _fromDate = picked;
+                                  }
+                                });
+                              },
+                              style: OutlinedButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                minimumSize: const Size(0, 44),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                              ),
+                              icon: const Icon(
+                                Icons.event_available_outlined,
+                                size: 18,
+                              ),
+                              label: Text(
+                                _toDate == null
+                                    ? 'Hasta'
+                                    : DateFormat(
+                                        'dd/MM/yy',
+                                        'es_DO',
+                                      ).format(_toDate!),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+                  decoration: const BoxDecoration(
+                    color: AppColors.surfaceAlt,
+                    border: Border(top: BorderSide(color: AppColors.border)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(
+                            context,
+                          ).pop(const _HistorialFilterState.clear()),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(46),
+                          ),
+                          child: const Text('Limpiar'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _apply,
+                          icon: const Icon(Icons.check_rounded),
+                          label: const Text('Aplicar'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.secondary,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size.fromHeight(46),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HistorialFilterSectionLabel extends StatelessWidget {
+  const _HistorialFilterSectionLabel(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: const TextStyle(
+        color: AppColors.textPrimary,
+        fontSize: 13,
+        fontWeight: FontWeight.w800,
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Desktop quotation detail
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1912,7 +2308,6 @@ class _QuotationDetailSidePanel extends StatelessWidget {
     required this.onEdit,
     required this.onDuplicate,
     required this.onPdf,
-    required this.onServiceOrder,
     required this.onSalesTicket,
   });
 
@@ -1922,7 +2317,6 @@ class _QuotationDetailSidePanel extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDuplicate;
   final VoidCallback onPdf;
-  final VoidCallback onServiceOrder;
   final VoidCallback onSalesTicket;
 
   String _qty(double value) =>
@@ -2118,14 +2512,6 @@ class _QuotationDetailSidePanel extends StatelessWidget {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: onServiceOrder,
-                          icon: const Icon(Icons.assignment_add),
-                          label: const Text('Orden'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
                       IconButton.outlined(
                         tooltip: 'Ver PDF',
                         onPressed: onPdf,
@@ -2754,7 +3140,6 @@ class _HistorialListCard extends StatefulWidget {
     required this.onTap,
     required this.onView,
     required this.onPdf,
-    required this.onSendToServiceOrder,
     this.onEdit,
     this.onDuplicate,
     this.onDelete,
@@ -2771,7 +3156,6 @@ class _HistorialListCard extends StatefulWidget {
   final VoidCallback onTap;
   final VoidCallback onView;
   final VoidCallback onPdf;
-  final VoidCallback onSendToServiceOrder;
   final VoidCallback? onEdit;
   final VoidCallback? onDuplicate;
   final VoidCallback? onDelete;
@@ -2898,9 +3282,6 @@ class _HistorialListCardState extends State<_HistorialListCard> {
                       onSelected: (value) {
                         if (value == 'view') widget.onView();
                         if (value == 'pdf') widget.onPdf();
-                        if (value == 'service_order') {
-                          widget.onSendToServiceOrder();
-                        }
                         if (value == 'edit') widget.onEdit?.call();
                         if (value == 'duplicate') widget.onDuplicate?.call();
                         if (value == 'delete') widget.onDelete?.call();
@@ -2913,10 +3294,6 @@ class _HistorialListCardState extends State<_HistorialListCard> {
                         const PopupMenuItem(
                           value: 'pdf',
                           child: Text('Ver PDF'),
-                        ),
-                        const PopupMenuItem(
-                          value: 'service_order',
-                          child: Text('Pasar a orden de servicio'),
                         ),
                         if (widget.canEdit)
                           const PopupMenuItem(

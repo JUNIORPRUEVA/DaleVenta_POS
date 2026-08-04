@@ -253,3 +253,88 @@ class CashSessionHistoryModel {
     );
   }
 }
+
+class CashSessionDetailModel {
+  const CashSessionDetailModel({
+    required this.id,
+    required this.userName,
+    required this.businessDate,
+    required this.openedAt,
+    this.closedAt,
+    required this.initialAmount,
+    required this.closingAmount,
+    required this.expectedAmount,
+    required this.difference,
+    required this.status,
+    this.note,
+    required this.summary,
+    required this.movements,
+  });
+
+  final String id;
+  final String userName;
+  final String businessDate;
+  final DateTime openedAt;
+  final DateTime? closedAt;
+  final double initialAmount;
+  final double closingAmount;
+  final double expectedAmount;
+  final double difference;
+  final String status;
+  final String? note;
+  final CashSummaryModel summary;
+  final List<CashMovementModel> movements;
+
+  factory CashSessionDetailModel.fromJson(Map<String, dynamic> json) {
+    return CashSessionDetailModel(
+      id: (json['id'] ?? '').toString(),
+      userName: (json['userName'] ?? 'Usuario').toString(),
+      businessDate: (json['businessDate'] ?? '').toString(),
+      openedAt: _asDate(json['openedAt']) ?? DateTime.now(),
+      closedAt: _asDate(json['closedAt']),
+      initialAmount: _asDouble(json['initialAmount']),
+      closingAmount: _asDouble(json['closingAmount']),
+      expectedAmount: _asDouble(json['expectedAmount']),
+      difference: _asDouble(json['difference']),
+      status: (json['status'] ?? '').toString(),
+      note: json['note']?.toString(),
+      summary: json['summary'] is Map
+          ? CashSummaryModel.fromJson(
+              (json['summary'] as Map).cast<String, dynamic>(),
+            )
+          : _emptySummary(),
+      movements: ((json['movements'] as List?) ?? const [])
+          .whereType<Map>()
+          .map(
+            (movement) =>
+                CashMovementModel.fromJson(movement.cast<String, dynamic>()),
+          )
+          .toList(growable: false),
+    );
+  }
+}
+
+CashSummaryModel _emptySummary() {
+  return CashSummaryModel(
+    openingAmount: 0,
+    totalSales: 0,
+    totalExpenses: 0,
+    totalWithdrawals: 0,
+    cashInManual: 0,
+    cashOutManual: 0,
+    creditAbonos: 0,
+    creditSalesTotal: 0,
+    creditInitialCash: 0,
+    creditInitialTransfer: 0,
+    creditBalanceTotal: 0,
+    creditPaymentCash: 0,
+    creditPaymentTransfer: 0,
+    salesCashTotal: 0,
+    salesTransferTotal: 0,
+    refundsCash: 0,
+    expectedCash: 0,
+    totalTickets: 0,
+    totalRefunds: 0,
+    categorySummary: const [],
+  );
+}

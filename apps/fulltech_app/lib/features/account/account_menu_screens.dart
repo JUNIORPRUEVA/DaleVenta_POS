@@ -18,6 +18,7 @@ import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/local_file_bytes.dart';
 import '../../core/utils/safe_url_launcher.dart';
+import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../settings/data/cloud_backup_service.dart';
 import '../settings/ui/printer_settings_page.dart';
@@ -454,15 +455,16 @@ class AccountDocumentsSettingsScreen extends ConsumerWidget {
   }
 }
 
-class _SettingsHubScaffold extends StatelessWidget {
+class _SettingsHubScaffold extends ConsumerWidget {
   const _SettingsHubScaffold({required this.company, required this.children});
 
   final AsyncValue<CompanySettings> company;
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final mobile = MediaQuery.sizeOf(context).width < 900;
+    final user = ref.watch(authStateProvider).user;
     final configuredName = company.maybeWhen(
       data: (settings) => settings.companyName.trim(),
       orElse: () => '',
@@ -472,11 +474,13 @@ class _SettingsHubScaffold extends StatelessWidget {
         : configuredName;
     return Scaffold(
       backgroundColor: AppColors.background,
+      drawer: buildAdaptiveDrawer(context, currentUser: user),
       appBar: mobile
           ? const CustomAppBar(
               title: 'Configuración',
               showLogo: false,
               showDepartmentLabel: false,
+              preferDrawerLeading: true,
               trailing: SizedBox.shrink(),
             )
           : null,
@@ -590,66 +594,78 @@ class _SettingsDetailScaffold extends StatelessWidget {
             ],
           )
         : Text(subtitle, style: _bodyStyle());
-    final backButton = IconButton(
-      tooltip: 'Volver',
-      onPressed: () =>
-          AppNavigator.goBack(context, fallbackRoute: Routes.configuracion),
-      icon: const Icon(Icons.arrow_back_rounded),
-      style: IconButton.styleFrom(
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.secondary,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: Color(0xFFDDE7EE)),
+    final backButton = SizedBox.square(
+      dimension: 48,
+      child: IconButton(
+        tooltip: 'Volver',
+        onPressed: () =>
+            AppNavigator.goBack(context, fallbackRoute: Routes.configuracion),
+        icon: const Icon(Icons.arrow_back_rounded),
+        iconSize: 22,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+        style: IconButton.styleFrom(
+          minimumSize: const Size(48, 48),
+          fixedSize: const Size(48, 48),
+          tapTargetSize: MaterialTapTargetSize.padded,
+          backgroundColor: Colors.white,
+          foregroundColor: AppColors.secondary,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: Color(0xFFDDE7EE)),
+          ),
+        ),
+      ),
+    );
+    final content = Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1120),
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(
+            compact ? 14 : 22,
+            compact ? 8 : 24,
+            compact ? 14 : 22,
+            28,
+          ),
+          children: [
+            if (compact)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      backButton,
+                      const SizedBox(width: 10),
+                      Expanded(child: headerTitle),
+                    ],
+                  ),
+                  if (action != null) ...[
+                    const SizedBox(height: 12),
+                    Align(alignment: Alignment.centerRight, child: action!),
+                  ],
+                ],
+              )
+            else
+              Row(
+                children: [
+                  backButton,
+                  const SizedBox(width: 12),
+                  Expanded(child: headerTitle),
+                  if (action != null) action!,
+                ],
+              ),
+            const SizedBox(height: 20),
+            child,
+          ],
         ),
       ),
     );
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1120),
-          child: ListView(
-            padding: EdgeInsets.fromLTRB(
-              compact ? 12 : 22,
-              compact ? 14 : 24,
-              compact ? 12 : 22,
-              28,
-            ),
-            children: [
-              if (compact)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        backButton,
-                        const SizedBox(width: 10),
-                        Expanded(child: headerTitle),
-                      ],
-                    ),
-                    if (action != null) ...[
-                      const SizedBox(height: 10),
-                      Align(alignment: Alignment.centerRight, child: action!),
-                    ],
-                  ],
-                )
-              else
-                Row(
-                  children: [
-                    backButton,
-                    const SizedBox(width: 12),
-                    Expanded(child: headerTitle),
-                    if (action != null) action!,
-                  ],
-                ),
-              const SizedBox(height: 20),
-              child,
-            ],
-          ),
-        ),
-      ),
+      body: showInlineTitle
+          ? SafeArea(left: false, right: false, bottom: false, child: content)
+          : content,
     );
   }
 }

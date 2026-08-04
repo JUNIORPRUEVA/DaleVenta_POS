@@ -9,6 +9,7 @@ import '../../../core/auth/auth_provider.dart';
 import '../../../core/utils/app_feedback.dart';
 import '../../../core/utils/money_formatters.dart';
 import '../../../core/widgets/app_drawer.dart';
+import '../../../core/widgets/custom_app_bar.dart';
 import '../../../modules/ventas/data/ventas_repository.dart';
 import '../../../modules/ventas/sales_models.dart';
 import '../utils/sales_report_pdf_service.dart';
@@ -22,7 +23,7 @@ const _textSecondary = Color(0xFF6B7280);
 const _borderSoft = Color(0xFFE5E7EB);
 const _pageBg = Color(0xFFF6F8FB);
 
-enum DateRangePeriod { today, week, biweekly, month, year, custom }
+enum DateRangePeriod { today, yesterday, week, biweekly, month, year, custom }
 
 class KpisData {
   const KpisData({
@@ -385,6 +386,56 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     _loadData();
   }
 
+  Future<void> _openMobileFilters() async {
+    final next = await showGeneralDialog<_ReportsFilterDraft>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Filtros de reportes',
+      barrierColor: Colors.black.withValues(alpha: 0.28),
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: _ReportsFilterDrawer(
+            selectedPeriod: _selectedPeriod,
+            customLabel: _selectedPeriod == DateRangePeriod.custom
+                ? '${_date.format(_range.start)} - ${_date.format(_range.end)}'
+                : null,
+            categories: _categories,
+            selectedCategory: _selectedCategory,
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
+        );
+      },
+    );
+    if (next == null || !mounted) return;
+    if (next.period == DateRangePeriod.custom) {
+      _pickCustomRange();
+      if (next.category != _selectedCategory) _changeCategory(next.category);
+      return;
+    }
+    setState(() {
+      _selectedPeriod = next.period;
+      _selectedCategory = next.category?.trim().isEmpty == true
+          ? null
+          : next.category;
+    });
+    _loadData();
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).user;
@@ -392,6 +443,46 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     return Scaffold(
       drawer: buildAdaptiveDrawer(context, currentUser: user),
       backgroundColor: _pageBg,
+      appBar: MediaQuery.sizeOf(context).width < 640
+          ? CustomAppBar(
+              title: 'Reportes',
+              showLogo: false,
+              showDepartmentLabel: false,
+              actions: [
+                IconButton(
+                  tooltip: 'Filtros',
+                  onPressed: _openMobileFilters,
+                  icon: Badge(
+                    isLabelVisible:
+                        _selectedPeriod != DateRangePeriod.month ||
+                        (_selectedCategory?.trim().isNotEmpty ?? false),
+                    smallSize: 8,
+                    child: const Icon(Icons.filter_alt_outlined),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Recargar',
+                  onPressed: _loading ? null : _loadData,
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
+                IconButton(
+                  tooltip: 'PDF',
+                  onPressed: _loading || _generatingPdf ? null : _downloadPdf,
+                  icon: _generatingPdf
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.picture_as_pdf_outlined),
+                ),
+              ],
+              trailing: const SizedBox.shrink(),
+            )
+          : null,
       body: LayoutBuilder(
         builder: (context, pageConstraints) {
           final mobile = pageConstraints.maxWidth < 640;
@@ -400,21 +491,30 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _ReportsTopBar(
-                  selectedPeriod: _selectedPeriod,
-                  customLabel: _selectedPeriod == DateRangePeriod.custom
-                      ? '${_date.format(_range.start)} - ${_date.format(_range.end)}'
-                      : null,
-                  loading: _loading,
-                  generatingPdf: _generatingPdf,
-                  categories: _categories,
-                  selectedCategory: _selectedCategory,
-                  onPeriodChanged: _changePeriod,
-                  onCategoryChanged: _changeCategory,
-                  onReload: _loadData,
-                  onDownloadPdf: _downloadPdf,
-                ),
-                const SizedBox(height: 12),
+                if (!mobile) ...[
+                  _ReportsTopBar(
+                    selectedPeriod: _selectedPeriod,
+                    customLabel: _selectedPeriod == DateRangePeriod.custom
+                        ? '${_date.format(_range.start)} - ${_date.format(_range.end)}'
+                        : null,
+                    loading: _loading,
+                    generatingPdf: _generatingPdf,
+                    categories: _categories,
+                    selectedCategory: _selectedCategory,
+                    onPeriodChanged: _changePeriod,
+                    onCategoryChanged: _changeCategory,
+                    onReload: _loadData,
+                    onDownloadPdf: _downloadPdf,
+                  ),
+                  const SizedBox(height: 12),
+                ] else
+                  _ActiveReportFilterBar(
+                    period: _periodLabel(_selectedPeriod),
+                    range:
+                        '${_date.format(_range.start)} - ${_date.format(_range.end)}',
+                    category: _selectedCategory,
+                    onClearCategory: () => _changeCategory(null),
+                  ),
                 if (_loading) const LinearProgressIndicator(minHeight: 2),
                 if (_error != null)
                   Expanded(child: Center(child: Text(_error!)))
@@ -427,96 +527,112 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                           onRefresh: _loadData,
                           child: ListView(
                             padding: EdgeInsets.only(bottom: mobile ? 18 : 0),
-                            children: [
-                              _HeroReportsPanel(
-                                wide: wide,
-                                kpis: _kpis,
-                                salesSeries: _salesSeries,
-                                paymentMethods: _paymentMethods,
-                                periodLabel:
-                                    '${_date.format(_range.start)} - ${_date.format(_range.end)}',
-                              ),
-                              const SizedBox(height: 12),
-                              _AdvancedKpiCards(kpis: _kpis),
-                              const SizedBox(height: 12),
-                              CategoryProfitTable(categories: _categoryProfits),
-                              const SizedBox(height: 12),
-                              wide
-                                  ? Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Expanded(
-                                          flex: 3,
-                                          child: _PremiumCard(
-                                            title: 'Utilidad',
-                                            child: SizedBox(
-                                              height: 260,
-                                              child: ProfitLineChart(
-                                                data: _profitSeries,
+                            children: mobile
+                                ? [
+                                    _MobileReportsContent(
+                                      kpis: _kpis,
+                                      salesSeries: _salesSeries,
+                                      profitSeries: _profitSeries,
+                                      paymentMethods: _paymentMethods,
+                                      topProducts: _topProducts,
+                                      topClients: _topClients,
+                                      sales: _sales.take(8).toList(),
+                                    ),
+                                  ]
+                                : [
+                                    _HeroReportsPanel(
+                                      wide: wide,
+                                      kpis: _kpis,
+                                      salesSeries: _salesSeries,
+                                      paymentMethods: _paymentMethods,
+                                      periodLabel:
+                                          '${_date.format(_range.start)} - ${_date.format(_range.end)}',
+                                    ),
+                                    const SizedBox(height: 12),
+                                    _AdvancedKpiCards(kpis: _kpis),
+                                    const SizedBox(height: 12),
+                                    CategoryProfitTable(
+                                      categories: _categoryProfits,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    wide
+                                        ? Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Expanded(
+                                                flex: 3,
+                                                child: _PremiumCard(
+                                                  title: 'Utilidad',
+                                                  child: SizedBox(
+                                                    height: 260,
+                                                    child: ProfitLineChart(
+                                                      data: _profitSeries,
+                                                    ),
+                                                  ),
+                                                ),
                                               ),
-                                            ),
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                flex: 2,
+                                                child: _ComparativeStatsCard(
+                                                  rows: _comparisons,
+                                                ),
+                                              ),
+                                            ],
+                                          )
+                                        : Column(
+                                            children: [
+                                              _PremiumCard(
+                                                title: 'Utilidad',
+                                                child: SizedBox(
+                                                  height: 230,
+                                                  child: ProfitLineChart(
+                                                    data: _profitSeries,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(height: 12),
+                                              _ComparativeStatsCard(
+                                                rows: _comparisons,
+                                              ),
+                                            ],
                                           ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          flex: 2,
-                                          child: _ComparativeStatsCard(
-                                            rows: _comparisons,
+                                    const SizedBox(height: 12),
+                                    wide
+                                        ? Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Expanded(
+                                                child: TopProductsTable(
+                                                  products: _topProducts,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: TopClientsTable(
+                                                  clients: _topClients,
+                                                ),
+                                              ),
+                                            ],
+                                          )
+                                        : Column(
+                                            children: [
+                                              TopProductsTable(
+                                                products: _topProducts,
+                                              ),
+                                              const SizedBox(height: 12),
+                                              TopClientsTable(
+                                                clients: _topClients,
+                                              ),
+                                            ],
                                           ),
-                                        ),
-                                      ],
-                                    )
-                                  : Column(
-                                      children: [
-                                        _PremiumCard(
-                                          title: 'Utilidad',
-                                          child: SizedBox(
-                                            height: 230,
-                                            child: ProfitLineChart(
-                                              data: _profitSeries,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 12),
-                                        _ComparativeStatsCard(
-                                          rows: _comparisons,
-                                        ),
-                                      ],
+                                    const SizedBox(height: 12),
+                                    _RecentSalesTable(
+                                      sales: _sales.take(12).toList(),
                                     ),
-                              const SizedBox(height: 12),
-                              wide
-                                  ? Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Expanded(
-                                          child: TopProductsTable(
-                                            products: _topProducts,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: TopClientsTable(
-                                            clients: _topClients,
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  : Column(
-                                      children: [
-                                        TopProductsTable(
-                                          products: _topProducts,
-                                        ),
-                                        const SizedBox(height: 12),
-                                        TopClientsTable(clients: _topClients),
-                                      ],
-                                    ),
-                              const SizedBox(height: 12),
-                              _RecentSalesTable(
-                                sales: _sales.take(12).toList(),
-                              ),
-                            ],
+                                  ],
                           ),
                         );
                       },
@@ -542,6 +658,10 @@ class DateRangeHelper {
     final endOfToday = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
     return switch (period) {
       DateRangePeriod.today => DateTimeRange(start: today, end: endOfToday),
+      DateRangePeriod.yesterday => DateTimeRange(
+        start: today.subtract(const Duration(days: 1)),
+        end: today.subtract(const Duration(milliseconds: 1)),
+      ),
       DateRangePeriod.week => DateTimeRange(
         start: today.subtract(const Duration(days: 7)),
         end: endOfToday,
@@ -563,6 +683,275 @@ class DateRangeHelper {
         end: customEnd ?? endOfToday,
       ),
     };
+  }
+}
+
+String _periodLabel(DateRangePeriod period) {
+  return switch (period) {
+    DateRangePeriod.today => 'Hoy',
+    DateRangePeriod.yesterday => 'Ayer',
+    DateRangePeriod.week => 'Semana',
+    DateRangePeriod.biweekly => '15 días',
+    DateRangePeriod.month => 'Mes',
+    DateRangePeriod.year => 'Año',
+    DateRangePeriod.custom => 'Intervalo',
+  };
+}
+
+class _ReportsFilterDraft {
+  const _ReportsFilterDraft({required this.period, required this.category});
+
+  final DateRangePeriod period;
+  final String? category;
+}
+
+class _ReportsFilterDrawer extends StatefulWidget {
+  const _ReportsFilterDrawer({
+    required this.selectedPeriod,
+    required this.customLabel,
+    required this.categories,
+    required this.selectedCategory,
+  });
+
+  final DateRangePeriod selectedPeriod;
+  final String? customLabel;
+  final List<String> categories;
+  final String? selectedCategory;
+
+  @override
+  State<_ReportsFilterDrawer> createState() => _ReportsFilterDrawerState();
+}
+
+class _ReportsFilterDrawerState extends State<_ReportsFilterDrawer> {
+  late DateRangePeriod _period = widget.selectedPeriod;
+  late String? _category = widget.selectedCategory;
+
+  void _apply() {
+    Navigator.of(
+      context,
+    ).pop(_ReportsFilterDraft(period: _period, category: _category));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final width = math.min(MediaQuery.sizeOf(context).width * 0.88, 340.0);
+    return SafeArea(
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          width: width,
+          height: double.infinity,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.horizontal(left: Radius.circular(18)),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x330B1720),
+                blurRadius: 24,
+                offset: Offset(-10, 0),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF1957E6), Color(0xFF2F7BFF)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.only(topLeft: Radius.circular(18)),
+                ),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Filtros',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Cerrar',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                      color: Colors.white,
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.all(14),
+                  children: [
+                    const _DrawerSectionTitle('Rango'),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final item in [
+                          DateRangePeriod.today,
+                          DateRangePeriod.yesterday,
+                          DateRangePeriod.week,
+                          DateRangePeriod.biweekly,
+                          DateRangePeriod.month,
+                          DateRangePeriod.year,
+                          DateRangePeriod.custom,
+                        ])
+                          ChoiceChip(
+                            label: Text(
+                              item == DateRangePeriod.custom &&
+                                      widget.customLabel != null
+                                  ? widget.customLabel!
+                                  : _periodLabel(item),
+                            ),
+                            selected: _period == item,
+                            onSelected: (_) => setState(() => _period = item),
+                            selectedColor: _primaryBlue.withValues(alpha: 0.14),
+                            side: BorderSide(
+                              color: _period == item
+                                  ? _primaryBlue
+                                  : _borderSoft,
+                            ),
+                            labelStyle: TextStyle(
+                              color: _period == item
+                                  ? _primaryBlue
+                                  : _textPrimary,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    const _DrawerSectionTitle('Categoría'),
+                    _FilterCategoryTile(
+                      label: 'Todas las categorías',
+                      selected: _category == null,
+                      onTap: () => setState(() => _category = null),
+                    ),
+                    for (final category in widget.categories)
+                      _FilterCategoryTile(
+                        label: category,
+                        selected: _category == category,
+                        onTap: () => setState(() => _category = category),
+                      ),
+                  ],
+                ),
+              ),
+              SafeArea(
+                top: false,
+                minimum: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                child: FilledButton.icon(
+                  onPressed: _apply,
+                  icon: const Icon(Icons.check_rounded),
+                  label: const Text('Aplicar filtros'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _primaryBlue,
+                    minimumSize: const Size.fromHeight(46),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DrawerSectionTitle extends StatelessWidget {
+  const _DrawerSectionTitle(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: _textSecondary,
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterCategoryTile extends StatelessWidget {
+  const _FilterCategoryTile({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      onTap: onTap,
+      leading: Icon(
+        selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+        color: selected ? _primaryBlue : _textSecondary,
+      ),
+      title: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: selected ? _primaryBlue : _textPrimary,
+          fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _ActiveReportFilterBar extends StatelessWidget {
+  const _ActiveReportFilterBar({
+    required this.period,
+    required this.range,
+    required this.category,
+    required this.onClearCategory,
+  });
+
+  final String period;
+  final String range;
+  final String? category;
+  final VoidCallback onClearCategory;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+      child: Wrap(
+        spacing: 7,
+        runSpacing: 7,
+        children: [
+          _Pill(text: '$period · $range'),
+          if (category?.trim().isNotEmpty == true)
+            InputChip(
+              label: Text(category!.trim()),
+              avatar: const Icon(Icons.category_outlined, size: 16),
+              onDeleted: onClearCategory,
+              visualDensity: VisualDensity.compact,
+            ),
+        ],
+      ),
+    );
   }
 }
 
@@ -852,6 +1241,7 @@ class DateRangeSelector extends StatelessWidget {
           runSpacing: 6,
           children: [
             _chip(context, 'Hoy', DateRangePeriod.today),
+            _chip(context, 'Ayer', DateRangePeriod.yesterday),
             _chip(context, 'Semana', DateRangePeriod.week),
             _chip(context, '15 días', DateRangePeriod.biweekly),
             _chip(context, 'Mes', DateRangePeriod.month),
@@ -1063,6 +1453,288 @@ class _AdvancedKpiCards extends StatelessWidget {
           color: const Color(0xFF7C3AED),
         ),
       ],
+    );
+  }
+}
+
+class _MobileReportsContent extends StatelessWidget {
+  const _MobileReportsContent({
+    required this.kpis,
+    required this.salesSeries,
+    required this.profitSeries,
+    required this.paymentMethods,
+    required this.topProducts,
+    required this.topClients,
+    required this.sales,
+  });
+
+  final KpisData kpis;
+  final List<SeriesDataPoint> salesSeries;
+  final List<SeriesDataPoint> profitSeries;
+  final List<PaymentMethodData> paymentMethods;
+  final List<TopProduct> topProducts;
+  final List<TopClient> topClients;
+  final List<SaleModel> sales;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(6, 8, 6, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Ventas filtradas',
+                style: TextStyle(
+                  color: _textSecondary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 6),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  formatRdCurrencyAccounting(kpis.totalSales),
+                  style: const TextStyle(
+                    color: _textPrimary,
+                    fontSize: 34,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: _FlatMetric(
+                      label: 'Utilidad',
+                      value: formatRdCurrencyAccounting(kpis.netProfit),
+                      color: _teal,
+                    ),
+                  ),
+                  Expanded(
+                    child: _FlatMetric(
+                      label: 'Margen',
+                      value: '${kpis.margin.toStringAsFixed(1)}%',
+                      color: _primaryBlue,
+                    ),
+                  ),
+                  Expanded(
+                    child: _FlatMetric(
+                      label: 'Tickets',
+                      value: '${kpis.salesCount}',
+                      color: _gold,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        _FlatSection(
+          title: 'Ritmo de ventas',
+          child: SizedBox(
+            height: 180,
+            child: SalesBarChart(data: salesSeries, barColor: _primaryBlue),
+          ),
+        ),
+        _FlatSection(
+          title: 'Utilidad',
+          child: SizedBox(
+            height: 160,
+            child: ProfitLineChart(data: profitSeries),
+          ),
+        ),
+        _FlatSection(
+          title: 'Métodos de pago',
+          child: SizedBox(
+            height: 220,
+            child: PaymentMethodPieChart(data: paymentMethods),
+          ),
+        ),
+        _MobileRankingSection(
+          title: 'Productos más vendidos',
+          rows: [
+            for (var i = 0; i < topProducts.length; i++)
+              _MobileRankingData(
+                rank: i + 1,
+                title: topProducts[i].productName,
+                subtitle:
+                    '${topProducts[i].totalQty.toStringAsFixed(0)} unidades',
+                value: formatRdCurrencyAccounting(topProducts[i].totalSales),
+              ),
+          ],
+        ),
+        _MobileRankingSection(
+          title: 'Clientes top',
+          rows: [
+            for (var i = 0; i < topClients.length; i++)
+              _MobileRankingData(
+                rank: i + 1,
+                title: topClients[i].clientName,
+                subtitle: '${topClients[i].purchaseCount} compras',
+                value: formatRdCurrencyAccounting(topClients[i].totalSpent),
+              ),
+          ],
+        ),
+        _RecentSalesTable(sales: sales),
+      ],
+    );
+  }
+}
+
+class _FlatMetric extends StatelessWidget {
+  const _FlatMetric({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(color: _textSecondary, fontSize: 11),
+          ),
+          const SizedBox(height: 3),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: TextStyle(color: color, fontWeight: FontWeight.w900),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FlatSection extends StatelessWidget {
+  const _FlatSection({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(6, 10, 6, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: _textPrimary,
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 10),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _MobileRankingData {
+  const _MobileRankingData({
+    required this.rank,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+  });
+
+  final int rank;
+  final String title;
+  final String subtitle;
+  final String value;
+}
+
+class _MobileRankingSection extends StatelessWidget {
+  const _MobileRankingSection({required this.title, required this.rows});
+
+  final String title;
+  final List<_MobileRankingData> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return _FlatSection(
+      title: title,
+      child: rows.isEmpty
+          ? const SizedBox(height: 80, child: _EmptyChart())
+          : Column(
+              children: [
+                for (final row in rows.take(6))
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 30,
+                          child: Text(
+                            '#${row.rank}',
+                            style: const TextStyle(
+                              color: _primaryBlue,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                row.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: _textPrimary,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              Text(
+                                row.subtitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: _textSecondary,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          row.value,
+                          style: const TextStyle(
+                            color: _primaryBlue,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
     );
   }
 }

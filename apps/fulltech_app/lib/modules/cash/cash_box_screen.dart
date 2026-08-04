@@ -86,6 +86,29 @@ class CashBoxScreen extends ConsumerWidget {
     }
   }
 
+  Future<void> _printCurrentCash(BuildContext context, WidgetRef ref) async {
+    try {
+      final result = await ref
+          .read(activeCashSessionControllerProvider.notifier)
+          .printCurrent();
+      if (!context.mounted) return;
+      showCashToast(
+        context,
+        result.success ? 'Corte enviado a imprimir' : result.message,
+        isError: !result.success,
+      );
+    } catch (error, stack) {
+      AppErrorReporter.instance.record(
+        error,
+        stack,
+        context: 'Imprimir turno activo',
+        notifyUser: false,
+      );
+      if (!context.mounted) return;
+      showCashToast(context, resolveCashError(error), isError: true);
+    }
+  }
+
   Future<void> _addMovement(
     BuildContext context,
     WidgetRef ref,
@@ -182,6 +205,7 @@ class CashBoxScreen extends ConsumerWidget {
                   active: active,
                   summary: summary,
                   onClose: () => _closeCash(context, ref),
+                  onPrint: () => _printCurrentCash(context, ref),
                   onCashIn: () => _addMovement(context, ref, 'IN'),
                   onCashOut: () => _addMovement(context, ref, 'OUT'),
                 );
@@ -274,6 +298,7 @@ class _ActiveCashPanel extends StatelessWidget {
     required this.active,
     required this.summary,
     required this.onClose,
+    required this.onPrint,
     required this.onCashIn,
     required this.onCashOut,
   });
@@ -281,6 +306,7 @@ class _ActiveCashPanel extends StatelessWidget {
   final ActiveCashSession active;
   final AsyncValue<CashSummaryModel?> summary;
   final VoidCallback onClose;
+  final VoidCallback onPrint;
   final VoidCallback onCashIn;
   final VoidCallback onCashOut;
 
@@ -410,44 +436,71 @@ class _ActiveCashPanel extends StatelessWidget {
               },
             ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onCashIn,
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text('Entrada'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: CashBoxScreen._primary,
-                    side: const BorderSide(color: CashBoxScreen._primary),
-                    minimumSize: const Size.fromHeight(42),
-                  ),
+          SafeArea(
+            top: false,
+            minimum: EdgeInsets.only(bottom: isMobile ? 6 : 0),
+            child: Column(
+              children: [
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: onCashIn,
+                        icon: const Icon(Icons.add_rounded),
+                        label: const Text('Entrada'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: CashBoxScreen._primary,
+                          side: const BorderSide(color: CashBoxScreen._primary),
+                          minimumSize: const Size.fromHeight(42),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: onCashOut,
+                        icon: const Icon(Icons.remove_rounded),
+                        label: const Text('Gasto / salida'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: CashBoxScreen._primary,
+                          side: const BorderSide(color: CashBoxScreen._primary),
+                          minimumSize: const Size.fromHeight(42),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onCashOut,
-                  icon: const Icon(Icons.remove_rounded),
-                  label: const Text('Gasto / salida'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: CashBoxScreen._primary,
-                    side: const BorderSide(color: CashBoxScreen._primary),
-                    minimumSize: const Size.fromHeight(42),
-                  ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: onPrint,
+                        icon: const Icon(Icons.print_outlined),
+                        label: const Text('Imprimir'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: CashBoxScreen._primary,
+                          side: const BorderSide(color: CashBoxScreen._primary),
+                          minimumSize: const Size.fromHeight(42),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: onClose,
+                        icon: const Icon(Icons.lock_rounded),
+                        label: const Text('Cerrar turno'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: CashBoxScreen._primary,
+                          minimumSize: const Size.fromHeight(42),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          FilledButton.icon(
-            onPressed: onClose,
-            icon: const Icon(Icons.lock_rounded),
-            label: const Text('Cerrar turno'),
-            style: FilledButton.styleFrom(
-              backgroundColor: CashBoxScreen._primary,
-              minimumSize: const Size.fromHeight(44),
+              ],
             ),
           ),
         ],

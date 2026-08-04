@@ -86,6 +86,40 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.text(entry.value), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Volver').first);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Empresa'), findsOneWidget);
+      expect(find.text('Impresora'), findsOneWidget);
     });
   }
+
+  testWidgets('mobile settings hub uses drawer leading instead of back', (
+    tester,
+  ) async {
+    await _pumpSettingsRouter(tester);
+
+    expect(find.byTooltip('Abrir menú'), findsOneWidget);
+    expect(find.byTooltip('Volver'), findsNothing);
+  });
+
+  testWidgets('mobile settings back button responds across its tap target', (
+    tester,
+  ) async {
+    await _pumpSettingsRouter(tester);
+
+    await tester.tap(find.text('Empresa').first);
+    await tester.pumpAndSettle();
+
+    final backButton = find.byTooltip('Volver').first;
+    final rect = tester.getRect(backButton);
+    await tester.tapAt(rect.topCenter + const Offset(0, 8));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Documentos'), findsOneWidget);
+    expect(find.text('Backup'), findsOneWidget);
+  });
 }

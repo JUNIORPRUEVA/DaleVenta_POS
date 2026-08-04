@@ -79,9 +79,32 @@ class VentasController extends StateNotifier<VentasState> {
   }
 
   Future<void> load() async {
-    state = state.copyWith(loading: true, clearError: true);
+    final repo = ref.read(ventasRepositoryProvider);
+    final cachedResults = await Future.wait([
+      repo.cachedSales(
+        from: state.from,
+        to: state.to,
+        customerId: state.customerIdFilter,
+        includeDeleted: true,
+      ),
+      repo.cachedSummary(
+        from: state.from,
+        to: state.to,
+        customerId: state.customerIdFilter,
+      ),
+    ]);
+    final cachedSales = cachedResults[0] as List<SaleModel>;
+    final cachedSummary = cachedResults[1] as SalesSummaryModel?;
+    final hasCached = cachedSales.isNotEmpty || cachedSummary != null;
+
+    state = state.copyWith(
+      loading: !hasCached,
+      sales: cachedSales.isNotEmpty ? cachedSales : state.sales,
+      summary: cachedSummary ?? state.summary,
+      clearError: true,
+    );
+
     try {
-      final repo = ref.read(ventasRepositoryProvider);
       final results = await Future.wait([
         repo.listSales(
           from: state.from,

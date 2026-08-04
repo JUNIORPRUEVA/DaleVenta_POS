@@ -672,7 +672,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
 
   private roundMoney(value: number) {
     if (!Number.isFinite(value)) {
-      throw new BadRequestException('Monto invÃ¡lido.');
+      throw new BadRequestException('Monto inválido.');
     }
     return Math.round(value * 100) / 100;
   }
@@ -1411,7 +1411,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
   async reviewClose(id: string, status: CloseStatus, actor: Actor) {
     this.ensureReviewer(actor);
     if (status !== CloseStatus.APPROVED && status !== CloseStatus.REJECTED) {
-      throw new BadRequestException('Estado de revisiÃ³n invÃ¡lido');
+      throw new BadRequestException('Estado de revisión inválido');
     }
 
     const close = await this.prisma.close.findUnique({ where: { id } });
@@ -1763,7 +1763,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
       ['Transferencias', this.money(close.transfer)],
       ['Tarjeta', this.money(close.card)],
       ['Otros ingresos', this.money(close.otherIncome)],
-      ['Gastos del d�a', this.money(close.expenses)],
+      ['Gastos del día', this.money(close.expenses)],
       ['Total ingresos', this.money(close.totalIncome)],
       ['Total neto', this.money(close.netTotal)],
       ['Efectivo entregado', this.money(close.cashDelivered)],

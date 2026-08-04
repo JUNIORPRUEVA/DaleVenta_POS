@@ -12,6 +12,7 @@ import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/fulltech_page_header.dart';
 import 'cash_dialogs.dart';
+import 'cash_close_ticket_printer.dart';
 import 'cash_models.dart';
 import 'cash_providers.dart';
 import 'cash_repository.dart';
@@ -212,7 +213,6 @@ class _CashMovementsHistoryScreenState
   _MovementDateFilter _date = _MovementDateFilter.today;
   DateTime? _specificDate;
   bool _searchOpen = false;
-  bool _filtersOpen = false;
 
   @override
   void initState() {
@@ -314,36 +314,132 @@ class _CashMovementsHistoryScreenState
     });
   }
 
+  Future<void> _openMovementFilters() async {
+    final result = await showGeneralDialog<_CashMovementFilterDraft>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Filtros de movimientos',
+      barrierColor: Colors.black.withValues(alpha: 0.26),
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: _CashMovementsFilterDrawer(
+            initialType: _type,
+            initialDate: _date,
+            initialSpecificDate: _specificDate,
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
+        );
+      },
+    );
+
+    if (!mounted || result == null) return;
+    setState(() {
+      _type = result.type;
+      _date = result.date;
+      if (result.date == _MovementDateFilter.specific) {
+        _specificDate = result.specificDate;
+      }
+    });
+  }
+
+  Widget _buildMovementsContent(
+    BuildContext context,
+    AsyncValue<List<CashMovementModel>> history, {
+    required bool isMobile,
+    required bool showStats,
+    required EdgeInsetsGeometry listPadding,
+  }) {
+    return history.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, _) => _CashPanelMessage(
+        icon: Icons.payments_outlined,
+        title: 'No se pudieron cargar movimientos',
+        detail: resolveCashError(error),
+      ),
+      data: (rows) {
+        final visible = _filter(rows);
+        final entries = visible
+            .where((row) => row.isIn)
+            .fold<double>(0, (sum, row) => sum + row.amount);
+        final exits = visible
+            .where((row) => !row.isIn)
+            .fold<double>(0, (sum, row) => sum + row.amount);
+        if (visible.isEmpty) {
+          return const _CashPanelMessage(
+            icon: Icons.history_toggle_off_rounded,
+            title: 'Sin movimientos',
+            detail: 'No hay entradas ni salidas en el rango seleccionado.',
+          );
+        }
+        return Column(
+          children: [
+            if (showStats) ...[
+              _MovementStatsGrid(
+                isMobile: isMobile,
+                entries: entries,
+                exits: exits,
+                count: visible.length,
+              ),
+              const SizedBox(height: 14),
+            ],
+            Expanded(
+              child: ListView.separated(
+                padding: listPadding,
+                itemCount: visible.length,
+                separatorBuilder: (_, __) => isMobile
+                    ? const SizedBox.shrink()
+                    : const SizedBox(height: 8),
+                itemBuilder: (context, index) =>
+                    _CashMovementRow(row: visible[index]),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildMovementSearchField() {
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 260),
+        constraints: const BoxConstraints(maxWidth: 280),
         child: TextField(
           controller: _searchController,
           autofocus: true,
           style: const TextStyle(color: Color(0xFF111827)),
+          textInputAction: TextInputAction.search,
           decoration: InputDecoration(
             hintText: 'Buscar',
             hintStyle: const TextStyle(color: Color(0xFF8A9AA8)),
             filled: true,
             fillColor: Colors.white,
             isDense: true,
-            prefixIconConstraints: const BoxConstraints(
-              minWidth: 34,
-              minHeight: 32,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.zero,
+              borderSide: BorderSide.none,
             ),
             prefixIcon: const Icon(
               Icons.search_rounded,
-              size: 18,
-              color: Color(0xFF52667C),
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 10,
-              vertical: 6,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
+              color: Color(0xFF8A9AA8),
             ),
           ),
         ),
@@ -428,11 +524,9 @@ class _CashMovementsHistoryScreenState
                     if (!_searchOpen)
                       IconButton(
                         tooltip: 'Filtros',
-                        onPressed: () =>
-                            setState(() => _filtersOpen = !_filtersOpen),
+                        onPressed: _openMovementFilters,
                         icon: Badge(
                           isLabelVisible:
-                              _filtersOpen ||
                               _type != _MovementTypeFilter.all ||
                               _date != _MovementDateFilter.today,
                           smallSize: 8,
@@ -489,148 +583,97 @@ class _CashMovementsHistoryScreenState
                   child: const Icon(Icons.summarize_outlined),
                 )
               : null,
-          body: Padding(
-            padding: EdgeInsets.all(isMobile ? 10 : 18),
-            child: _CashCard(
-              child: Column(
-                children: [
-                  if (isMobile)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+          body: isMobile
+              ? _buildMovementsContent(
+                  context,
+                  history,
+                  isMobile: true,
+                  showStats: false,
+                  listPadding: const EdgeInsets.fromLTRB(0, 0, 0, 80),
+                )
+              : Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: _CashCard(
+                    child: Column(
                       children: [
-                        if (_filtersOpen) ...[
-                          SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: _MovementTypeSelector(
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _CashSearchField(
+                                controller: _searchController,
+                                hint:
+                                    'Buscar por usuario, motivo, monto o turno...',
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            _MovementTypeSelector(
                               selected: _type,
                               onChanged: (value) =>
                                   setState(() => _type = value),
                             ),
-                          ),
-                          const SizedBox(height: 10),
-                        ],
-                      ],
-                    )
-                  else
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _CashSearchField(
-                            controller: _searchController,
-                            hint:
-                                'Buscar por usuario, motivo, monto o turno...',
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        _MovementTypeSelector(
-                          selected: _type,
-                          onChanged: (value) => setState(() => _type = value),
-                        ),
-                      ],
-                    ),
-                  if (!isMobile || _filtersOpen) ...[
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            _MovementDateSelector(
-                              selected: _date,
-                              onChanged: (next) {
-                                if (next == _MovementDateFilter.specific) {
-                                  _pickSpecificDate();
-                                  return;
-                                }
-                                setState(() => _date = next);
-                              },
-                            ),
-                            if (_date == _MovementDateFilter.specific) ...[
-                              const SizedBox(width: 10),
-                              OutlinedButton.icon(
-                                onPressed: _pickSpecificDate,
-                                icon: const Icon(Icons.event_rounded, size: 18),
-                                label: Text(
-                                  _specificDate == null
-                                      ? 'Elegir fecha'
-                                      : DateFormat(
-                                          'dd/MM/yyyy',
-                                          'es_DO',
-                                        ).format(_specificDate!),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: _cashText,
-                                  minimumSize: Size(isMobile ? 118 : 132, 40),
-                                  side: const BorderSide(color: _cashLine),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                              ),
-                            ],
                           ],
                         ),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 14),
-                  Expanded(
-                    child: history.when(
-                      loading: () =>
-                          const Center(child: CircularProgressIndicator()),
-                      error: (error, _) => _CashPanelMessage(
-                        icon: Icons.payments_outlined,
-                        title: 'No se pudieron cargar movimientos',
-                        detail: resolveCashError(error),
-                      ),
-                      data: (rows) {
-                        final visible = _filter(rows);
-                        final entries = visible
-                            .where((row) => row.isIn)
-                            .fold<double>(0, (sum, row) => sum + row.amount);
-                        final exits = visible
-                            .where((row) => !row.isIn)
-                            .fold<double>(0, (sum, row) => sum + row.amount);
-                        return Column(
-                          children: [
-                            if (!isMobile) ...[
-                              _MovementStatsGrid(
-                                isMobile: isMobile,
-                                entries: entries,
-                                exits: exits,
-                                count: visible.length,
-                              ),
-                              const SizedBox(height: 14),
-                            ],
-                            Expanded(
-                              child: visible.isEmpty
-                                  ? const _CashPanelMessage(
-                                      icon: Icons.history_toggle_off_rounded,
-                                      title: 'Sin movimientos',
-                                      detail:
-                                          'No hay entradas ni salidas en el rango seleccionado.',
-                                    )
-                                  : ListView.separated(
-                                      padding: EdgeInsets.only(
-                                        bottom: isMobile ? 76 : 0,
-                                      ),
-                                      itemCount: visible.length,
-                                      separatorBuilder: (_, __) =>
-                                          const SizedBox(height: 8),
-                                      itemBuilder: (context, index) =>
-                                          _CashMovementRow(row: visible[index]),
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                _MovementDateSelector(
+                                  selected: _date,
+                                  onChanged: (next) {
+                                    if (next == _MovementDateFilter.specific) {
+                                      _pickSpecificDate();
+                                      return;
+                                    }
+                                    setState(() => _date = next);
+                                  },
+                                ),
+                                if (_date == _MovementDateFilter.specific) ...[
+                                  const SizedBox(width: 10),
+                                  OutlinedButton.icon(
+                                    onPressed: _pickSpecificDate,
+                                    icon: const Icon(
+                                      Icons.event_rounded,
+                                      size: 18,
                                     ),
+                                    label: Text(
+                                      _specificDate == null
+                                          ? 'Elegir fecha'
+                                          : DateFormat(
+                                              'dd/MM/yyyy',
+                                              'es_DO',
+                                            ).format(_specificDate!),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: _cashText,
+                                      minimumSize: const Size(132, 40),
+                                      side: const BorderSide(color: _cashLine),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
-                          ],
-                        );
-                      },
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Expanded(
+                          child: _buildMovementsContent(
+                            context,
+                            history,
+                            isMobile: false,
+                            showStats: true,
+                            listPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ),
-          ),
+                ),
         ),
       ),
     );
@@ -695,6 +738,369 @@ class _MovementDateSelector extends StatelessWidget {
       selected: {selected},
       onSelectionChanged: (value) => onChanged(value.first),
     );
+  }
+}
+
+class _CashMovementFilterDraft {
+  const _CashMovementFilterDraft({
+    required this.type,
+    required this.date,
+    this.specificDate,
+  });
+
+  final _MovementTypeFilter type;
+  final _MovementDateFilter date;
+  final DateTime? specificDate;
+}
+
+class _CashMovementsFilterDrawer extends StatefulWidget {
+  const _CashMovementsFilterDrawer({
+    required this.initialType,
+    required this.initialDate,
+    this.initialSpecificDate,
+  });
+
+  final _MovementTypeFilter initialType;
+  final _MovementDateFilter initialDate;
+  final DateTime? initialSpecificDate;
+
+  @override
+  State<_CashMovementsFilterDrawer> createState() =>
+      _CashMovementsFilterDrawerState();
+}
+
+class _CashMovementsFilterDrawerState
+    extends State<_CashMovementsFilterDrawer> {
+  late _MovementTypeFilter _type;
+  late _MovementDateFilter _date;
+  DateTime? _specificDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _type = widget.initialType;
+    _date = widget.initialDate;
+    _specificDate = widget.initialSpecificDate;
+  }
+
+  Future<DateTime?> _pickSpecificDate() async {
+    final now = DateTime.now();
+    return showDatePicker(
+      context: context,
+      initialDate: _specificDate ?? now,
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 1),
+      locale: const Locale('es', 'DO'),
+      helpText: 'Filtrar por fecha',
+      cancelText: 'Cancelar',
+      confirmText: 'Aplicar',
+    );
+  }
+
+  void _apply() {
+    Navigator.of(context).pop(
+      _CashMovementFilterDraft(
+        type: _type,
+        date: _date,
+        specificDate: _specificDate,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.sizeOf(context);
+    final width = (media.width * 0.6).clamp(300.0, 430.0);
+
+    return Dismissible(
+      key: const ValueKey('cash-movements-filters-panel'),
+      direction: DismissDirection.endToStart,
+      onDismissed: (_) => Navigator.of(context).pop(),
+      child: Material(
+        color: Colors.white,
+        elevation: 18,
+        borderRadius: BorderRadius.zero,
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          width: width,
+          height: media.height,
+          child: SafeArea(
+            left: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEAF1FF),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.filter_alt_rounded,
+                          color: AppColors.secondary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Filtros de movimientos',
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Tipo y rango de fechas',
+                              style: TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Cerrar',
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, color: AppColors.border),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                    children: [
+                      _CashFilterSection<_MovementTypeFilter>(
+                        title: 'Tipo',
+                        value: _type,
+                        options: const [
+                          _MovementTypeFilter.all,
+                          _MovementTypeFilter.inOnly,
+                          _MovementTypeFilter.outOnly,
+                        ],
+                        labelBuilder: _movementTypeLabel,
+                        onSelected: (value) => setState(() => _type = value),
+                      ),
+                      const SizedBox(height: 16),
+                      _CashFilterSection<_MovementDateFilter>(
+                        title: 'Fecha',
+                        value: _date,
+                        options: const [
+                          _MovementDateFilter.today,
+                          _MovementDateFilter.yesterday,
+                          _MovementDateFilter.week,
+                          _MovementDateFilter.month,
+                          _MovementDateFilter.specific,
+                          _MovementDateFilter.all,
+                        ],
+                        labelBuilder: _movementDateLabel,
+                        onSelected: (value) async {
+                          if (value == _MovementDateFilter.specific) {
+                            final picked = await _pickSpecificDate();
+                            if (picked == null || !mounted) return;
+                            setState(() {
+                              _specificDate = picked;
+                              _date = value;
+                            });
+                            return;
+                          }
+                          setState(() => _date = value);
+                        },
+                      ),
+                      if (_date == _MovementDateFilter.specific)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(8, 4, 0, 0),
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              final picked = await _pickSpecificDate();
+                              if (picked != null) {
+                                setState(() => _specificDate = picked);
+                              }
+                            },
+                            icon: const Icon(Icons.event_rounded, size: 18),
+                            label: Text(
+                              _specificDate == null
+                                  ? 'Elegir fecha'
+                                  : DateFormat(
+                                      'dd/MM/yyyy',
+                                      'es_DO',
+                                    ).format(_specificDate!),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+                  decoration: const BoxDecoration(
+                    color: AppColors.surfaceAlt,
+                    border: Border(top: BorderSide(color: AppColors.border)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pop(
+                            const _CashMovementFilterDraft(
+                              type: _MovementTypeFilter.all,
+                              date: _MovementDateFilter.today,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(46),
+                          ),
+                          child: const Text('Limpiar'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _apply,
+                          icon: const Icon(Icons.check_rounded),
+                          label: const Text('Aplicar'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.secondary,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size.fromHeight(46),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CashFilterSection<T> extends StatelessWidget {
+  const _CashFilterSection({
+    required this.title,
+    required this.value,
+    required this.options,
+    required this.labelBuilder,
+    required this.onSelected,
+  });
+
+  final String title;
+  final T value;
+  final List<T> options;
+  final String Function(T value) labelBuilder;
+  final ValueChanged<T> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Column(
+          children: [
+            for (var index = 0; index < options.length; index++) ...[
+              if (index > 0) const SizedBox(height: 8),
+              Material(
+                color: optionEquals(options[index], value)
+                    ? theme.colorScheme.primaryContainer.withValues(alpha: 0.6)
+                    : theme.colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.25,
+                      ),
+                borderRadius: BorderRadius.circular(16),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () => onSelected(options[index]),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 14,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          optionEquals(options[index], value)
+                              ? Icons.circle_rounded
+                              : Icons.circle_outlined,
+                          size: 18,
+                          color: optionEquals(options[index], value)
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            labelBuilder(options[index]),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: optionEquals(options[index], value)
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  bool optionEquals(T left, T right) => left == right;
+}
+
+String _movementTypeLabel(_MovementTypeFilter filter) {
+  switch (filter) {
+    case _MovementTypeFilter.all:
+      return 'Todos';
+    case _MovementTypeFilter.inOnly:
+      return 'Entradas (ingresos)';
+    case _MovementTypeFilter.outOnly:
+      return 'Salidas';
+  }
+}
+
+String _movementDateLabel(_MovementDateFilter filter) {
+  switch (filter) {
+    case _MovementDateFilter.today:
+      return 'Hoy';
+    case _MovementDateFilter.yesterday:
+      return 'Ayer';
+    case _MovementDateFilter.week:
+      return 'Semana';
+    case _MovementDateFilter.month:
+      return 'Mes';
+    case _MovementDateFilter.specific:
+      return 'Fecha específica';
+    case _MovementDateFilter.all:
+      return 'Todo';
   }
 }
 
@@ -1795,11 +2201,16 @@ class _CashMovementRow extends StatelessWidget {
     final label = isIn ? 'Ingreso' : 'Salida';
 
     return Container(
-      padding: EdgeInsets.all(isMobile ? 10 : 12),
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 12 : 12,
+        vertical: isMobile ? 12 : 12,
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(13),
-        border: Border.all(color: _cashLine),
+        borderRadius: isMobile ? BorderRadius.zero : BorderRadius.circular(13),
+        border: isMobile
+            ? const Border(bottom: BorderSide(color: _cashLine))
+            : Border.all(color: _cashLine),
       ),
       child: isMobile
           ? Column(
@@ -2000,154 +2411,163 @@ class _TurnHistoryWideCard extends StatelessWidget {
         ? const Color(0xFF16A34A)
         : _danger;
 
-    return Container(
-      padding: EdgeInsets.fromLTRB(12, isMobile ? 12 : 10, 12, 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
+      child: InkWell(
+        onTap: () => _showDetail(context),
         borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
-        border: Border.all(color: const Color(0xFFDDE8F1)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0A0B3550),
-            blurRadius: 12,
-            offset: Offset(0, 4),
+        child: Container(
+          padding: EdgeInsets.fromLTRB(10, isMobile ? 9 : 10, 10, 9),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
+            border: Border.all(color: const Color(0xFFDDE8F1)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x070B3550),
+                blurRadius: 10,
+                offset: Offset(0, 3),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: isMobile
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
+          child: isMobile
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEAF1FF),
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                          child: const Icon(
+                            Icons.point_of_sale_rounded,
+                            color: _cashBlue,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _TurnInfoBlock(
+                            title: row.userName,
+                            subtitle: 'Turno ${row.businessDate}',
+                          ),
+                        ),
+                        OutlinedButton(
+                          onPressed: () => _showDetail(context),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: _cashBlue,
+                            side: const BorderSide(color: Color(0xFFC7D8FF)),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: const Text('Ver'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        _TurnMiniPill(label: 'Abrió', value: opened),
+                        _TurnMiniPill(label: 'Cerró', value: closed),
+                        _TurnMiniPill(
+                          label: 'Esperado',
+                          value: formatRdCurrencyAccounting(row.expectedAmount),
+                        ),
+                        _TurnMiniPill(
+                          label: 'Diferencia',
+                          value: formatRdCurrencyAccounting(row.difference),
+                          color: diffColor,
+                        ),
+                      ],
+                    ),
+                  ],
+                )
+              : Row(
                   children: [
                     Container(
-                      width: 40,
-                      height: 40,
+                      width: 42,
+                      height: 42,
                       decoration: BoxDecoration(
                         color: const Color(0xFFEAF1FF),
-                        borderRadius: BorderRadius.circular(11),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(
                         Icons.point_of_sale_rounded,
                         color: _cashBlue,
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 12),
                     Expanded(
+                      flex: 2,
                       child: _TurnInfoBlock(
                         title: row.userName,
                         subtitle: 'Turno ${row.businessDate}',
                       ),
                     ),
-                    OutlinedButton(
+                    Expanded(
+                      child: _TurnInfoBlock(title: 'Abrió', subtitle: opened),
+                    ),
+                    Expanded(
+                      child: _TurnInfoBlock(title: 'Cerró', subtitle: closed),
+                    ),
+                    Expanded(
+                      child: _TurnInfoBlock(
+                        title: 'Inicial',
+                        subtitle: formatRdCurrencyAccounting(row.initialAmount),
+                      ),
+                    ),
+                    Expanded(
+                      child: _TurnInfoBlock(
+                        title: 'Esperado',
+                        subtitle: formatRdCurrencyAccounting(
+                          row.expectedAmount,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: _TurnInfoBlock(
+                        title: 'Cierre',
+                        subtitle: formatRdCurrencyAccounting(row.closingAmount),
+                      ),
+                    ),
+                    Expanded(
+                      child: _TurnInfoBlock(
+                        title: 'Diferencia',
+                        subtitle: formatRdCurrencyAccounting(row.difference),
+                        color: diffColor,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
                       onPressed: () => _showDetail(context),
+                      icon: const Icon(Icons.visibility_outlined, size: 17),
+                      label: const Text('Ver detalle'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: _cashBlue,
                         side: const BorderSide(color: Color(0xFFC7D8FF)),
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
+                          horizontal: 12,
+                          vertical: 11,
                         ),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(9),
                         ),
                       ),
-                      child: const Text('Ver'),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _TurnMiniPill(label: 'Abrió', value: opened),
-                    _TurnMiniPill(label: 'Cerró', value: closed),
-                    _TurnMiniPill(
-                      label: 'Esperado',
-                      value: formatRdCurrencyAccounting(row.expectedAmount),
-                    ),
-                    _TurnMiniPill(
-                      label: 'Diferencia',
-                      value: formatRdCurrencyAccounting(row.difference),
-                      color: diffColor,
-                    ),
-                  ],
-                ),
-              ],
-            )
-          : Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEAF1FF),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.point_of_sale_rounded,
-                    color: _cashBlue,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: _TurnInfoBlock(
-                    title: row.userName,
-                    subtitle: 'Turno ${row.businessDate}',
-                  ),
-                ),
-                Expanded(
-                  child: _TurnInfoBlock(title: 'Abrió', subtitle: opened),
-                ),
-                Expanded(
-                  child: _TurnInfoBlock(title: 'Cerró', subtitle: closed),
-                ),
-                Expanded(
-                  child: _TurnInfoBlock(
-                    title: 'Inicial',
-                    subtitle: formatRdCurrencyAccounting(row.initialAmount),
-                  ),
-                ),
-                Expanded(
-                  child: _TurnInfoBlock(
-                    title: 'Esperado',
-                    subtitle: formatRdCurrencyAccounting(row.expectedAmount),
-                  ),
-                ),
-                Expanded(
-                  child: _TurnInfoBlock(
-                    title: 'Cierre',
-                    subtitle: formatRdCurrencyAccounting(row.closingAmount),
-                  ),
-                ),
-                Expanded(
-                  child: _TurnInfoBlock(
-                    title: 'Diferencia',
-                    subtitle: formatRdCurrencyAccounting(row.difference),
-                    color: diffColor,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: () => _showDetail(context),
-                  icon: const Icon(Icons.visibility_outlined, size: 17),
-                  label: const Text('Ver detalle'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _cashBlue,
-                    side: const BorderSide(color: Color(0xFFC7D8FF)),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 11,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+        ),
+      ),
     );
   }
 }
@@ -2364,13 +2784,30 @@ class _TurnDetailDialog extends StatelessWidget {
   }
 }
 
-class _ShiftDetailPage extends StatelessWidget {
+class _ShiftDetailPage extends ConsumerWidget {
   const _ShiftDetailPage({required this.row});
 
   final CashSessionHistoryModel row;
 
+  Future<void> _print(BuildContext context, WidgetRef ref) async {
+    try {
+      final result = await ref
+          .read(cashCloseTicketPrinterProvider)
+          .printHistoryTicket(row);
+      if (!context.mounted) return;
+      showCashToast(
+        context,
+        result.success ? 'Turno enviado a imprimir' : result.message,
+        isError: !result.success,
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      showCashToast(context, 'No se pudo imprimir: $error', isError: true);
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final fmt = DateFormat('dd/MM/yyyy HH:mm', 'es_DO');
     final opened = fmt.format(row.openedAt.toLocal());
     final closed = row.closedAt == null
@@ -2384,11 +2821,18 @@ class _ShiftDetailPage extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: _cashBg,
-      appBar: const CustomAppBar(
-        title: 'Shift Details',
+      appBar: CustomAppBar(
+        title: 'Detalle',
         showLogo: false,
         showDepartmentLabel: false,
-        trailing: SizedBox.shrink(),
+        actions: [
+          IconButton(
+            tooltip: 'Imprimir turno',
+            onPressed: () => _print(context, ref),
+            icon: const Icon(Icons.print_outlined),
+          ),
+        ],
+        trailing: const SizedBox.shrink(),
       ),
       body: SafeArea(
         top: false,

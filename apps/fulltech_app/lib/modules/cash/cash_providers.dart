@@ -85,6 +85,24 @@ class ActiveCashSessionController
     return ref.read(cashCloseTicketPrinterProvider).printCloseTicket(snapshot);
   }
 
+  Future<PrintTicketResult> printCurrent() async {
+    final repo = ref.read(cashRepositoryProvider);
+    final state = await repo.state();
+    final summary = await repo.summary();
+    final movements = await repo.movements();
+    final snapshot = CashCloseTicketSnapshot(
+      state: state,
+      summary: summary,
+      movements: movements,
+      closingAmount: summary.expectedCash,
+      note: 'Impresión previa del turno activo',
+      capturedAt: DateTime.now(),
+    );
+    return ref
+        .read(cashCloseTicketPrinterProvider)
+        .printCloseTicket(snapshot, automatic: false);
+  }
+
   Future<void> addMovement({
     required String type,
     required double amount,

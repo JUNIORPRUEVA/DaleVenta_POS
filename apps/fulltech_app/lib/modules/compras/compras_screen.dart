@@ -3266,60 +3266,56 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     final email = TextEditingController(text: supplier?.email ?? '');
     final contact = TextEditingController(text: supplier?.contactName ?? '');
     final address = TextEditingController(text: supplier?.address ?? '');
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(supplier == null ? 'Crear suplidor' : 'Editar suplidor'),
-        content: SizedBox(
-          width: 420,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: name,
-                  decoration: const InputDecoration(
-                    labelText: 'Nombre comercial',
-                  ),
-                ),
-                TextField(
-                  controller: contact,
-                  decoration: const InputDecoration(
-                    labelText: 'Persona de contacto',
-                  ),
-                ),
-                TextField(
-                  controller: phone,
-                  decoration: const InputDecoration(labelText: 'Teléfono'),
-                ),
-                TextField(
-                  controller: whatsapp,
-                  decoration: const InputDecoration(labelText: 'WhatsApp'),
-                ),
-                TextField(
-                  controller: email,
-                  decoration: const InputDecoration(labelText: 'Correo'),
-                ),
-                TextField(
-                  controller: address,
-                  decoration: const InputDecoration(labelText: 'Dirección'),
-                ),
-              ],
+    final isMobile = MediaQuery.sizeOf(context).width < 720;
+    bool? ok;
+    if (isMobile) {
+      ok = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: AppColors.background,
+        builder: (context) => _SupplierEditorSheet(
+          title: supplier == null ? 'Crear suplidor' : 'Editar suplidor',
+          name: name,
+          contact: contact,
+          phone: phone,
+          whatsapp: whatsapp,
+          email: email,
+          address: address,
+        ),
+      );
+    } else {
+      ok = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(supplier == null ? 'Crear suplidor' : 'Editar suplidor'),
+          content: SizedBox(
+            width: 460,
+            child: SingleChildScrollView(
+              child: _SupplierEditorFields(
+                name: name,
+                contact: contact,
+                phone: phone,
+                whatsapp: whatsapp,
+                email: email,
+                address: address,
+                mobile: false,
+              ),
             ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Guardar'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
-    );
+      );
+    }
     if (ok != true) return;
     if (name.text.trim().isEmpty) {
       _snack('Escribe el nombre comercial del suplidor.');
@@ -4180,6 +4176,227 @@ class _OrderDetailPanel extends StatelessWidget {
                 ),
               ),
             ),
+    );
+  }
+}
+
+class _SupplierEditorSheet extends StatelessWidget {
+  const _SupplierEditorSheet({
+    required this.title,
+    required this.name,
+    required this.contact,
+    required this.phone,
+    required this.whatsapp,
+    required this.email,
+    required this.address,
+  });
+
+  final String title;
+  final TextEditingController name;
+  final TextEditingController contact;
+  final TextEditingController phone;
+  final TextEditingController whatsapp;
+  final TextEditingController email;
+  final TextEditingController address;
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    return SizedBox.expand(
+      child: Material(
+        color: AppColors.background,
+        child: Column(
+          children: [
+            Container(
+              color: Colors.white,
+              padding: const EdgeInsets.fromLTRB(4, 8, 10, 10),
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Cerrar',
+                    onPressed: () => Navigator.pop(context, false),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  FilledButton.icon(
+                    onPressed: () => Navigator.pop(context, true),
+                    icon: const Icon(Icons.check_rounded, size: 18),
+                    label: const Text('Guardar'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.secondary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(118, 42),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: EdgeInsets.fromLTRB(10, 12, 10, 18 + bottomInset),
+                children: [
+                  _SupplierEditorFields(
+                    name: name,
+                    contact: contact,
+                    phone: phone,
+                    whatsapp: whatsapp,
+                    email: email,
+                    address: address,
+                    mobile: true,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SupplierEditorFields extends StatelessWidget {
+  const _SupplierEditorFields({
+    required this.name,
+    required this.contact,
+    required this.phone,
+    required this.whatsapp,
+    required this.email,
+    required this.address,
+    required this.mobile,
+  });
+
+  final TextEditingController name;
+  final TextEditingController contact;
+  final TextEditingController phone;
+  final TextEditingController whatsapp;
+  final TextEditingController email;
+  final TextEditingController address;
+  final bool mobile;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _SupplierTextField(
+          controller: name,
+          label: 'Nombre comercial',
+          icon: Icons.storefront_outlined,
+          textInputAction: TextInputAction.next,
+          autofocus: true,
+          mobile: mobile,
+        ),
+        _SupplierTextField(
+          controller: contact,
+          label: 'Persona de contacto',
+          icon: Icons.person_outline_rounded,
+          textInputAction: TextInputAction.next,
+          mobile: mobile,
+        ),
+        _SupplierTextField(
+          controller: phone,
+          label: 'Teléfono',
+          icon: Icons.call_outlined,
+          keyboardType: TextInputType.phone,
+          textInputAction: TextInputAction.next,
+          mobile: mobile,
+        ),
+        _SupplierTextField(
+          controller: whatsapp,
+          label: 'WhatsApp',
+          icon: Icons.chat_outlined,
+          keyboardType: TextInputType.phone,
+          textInputAction: TextInputAction.next,
+          mobile: mobile,
+        ),
+        _SupplierTextField(
+          controller: email,
+          label: 'Correo',
+          icon: Icons.mail_outline_rounded,
+          keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.next,
+          mobile: mobile,
+        ),
+        _SupplierTextField(
+          controller: address,
+          label: 'Dirección',
+          icon: Icons.location_on_outlined,
+          minLines: mobile ? 3 : 2,
+          maxLines: 4,
+          mobile: mobile,
+        ),
+      ],
+    );
+  }
+}
+
+class _SupplierTextField extends StatelessWidget {
+  const _SupplierTextField({
+    required this.controller,
+    required this.label,
+    required this.icon,
+    required this.mobile,
+    this.keyboardType,
+    this.textInputAction,
+    this.autofocus = false,
+    this.minLines,
+    this.maxLines = 1,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+  final bool mobile;
+  final TextInputType? keyboardType;
+  final TextInputAction? textInputAction;
+  final bool autofocus;
+  final int? minLines;
+  final int? maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: mobile ? 10 : 12),
+      child: TextField(
+        controller: controller,
+        autofocus: autofocus,
+        keyboardType: keyboardType,
+        textInputAction: textInputAction,
+        minLines: minLines,
+        maxLines: maxLines,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon),
+          filled: true,
+          fillColor: Colors.white,
+          isDense: !mobile,
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: mobile ? 14 : 12,
+            vertical: mobile ? 16 : 13,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(mobile ? 8 : 10),
+            borderSide: const BorderSide(color: AppColors.border),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(mobile ? 8 : 10),
+            borderSide: const BorderSide(color: AppColors.border),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -119,6 +119,101 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  void _showSummary() {
+    final active = _activeServices;
+    final overdue = _overdueCount;
+    final dueSoon = _dueSoonCount;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Resumen de pagos',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 12),
+              _PaymentSummaryStat(
+                label: 'Total estimado a pagar',
+                value: _money.format(_totalEstimated),
+                icon: Icons.account_balance_wallet_outlined,
+              ),
+              const SizedBox(height: 8),
+              _PaymentSummaryStat(
+                label: 'Servicios activos',
+                value: '${active.length}',
+                icon: Icons.list_alt_outlined,
+              ),
+              const SizedBox(height: 8),
+              _PaymentSummaryStat(
+                label: 'Vencidos',
+                value: '$overdue',
+                icon: Icons.warning_amber_rounded,
+              ),
+              const SizedBox(height: 8),
+              _PaymentSummaryStat(
+                label: 'Próximos (7 días)',
+                value: '$dueSoon',
+                icon: Icons.schedule_rounded,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openFilters() async {
+    final result = await showGeneralDialog<_PagosOptionsResult>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Filtros y opciones de pagos',
+      barrierColor: Colors.black.withValues(alpha: 0.26),
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: _PagosOptionsSheet(initialSort: _sortOrder),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
+        );
+      },
+    );
+    if (result == null || !mounted) return;
+    if (result.sort != _sortOrder) {
+      setState(() => _sortOrder = result.sort);
+    }
+    switch (result.action) {
+      case _PagosSheetAction.createFixed:
+        await _openCreateFixedDialog();
+        break;
+      case _PagosSheetAction.directPayment:
+        await _openDirectPaymentDialog();
+        break;
+      case _PagosSheetAction.none:
+        break;
+    }
+  }
+
   double get _totalEstimated {
     return _activeServices.fold(0.0, (sum, s) => sum + (s.defaultAmount ?? 0));
   }
@@ -780,7 +875,12 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
         backgroundColor: MediaQuery.sizeOf(context).width < 900
             ? AppColors.background
             : null,
-        appBar: CustomAppBar(title: 'Pagos pendientes', showLogo: false),
+        appBar: CustomAppBar(
+          title: 'Pagos pendientes',
+          showLogo: false,
+          showDepartmentLabel: false,
+          trailing: const SizedBox.shrink(),
+        ),
         drawer: buildAdaptiveDrawer(context, currentUser: user),
         body: const Center(
           child: Padding(
@@ -803,33 +903,29 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
       appBar: CustomAppBar(
         title: 'Pagos pendientes',
         showLogo: false,
+        showDepartmentLabel: false,
         actions: [
+          IconButton(
+            tooltip: 'Filtros y opciones',
+            onPressed: _openFilters,
+            icon: const Icon(Icons.filter_alt_outlined),
+          ),
           IconButton(
             tooltip: 'Actualizar',
             onPressed: _loading ? null : _load,
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
+        trailing: const SizedBox.shrink(),
       ),
       drawer: buildAdaptiveDrawer(context, currentUser: user),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          FloatingActionButton.extended(
-            heroTag: 'fab_fixed',
-            onPressed: _openCreateFixedDialog,
-            icon: const Icon(Icons.add_task_outlined),
-            label: const Text('Servicio fijo'),
-          ),
-          const SizedBox(height: 10),
-          FloatingActionButton.extended(
-            heroTag: 'fab_direct',
-            onPressed: _openDirectPaymentDialog,
-            icon: const Icon(Icons.attach_money_outlined),
-            label: const Text('Pago directo'),
-          ),
-        ],
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'payments_summary',
+        tooltip: 'Ver resumen',
+        backgroundColor: AppColors.secondary,
+        foregroundColor: Colors.white,
+        onPressed: _showSummary,
+        child: const Icon(Icons.summarize_rounded),
       ),
       body: RefreshIndicator(
         onRefresh: _load,
@@ -861,29 +957,11 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       children: [
-        _SummaryPanel(
-          totalEstimated: _totalEstimated,
-          activeCount: active.length,
-          overdueCount: _overdueCount,
-          dueSoonCount: _dueSoonCount,
-          money: _money,
-        ),
-        const SizedBox(height: 20),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Servicios activos (${active.length})',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-            _SortMenu(
-              current: _sortOrder,
-              onSelect: (v) => setState(() => _sortOrder = v),
-            ),
-          ],
+        Text(
+          'Servicios activos (${active.length})',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
         ),
         const SizedBox(height: 10),
         if (active.isEmpty)
@@ -1013,169 +1091,66 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
 
 // ── Summary Panel ─────────────────────────────────────────────────────────────
 
-class _SummaryPanel extends StatelessWidget {
-  final double totalEstimated;
-  final int activeCount;
-  final int overdueCount;
-  final int dueSoonCount;
-  final NumberFormat money;
-
-  const _SummaryPanel({
-    required this.totalEstimated,
-    required this.activeCount,
-    required this.overdueCount,
-    required this.dueSoonCount,
-    required this.money,
+class _PaymentSummaryStat extends StatelessWidget {
+  const _PaymentSummaryStat({
+    required this.label,
+    required this.value,
+    required this.icon,
   });
+
+  final String label;
+  final String value;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
-    return Card(
-      elevation: 0,
-      color: scheme.primaryContainer,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'RESUMEN',
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: scheme.onPrimaryContainer.withValues(alpha: 0.7),
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              money.format(totalEstimated),
-              style: theme.textTheme.headlineMedium?.copyWith(
-                color: scheme.onPrimaryContainer,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -0.5,
-              ),
-            ),
-            Text(
-              'Total estimado a pagar (servicios activos)',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onPrimaryContainer.withValues(alpha: 0.75),
-              ),
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _StatChip(
-                  icon: Icons.list_alt_outlined,
-                  label: '$activeCount activos',
-                  color: scheme.onPrimaryContainer,
-                  bg: scheme.onPrimaryContainer.withValues(alpha: 0.12),
-                ),
-                if (overdueCount > 0)
-                  _StatChip(
-                    icon: Icons.warning_amber_rounded,
-                    label:
-                        '$overdueCount vencido${overdueCount > 1 ? "s" : ""}',
-                    color: scheme.error,
-                    bg: scheme.errorContainer,
-                  ),
-                if (dueSoonCount > 0)
-                  _StatChip(
-                    icon: Icons.schedule_rounded,
-                    label:
-                        '$dueSoonCount próximo${dueSoonCount > 1 ? "s" : ""} (7d)',
-                    color: scheme.onPrimaryContainer,
-                    bg: scheme.onPrimaryContainer.withValues(alpha: 0.12),
-                  ),
-              ],
-            ),
-          ],
+    final colorScheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.55),
         ),
       ),
-    );
-  }
-}
-
-class _StatChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final Color bg;
-  const _StatChip({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.bg,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
-      ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: color),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: color,
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: colorScheme.primary.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: colorScheme.primary, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ── Sort menu ─────────────────────────────────────────────────────────────────
-
-class _SortMenu extends StatelessWidget {
-  final _SortOrder current;
-  final ValueChanged<_SortOrder> onSelect;
-  const _SortMenu({required this.current, required this.onSelect});
-
-  @override
-  Widget build(BuildContext context) {
-    return PopupMenuButton<_SortOrder>(
-      tooltip: 'Ordenar',
-      initialValue: current,
-      onSelected: onSelect,
-      itemBuilder: (_) => _SortOrder.values
-          .map(
-            (o) => PopupMenuItem(
-              value: o,
-              child: Row(
-                children: [
-                  Icon(
-                    o == current
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 10),
-                  Text(o.label),
-                ],
-              ),
-            ),
-          )
-          .toList(),
-      child: Chip(
-        avatar: const Icon(Icons.sort_rounded, size: 16),
-        label: Text(current.label, style: const TextStyle(fontSize: 12)),
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        visualDensity: VisualDensity.compact,
       ),
     );
   }
@@ -1543,6 +1518,326 @@ class _ErrorView extends StatelessWidget {
               label: const Text('Reintentar'),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+enum _PagosSheetAction { none, createFixed, directPayment }
+
+class _PagosOptionsResult {
+  const _PagosOptionsResult({
+    required this.sort,
+    this.action = _PagosSheetAction.none,
+  });
+
+  final _SortOrder sort;
+  final _PagosSheetAction action;
+}
+
+class _PagosOptionsSheet extends StatefulWidget {
+  const _PagosOptionsSheet({required this.initialSort});
+
+  final _SortOrder initialSort;
+
+  @override
+  State<_PagosOptionsSheet> createState() => _PagosOptionsSheetState();
+}
+
+class _PagosOptionsSheetState extends State<_PagosOptionsSheet> {
+  late _SortOrder _sort = widget.initialSort;
+
+  void _apply() {
+    Navigator.of(
+      context,
+    ).pop(_PagosOptionsResult(sort: _sort, action: _PagosSheetAction.none));
+  }
+
+  void _runAction(_PagosSheetAction action) {
+    Navigator.of(context).pop(_PagosOptionsResult(sort: _sort, action: action));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.sizeOf(context);
+    final width = (media.width * 0.85).clamp(340.0, 540.0);
+
+    return Dismissible(
+      key: const ValueKey('pagos-options-panel'),
+      direction: DismissDirection.endToStart,
+      onDismissed: (_) => Navigator.of(context).pop(),
+      child: Material(
+        color: Colors.white,
+        elevation: 18,
+        borderRadius: const BorderRadius.horizontal(left: Radius.circular(26)),
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          width: width,
+          height: media.height,
+          child: SafeArea(
+            left: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEAF1FF),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.filter_alt_rounded,
+                          color: AppColors.secondary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Filtros y opciones',
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Orden y acciones rápidas',
+                              style: TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Cerrar',
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, color: AppColors.border),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                    children: [
+                      _PagosFilterSection<_SortOrder>(
+                        title: 'Ordenar',
+                        value: _sort,
+                        options: _SortOrder.values,
+                        labelBuilder: (order) => order.label,
+                        onSelected: (value) {
+                          setState(() => _sort = value);
+                        },
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        'Acciones',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _PagosActionTile(
+                        icon: Icons.add_task_outlined,
+                        label: 'Nuevo servicio fijo',
+                        onTap: () => _runAction(_PagosSheetAction.createFixed),
+                      ),
+                      const SizedBox(height: 8),
+                      _PagosActionTile(
+                        icon: Icons.attach_money_outlined,
+                        label: 'Pago directo',
+                        onTap: () =>
+                            _runAction(_PagosSheetAction.directPayment),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+                  decoration: const BoxDecoration(
+                    color: AppColors.surfaceAlt,
+                    border: Border(top: BorderSide(color: AppColors.border)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            Navigator.of(context).pop(
+                              const _PagosOptionsResult(
+                                sort: _SortOrder.dueDateAsc,
+                              ),
+                            );
+                          },
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(46),
+                          ),
+                          child: const Text('Limpiar'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _apply,
+                          icon: const Icon(Icons.check_rounded),
+                          label: const Text('Aplicar'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.secondary,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size.fromHeight(46),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PagosFilterSection<T> extends StatelessWidget {
+  const _PagosFilterSection({
+    required this.title,
+    required this.value,
+    required this.options,
+    required this.labelBuilder,
+    required this.onSelected,
+  });
+
+  final String title;
+  final T value;
+  final List<T> options;
+  final String Function(T value) labelBuilder;
+  final ValueChanged<T> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Column(
+          children: [
+            for (var index = 0; index < options.length; index++) ...[
+              if (index > 0) const SizedBox(height: 8),
+              Material(
+                color: options[index] == value
+                    ? theme.colorScheme.primaryContainer.withValues(alpha: 0.6)
+                    : theme.colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.25,
+                      ),
+                borderRadius: BorderRadius.circular(16),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () => onSelected(options[index]),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          options[index] == value
+                              ? Icons.radio_button_checked_rounded
+                              : Icons.radio_button_off_rounded,
+                          size: 18,
+                          color: options[index] == value
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            labelBuilder(options[index]),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: options[index] == value
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _PagosActionTile extends StatelessWidget {
+  const _PagosActionTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: Row(
+            children: [
+              Icon(icon, size: 18, color: theme.colorScheme.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
         ),
       ),
     );

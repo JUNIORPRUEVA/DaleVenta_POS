@@ -1297,6 +1297,7 @@ class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
                             return _HistoryTurnCard(
                               row: rows[index],
                               onPrint: () => widget.onPrint(rows[index]),
+                              isPhone: isPhone,
                             );
                           },
                         ),
@@ -1431,22 +1432,77 @@ class _HistoryFilterDropdown extends StatelessWidget {
   }
 }
 
-class _HistoryTurnCard extends StatelessWidget {
-  const _HistoryTurnCard({required this.row, required this.onPrint});
+class _HistoryTurnCard extends ConsumerStatefulWidget {
+  const _HistoryTurnCard({
+    required this.row,
+    required this.onPrint,
+    required this.isPhone,
+  });
 
   final CashSessionHistoryModel row;
   final Future<void> Function() onPrint;
+  final bool isPhone;
+
+  @override
+  ConsumerState<_HistoryTurnCard> createState() => _HistoryTurnCardState();
+}
+
+class _HistoryTurnCardState extends ConsumerState<_HistoryTurnCard> {
+  bool _expanded = false;
+  bool _loading = false;
+  String? _error;
+  CashSessionDetailModel? _detail;
+
+  Future<void> _loadDetail() async {
+    try {
+      final detail = await ref
+          .read(cashRepositoryProvider)
+          .sessionDetail(widget.row.id);
+      if (!mounted) return;
+      setState(() {
+        _detail = detail;
+        _loading = false;
+        _error = null;
+      });
+    } catch (error, stack) {
+      AppErrorReporter.instance.record(
+        error,
+        stack,
+        context: 'Cargar detalle de turno en historial',
+        notifyUser: false,
+      );
+      if (!mounted) return;
+      setState(() {
+        _error = resolveCashError(error);
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _toggleDetails() async {
+    if (_expanded) {
+      setState(() => _expanded = false);
+      return;
+    }
+    setState(() {
+      _expanded = true;
+      _loading = _detail == null;
+      _error = null;
+    });
+    if (_detail != null) return;
+    await _loadDetail();
+  }
 
   @override
   Widget build(BuildContext context) {
     final fmt = DateFormat('dd/MM/yyyy HH:mm', 'es_DO');
-    final opened = fmt.format(row.openedAt.toLocal());
-    final closed = row.closedAt == null
+    final opened = fmt.format(widget.row.openedAt.toLocal());
+    final closed = widget.row.closedAt == null
         ? 'Sin cierre'
-        : fmt.format(row.closedAt!.toLocal());
-    final differenceColor = row.difference.abs() < 0.01
+        : fmt.format(widget.row.closedAt!.toLocal());
+    final differenceColor = widget.row.difference.abs() < 0.01
         ? const Color(0xFF64748B)
-        : row.difference > 0
+        : widget.row.difference > 0
         ? const Color(0xFF16A34A)
         : const Color(0xFFDC2626);
 
@@ -1482,7 +1538,7 @@ class _HistoryTurnCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      row.userName,
+                      widget.row.userName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -1492,7 +1548,7 @@ class _HistoryTurnCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'Turno ${row.businessDate}',
+                      'Turno ${widget.row.businessDate}',
                       style: const TextStyle(
                         color: Color(0xFF64748B),
                         fontSize: 11,
@@ -1502,11 +1558,40 @@ class _HistoryTurnCard extends StatelessWidget {
                   ],
                 ),
               ),
-              _HistoryStatusPill(status: row.status),
+              _HistoryStatusPill(status: widget.row.status),
               const SizedBox(width: 2),
+              if (!widget.isPhone) ...[
+                IconButton(
+                  tooltip: _expanded ? 'Ocultar detalles' : 'Ver detalles',
+                  onPressed: _toggleDetails,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 34,
+                    height: 34,
+                  ),
+                  padding: EdgeInsets.zero,
+                  style: IconButton.styleFrom(
+                    foregroundColor: _expanded
+                        ? const Color(0xFF1957E6)
+                        : const Color(0xFF52667C),
+                    backgroundColor: _expanded
+                        ? const Color(0xFFEAF1FF)
+                        : const Color(0xFFF1F5F9),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                  ),
+                  icon: Icon(
+                    _expanded
+                        ? Icons.visibility_off_rounded
+                        : Icons.visibility_rounded,
+                    size: 17,
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
               IconButton(
                 tooltip: 'Reimprimir ticket',
-                onPressed: onPrint,
+                onPressed: widget.onPrint,
                 constraints: const BoxConstraints.tightFor(
                   width: 34,
                   height: 34,
@@ -1526,13 +1611,19 @@ class _HistoryTurnCard extends StatelessWidget {
           const SizedBox(height: 9),
           Row(
             children: [
-              Expanded(child: _HistoryAmount('Inicial', row.initialAmount)),
-              Expanded(child: _HistoryAmount('Esperado', row.expectedAmount)),
-              Expanded(child: _HistoryAmount('Cierre', row.closingAmount)),
+              Expanded(
+                child: _HistoryAmount('Inicial', widget.row.initialAmount),
+              ),
+              Expanded(
+                child: _HistoryAmount('Esperado', widget.row.expectedAmount),
+              ),
+              Expanded(
+                child: _HistoryAmount('Cierre', widget.row.closingAmount),
+              ),
               Expanded(
                 child: _HistoryAmount(
                   'Dif.',
-                  row.difference,
+                  widget.row.difference,
                   color: differenceColor,
                 ),
               ),
@@ -1564,6 +1655,397 @@ class _HistoryTurnCard extends StatelessWidget {
               ),
             ),
           ),
+          if (_expanded) _buildDetails(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetails() {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2.4),
+          ),
+        ),
+      );
+    }
+    final detail = _detail;
+    if (detail == null) {
+      return Container(
+        margin: const EdgeInsets.only(top: 10),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFBF5),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFFDE68A)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              _error ?? 'No se pudieron cargar los detalles.',
+              style: const TextStyle(
+                color: Color(0xFFB45309),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _loading = true;
+                    _error = null;
+                  });
+                  _loadDetail();
+                },
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: const Text('Reintentar'),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFFB45309),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final summary = detail.summary;
+    final note = (detail.note ?? '').trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 10),
+        const Divider(height: 1, color: Color(0xFFE2E8F0)),
+        const SizedBox(height: 10),
+        _HistoryDetailSection(
+          title: 'Resumen de ventas',
+          rows: [
+            _HistoryDetailEntry(
+              label: 'Base inicial',
+              display: formatRdCurrencyAccounting(detail.initialAmount),
+            ),
+            _HistoryDetailEntry(
+              label: 'Total vendido',
+              display: formatRdCurrencyAccounting(summary.totalSales),
+            ),
+            _HistoryDetailEntry(
+              label: 'Ventas efectivo',
+              display: formatRdCurrencyAccounting(summary.salesCashTotal),
+            ),
+            _HistoryDetailEntry(
+              label: 'Transferencias',
+              display: formatRdCurrencyAccounting(summary.salesTransferTotal),
+            ),
+            _HistoryDetailEntry(
+              label: 'Entradas de dinero',
+              display: formatRdCurrencyAccounting(summary.cashInManual),
+              color: const Color(0xFF16A34A),
+            ),
+            _HistoryDetailEntry(
+              label: 'Salidas de dinero',
+              display: formatRdCurrencyAccounting(summary.cashOutManual),
+              color: const Color(0xFFDC2626),
+            ),
+            _HistoryDetailEntry(
+              label: 'Gastos',
+              display: formatRdCurrencyAccounting(summary.totalExpenses),
+              color: const Color(0xFFDC2626),
+            ),
+            _HistoryDetailEntry(
+              label: 'Retiros',
+              display: formatRdCurrencyAccounting(summary.totalWithdrawals),
+              color: const Color(0xFFDC2626),
+            ),
+            _HistoryDetailEntry(
+              label: 'Devoluciones',
+              display: formatRdCurrencyAccounting(summary.refundsCash),
+              color: const Color(0xFFDC2626),
+            ),
+          ],
+        ),
+        if (summary.creditSalesTotal > 0) ...[
+          const SizedBox(height: 8),
+          _HistoryDetailSection(
+            title: 'Ventas a crédito',
+            rows: [
+              _HistoryDetailEntry(
+                label: 'Total crédito',
+                display: formatRdCurrencyAccounting(summary.creditSalesTotal),
+              ),
+              _HistoryDetailEntry(
+                label: 'Inicial efectivo',
+                display: formatRdCurrencyAccounting(summary.creditInitialCash),
+              ),
+              _HistoryDetailEntry(
+                label: 'Inicial transf.',
+                display: formatRdCurrencyAccounting(
+                  summary.creditInitialTransfer,
+                ),
+              ),
+              _HistoryDetailEntry(
+                label: 'Abonos efectivo',
+                display: formatRdCurrencyAccounting(summary.creditPaymentCash),
+              ),
+              _HistoryDetailEntry(
+                label: 'Abonos transf.',
+                display: formatRdCurrencyAccounting(
+                  summary.creditPaymentTransfer,
+                ),
+              ),
+              _HistoryDetailEntry(
+                label: 'Balance crédito',
+                display: formatRdCurrencyAccounting(summary.creditBalanceTotal),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 8),
+        _HistoryDetailSection(
+          title: 'Cuadre final',
+          rows: [
+            _HistoryDetailEntry(
+              label: 'Efectivo esperado',
+              display: formatRdCurrencyAccounting(summary.expectedCash),
+            ),
+            _HistoryDetailEntry(
+              label: 'Efectivo contado',
+              display: formatRdCurrencyAccounting(detail.closingAmount),
+            ),
+            _HistoryDetailEntry(
+              label: 'Diferencia',
+              display: formatRdCurrencyAccounting(detail.difference),
+              color: detail.difference.abs() < 0.01
+                  ? const Color(0xFF64748B)
+                  : detail.difference > 0
+                  ? const Color(0xFF16A34A)
+                  : const Color(0xFFDC2626),
+            ),
+            _HistoryDetailEntry(
+              label: 'Tickets',
+              display: summary.totalTickets.toString(),
+            ),
+            _HistoryDetailEntry(
+              label: 'Devoluciones',
+              display: summary.totalRefunds.toString(),
+            ),
+          ],
+        ),
+        if (note.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _HistoryDetailSection(title: 'Nota', note: note),
+        ],
+        if (detail.movements.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _HistoryMovementsSection(movements: detail.movements),
+        ],
+        const SizedBox(height: 4),
+      ],
+    );
+  }
+}
+
+class _HistoryDetailEntry {
+  const _HistoryDetailEntry({
+    required this.label,
+    required this.display,
+    this.color,
+  });
+
+  final String label;
+  final String display;
+  final Color? color;
+}
+
+class _HistoryDetailSection extends StatelessWidget {
+  const _HistoryDetailSection({
+    required this.title,
+    this.rows = const [],
+    this.note,
+  });
+
+  final String title;
+  final List<_HistoryDetailEntry> rows;
+  final String? note;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Color(0xFF0F172A),
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          if (rows.isNotEmpty) const SizedBox(height: 6),
+          for (final entry in rows) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    entry.label,
+                    style: const TextStyle(
+                      color: Color(0xFF52667C),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  entry.display,
+                  style: TextStyle(
+                    color: entry.color ?? const Color(0xFF0F172A),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+          ],
+          if (note != null && note!.trim().isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              note!,
+              style: const TextStyle(
+                color: Color(0xFF52667C),
+                fontSize: 11,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoryMovementsSection extends StatelessWidget {
+  const _HistoryMovementsSection({required this.movements});
+
+  final List<CashMovementModel> movements;
+
+  String _movementLabel(CashMovementModel movement) {
+    return switch (movement.movementType) {
+      'expense' => 'Gasto',
+      'owner_draw' => 'Retiro',
+      'transfer' => movement.isIn ? 'Entrada' : 'Transfer.',
+      _ => movement.isIn ? 'Entrada' : 'Salida',
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Movimientos (${movements.length})',
+            style: const TextStyle(
+              color: Color(0xFF0F172A),
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 6),
+          for (final movement in movements)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color:
+                          (movement.isIn
+                                  ? const Color(0xFF16A34A)
+                                  : const Color(0xFFDC2626))
+                              .withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Icon(
+                      movement.isIn
+                          ? Icons.arrow_downward_rounded
+                          : Icons.arrow_upward_rounded,
+                      size: 13,
+                      color: movement.isIn
+                          ? const Color(0xFF16A34A)
+                          : const Color(0xFFDC2626),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _movementLabel(movement),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF0F172A),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        if (movement.reason.trim().isNotEmpty)
+                          Text(
+                            movement.reason,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFF64748B),
+                              fontSize: 10,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${movement.isIn ? '+' : '-'}'
+                    '${formatRdCurrencyAccounting(movement.amount)}',
+                    style: TextStyle(
+                      color: movement.isIn
+                          ? const Color(0xFF16A34A)
+                          : const Color(0xFFDC2626),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );

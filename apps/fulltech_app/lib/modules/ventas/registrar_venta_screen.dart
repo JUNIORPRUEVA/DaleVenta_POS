@@ -865,6 +865,10 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                       final qtyValue = item.qty % 1 == 0
                           ? item.qty.toInt().toString()
                           : item.qty.toStringAsFixed(2);
+                      final outOfStock =
+                          !item.isExternal &&
+                          (item.product?.stock == null ||
+                              item.product!.stock! <= 0);
                       return ListTile(
                         dense: true,
                         minLeadingWidth: 26,
@@ -915,18 +919,47 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                             height: 1.08,
                           ),
                         ),
-                        subtitle: Text(
-                          '$qtyValue x ${_money(item.priceSoldUnit)}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontSize: 10.5,
-                            color: const Color(0xFF60758A),
-                            fontWeight: FontWeight.w600,
-                          ),
+                        subtitle: Row(
+                          children: [
+                            if (outOfStock) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFDC2626),
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                                child: const Text(
+                                  'SIN STOCK',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 7,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.4,
+                                    height: 1,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                            ],
+                            Flexible(
+                              child: Text(
+                                '$qtyValue x ${_money(item.priceSoldUnit)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontSize: 10.5,
+                                  color: const Color(0xFF60758A),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         trailing: SizedBox(
-                          width: 98,
+                          width: 110,
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
@@ -942,9 +975,16 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                   ),
                                 ),
                               ),
-                              SizedBox(
-                                width: 28,
-                                height: 28,
+                              Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE2E4E9),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.black.withValues(alpha: 0.12),
+                                  ),
+                                ),
                                 child: IconButton(
                                   tooltip: 'Editar',
                                   visualDensity: VisualDensity.compact,
@@ -953,14 +993,21 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                       _openEditCartItemDialog(index),
                                   icon: const Icon(
                                     Icons.edit_outlined,
-                                    size: 15,
-                                    color: Color(0xFF52667C),
+                                    size: 18,
+                                    color: Colors.black,
                                   ),
                                 ),
                               ),
-                              SizedBox(
-                                width: 24,
-                                height: 28,
+                              Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE2E4E9),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.black.withValues(alpha: 0.12),
+                                  ),
+                                ),
                                 child: IconButton(
                                   tooltip: 'Quitar',
                                   visualDensity: VisualDensity.compact,
@@ -970,8 +1017,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                   ),
                                   icon: const Icon(
                                     Icons.close_rounded,
-                                    size: 16,
-                                    color: Color(0xFF52667C),
+                                    size: 18,
+                                    color: Colors.black,
                                   ),
                                 ),
                               ),
@@ -1250,6 +1297,10 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                               final qtyValue = item.qty % 1 == 0
                                   ? item.qty.toInt().toString()
                                   : item.qty.toStringAsFixed(2);
+                              final outOfStock =
+                                  !item.isExternal &&
+                                  (item.product?.stock == null ||
+                                      item.product!.stock! <= 0);
 
                               return Material(
                                 color: Colors.transparent,
@@ -1292,6 +1343,30 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                             ),
                                           ),
                                         ),
+                                        if (outOfStock) ...[
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 4,
+                                              vertical: 1,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFDC2626),
+                                              borderRadius:
+                                                  BorderRadius.circular(3),
+                                            ),
+                                            child: const Text(
+                                              'SIN STOCK',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 7,
+                                                fontWeight: FontWeight.w800,
+                                                letterSpacing: 0.4,
+                                                height: 1,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                         const SizedBox(width: 6),
                                         Text(
                                           _money(item.subtotalSold),
@@ -1302,25 +1377,35 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         ),
-                                        SizedBox(
-                                          width: 24,
-                                          height: 24,
+                                        Container(
+                                          width: 28,
+                                          height: 28,
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFE2E4E9),
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: Colors.black.withValues(
+                                                alpha: 0.12,
+                                              ),
+                                            ),
+                                          ),
                                           child: IconButton(
                                             visualDensity:
                                                 VisualDensity.compact,
                                             padding: EdgeInsets.zero,
                                             constraints: const BoxConstraints(
-                                              minHeight: 24,
-                                              minWidth: 24,
+                                              minHeight: 26,
+                                              minWidth: 26,
                                             ),
-                                            splashRadius: 12,
+                                            splashRadius: 14,
                                             tooltip: 'Quitar item',
                                             onPressed: () => setState(
                                               () => _cart.removeAt(index),
                                             ),
                                             icon: const Icon(
                                               Icons.close,
-                                              size: 14,
+                                              size: 16,
+                                              color: Colors.black,
                                             ),
                                           ),
                                         ),
@@ -2048,6 +2133,13 @@ class _SaleProductGridCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final stockValue = product.stock;
+    final outOfStock = stockValue == null || stockValue <= 0;
+    final stockText = stockValue == null
+        ? '0'
+        : stockValue == stockValue.roundToDouble()
+        ? stockValue.toStringAsFixed(0)
+        : stockValue.toStringAsFixed(2);
     return InkWell(
       borderRadius: BorderRadius.circular(10),
       onTap: onTap,
@@ -2092,6 +2184,100 @@ class _SaleProductGridCard extends StatelessWidget {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [Color(0x00000000), Color(0xAA000000)],
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: 2,
+              top: 2,
+              child: outOfStock
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDC2626),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.55),
+                          width: 0.6,
+                        ),
+                      ),
+                      child: Text(
+                        'SIN STOCK',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: mobileGrid ? 7 : 8,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.3,
+                          height: 1,
+                        ),
+                      ),
+                    )
+                  : Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.62),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.6),
+                          width: 0.7,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'DISP',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: mobileGrid ? 7 : 8,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                              height: 1,
+                            ),
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            stockText,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: mobileGrid ? 13 : 15,
+                              fontWeight: FontWeight.w900,
+                              height: 1.0,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+            Positioned(
+              right: 2,
+              top: 2,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.6),
+                    width: 0.7,
+                  ),
+                ),
+                child: Text(
+                  money(product.precio),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: mobileGrid ? 9.5 : 10.5,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
               ),
@@ -2163,21 +2349,6 @@ class _SaleProductGridCard extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0,
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    money(product.precio),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: mobileGrid
-                          ? 9.8
-                          : compactCard
-                          ? 9
-                          : 10,
-                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],

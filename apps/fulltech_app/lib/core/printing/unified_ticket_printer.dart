@@ -74,9 +74,32 @@ class UnifiedTicketPrinter {
               lines: builder.buildLines(data),
               pdfBytes: pdf,
               documentName: 'Ticket ${data.ticketNumber}',
+              logoBytes: company.logoBytes,
+              printLogo: layout.showLogo,
             );
+        if (mobileResult.success) {
+          return PrintTicketResult(
+            success: true,
+            message: mobileResult.message,
+            ticketNumber: data.ticketNumber,
+          );
+        }
+        // Sin impresora térmica disponible: abrir el diálogo del sistema
+        // como respaldo para que el ticket salga de inmediato en móvil.
+        if (showSystemDialogIfNoPrinter) {
+          await Printing.layoutPdf(
+            name: 'Ticket ${data.ticketNumber}',
+            onLayout: (_) async => pdf,
+          );
+          return PrintTicketResult(
+            success: true,
+            message:
+                '${mobileResult.message} Se abrio el dialogo del sistema como respaldo.',
+            ticketNumber: data.ticketNumber,
+          );
+        }
         return PrintTicketResult(
-          success: mobileResult.success,
+          success: false,
           message: mobileResult.message,
           ticketNumber: data.ticketNumber,
         );

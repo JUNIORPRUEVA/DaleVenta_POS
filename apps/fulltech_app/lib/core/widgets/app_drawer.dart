@@ -689,11 +689,6 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
       Routes.configuracion,
     ]);
 
-    addGroup('Contabilidad', Icons.account_balance_outlined, [
-      Routes.contabilidad,
-      Routes.nomina,
-      Routes.misPagos,
-    ]);
     if (inventoryItems.isNotEmpty) {
       groups.add(
         const _DrawerMenuGroup(
@@ -771,6 +766,11 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
         ),
       );
     }
+    addGroup('Contabilidad', Icons.account_balance_outlined, [
+      Routes.contabilidadDepositos,
+      Routes.contabilidadPagosPendientes,
+      Routes.nomina,
+    ]);
     addGroup('Factura fiscal', Icons.fact_check_outlined, [
       Routes.contabilidadFacturaFiscal,
     ]);
@@ -854,9 +854,9 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     Routes.configuracion,
   ]);
   addGroup('Contabilidad', Icons.account_balance_outlined, [
-    Routes.contabilidad,
+    Routes.contabilidadDepositos,
+    Routes.contabilidadPagosPendientes,
     Routes.nomina,
-    Routes.misPagos,
   ]);
   addGroup('Factura fiscal', Icons.fact_check_outlined, [
     Routes.contabilidadFacturaFiscal,

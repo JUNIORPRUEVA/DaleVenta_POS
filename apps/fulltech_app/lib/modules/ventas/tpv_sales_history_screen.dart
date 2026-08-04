@@ -75,35 +75,51 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   }
 
   Future<void> _load() async {
+    final repo = ref.read(ventasRepositoryProvider);
+    final cached = await repo.cachedInvoices(
+      from: _fromDate,
+      to: _toDate,
+      includeDeleted: true,
+    );
+    if (!mounted) return;
     setState(() {
-      _loading = true;
+      _loading = cached.isEmpty;
       _error = null;
+      if (cached.isNotEmpty) {
+        _applyRows(cached);
+      }
     });
 
     try {
-      final rows = await ref
-          .read(ventasRepositoryProvider)
-          .listInvoices(from: _fromDate, to: _toDate, includeDeleted: true);
+      final rows = await repo.listInvoices(
+        from: _fromDate,
+        to: _toDate,
+        includeDeleted: true,
+      );
       if (!mounted) return;
       setState(() {
-        _sales = rows;
-        if (_selected == null && rows.isNotEmpty) {
-          _selected = rows.firstWhere(
-            (sale) => !sale.isDeleted,
-            orElse: () => rows.first,
-          );
-        } else if (_selected != null) {
-          _selected = rows.cast<SaleModel?>().firstWhere(
-            (sale) => sale?.id == _selected!.id,
-            orElse: () => rows.isEmpty ? null : rows.first,
-          );
-        }
+        _applyRows(rows);
       });
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _applyRows(List<SaleModel> rows) {
+    _sales = rows;
+    if (_selected == null && rows.isNotEmpty) {
+      _selected = rows.firstWhere(
+        (sale) => !sale.isDeleted,
+        orElse: () => rows.first,
+      );
+    } else if (_selected != null) {
+      _selected = rows.cast<SaleModel?>().firstWhere(
+        (sale) => sale?.id == _selected!.id,
+        orElse: () => rows.isEmpty ? null : rows.first,
+      );
     }
   }
 

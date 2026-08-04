@@ -40,6 +40,53 @@ void main() {
     );
   });
 
+  test('prefers the previous shell route over explicit child fallback', () {
+    AppNavigator.recordShellLocation(Routes.cotizaciones);
+    AppNavigator.recordShellLocation(Routes.catalogo);
+
+    expect(
+      AppNavigator.effectiveFallbackRouteFor(Routes.catalogoStock),
+      Routes.cotizaciones,
+    );
+    expect(
+      AppNavigator.effectiveFallbackRouteFor(Routes.comprasLista),
+      Routes.cotizaciones,
+    );
+    expect(
+      AppNavigator.effectiveFallbackRouteFor(Routes.cajaTurnosHistorial),
+      Routes.cotizaciones,
+    );
+  });
+
+  test('uses explicit module fallback when there is no previous shell', () {
+    expect(
+      AppNavigator.effectiveFallbackRouteFor(Routes.catalogoStock),
+      Routes.catalogo,
+    );
+    expect(
+      AppNavigator.effectiveFallbackRouteFor(Routes.comprasLista),
+      Routes.compras,
+    );
+    expect(
+      AppNavigator.effectiveFallbackRouteFor(Routes.cajaTurnosHistorial),
+      Routes.caja,
+    );
+    expect(
+      AppNavigator.effectiveFallbackRouteFor(Routes.contabilidadFacturaFiscal),
+      Routes.contabilidad,
+    );
+  });
+
+  test('factura fiscal back goes to the real previous screen', () {
+    AppNavigator.recordShellLocation(Routes.home);
+    AppNavigator.recordShellLocation(Routes.contabilidadFacturaFiscal);
+
+    expect(
+      AppNavigator.effectiveFallbackRouteFor(Routes.contabilidadFacturaFiscal),
+      Routes.home,
+    );
+  });
+
   testWidgets('returns to the source shell route after opening inventory', (
     tester,
   ) async {

@@ -28,10 +28,18 @@
 	<string>FULLTECH usa tu ubicación mientras utilizas la app para registrar y consultar ubicaciones operativas autorizadas.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>FULLTECH necesita acceso a tus fotos y videos para seleccionar evidencias, comprobantes e imágenes que subas desde la app.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>FULLTECH puede guardar documentos, comprobantes o imágenes generadas desde la app cuando el usuario lo solicita.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>FULLTECH usa la cámara para capturar comprobantes, evidencias e imágenes de productos cuando el usuario lo solicita.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>FULLTECH usa el micrófono para dictar reportes técnicos por voz.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>FULLTECH convierte tu audio en texto para completar reportes técnicos.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>FULLTECH usa Bluetooth para conectar impresoras móviles y emitir tickets cuando el usuario configura esa opción.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>FULLTECH usa la red local para detectar o conectar impresoras disponibles en la misma red cuando el usuario lo solicita.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

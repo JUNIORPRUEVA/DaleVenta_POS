@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Param,
   Post,
   Query,
   Req,
@@ -68,5 +69,13 @@ export class CashController {
   @Get("sessions/closed")
   closedSessions(@Req() req: Request) {
     return this.cash.closedSessions(req.user as { id: string; role: Role });
+  }
+
+  @Get("sessions/:id")
+  sessionDetail(@Req() req: Request, @Param("id") id: string) {
+    return this.cash.sessionDetail(
+      req.user as { id: string; role: Role },
+      id,
+    );
   }
 }

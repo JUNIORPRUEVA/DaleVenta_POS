@@ -207,6 +207,7 @@ class ApiRoutes {
   static const cashMovements = '/cash/movements';
   static const cashMovementsHistory = '/cash/movements/history';
   static const cashClosedSessions = '/cash/sessions/closed';
+  static String cashSessionDetail(String id) => '/cash/sessions/$id';
 
   static const services = '/services';
   static const technicians = '/technicians';

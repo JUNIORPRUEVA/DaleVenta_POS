@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -14,7 +13,6 @@ import '../../core/company/company_settings_repository.dart';
 import '../../core/debug/trace_log.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/models/user_model.dart';
-import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/app_feedback.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -351,12 +349,6 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
                     'Este módulo es solo para administración',
                     style: TextStyle(fontWeight: FontWeight.w600),
                     textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 10),
-                  FilledButton.icon(
-                    onPressed: () => context.go(Routes.misPagos),
-                    icon: const Icon(Icons.receipt_long_outlined),
-                    label: const Text('Ir a Mis Pagos'),
                   ),
                 ],
               ),

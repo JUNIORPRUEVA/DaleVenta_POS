@@ -169,6 +169,29 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
       backgroundColor: isDesktop ? null : AppColors.background,
       appBar: CustomAppBar(
         title: isDesktop ? 'Lista de ventas y devoluciones' : 'Ventas',
+        leading: isDesktop
+            ? null
+            : Padding(
+                padding: const EdgeInsets.only(left: 10, top: 8, bottom: 8),
+                child: SizedBox.square(
+                  dimension: 44,
+                  child: IconButton(
+                    tooltip: 'Volver a facturación',
+                    onPressed: () => context.go(Routes.registrarVenta),
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.white.withValues(alpha: 0.14),
+                      foregroundColor: Colors.white,
+                      side: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.82),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
         showLogo: false,
         showDepartmentLabel: false,
         actions: [
@@ -607,6 +630,8 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                 ),
                 const SizedBox(height: 8),
               ],
+              _buildMobileReturnToBillingBar(state),
+              const SizedBox(height: 10),
               _buildCurrentQuincenaCard(state, compact: true),
               const SizedBox(height: 10),
               Expanded(
@@ -644,6 +669,76 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildMobileReturnToBillingBar(VentasState state) {
+    final count = state.sales.length;
+    final label = count == 1 ? '1 item' : '$count items';
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFD8E5EC)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          SizedBox.square(
+            dimension: 40,
+            child: IconButton(
+              tooltip: 'Volver a facturación',
+              onPressed: () => context.go(Routes.registrarVenta),
+              icon: const Icon(Icons.arrow_back_rounded, size: 22),
+              padding: EdgeInsets.zero,
+              style: IconButton.styleFrom(
+                backgroundColor: const Color(0xFFEAF1FF),
+                foregroundColor: const Color(0xFF1957E6),
+                side: const BorderSide(color: Color(0xFF9CB7FF)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(11),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Facturación',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF172033),
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEAF1FF),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: const Color(0xFFB8CAFF)),
+            ),
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFF1957E6),
+                fontWeight: FontWeight.w900,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

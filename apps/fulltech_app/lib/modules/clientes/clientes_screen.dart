@@ -119,7 +119,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
           order: next.order,
           correoFilter: next.correoFilter,
           estadoFilter: next.estadoFilter,
-          ownerFilter: next.ownerFilter,
+          ownerFilter: OwnerFilter.todos,
         );
   }
 
@@ -1559,15 +1559,6 @@ class _ClientesFiltersBottomSheetState
               },
             ),
             const SizedBox(height: 16),
-            _FilterSection<OwnerFilter>(
-              title: 'Clientes',
-              value: _draft.ownerFilter,
-              options: const [OwnerFilter.todos, OwnerFilter.mine],
-              labelBuilder: _ownerFilterLabel,
-              onSelected: (value) {
-                setState(() => _draft = _draft.copyWith(ownerFilter: value));
-              },
-            ),
             const SizedBox(height: 24),
             Row(
               children: [
@@ -1672,7 +1663,7 @@ class _ClientesFiltersSheetState extends State<_ClientesFiltersSheet> {
                             ),
                             SizedBox(height: 2),
                             Text(
-                              'Orden, correo, estado y propietario',
+                              'Orden, correo y estado',
                               style: TextStyle(
                                 color: AppColors.textMuted,
                                 fontSize: 12,
@@ -1735,18 +1726,6 @@ class _ClientesFiltersSheetState extends State<_ClientesFiltersSheet> {
                         onSelected: (value) {
                           setState(
                             () => _draft = _draft.copyWith(estadoFilter: value),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      _FilterSection<OwnerFilter>(
-                        title: 'Clientes',
-                        value: _draft.ownerFilter,
-                        options: const [OwnerFilter.todos, OwnerFilter.mine],
-                        labelBuilder: _ownerFilterLabel,
-                        onSelected: (value) {
-                          setState(
-                            () => _draft = _draft.copyWith(ownerFilter: value),
                           );
                         },
                       ),
@@ -1917,15 +1896,6 @@ String _estadoFilterLabel(EstadoFilter filter) {
       return 'Eliminados';
     case EstadoFilter.todos:
       return 'Todos';
-  }
-}
-
-String _ownerFilterLabel(OwnerFilter filter) {
-  switch (filter) {
-    case OwnerFilter.todos:
-      return 'Todos los clientes';
-    case OwnerFilter.mine:
-      return 'Mis clientes';
   }
 }
 

@@ -418,9 +418,18 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
             )
           : Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 760),
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.sizeOf(context).width < 900
+                      ? double.infinity
+                      : 760,
+                ),
                 child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                  padding: EdgeInsets.fromLTRB(
+                    MediaQuery.sizeOf(context).width < 900 ? 4 : 16,
+                    16,
+                    MediaQuery.sizeOf(context).width < 900 ? 4 : 16,
+                    24,
+                  ),
                   children: [
                     _buildFiscalConfigCard(context),
                     const SizedBox(height: 10),
@@ -437,6 +446,7 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
   Widget _buildFiscalConfigCard(BuildContext context) {
     final theme = Theme.of(context);
     final config = _fiscalConfig;
+    final isMobile = MediaQuery.sizeOf(context).width < 700;
     if (!_configLoaded) {
       return const AppCard(
         child: Padding(
@@ -446,157 +456,91 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
       );
     }
 
-    return AppCard(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEAF1FF),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.fact_check_outlined,
-                    color: Color(0xFF1957E6),
-                  ),
+    final content = Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF1FF),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Configuración de factura fiscal',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
+                child: const Icon(
+                  Icons.fact_check_outlined,
+                  color: Color(0xFF1957E6),
                 ),
-                Switch.adaptive(
-                  value: config.enabled,
-                  onChanged: (value) => setState(
-                    () => _fiscalConfig = config.copyWith(enabled: value),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                SizedBox(
-                  width: 220,
-                  child: DropdownButtonFormField<String>(
-                    initialValue: config.environment,
-                    decoration: const InputDecoration(
-                      labelText: 'Ambiente',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'Pruebas',
-                        child: Text('Pruebas'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'Producción',
-                        child: Text('Producción'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(
-                        () =>
-                            _fiscalConfig = config.copyWith(environment: value),
-                      );
-                    },
-                  ),
-                ),
-                _FiscalSwitchChip(
-                  value: config.electronicEnabled,
-                  label: 'Factura electrónica',
-                  onChanged: (value) => setState(
-                    () => _fiscalConfig = config.copyWith(
-                      electronicEnabled: value,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _FiscalTextField(controller: _rncCtrl, label: 'RNC emisor'),
-            const SizedBox(height: 10),
-            _FiscalTextField(
-              controller: _businessNameCtrl,
-              label: 'Razón social',
-            ),
-            const SizedBox(height: 10),
-            _FiscalTextField(
-              controller: _commercialNameCtrl,
-              label: 'Nombre comercial',
-            ),
-            const SizedBox(height: 10),
-            _FiscalTextField(
-              controller: _addressCtrl,
-              label: 'Dirección fiscal',
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _FiscalTextField(
-                    controller: _providerCtrl,
-                    label: 'Proveedor electrónico',
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _FiscalTextField(
-                    controller: _certificateCtrl,
-                    label: 'Certificado / alias',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Text(
-              'Secuencias NCF',
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w900,
               ),
-            ),
-            const SizedBox(height: 8),
-            for (final type in _fiscalVoucherTypes) ...[
-              _FiscalSequenceRow(
-                type: type,
-                title: _FiscalNcfSequence.typeLabel(type),
-                nextController: _nextControllers[type]!,
-                endController: _endControllers[type]!,
-                dueController: _dueControllers[type]!,
-                onGenerate: () => _generateNextNcf(type),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Configuración de factura fiscal',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
               ),
-              if (type != _fiscalVoucherTypes.last) const SizedBox(height: 8),
+              Switch.adaptive(
+                value: config.enabled,
+                onChanged: (value) => setState(
+                  () => _fiscalConfig = config.copyWith(enabled: value),
+                ),
+              ),
             ],
-            const SizedBox(height: 14),
-            FilledButton.icon(
-              onPressed: _savingConfig ? null : _saveFiscalConfig,
-              icon: _savingConfig
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.save_outlined),
-              label: const Text('Guardar configuración fiscal'),
+          ),
+          const SizedBox(height: 14),
+          _FiscalTextField(controller: _rncCtrl, label: 'RNC emisor'),
+          const SizedBox(height: 10),
+          _FiscalTextField(
+            controller: _businessNameCtrl,
+            label: 'Razón social',
+          ),
+          const SizedBox(height: 10),
+          _FiscalTextField(
+            controller: _commercialNameCtrl,
+            label: 'Nombre comercial',
+          ),
+          const SizedBox(height: 10),
+          _FiscalTextField(controller: _addressCtrl, label: 'Dirección fiscal'),
+          const SizedBox(height: 14),
+          Text(
+            'Secuencias NCF',
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w900,
             ),
+          ),
+          const SizedBox(height: 8),
+          for (final type in _fiscalVoucherTypes) ...[
+            _FiscalSequenceRow(
+              type: type,
+              title: _FiscalNcfSequence.typeLabel(type),
+              nextController: _nextControllers[type]!,
+              endController: _endControllers[type]!,
+              dueController: _dueControllers[type]!,
+              onGenerate: () => _generateNextNcf(type),
+            ),
+            if (type != _fiscalVoucherTypes.last) const SizedBox(height: 8),
           ],
-        ),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: _savingConfig ? null : _saveFiscalConfig,
+            icon: _savingConfig
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.save_outlined),
+            label: const Text('Guardar configuración fiscal'),
+          ),
+        ],
       ),
     );
+    return isMobile ? content : AppCard(child: content);
   }
 
   Widget _buildUploadCard(BuildContext context) {
@@ -607,265 +551,258 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
     final dateLabel = DateFormat('dd/MM/yyyy').format(_invoiceDate);
     final hasFile = selectedFiles.isNotEmpty;
 
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  scheme.primary.withValues(alpha: 0.12),
-                  scheme.secondary.withValues(alpha: 0.08),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: scheme.outlineVariant),
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                scheme.primary.withValues(alpha: 0.12),
+                scheme.secondary.withValues(alpha: 0.08),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (isNarrow)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: scheme.outlineVariant),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (isNarrow)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeaderInfo(context),
+                    const SizedBox(height: 12),
+                    _buildDatePill(context, dateLabel),
+                  ],
+                )
+              else
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _buildHeaderInfo(context)),
+                    const SizedBox(width: 12),
+                    _buildDatePill(context, dateLabel),
+                  ],
+                ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: scheme.surface.withValues(alpha: 0.82),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: scheme.outlineVariant),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: scheme.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      alignment: Alignment.center,
+                      child: Icon(_kindIcon(_kind), color: scheme.primary),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _kind.label,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _saving ? null : _pickInvoiceImage,
+                icon: const Icon(Icons.upload_file_rounded),
+                label: Text(_uploadButtonLabel(_kind, hasFile)),
+              ),
+              const SizedBox(height: 10),
+              if (!hasFile)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: scheme.surface.withValues(alpha: 0.72),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: scheme.outlineVariant),
+                  ),
+                  child: Column(
                     children: [
-                      _buildHeaderInfo(context),
-                      const SizedBox(height: 12),
-                      _buildDatePill(context, dateLabel),
-                    ],
-                  )
-                else
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(child: _buildHeaderInfo(context)),
-                      const SizedBox(width: 12),
-                      _buildDatePill(context, dateLabel),
+                      Icon(
+                        Icons.receipt_long_outlined,
+                        size: 30,
+                        color: scheme.primary,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Sin archivos cargados',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ],
                   ),
-                const SizedBox(height: 14),
+                )
+              else ...[
                 Container(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: scheme.surface.withValues(alpha: 0.82),
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: scheme.outlineVariant),
                   ),
                   child: Row(
                     children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: scheme.primary.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        alignment: Alignment.center,
-                        child: Icon(_kindIcon(_kind), color: scheme.primary),
-                      ),
-                      const SizedBox(width: 12),
+                      const Icon(Icons.attach_file_outlined, size: 18),
+                      const SizedBox(width: 8),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _kind.label,
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
+                        child: Text(
+                          selectedFiles.length == 1
+                              ? selectedFiles.first.name
+                              : '${selectedFiles.length} archivos seleccionados',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
+                      ),
+                      IconButton(
+                        tooltip: 'Quitar archivos',
+                        onPressed: _saving ? null : _clearSelectedInvoice,
+                        icon: const Icon(Icons.close_rounded),
                       ),
                     ],
                   ),
                 ),
+                if (selectedFiles.length > 1) ...[
+                  const SizedBox(height: 8),
+                  ...selectedFiles.map(
+                    (file) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: _SelectedFiscalFileChip(file: file),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
-                FilledButton.icon(
-                  onPressed: _saving ? null : _pickInvoiceImage,
-                  icon: const Icon(Icons.upload_file_rounded),
-                  label: Text(_uploadButtonLabel(_kind, hasFile)),
-                ),
-                const SizedBox(height: 10),
-                if (!hasFile)
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: scheme.surface.withValues(alpha: 0.72),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: scheme.outlineVariant),
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.receipt_long_outlined,
-                          size: 30,
-                          color: scheme.primary,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Sin archivos cargados',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                else ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: scheme.surface.withValues(alpha: 0.82),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: scheme.outlineVariant),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.attach_file_outlined, size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            selectedFiles.length == 1
-                                ? selectedFiles.first.name
-                                : '${selectedFiles.length} archivos seleccionados',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              fontWeight: FontWeight.w700,
+                TextFormField(
+                  controller: _noteCtrl,
+                  focusNode: _noteFocusNode,
+                  enabled: !_saving,
+                  minLines: 1,
+                  maxLines: 3,
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => _saveSelectedInvoice(),
+                  decoration: InputDecoration(
+                    labelText: 'Observación o nota',
+                    hintText:
+                        'Describe brevemente esta factura para guardarla.',
+                    suffixIcon: _saving
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             ),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Quitar archivos',
-                          onPressed: _saving ? null : _clearSelectedInvoice,
-                          icon: const Icon(Icons.close_rounded),
-                        ),
-                      ],
-                    ),
+                          )
+                        : const Icon(Icons.notes_rounded),
                   ),
-                  if (selectedFiles.length > 1) ...[
-                    const SizedBox(height: 8),
-                    ...selectedFiles.map(
-                      (file) => Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: _SelectedFiscalFileChip(file: file),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _noteCtrl,
-                    focusNode: _noteFocusNode,
-                    enabled: !_saving,
-                    minLines: 1,
-                    maxLines: 3,
-                    textInputAction: TextInputAction.done,
-                    onFieldSubmitted: (_) => _saveSelectedInvoice(),
-                    decoration: InputDecoration(
-                      labelText: 'Observación o nota',
-                      hintText:
-                          'Describe brevemente esta factura para guardarla.',
-                      suffixIcon: _saving
-                          ? const Padding(
-                              padding: EdgeInsets.all(12),
-                              child: SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              ),
+                ),
+                const SizedBox(height: 12),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final narrow = constraints.maxWidth < 430;
+                    final saveButton = FilledButton.icon(
+                      onPressed: _saving ? null : _saveSelectedInvoice,
+                      icon: _saving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Icon(Icons.notes_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final narrow = constraints.maxWidth < 430;
-                      final saveButton = FilledButton.icon(
-                        onPressed: _saving ? null : _saveSelectedInvoice,
-                        icon: _saving
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.cloud_done_outlined),
-                        label: Text(
-                          _saving ? 'Guardando...' : 'Guardar factura',
-                        ),
-                      );
-                      final clearButton = OutlinedButton.icon(
-                        onPressed: _saving ? null : _clearSelectedInvoice,
-                        icon: const Icon(Icons.delete_outline_rounded),
-                        label: const Text('Quitar'),
-                      );
+                          : const Icon(Icons.cloud_done_outlined),
+                      label: Text(_saving ? 'Guardando...' : 'Guardar factura'),
+                    );
+                    final clearButton = OutlinedButton.icon(
+                      onPressed: _saving ? null : _clearSelectedInvoice,
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      label: const Text('Quitar'),
+                    );
 
-                      if (narrow) {
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            saveButton,
-                            const SizedBox(height: 8),
-                            clearButton,
-                          ],
-                        );
-                      }
-
-                      return Row(
+                    if (narrow) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Expanded(child: clearButton),
-                          const SizedBox(width: 10),
-                          Expanded(flex: 2, child: saveButton),
+                          saveButton,
+                          const SizedBox(height: 8),
+                          clearButton,
                         ],
                       );
-                    },
+                    }
+
+                    return Row(
+                      children: [
+                        Expanded(child: clearButton),
+                        const SizedBox(width: 10),
+                        Expanded(flex: 2, child: saveButton),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            const gap = 10.0;
+            final itemWidth = (constraints.maxWidth - (gap * 2)) / 3;
+            final kinds = FiscalInvoiceKind.values;
+
+            return Row(
+              children: [
+                for (var index = 0; index < kinds.length; index++) ...[
+                  SizedBox(
+                    width: itemWidth,
+                    child: _InvoiceKindOption(
+                      label: kinds[index].label,
+                      icon: _kindIcon(kinds[index]),
+                      selected: _kind == kinds[index],
+                      onTap: _saving
+                          ? null
+                          : () => setState(() => _kind = kinds[index]),
+                    ),
                   ),
+                  if (index != kinds.length - 1) const SizedBox(width: gap),
                 ],
               ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              const gap = 10.0;
-              final itemWidth = (constraints.maxWidth - (gap * 2)) / 3;
-              final kinds = FiscalInvoiceKind.values;
-
-              return Row(
-                children: [
-                  for (var index = 0; index < kinds.length; index++) ...[
-                    SizedBox(
-                      width: itemWidth,
-                      child: _InvoiceKindOption(
-                        label: kinds[index].label,
-                        icon: _kindIcon(kinds[index]),
-                        selected: _kind == kinds[index],
-                        onTap: _saving
-                            ? null
-                            : () => setState(() => _kind = kinds[index]),
-                      ),
-                    ),
-                    if (index != kinds.length - 1) const SizedBox(width: gap),
-                  ],
-                ],
-              );
-            },
-          ),
-        ],
-      ),
+            );
+          },
+        ),
+      ],
     );
+    return isNarrow ? content : AppCard(child: content);
   }
 
   Widget _buildHeaderInfo(BuildContext context) {
@@ -1105,50 +1042,7 @@ class _FiscalTextField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
-      decoration: InputDecoration(
-        labelText: label,
-        border: const OutlineInputBorder(),
-        isDense: true,
-      ),
-    );
-  }
-}
-
-class _FiscalSwitchChip extends StatelessWidget {
-  const _FiscalSwitchChip({
-    required this.value,
-    required this.label,
-    required this.onChanged,
-  });
-
-  final bool value;
-  final String label;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: () => onChanged(!value),
-      child: Container(
-        height: 48,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          color: value ? const Color(0xFFEAF1FF) : Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: value ? const Color(0xFF9FC0FF) : const Color(0xFFD3E0E7),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
-            const SizedBox(width: 8),
-            Switch.adaptive(value: value, onChanged: onChanged),
-          ],
-        ),
-      ),
+      decoration: _fiscalInputDecoration(label),
     );
   }
 }
@@ -1239,14 +1133,32 @@ class _FiscalSmallField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        border: const OutlineInputBorder(),
-        isDense: true,
-      ),
+      decoration: _fiscalInputDecoration(label, hint: hint),
     );
   }
+}
+
+InputDecoration _fiscalInputDecoration(String label, {String? hint}) {
+  return InputDecoration(
+    labelText: label,
+    hintText: hint,
+    filled: true,
+    fillColor: Colors.white,
+    isDense: true,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(7),
+      borderSide: BorderSide.none,
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(7),
+      borderSide: BorderSide.none,
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(7),
+      borderSide: const BorderSide(color: Color(0xFF1957E6), width: 1.3),
+    ),
+  );
 }
 
 class _FiscalInvoiceConfig {

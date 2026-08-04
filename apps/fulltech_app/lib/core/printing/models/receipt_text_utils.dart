@@ -61,6 +61,7 @@ class ReceiptTextUtils {
   static String separator(int width, String style) {
     final char = switch (style) {
       'double' => '=',
+      'dotted' => '.',
       'dashed' => '-',
       _ => '-',
     };

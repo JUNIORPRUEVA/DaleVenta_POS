@@ -36,13 +36,6 @@ List<AppNavigationSection> buildAppNavigationSections(
   WidgetRef _,
   UserModel? currentUser,
 ) {
-  final role = currentUser?.appRole;
-
-  bool can(AppPermission permission) {
-    if (currentUser == null || role == null) return false;
-    return hasUserPermission(currentUser, permission);
-  }
-
   bool canOrAuthorize(AppPermission _) {
     if (currentUser == null) return false;
     return true;
@@ -124,13 +117,6 @@ List<AppNavigationSection> buildAppNavigationSections(
           ),
         if (canOrAuthorize(AppPermission.viewAccounting))
           const AppNavigationItem(
-            icon: Icons.account_balance,
-            appIcon: AppIcons.company,
-            title: 'Contabilidad',
-            route: Routes.contabilidad,
-          ),
-        if (canOrAuthorize(AppPermission.viewAccounting))
-          const AppNavigationItem(
             icon: Icons.fact_check_outlined,
             appIcon: AppIcons.receipt,
             title: 'Factura fiscal',
@@ -139,21 +125,28 @@ List<AppNavigationSection> buildAppNavigationSections(
       ],
     ),
     AppNavigationSection(
-      title: 'Nómina',
+      title: 'Contabilidad',
       items: [
+        if (canOrAuthorize(AppPermission.viewAccounting))
+          const AppNavigationItem(
+            icon: Icons.account_balance_outlined,
+            appIcon: AppIcons.company,
+            title: 'Depósitos',
+            route: Routes.contabilidadDepositos,
+          ),
+        if (canOrAuthorize(AppPermission.viewAccounting))
+          const AppNavigationItem(
+            icon: Icons.account_balance_wallet_outlined,
+            appIcon: AppIcons.payment,
+            title: 'Pagos',
+            route: Routes.contabilidadPagosPendientes,
+          ),
         if (canOrAuthorize(AppPermission.managePayroll))
           const AppNavigationItem(
             icon: Icons.payments_outlined,
             appIcon: AppIcons.payment,
             title: 'Nómina',
             route: Routes.nomina,
-          ),
-        if (can(AppPermission.viewMyPayments))
-          const AppNavigationItem(
-            icon: Icons.receipt_long_outlined,
-            appIcon: AppIcons.receipt,
-            title: 'Mis pagos',
-            route: Routes.misPagos,
           ),
       ],
     ),

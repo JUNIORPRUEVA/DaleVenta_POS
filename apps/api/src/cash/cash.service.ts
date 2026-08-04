@@ -323,6 +323,42 @@ export class CashService {
     });
   }
 
+  async sessionDetail(user: RequestUser, sessionId: string) {
+    const companyId = requireTenant(user);
+    const session = await this.prisma.cashSession.findFirst({
+      where: {
+        id: sessionId,
+        companyId,
+        ...(isAdminLike(user) ? {} : { openedByUserId: user.id }),
+      },
+    });
+    if (!session) {
+      throw new NotFoundException("No encontramos el turno solicitado.");
+    }
+    const [summary, movements] = await Promise.all([
+      this.buildSummaryForSession(sessionId),
+      this.prisma.cashMovement.findMany({
+        where: { sessionId },
+        orderBy: { createdAt: "asc" },
+      }),
+    ]);
+    return {
+      id: session.id,
+      userName: session.userName ?? "Usuario",
+      businessDate: session.businessDate,
+      openedAt: session.openedAt,
+      closedAt: session.closedAt,
+      status: session.status,
+      initialAmount: this.toNumber(session.initialAmount),
+      closingAmount: this.toNumber(session.closingAmount),
+      expectedAmount: this.toNumber(session.expectedAmount),
+      difference: this.toNumber(session.difference),
+      note: session.note,
+      summary,
+      movements,
+    };
+  }
+
   async requireOpenSession(userId: string, companyId: string) {
     const session = await this.prisma.cashSession.findFirst({
       where: { openedByUserId: userId, companyId, status: "OPEN", closedAt: null },

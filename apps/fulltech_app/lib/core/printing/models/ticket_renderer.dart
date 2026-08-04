@@ -12,15 +12,25 @@ class TicketRenderer {
   final CompanyInfo company;
 
   List<String> buildLines(TicketData data) {
-    final width = layout.printableChars;
+    final compact58 = layout.paperWidthMm == 58;
+    final width = compact58 ? 30 : layout.printableChars;
     final lines = <String>[];
-    final sep = ReceiptTextUtils.separator(width, layout.sectionSeparatorStyle);
-    final leftPad = ' ' * layout.leftMargin;
+    final sep = ReceiptTextUtils.separator(
+      width,
+      compact58 ? 'dotted' : layout.sectionSeparatorStyle,
+    );
+    final leftPad = compact58 ? '' : ' ' * layout.leftMargin;
 
     void add(String line) => lines.add('$leftPad$line');
     void blank() => lines.add('');
+    void addMoneyLine(String label, double value) {
+      add(
+        ReceiptTextUtils.leftRight(label, ReceiptTextUtils.money(value), width),
+      );
+    }
 
-    for (var i = 0; i < layout.topMargin ~/ 4; i++) {
+    final topBlanks = compact58 ? 0 : layout.topMargin ~/ 4;
+    for (var i = 0; i < topBlanks; i++) {
       blank();
     }
 
@@ -34,29 +44,41 @@ class TicketRenderer {
       return lines;
     }
 
-    add(ReceiptTextUtils.align(company.name, width, layout.headerAlignment));
+    add(
+      compact58
+          ? ReceiptTextUtils.center(company.name, width)
+          : ReceiptTextUtils.align(company.name, width, layout.headerAlignment),
+    );
     if (layout.showBusinessData) {
       if (company.rnc.isNotEmpty) {
         add(
-          ReceiptTextUtils.align(
-            'RNC: ${company.rnc}',
-            width,
-            layout.headerAlignment,
-          ),
+          compact58
+              ? ReceiptTextUtils.center('RNC: ${company.rnc}', width)
+              : ReceiptTextUtils.align(
+                  'RNC: ${company.rnc}',
+                  width,
+                  layout.headerAlignment,
+                ),
         );
       }
       if (company.phone.isNotEmpty) {
         add(
-          ReceiptTextUtils.align(
-            'Tel: ${company.phone}',
-            width,
-            layout.headerAlignment,
-          ),
+          compact58
+              ? ReceiptTextUtils.center('Tel: ${company.phone}', width)
+              : ReceiptTextUtils.align(
+                  'Tel: ${company.phone}',
+                  width,
+                  layout.headerAlignment,
+                ),
         );
       }
       if (company.address.isNotEmpty) {
         for (final line in ReceiptTextUtils.wrap(company.address, width)) {
-          add(ReceiptTextUtils.align(line, width, layout.headerAlignment));
+          add(
+            compact58
+                ? ReceiptTextUtils.center(line, width)
+                : ReceiptTextUtils.align(line, width, layout.headerAlignment),
+          );
         }
       }
     }
@@ -66,7 +88,6 @@ class TicketRenderer {
       }
     }
 
-    blank();
     final title = switch (data.type) {
       TicketType.refund => 'DEVOLUCION',
       TicketType.quote => 'COTIZACION',
@@ -109,15 +130,28 @@ class TicketRenderer {
     }
     add(sep);
 
-    add(ReceiptTextUtils.leftRight('DESCRIPCION', 'TOTAL', width));
+    add(ReceiptTextUtils.leftRight('PRODUCTO', 'IMPORTE', width));
+    if (compact58) blank();
     for (final item in data.items) {
       final total = ReceiptTextUtils.money(item.total);
-      for (final line in ReceiptTextUtils.wrap(item.name, width)) {
-        add(ReceiptTextUtils.truncate(line, width));
-      }
       final qtyPrice =
           '${ReceiptTextUtils.qty(item.qty)} x ${ReceiptTextUtils.money(item.unitPrice)}';
-      add(ReceiptTextUtils.leftRight(qtyPrice, total, width));
+      if (compact58) {
+        final amountWidth = total.length;
+        final productWidth = (width - amountWidth - 1).clamp(8, width);
+        final nameLines = ReceiptTextUtils.wrap(item.name, productWidth);
+        final firstName = nameLines.isEmpty ? '' : nameLines.first;
+        add(ReceiptTextUtils.leftRight(firstName, total, width));
+        for (final line in nameLines.skip(1).take(1)) {
+          add(ReceiptTextUtils.truncate(line, width));
+        }
+        add(ReceiptTextUtils.truncate(qtyPrice, width));
+      } else {
+        for (final line in ReceiptTextUtils.wrap(item.name, width)) {
+          add(ReceiptTextUtils.truncate(line, width));
+        }
+        add(ReceiptTextUtils.leftRight(qtyPrice, total, width));
+      }
       if (layout.showDiscounts && item.discount > 0) {
         add(
           ReceiptTextUtils.leftRight(
@@ -131,13 +165,7 @@ class TicketRenderer {
 
     add(sep);
     if (layout.showSubtotalItbisTotal) {
-      add(
-        ReceiptTextUtils.leftRight(
-          'Subtotal',
-          ReceiptTextUtils.money(data.resolvedSubtotal),
-          width,
-        ),
-      );
+      addMoneyLine('Subtotal', data.resolvedSubtotal);
       if (layout.showDiscounts && data.discount > 0) {
         add(
           ReceiptTextUtils.leftRight(
@@ -148,22 +176,10 @@ class TicketRenderer {
         );
       }
       if (layout.showItbis && data.itbis > 0) {
-        add(
-          ReceiptTextUtils.leftRight(
-            'ITBIS',
-            ReceiptTextUtils.money(data.itbis),
-            width,
-          ),
-        );
+        addMoneyLine('ITBIS', data.itbis);
       }
     }
-    add(
-      ReceiptTextUtils.leftRight(
-        'TOTAL',
-        ReceiptTextUtils.money(data.total),
-        width,
-      ),
-    );
+    addMoneyLine('TOTAL', data.total);
     if (layout.showPaymentMethod &&
         (data.paymentMethod ?? '').trim().isNotEmpty) {
       add(
@@ -171,7 +187,7 @@ class TicketRenderer {
       );
     }
     if ((data.note ?? '').trim().isNotEmpty) {
-      blank();
+      if (!compact58) blank();
       for (final line in ReceiptTextUtils.wrap(data.note!, width)) {
         add(line);
       }
@@ -185,13 +201,14 @@ class TicketRenderer {
       }
     }
     if (layout.footerMessage.trim().isNotEmpty) {
-      blank();
+      if (!compact58) blank();
       for (final line in ReceiptTextUtils.wrap(layout.footerMessage, width)) {
         add(ReceiptTextUtils.center(line, width));
       }
     }
 
-    for (var i = 0; i < layout.bottomMargin ~/ 4; i++) {
+    final bottomBlanks = compact58 ? 0 : layout.bottomMargin ~/ 4;
+    for (var i = 0; i < bottomBlanks; i++) {
       blank();
     }
     return lines;
