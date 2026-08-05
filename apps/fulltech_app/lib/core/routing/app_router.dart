@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/account/account_menu_screens.dart';
+import '../../features/auth/presentation/landing_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/home/home_shell.dart';
@@ -66,6 +67,10 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: refresh,
     observers: [routeObserver],
     routes: [
+      GoRoute(
+        path: Routes.landing,
+        builder: (context, state) => const LandingScreen(),
+      ),
       GoRoute(
         path: Routes.splash,
         builder: (context, state) => const SplashScreen(),
@@ -312,7 +317,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       final role = auth.user?.appRole ?? AppRole.unknown;
       final loc = state.uri.toString();
       final path = state.uri.path;
-      final isAuthRoute = path == Routes.login;
+      final isAuthRoute =
+          path == Routes.login ||
+          path == Routes.register ||
+          path == Routes.landing;
       final isSplashRoute = path == Routes.splash;
 
       String defaultAuthedRoute() {
@@ -324,11 +332,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       if (isSplashRoute) {
-        return isAuth ? defaultAuthedRoute() : Routes.login;
+        return isAuth ? defaultAuthedRoute() : Routes.landing;
       }
 
       if (!isAuth) {
-        return isAuthRoute ? null : Routes.login;
+        return isAuthRoute ? null : Routes.landing;
       }
 
       if (isAuth && isAuthRoute) {

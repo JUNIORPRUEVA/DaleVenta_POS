@@ -13,3 +13,5 @@ apps/api/.env.docker
 fulltech-pwa/
 apps/fulltech_app/release_artifacts/
 apps/fulltech_app/emulator-*.png
+apps/fulltech_app/web/downloads/*.apk
+apps/fulltech_app/web/downloads/*.exe

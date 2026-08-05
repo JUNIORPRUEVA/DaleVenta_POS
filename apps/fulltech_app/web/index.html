@@ -465,6 +465,12 @@
         return isiOS && isWebKit && !isCriOS && !isFxiOS;
       }
 
+      function isLandingRoute() {
+        var path = window.location.pathname || '/';
+        var hash = window.location.hash || '';
+        return (path === '/' || path.endsWith('/')) && (hash === '' || hash === '#/' || hash === '#');
+      }
+
       function hideBanner() {
         activeVariant = null;
         banner.classList.remove('is-visible');
@@ -541,6 +547,11 @@
           return;
         }
 
+        if (isLandingRoute()) {
+          hideBanner();
+          return;
+        }
+
         if (updatePending) {
           showVariant('update');
           return;
@@ -560,6 +571,26 @@
           showVariant('ios-install');
         }
       }
+
+      window.fulltechPwaInstall = function () {
+        if (isStandalone()) {
+          hideBanner();
+          return false;
+        }
+
+        if (deferredInstallPrompt) {
+          showVariant('install');
+          return true;
+        }
+
+        if (isIosSafari()) {
+          showVariant('ios-install');
+          return true;
+        }
+
+        showVariant('install');
+        return false;
+      };
 
       primaryButton.addEventListener('click', function () {
         if (activeVariant === 'update') {
