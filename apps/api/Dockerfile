@@ -21,6 +21,7 @@ ENV MIGRATION_STRICT=false
 ENV REDIS_ENABLED=false
 ENV PRODUCTS_SOURCE=LOCAL
 COPY package*.json ./
+COPY tsconfig.scripts.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
