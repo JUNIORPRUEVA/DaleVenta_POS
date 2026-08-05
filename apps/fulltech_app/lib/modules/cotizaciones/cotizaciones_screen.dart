@@ -9265,6 +9265,7 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
                               onChanged: (_) => widget.onSearchChanged(),
                               textInputAction: TextInputAction.search,
                               onSubmitted: (_) => widget.onSearchSubmitted(),
+                              textAlignVertical: TextAlignVertical.center,
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 0.2,
@@ -9277,27 +9278,12 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
                                   fontWeight: FontWeight.w600,
                                   letterSpacing: 0.2,
                                 ),
-                                suffixIcon:
-                                    widget.searchController.text
-                                        .trim()
-                                        .isNotEmpty
-                                    ? IconButton(
-                                        tooltip: 'Limpiar búsqueda',
-                                        onPressed: () {
-                                          widget.searchController.clear();
-                                          widget.onSearchChanged();
-                                        },
-                                        icon: const Icon(
-                                          Icons.close_rounded,
-                                          size: 18,
-                                        ),
-                                      )
-                                    : null,
                                 filled: true,
                                 fillColor: Colors.transparent,
+                                isDense: true,
                                 contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 16,
-                                  vertical: 0,
+                                  vertical: 11,
                                 ),
                                 border: InputBorder.none,
                                 enabledBorder: InputBorder.none,
@@ -9306,6 +9292,28 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
                               ),
                             ),
                           ),
+                          if (widget.searchController.text.trim().isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: IconButton(
+                                tooltip: 'Limpiar búsqueda',
+                                onPressed: () {
+                                  widget.searchController.clear();
+                                  widget.onSearchChanged();
+                                },
+                                icon: const Icon(
+                                  Icons.close_rounded,
+                                  size: 18,
+                                  color: Color(0xFF617383),
+                                ),
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints.tightFor(
+                                  width: 32,
+                                  height: 32,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),

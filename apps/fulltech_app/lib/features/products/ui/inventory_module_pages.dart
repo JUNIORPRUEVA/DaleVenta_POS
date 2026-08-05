@@ -1391,6 +1391,12 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
       _ => 0,
     };
     _mobileTabIndex = initialTabIndex;
+    final desktopTitle = switch (initialTabIndex) {
+      1 => 'Recuento de inventario',
+      2 => 'Ajuste stock',
+      3 => 'Categorías',
+      _ => 'Catálogo',
+    };
     final mobileTitle = switch (initialTabIndex) {
       1 => 'Conteo',
       2 => 'Stock',
@@ -1541,13 +1547,34 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                 ],
               )
             : FullTechPageHeader(
-                title: 'Inventario',
+                title: desktopTitle,
                 actions: [
-                  FilledButton.icon(
-                    onPressed: () => _openProductEditor(),
-                    icon: const Icon(Icons.add_rounded, size: 18),
-                    label: const Text('Nuevo producto'),
-                  ),
+                  if (initialTabIndex == 0)
+                    FilledButton.icon(
+                      onPressed: canEditProducts
+                          ? () => _openProductEditor()
+                          : null,
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: const Text('Nuevo producto'),
+                    ),
+                  if (initialTabIndex == 3)
+                    FilledButton.icon(
+                      onPressed: canEditProducts
+                          ? () => _categoriesKey.currentState?.openNewCategory()
+                          : null,
+                      icon: const Icon(
+                        Icons.create_new_folder_outlined,
+                        size: 18,
+                      ),
+                      label: const Text('Nueva categoría'),
+                    ),
+                  if (initialTabIndex == 1)
+                    IconButton(
+                      tooltip: 'Filtrar recuento',
+                      onPressed: () =>
+                          _inventoryKey.currentState?.openMobileFilters(),
+                      icon: const Icon(Icons.filter_alt_outlined),
+                    ),
                   IconButton(
                     tooltip: 'Actualizar',
                     onPressed: state.refreshing ? null : _refresh,
@@ -1561,39 +1588,11 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                   ),
                   const SizedBox(width: 8),
                 ],
-                bottom: TabBar(
-                  isScrollable: true,
-                  labelColor: _primaryBlue,
-                  unselectedLabelColor: _textSecondary,
-                  indicatorColor: _primaryBlue,
-                  indicatorWeight: 3,
-                  labelStyle: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
-                  ),
-                  tabs: const [
-                    Tab(
-                      icon: Icon(Icons.table_rows_outlined),
-                      text: 'Catálogo',
-                    ),
-                    Tab(
-                      icon: Icon(Icons.dashboard_outlined),
-                      text: 'Inventario',
-                    ),
-                    Tab(icon: Icon(Icons.tune_outlined), text: 'Stock'),
-                    Tab(
-                      icon: Icon(Icons.category_outlined),
-                      text: 'Categorías',
-                    ),
-                  ],
-                ),
               ),
         body: Stack(
           children: [
             Positioned.fill(
-              child: isMobile
-                  ? pages[initialTabIndex]
-                  : TabBarView(children: pages),
+              child: isMobile ? pages[initialTabIndex] : pages[initialTabIndex],
             ),
             if (state.loading)
               const Positioned(
@@ -2931,70 +2930,80 @@ class _InventoryTabState extends State<InventoryTab> {
           child: ListView(
             padding: productsResponsivePagePadding(constraints),
             children: [
-              if (mobile)
-                _InventoryMobileOverview(
-                  totalCost: totalCost,
-                  totalRevenue: totalRevenue,
-                  profit: profit,
-                  margin: margin,
-                  totalUnits: totalUnits,
-                  activeCount: active.length,
-                  lowStock: lowStock,
-                  outStock: outStock,
-                )
-              else
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    KpiCard(
-                      title: 'Inversión Total',
-                      value: formatRdCurrencyAccounting(totalCost),
-                      icon: Icons.account_balance_wallet_outlined,
-                      color: _primaryBlue,
-                    ),
-                    KpiCard(
-                      title: 'Valor de Venta',
-                      value: formatRdCurrencyAccounting(totalRevenue),
-                      icon: Icons.sell_outlined,
-                      color: const Color(0xFF16A34A),
-                    ),
-                    KpiCard(
-                      title: 'Ganancia Potencial',
-                      value: formatRdCurrencyAccounting(profit),
-                      icon: Icons.trending_up_rounded,
-                      color: const Color(0xFF7C3AED),
-                    ),
-                    KpiCard(
-                      title: 'Margen Promedio',
-                      value: '${margin.toStringAsFixed(1)}%',
-                      icon: Icons.percent_rounded,
-                      color: const Color(0xFF0F766E),
-                    ),
-                    KpiCard(
-                      title: 'Unidades en Stock',
-                      value: _stockText(totalUnits),
-                      icon: Icons.inventory_2_outlined,
-                      color: const Color(0xFF4F46E5),
-                    ),
-                    KpiCard(
-                      title: 'Productos Activos',
-                      value: '${active.length}',
-                      icon: Icons.check_circle_outline,
-                      color: const Color(0xFF0891B2),
-                    ),
-                    KpiCard(
-                      title: 'Alertas activas',
-                      value: '${lowStock + outStock}',
-                      icon: Icons.warning_amber_rounded,
-                      color: (lowStock + outStock) == 0
-                          ? const Color(0xFF16A34A)
-                          : const Color(0xFFF97316),
-                    ),
-                  ],
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1240),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (mobile)
+                        _InventoryMobileOverview(
+                          totalCost: totalCost,
+                          totalRevenue: totalRevenue,
+                          profit: profit,
+                          margin: margin,
+                          totalUnits: totalUnits,
+                          activeCount: active.length,
+                          lowStock: lowStock,
+                          outStock: outStock,
+                        )
+                      else
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: [
+                            KpiCard(
+                              title: 'Inversión Total',
+                              value: formatRdCurrencyAccounting(totalCost),
+                              icon: Icons.account_balance_wallet_outlined,
+                              color: _primaryBlue,
+                            ),
+                            KpiCard(
+                              title: 'Valor de Venta',
+                              value: formatRdCurrencyAccounting(totalRevenue),
+                              icon: Icons.sell_outlined,
+                              color: const Color(0xFF16A34A),
+                            ),
+                            KpiCard(
+                              title: 'Ganancia Potencial',
+                              value: formatRdCurrencyAccounting(profit),
+                              icon: Icons.trending_up_rounded,
+                              color: const Color(0xFF7C3AED),
+                            ),
+                            KpiCard(
+                              title: 'Margen Promedio',
+                              value: '${margin.toStringAsFixed(1)}%',
+                              icon: Icons.percent_rounded,
+                              color: const Color(0xFF0F766E),
+                            ),
+                            KpiCard(
+                              title: 'Unidades en Stock',
+                              value: _stockText(totalUnits),
+                              icon: Icons.inventory_2_outlined,
+                              color: const Color(0xFF4F46E5),
+                            ),
+                            KpiCard(
+                              title: 'Productos Activos',
+                              value: '${active.length}',
+                              icon: Icons.check_circle_outline,
+                              color: const Color(0xFF0891B2),
+                            ),
+                            KpiCard(
+                              title: 'Alertas activas',
+                              value: '${lowStock + outStock}',
+                              icon: Icons.warning_amber_rounded,
+                              color: (lowStock + outStock) == 0
+                                  ? const Color(0xFF16A34A)
+                                  : const Color(0xFFF97316),
+                            ),
+                          ],
+                        ),
+                      const SizedBox(height: 14),
+                      _InventoryBreakdown(products: active),
+                    ],
+                  ),
                 ),
-              const SizedBox(height: 14),
-              _InventoryBreakdown(products: active),
+              ),
             ],
           ),
         );
@@ -3434,174 +3443,244 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
     final filtered = _filteredProductsFor(categoryFilter);
     final mobile = MediaQuery.sizeOf(context).width < 640;
 
-    return Column(
-      children: [
-        Expanded(
-          child: CallbackShortcuts(
-            bindings: {
-              if (_canSubmit)
-                const SingleActivator(LogicalKeyboardKey.enter):
-                    _applyAdjustment,
-              if (_canSubmit)
-                const SingleActivator(LogicalKeyboardKey.numpadEnter):
-                    _applyAdjustment,
-              if (widget.onClose != null)
-                const SingleActivator(LogicalKeyboardKey.escape):
-                    widget.onClose!,
-            },
-            child: Focus(
-              autofocus: true,
-              child: RefreshIndicator(
-                onRefresh: widget.onRefresh,
-                child: ListView(
-                  padding: EdgeInsets.fromLTRB(
-                    mobile ? 10 : 0,
-                    mobile ? 10 : 14,
-                    mobile ? 10 : 0,
-                    16,
-                  ),
-                  children: [
-                    if (!mobile) ...[
-                      TextField(
-                        controller: _searchCtrl,
-                        onChanged: (_) => setState(() {}),
-                        decoration: _inventoryTextInputDecoration(
-                          'Buscar producto',
-                          prefixIcon: Icon(Icons.search_rounded),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      DropdownButtonFormField<String>(
-                        key: ValueKey(categoryFilter),
-                        initialValue: categoryFilter,
-                        items: [
-                          const DropdownMenuItem(
-                            value: 'Todas las categorías',
-                            child: Text('Todas las categorías'),
-                          ),
-                          for (final category in categories)
-                            DropdownMenuItem(
-                              value: category,
-                              child: Text(category),
+    Widget content() {
+      return Column(
+        children: [
+          Expanded(
+            child: CallbackShortcuts(
+              bindings: {
+                if (_canSubmit)
+                  const SingleActivator(LogicalKeyboardKey.enter):
+                      _applyAdjustment,
+                if (_canSubmit)
+                  const SingleActivator(LogicalKeyboardKey.numpadEnter):
+                      _applyAdjustment,
+                if (widget.onClose != null)
+                  const SingleActivator(LogicalKeyboardKey.escape):
+                      widget.onClose!,
+              },
+              child: Focus(
+                autofocus: true,
+                child: RefreshIndicator(
+                  onRefresh: widget.onRefresh,
+                  child: ListView(
+                    padding: EdgeInsets.fromLTRB(
+                      mobile ? 10 : 18,
+                      mobile ? 10 : 18,
+                      mobile ? 10 : 18,
+                      16,
+                    ),
+                    children: [
+                      if (!mobile) ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: TextField(
+                                controller: _searchCtrl,
+                                onChanged: (_) => setState(() {}),
+                                decoration: _inventoryTextInputDecoration(
+                                  'Buscar producto',
+                                  prefixIcon: Icon(Icons.search_rounded),
+                                ),
+                              ),
                             ),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setState(() => _categoryFilter = value);
-                        },
-                        decoration: _inventoryTextInputDecoration('Categoría'),
-                      ),
-                      const SizedBox(height: 10),
-                      _SquareSegmentedSelector<_StockFilter>(
-                        values: _StockFilter.values,
-                        selected: _stockFilter,
-                        labelBuilder: (filter) => filter.label,
-                        onChanged: (value) =>
-                            setState(() => _stockFilter = value),
-                      ),
-                      const SizedBox(height: 14),
-                    ],
-                    if (selected != null)
-                      _SelectedStockProduct(product: selected),
-                    if (selected != null) ...[
-                      const SizedBox(height: 12),
-                      _SquareSegmentedSelector<String>(
-                        values: const ['Agregar', 'Disminuir'],
-                        selected: _mode,
-                        labelBuilder: (value) => '$value stock',
-                        iconBuilder: (value) => value == 'Agregar'
-                            ? Icons.add_rounded
-                            : Icons.remove_rounded,
-                        onChanged: (value) => setState(() => _mode = value),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _qtyCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                key: ValueKey(categoryFilter),
+                                initialValue: categoryFilter,
+                                items: [
+                                  const DropdownMenuItem(
+                                    value: 'Todas las categorías',
+                                    child: Text('Todas las categorías'),
+                                  ),
+                                  for (final category in categories)
+                                    DropdownMenuItem(
+                                      value: category,
+                                      child: Text(category),
+                                    ),
+                                ],
+                                onChanged: (value) {
+                                  if (value == null) return;
+                                  setState(() => _categoryFilter = value);
+                                },
+                                decoration: _inventoryTextInputDecoration(
+                                  'Categoría',
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        onChanged: (_) => setState(() {}),
-                        decoration: _inventoryTextInputDecoration('Cantidad'),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _noteCtrl,
-                        decoration: _inventoryTextInputDecoration('Motivo'),
-                      ),
-                      const SizedBox(height: 10),
-                      _InlineInfo(
-                        icon: Icons.inventory_2_outlined,
-                        message:
-                            'Stock actual: ${_stockText(selected.stock)}   Nuevo stock: ${_stockText(_previewStock(selected))}',
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        const Expanded(
-                          child: Text(
-                            'Productos',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 16,
+                        const SizedBox(height: 12),
+                        _SquareSegmentedSelector<_StockFilter>(
+                          values: _StockFilter.values,
+                          selected: _stockFilter,
+                          labelBuilder: (filter) => filter.label,
+                          onChanged: (value) =>
+                              setState(() => _stockFilter = value),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      if (selected != null)
+                        _SelectedStockProduct(product: selected),
+                      if (selected != null) ...[
+                        const SizedBox(height: 12),
+                        _SquareSegmentedSelector<String>(
+                          values: const ['Agregar', 'Disminuir'],
+                          selected: _mode,
+                          labelBuilder: (value) => '$value stock',
+                          iconBuilder: (value) => value == 'Agregar'
+                              ? Icons.add_rounded
+                              : Icons.remove_rounded,
+                          onChanged: (value) => setState(() => _mode = value),
+                        ),
+                        const SizedBox(height: 10),
+                        if (mobile) ...[
+                          TextField(
+                            controller: _qtyCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            onChanged: (_) => setState(() {}),
+                            decoration: _inventoryTextInputDecoration(
+                              'Cantidad',
                             ),
                           ),
-                        ),
-                        Text(
-                          '${filtered.length}',
-                          style: const TextStyle(
-                            color: _textSecondary,
-                            fontWeight: FontWeight.w800,
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: _noteCtrl,
+                            decoration: _inventoryTextInputDecoration('Motivo'),
                           ),
+                        ] else
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _qtyCtrl,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                  onChanged: (_) => setState(() {}),
+                                  decoration: _inventoryTextInputDecoration(
+                                    'Cantidad',
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                flex: 2,
+                                child: TextField(
+                                  controller: _noteCtrl,
+                                  decoration: _inventoryTextInputDecoration(
+                                    'Motivo',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        const SizedBox(height: 10),
+                        _InlineInfo(
+                          icon: Icons.inventory_2_outlined,
+                          message:
+                              'Stock actual: ${_stockText(selected.stock)}   Nuevo stock: ${_stockText(_previewStock(selected))}',
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 8),
-                    if (filtered.isEmpty)
-                      const ProductsEmptyState(
-                        icon: Icons.inventory_2_outlined,
-                        title: 'Sin resultados',
-                        message: 'No encontramos productos con esos filtros.',
-                      )
-                    else
-                      for (final product in filtered)
-                        _StockProductRow(
-                          product: product,
-                          selected: selected?.id == product.id,
-                          onSelected: () => setState(() => _selected = product),
-                        ),
-                  ],
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Productos',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '${filtered.length}',
+                            style: const TextStyle(
+                              color: _textSecondary,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (filtered.isEmpty)
+                        const ProductsEmptyState(
+                          icon: Icons.inventory_2_outlined,
+                          title: 'Sin resultados',
+                          message: 'No encontramos productos con esos filtros.',
+                        )
+                      else
+                        for (final product in filtered)
+                          _StockProductRow(
+                            product: product,
+                            selected: selected?.id == product.id,
+                            onSelected: () =>
+                                setState(() => _selected = product),
+                          ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-        const Divider(height: 1),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-          child: SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _canSubmit ? _applyAdjustment : null,
-              style: FilledButton.styleFrom(
-                shape: const RoundedRectangleBorder(),
-                minimumSize: const Size.fromHeight(42),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _canSubmit ? _applyAdjustment : null,
+                style: FilledButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  minimumSize: const Size.fromHeight(42),
+                ),
+                icon: _saving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.save_outlined),
+                label: const Text('Aplicar ajuste'),
               ),
-              icon: _saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.save_outlined),
-              label: const Text('Aplicar ajuste'),
             ),
           ),
-        ),
-      ],
+        ],
+      );
+    }
+
+    if (mobile) return content();
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final frameWidth = (constraints.maxWidth - 48)
+            .clamp(760.0, 1180.0)
+            .toDouble();
+        return Center(
+          child: SizedBox(
+            width: frameWidth,
+            height: constraints.maxHeight,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(0, 18, 0, 18),
+              child: ProductsSurface(
+                padding: EdgeInsets.zero,
+                child: content(),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

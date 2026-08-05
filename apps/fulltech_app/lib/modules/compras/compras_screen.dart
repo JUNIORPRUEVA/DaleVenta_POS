@@ -240,7 +240,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).user;
     final isMobile = MediaQuery.sizeOf(context).width < 700;
-    final mobileIndex = _mobileTabIndexFromValue(widget.initialMobileTab);
+    final sectionIndex = _mobileTabIndexFromValue(widget.initialMobileTab);
     final pages = [
       _newPurchaseTab(),
       _ordersTab(),
@@ -250,48 +250,27 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     ];
     return Scaffold(
       appBar: CustomAppBar(
-        title: isMobile ? _mobileTitleForIndex(mobileIndex) : 'Compras',
-        titleWidget: isMobile && mobileIndex == 0 && _mobilePurchaseSearchOpen
+        title: _mobileTitleForIndex(sectionIndex),
+        titleWidget: isMobile && sectionIndex == 0 && _mobilePurchaseSearchOpen
             ? _mobilePurchaseSearchField()
             : null,
         fallbackRoute: Routes.cotizaciones,
         preferDrawerLeading: true,
         showLogo: false,
         trailing: isMobile ? const SizedBox.shrink() : null,
-        actions: isMobile ? _mobileAppBarActions(mobileIndex) : null,
-        bottom: isMobile
-            ? null
-            : TabBar(
-                controller: _tabs,
-                isScrollable: true,
-                tabs: const [
-                  Tab(
-                    icon: Icon(Icons.add_shopping_cart_outlined),
-                    text: 'Nueva compra',
-                  ),
-                  Tab(
-                    icon: Icon(Icons.receipt_long_outlined),
-                    text: 'Lista de compras',
-                  ),
-                  Tab(
-                    icon: Icon(Icons.storefront_outlined),
-                    text: 'Suplidores',
-                  ),
-                  Tab(icon: Icon(Icons.folder_copy_outlined), text: 'Facturas'),
-                  Tab(
-                    icon: Icon(Icons.trending_up_rounded),
-                    text: 'Productos por comprar',
-                  ),
-                ],
-              ),
+        actions: isMobile
+            ? _mobileAppBarActions(sectionIndex)
+            : _desktopAppBarActions(sectionIndex),
       ),
       drawer: buildAdaptiveDrawer(context, currentUser: user),
       body: Stack(
         children: [
           Positioned.fill(
             child: isMobile
-                ? pages[mobileIndex]
-                : TabBarView(controller: _tabs, children: pages),
+                ? pages[sectionIndex]
+                : sectionIndex <= 1
+                ? pages[sectionIndex]
+                : _PurchaseDesktopFrame(child: pages[sectionIndex]),
           ),
           if (_loading)
             const Positioned(
@@ -303,6 +282,99 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         ],
       ),
     );
+  }
+
+  List<Widget> _desktopAppBarActions(int sectionIndex) {
+    if (sectionIndex == 0) {
+      return [
+        IconButton(
+          tooltip: 'Producto externo',
+          onPressed: _openExternalProductDialog,
+          icon: const Icon(Icons.add_rounded),
+        ),
+        IconButton(
+          tooltip: 'Filtros',
+          onPressed: _openPurchaseFilterDrawer,
+          icon: Badge(
+            isLabelVisible:
+                _selectedCategory != null || _selectedSupplierId != null,
+            smallSize: 8,
+            child: const Icon(Icons.filter_alt_outlined),
+          ),
+        ),
+        IconButton(
+          tooltip: 'Actualizar',
+          onPressed: _loading ? null : _load,
+          icon: const Icon(Icons.refresh_rounded),
+        ),
+      ];
+    }
+    if (sectionIndex == 1) {
+      return [
+        IconButton(
+          tooltip: 'Filtrar estado',
+          onPressed: _openOrdersFilterDrawer,
+          icon: Badge(
+            isLabelVisible: _statusFilter.isNotEmpty,
+            smallSize: 8,
+            child: const Icon(Icons.filter_alt_outlined),
+          ),
+        ),
+        IconButton(
+          tooltip: 'Actualizar',
+          onPressed: _loading ? null : _load,
+          icon: const Icon(Icons.refresh_rounded),
+        ),
+      ];
+    }
+    if (sectionIndex == 2) {
+      return [
+        IconButton(
+          tooltip: 'Crear suplidor',
+          onPressed: () => _supplierDialog(),
+          icon: const Icon(Icons.add_business_outlined),
+        ),
+        IconButton(
+          tooltip: 'Actualizar',
+          onPressed: _loading ? null : _load,
+          icon: const Icon(Icons.refresh_rounded),
+        ),
+      ];
+    }
+    if (sectionIndex == 3) {
+      return [
+        IconButton(
+          tooltip: 'Subir factura',
+          onPressed: _uploadPurchaseInvoiceDialog,
+          icon: const Icon(Icons.upload_file_outlined),
+        ),
+        IconButton(
+          tooltip: 'Filtros',
+          onPressed: _openInvoiceFilterDrawer,
+          icon: Badge(
+            isLabelVisible:
+                _invoiceSupplierFilterId != null ||
+                _invoiceSearchCtrl.text.trim().isNotEmpty ||
+                _invoiceFromCtrl.text.trim().isNotEmpty ||
+                _invoiceToCtrl.text.trim().isNotEmpty,
+            smallSize: 8,
+            child: const Icon(Icons.filter_alt_outlined),
+          ),
+        ),
+        IconButton(
+          tooltip: 'Actualizar',
+          onPressed: _loading ? null : _load,
+          icon: const Icon(Icons.refresh_rounded),
+        ),
+      ];
+    }
+    return [
+      IconButton(
+        tooltip: 'Actualizar',
+        onPressed: _loading ? null : _load,
+        icon: const Icon(Icons.refresh_rounded),
+      ),
+    ];
   }
 
   List<Widget> _mobileAppBarActions(int mobileIndex) {
@@ -5129,6 +5201,50 @@ class _CartItemTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _PurchaseDesktopFrame extends StatelessWidget {
+  const _PurchaseDesktopFrame({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = (constraints.maxWidth - 40)
+            .clamp(860.0, 1420.0)
+            .toDouble();
+        return Center(
+          child: SizedBox(
+            width: width,
+            height: constraints.maxHeight,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(0, 16, 0, 16),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 24,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: child,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

@@ -83,6 +83,44 @@ class _DrawerSettingsMenuEntry extends StatelessWidget {
 class _AppDrawerState extends ConsumerState<AppDrawer> {
   int? _openGroupIndex;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeDesktopDefaultGroup();
+    });
+  }
+
+  /// En escritorio abre por defecto el grupo que contiene la ruta activa
+  /// (o el primero si ninguno coincide), permitiendo luego colapsarlo con
+  /// un toque en el encabezado del grupo.
+  void _initializeDesktopDefaultGroup() {
+    if (!mounted) return;
+    if (MediaQuery.sizeOf(context).width < kDesktopShellBreakpoint) return;
+    final currentUser = widget.currentUser;
+    final role =
+        currentUser?.appRole ??
+        ref.read(authStateProvider).user?.appRole ??
+        AppRole.unknown;
+    final sections = buildAppNavigationSections(ref, currentUser);
+    final groups = _buildDrawerGroups(
+      sections,
+      mobileLayout: false,
+      role: role,
+    );
+    final location = safeCurrentLocation(context);
+    var defaultIndex = 0;
+    for (var i = 0; i < groups.length; i++) {
+      if (groups[i].containsActiveRoute(location)) {
+        defaultIndex = i;
+        break;
+      }
+    }
+    if (_openGroupIndex != defaultIndex) {
+      setState(() => _openGroupIndex = defaultIndex);
+    }
+  }
+
   void _openGroup(int index) {
     if (_openGroupIndex == index) return;
     setState(() => _openGroupIndex = index);
@@ -207,7 +245,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
     );
     final location = safeCurrentLocation(context);
     final expandedGroupIndex = isDesktop
-        ? (_openGroupIndex ?? 0)
+        ? (_openGroupIndex ?? -1)
         : _openGroupIndex;
     final panelShadow = BoxShadow(
       color: AppColors.primary.withValues(alpha: 0.08),
@@ -560,19 +598,6 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     groups.add(_DrawerMenuGroup(title: title, icon: icon, items: items));
   }
 
-  void addDirectItems(List<AppNavigationItem> items) {
-    if (items.isEmpty) return;
-    groups.add(
-      _DrawerMenuGroup(
-        title: '',
-        icon: Icons.circle_outlined,
-        items: items,
-        headerVisible: false,
-        openOnHover: false,
-      ),
-    );
-  }
-
   List<AppNavigationItem> pickItems(List<String> routes) {
     return [
       for (final route in routes)
@@ -614,11 +639,101 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
   ];
   final purchasesItem = pick(Routes.compras);
   final reportsItem = pick(Routes.ventas);
-  final directSalesModuleItems = <AppNavigationItem>[
-    ...inventoryItems,
-    if (purchasesItem != null) purchasesItem,
-    if (reportsItem != null) reportsItem,
-  ];
+
+  void addInventoryGroup() {
+    if (inventoryItems.isEmpty) return;
+    groups.add(
+      const _DrawerMenuGroup(
+        title: 'Inventario',
+        icon: Icons.inventory_2_outlined,
+        items: [
+          AppNavigationItem(
+            icon: Icons.table_rows_outlined,
+            title: 'Catálogo',
+            route: Routes.catalogo,
+          ),
+          AppNavigationItem(
+            icon: Icons.tune_outlined,
+            title: 'Ajuste stock',
+            route: Routes.catalogoStock,
+          ),
+          AppNavigationItem(
+            icon: Icons.category_outlined,
+            title: 'Categorías',
+            route: Routes.catalogoCategorias,
+          ),
+          AppNavigationItem(
+            icon: Icons.fact_check_outlined,
+            title: 'Recuento',
+            route: Routes.catalogoConteo,
+          ),
+        ],
+        openOnHover: false,
+      ),
+    );
+  }
+
+  void addPurchasesGroup() {
+    if (purchasesItem == null) return;
+    groups.add(
+      const _DrawerMenuGroup(
+        title: 'Compras',
+        icon: Icons.shopping_bag_outlined,
+        items: [
+          AppNavigationItem(
+            icon: Icons.add_shopping_cart_outlined,
+            title: 'Nueva compra',
+            route: Routes.compras,
+          ),
+          AppNavigationItem(
+            icon: Icons.receipt_long_outlined,
+            title: 'Lista de compra',
+            route: Routes.comprasLista,
+          ),
+          AppNavigationItem(
+            icon: Icons.storefront_outlined,
+            title: 'Suplidores',
+            route: Routes.comprasSuplidores,
+          ),
+          AppNavigationItem(
+            icon: Icons.folder_copy_outlined,
+            title: 'Facturas',
+            route: Routes.comprasFacturas,
+          ),
+          AppNavigationItem(
+            icon: Icons.trending_up_rounded,
+            title: 'Productos por comprar',
+            route: Routes.comprasPorComprar,
+          ),
+        ],
+        openOnHover: false,
+      ),
+    );
+  }
+
+  void addAccountingGroup() {
+    final items = <AppNavigationItem>[
+      if (hasPermission(role, AppPermission.viewAccounting))
+        const AppNavigationItem(
+          icon: Icons.fact_check_outlined,
+          title: 'Cierres diarios',
+          route: Routes.contabilidadCierresDiarios,
+        ),
+      if (pick(Routes.contabilidadDepositos) case final item?) item,
+      if (pick(Routes.contabilidadFacturaFiscal) case final item?) item,
+      if (pick(Routes.contabilidadPagosPendientes) case final item?) item,
+      if (pick(Routes.nomina) case final item?) item,
+    ];
+    if (items.isEmpty) return;
+    groups.add(
+      _DrawerMenuGroup(
+        title: 'Contabilidad',
+        icon: Icons.account_balance_outlined,
+        items: items,
+        openOnHover: false,
+      ),
+    );
+  }
 
   if (mobileLayout) {
     if (ventasItems.isNotEmpty) {
@@ -689,73 +804,8 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
       Routes.configuracion,
     ]);
 
-    if (inventoryItems.isNotEmpty) {
-      groups.add(
-        const _DrawerMenuGroup(
-          title: 'Inventario',
-          icon: Icons.inventory_2_outlined,
-          items: [
-            AppNavigationItem(
-              icon: Icons.table_rows_outlined,
-              title: 'Catálogo',
-              route: Routes.catalogo,
-            ),
-            AppNavigationItem(
-              icon: Icons.tune_outlined,
-              title: 'Stock',
-              route: Routes.catalogoStock,
-            ),
-            AppNavigationItem(
-              icon: Icons.category_outlined,
-              title: 'Categorías',
-              route: Routes.catalogoCategorias,
-            ),
-            AppNavigationItem(
-              icon: Icons.fact_check_outlined,
-              title: 'Conteo',
-              route: Routes.catalogoConteo,
-            ),
-          ],
-          openOnHover: false,
-        ),
-      );
-    }
-    if (purchasesItem != null) {
-      groups.add(
-        const _DrawerMenuGroup(
-          title: 'Compras',
-          icon: Icons.shopping_bag_outlined,
-          items: [
-            AppNavigationItem(
-              icon: Icons.add_shopping_cart_outlined,
-              title: 'Nueva compra',
-              route: Routes.compras,
-            ),
-            AppNavigationItem(
-              icon: Icons.receipt_long_outlined,
-              title: 'Lista de compra',
-              route: Routes.comprasLista,
-            ),
-            AppNavigationItem(
-              icon: Icons.storefront_outlined,
-              title: 'Suplidores',
-              route: Routes.comprasSuplidores,
-            ),
-            AppNavigationItem(
-              icon: Icons.folder_copy_outlined,
-              title: 'Facturas',
-              route: Routes.comprasFacturas,
-            ),
-            AppNavigationItem(
-              icon: Icons.trending_up_rounded,
-              title: 'Productos por comprar',
-              route: Routes.comprasPorComprar,
-            ),
-          ],
-          openOnHover: false,
-        ),
-      );
-    }
+    addInventoryGroup();
+    addPurchasesGroup();
     if (reportsItem != null) {
       groups.add(
         _DrawerMenuGroup(
@@ -766,14 +816,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
         ),
       );
     }
-    addGroup('Contabilidad', Icons.account_balance_outlined, [
-      Routes.contabilidadDepositos,
-      Routes.contabilidadPagosPendientes,
-      Routes.nomina,
-    ]);
-    addGroup('Factura fiscal', Icons.fact_check_outlined, [
-      Routes.contabilidadFacturaFiscal,
-    ]);
+    addAccountingGroup();
 
     discard([
       Routes.ai,
@@ -835,7 +878,18 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
       ),
     );
   }
-  addDirectItems(directSalesModuleItems);
+  addInventoryGroup();
+  addPurchasesGroup();
+  if (reportsItem != null) {
+    groups.add(
+      _DrawerMenuGroup(
+        title: 'Reportes',
+        icon: Icons.analytics_outlined,
+        items: [reportsItem],
+        openOnHover: false,
+      ),
+    );
+  }
 
   discard([
     Routes.ai,
@@ -853,14 +907,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     Routes.amonestaciones,
     Routes.configuracion,
   ]);
-  addGroup('Contabilidad', Icons.account_balance_outlined, [
-    Routes.contabilidadDepositos,
-    Routes.contabilidadPagosPendientes,
-    Routes.nomina,
-  ]);
-  addGroup('Factura fiscal', Icons.fact_check_outlined, [
-    Routes.contabilidadFacturaFiscal,
-  ]);
+  addAccountingGroup();
   addGroup('Operaciones', Icons.work_outline_rounded, [
     Routes.serviceOrders,
     Routes.mediaGallery,
@@ -886,14 +933,12 @@ class _DrawerMenuGroup {
     required this.icon,
     required this.items,
     this.openOnHover = true,
-    this.headerVisible = true,
   });
 
   final String title;
   final IconData icon;
   final List<AppNavigationItem> items;
   final bool openOnHover;
-  final bool headerVisible;
 
   bool containsActiveRoute(String location) {
     bool active(AppNavigationItem item) {
@@ -1005,20 +1050,6 @@ class _DrawerMenuGroupTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!group.headerVisible) {
-      return Padding(
-        padding: EdgeInsets.fromLTRB(
-          compact ? 4 : 6,
-          compact ? 4 : 6,
-          compact ? 4 : 6,
-          compact ? 8 : 10,
-        ),
-        child: Column(
-          children: [for (final item in group.items) itemBuilder(item)],
-        ),
-      );
-    }
-
     final foreground = AppColors.textPrimary;
     final headerBg = selected || expanded
         ? AppColors.primary.withValues(alpha: 0.09)

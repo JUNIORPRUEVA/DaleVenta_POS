@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -195,9 +196,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final size = mediaQuery.size;
     final viewInsets = mediaQuery.viewInsets;
     final horizontalPadding = size.width < 420 ? 16.0 : 24.0;
+    final availableCardWidth = size.width - (horizontalPadding * 2);
+    final maxCompactWidth = kIsWeb && size.width < 700 ? 340.0 : 520.0;
     final cardWidth = size.width >= 900
         ? 420.0
-        : (size.width - (horizontalPadding * 2)).clamp(288.0, 520.0);
+        : availableCardWidth.clamp(0.0, maxCompactWidth);
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
@@ -212,7 +215,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
         ),
         child: SafeArea(
-          child: Center(
+          child: Align(
+            alignment: kIsWeb && size.width < 700
+                ? Alignment.centerLeft
+                : Alignment.center,
             child: SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(
                 horizontalPadding,
