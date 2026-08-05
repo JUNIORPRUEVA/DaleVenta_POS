@@ -3489,16 +3489,23 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
                             Expanded(
                               child: DropdownButtonFormField<String>(
                                 key: ValueKey(categoryFilter),
+                                isExpanded: true,
                                 initialValue: categoryFilter,
                                 items: [
                                   const DropdownMenuItem(
                                     value: 'Todas las categorías',
-                                    child: Text('Todas las categorías'),
+                                    child: Text(
+                                      'Todas las categorías',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
                                   for (final category in categories)
                                     DropdownMenuItem(
                                       value: category,
-                                      child: Text(category),
+                                      child: Text(
+                                        category,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
                                 ],
                                 onChanged: (value) {

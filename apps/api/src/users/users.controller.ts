@@ -204,14 +204,14 @@ export class UsersController {
 
   @Get(':id/birthday-greeting')
   @Roles(Role.ADMIN)
-  birthdayGreeting(@Param('id') id: string) {
-    return this.users.generateBirthdayGreeting(id);
+  birthdayGreeting(@Req() req: Request, @Param('id') id: string) {
+    return this.users.generateBirthdayGreetingForTenant(req.user as TenantUser, id);
   }
 
   @Post(':id/work-contract/ai-edit')
   @Roles(Role.ADMIN)
-  aiEditWorkContract(@Param('id') id: string, @Body() dto: AiEditWorkContractDto) {
-    return this.users.applyAiWorkContractEdit(id, dto);
+  aiEditWorkContract(@Req() req: Request, @Param('id') id: string, @Body() dto: AiEditWorkContractDto) {
+    return this.users.applyAiWorkContractEditForTenant(req.user as TenantUser, id, dto);
   }
 
   @Get('me')
@@ -234,8 +234,8 @@ export class UsersController {
 
   @Get(':id')
   @Roles(Role.ADMIN)
-  findOne(@Param('id') id: string) {
-    return this.users.findById(id);
+  findOne(@Req() req: Request, @Param('id') id: string) {
+    return this.users.findByIdForTenant(req.user as TenantUser, id);
   }
 
   @Patch('me')
@@ -250,27 +250,28 @@ export class UsersController {
   @Patch(':id/permissions')
   @Roles(Role.ADMIN)
   updatePermissions(
+    @Req() req: Request,
     @Param('id') id: string,
     @Body() body: { userPermissions?: Record<string, boolean> },
   ) {
-    return this.users.updatePermissions(id, body.userPermissions ?? {});
+    return this.users.updatePermissions(req.user as TenantUser, id, body.userPermissions ?? {});
   }
 
   @Patch(':id')
   @Roles(Role.ADMIN)
-  update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
-    return this.users.update(id, dto);
+  update(@Req() req: Request, @Param('id') id: string, @Body() dto: UpdateUserDto) {
+    return this.users.update(req.user as TenantUser, id, dto);
   }
 
   @Patch(':id/block')
   @Roles(Role.ADMIN)
-  setBlocked(@Param('id') id: string, @Body() dto: BlockUserDto) {
-    return this.users.setBlocked(id, dto.blocked);
+  setBlocked(@Req() req: Request, @Param('id') id: string, @Body() dto: BlockUserDto) {
+    return this.users.setBlocked(req.user as TenantUser, id, dto.blocked);
   }
 
   @Delete(':id')
   @Roles(Role.ADMIN)
-  remove(@Param('id') id: string) {
-    return this.users.remove(id);
+  remove(@Req() req: Request, @Param('id') id: string) {
+    return this.users.remove(req.user as TenantUser, id);
   }
 }

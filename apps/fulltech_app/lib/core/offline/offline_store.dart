@@ -209,6 +209,36 @@ class OfflineStore {
     await db.delete('cache_entries', where: 'cache_key = ?', whereArgs: [key]);
   }
 
+  Future<void> clearAll() async {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs
+          .getKeys()
+          .where((key) => key.startsWith(_webCachePrefix) || key == _webPendingKey)
+          .toList(growable: false);
+      for (final key in keys) {
+        await prefs.remove(key);
+      }
+      return;
+    }
+
+    final db = await _dbOrNull();
+    if (db == null) {
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs
+          .getKeys()
+          .where((key) => key.startsWith(_webCachePrefix) || key == _webPendingKey)
+          .toList(growable: false);
+      for (final key in keys) {
+        await prefs.remove(key);
+      }
+      return;
+    }
+
+    await db.delete('cache_entries');
+    await db.delete('pending_actions');
+  }
+
   Future<void> putPendingAction(PendingSyncAction action) async {
     if (kIsWeb) {
       final prefs = await SharedPreferences.getInstance();

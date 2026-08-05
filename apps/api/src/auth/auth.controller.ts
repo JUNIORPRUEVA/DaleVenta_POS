@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Post,
   Req,
@@ -41,5 +42,19 @@ export class AuthController {
   async me(@Req() req: Request) {
     const user = req.user as any;
     return this.auth.me(user.id);
+  }
+
+  @UseGuards(AuthGuard("jwt"))
+  @Get("account/deletion-preview")
+  async deletionPreview(@Req() req: Request) {
+    const user = req.user as any;
+    return this.auth.deletionPreview(user.id, user.companyId);
+  }
+
+  @UseGuards(AuthGuard("jwt"))
+  @Delete("account")
+  async deleteAccount(@Req() req: Request, @Body() dto: Record<string, unknown>) {
+    const user = req.user as any;
+    return this.auth.deleteAccount(user.id, user.companyId, dto);
   }
 }

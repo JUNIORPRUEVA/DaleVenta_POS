@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Prisma } from '@prisma/client';
+import { CompanyMemberRole, CompanyMemberStatus, Prisma } from '@prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
 import { SignWorkContractDto } from './dto/sign-work-contract.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -127,6 +127,29 @@ export class UsersService {
       }
     }
     return output;
+  }
+
+  private async assertTargetUserInTenant(requestUser: TenantUser, targetUserId: string) {
+    const companyId = requireTenant(requestUser);
+    const target = await this.prisma.user.findFirst({
+      where: {
+        id: targetUserId,
+        OR: [
+          { companyId },
+          {
+            companyMemberships: {
+              some: {
+                companyId,
+                status: CompanyMemberStatus.ACTIVE,
+              },
+            },
+          },
+        ],
+      },
+      select: { id: true },
+    });
+    if (!target) throw new NotFoundException('User not found');
+    return target;
   }
 
   private parseAiFieldUpdates(value: unknown) {
@@ -580,6 +603,25 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     return user;
   }
 
+  async findByIdForTenant(requestUser: TenantUser, id: string) {
+    await this.assertTargetUserInTenant(requestUser, id);
+    return this.findById(id);
+  }
+
+  async generateBirthdayGreetingForTenant(requestUser: TenantUser, userId: string) {
+    await this.assertTargetUserInTenant(requestUser, userId);
+    return this.generateBirthdayGreeting(userId);
+  }
+
+  async applyAiWorkContractEditForTenant(
+    requestUser: TenantUser,
+    id: string,
+    dto: AiEditWorkContractDto,
+  ) {
+    await this.assertTargetUserInTenant(requestUser, id);
+    return this.applyAiWorkContractEdit(id, dto);
+  }
+
   async create(requestUser: TenantUser, dto: CreateUserDto) {
     const companyId = requireTenant(requestUser);
     const email = this.normalizeEmail(dto.email);
@@ -594,45 +636,63 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
-    return this.prisma.user.create({
-      data: {
-        email,
-        companyId,
-        passwordHash,
-        nombreCompleto: dto.nombreCompleto.trim(),
-        telefono: dto.telefono.trim(),
-        numeroFlota: dto.numeroFlota.trim(),
-        telefonoFamiliar: this.normalizeOptionalString(dto.telefonoFamiliar),
-        cedula,
-        fotoCedulaUrl: this.normalizeOptionalString(dto.fotoCedulaUrl),
-        fotoLicenciaUrl: this.normalizeOptionalString(dto.fotoLicenciaUrl),
-        fotoPersonalUrl: this.normalizeOptionalString(dto.fotoPersonalUrl),
-        workContractJobTitle: this.normalizeOptionalString(dto.workContractJobTitle),
-        workContractSalary: this.normalizeOptionalString(dto.workContractSalary),
-        workContractPaymentFrequency: this.normalizeOptionalString(dto.workContractPaymentFrequency),
-        workContractPaymentMethod: this.normalizeOptionalString(dto.workContractPaymentMethod),
-        workContractWorkSchedule: this.normalizeOptionalString(dto.workContractWorkSchedule),
-        workContractWorkLocation: this.normalizeOptionalString(dto.workContractWorkLocation),
-        workContractClauseOverrides: (() => {
-          const cleaned = this.normalizeStringMap(dto.workContractClauseOverrides);
-          return Object.keys(cleaned).length > 0 ? cleaned : undefined;
-        })(),
-        workContractCustomClauses: this.normalizeOptionalString(dto.workContractCustomClauses),
-        workContractStartDate: dto.workContractStartDate ? new Date(dto.workContractStartDate) : undefined,
-        edad: dto.edad,
-        tieneHijos: dto.tieneHijos ?? false,
-        estaCasado: dto.estaCasado ?? false,
-        casaPropia: dto.casaPropia ?? false,
-        vehiculo: dto.vehiculo ?? false,
-        licenciaConducir: dto.licenciaConducir ?? false,
-        fechaIngreso: dto.fechaIngreso ? new Date(dto.fechaIngreso) : undefined,
-        fechaNacimiento: dto.fechaNacimiento ? new Date(dto.fechaNacimiento) : undefined,
-        cuentaNominaPreferencial: this.normalizeOptionalString(dto.cuentaNominaPreferencial),
-        habilidades: dto.habilidades,
-        userPermissions: this.normalizeBooleanMap(dto.userPermissions),
-        role: dto.role,
-        blocked: dto.blocked ?? false
-      },
+    const created = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email,
+          companyId,
+          passwordHash,
+          nombreCompleto: dto.nombreCompleto.trim(),
+          telefono: dto.telefono.trim(),
+          numeroFlota: dto.numeroFlota.trim(),
+          telefonoFamiliar: this.normalizeOptionalString(dto.telefonoFamiliar),
+          cedula,
+          fotoCedulaUrl: this.normalizeOptionalString(dto.fotoCedulaUrl),
+          fotoLicenciaUrl: this.normalizeOptionalString(dto.fotoLicenciaUrl),
+          fotoPersonalUrl: this.normalizeOptionalString(dto.fotoPersonalUrl),
+          workContractJobTitle: this.normalizeOptionalString(dto.workContractJobTitle),
+          workContractSalary: this.normalizeOptionalString(dto.workContractSalary),
+          workContractPaymentFrequency: this.normalizeOptionalString(dto.workContractPaymentFrequency),
+          workContractPaymentMethod: this.normalizeOptionalString(dto.workContractPaymentMethod),
+          workContractWorkSchedule: this.normalizeOptionalString(dto.workContractWorkSchedule),
+          workContractWorkLocation: this.normalizeOptionalString(dto.workContractWorkLocation),
+          workContractClauseOverrides: (() => {
+            const cleaned = this.normalizeStringMap(dto.workContractClauseOverrides);
+            return Object.keys(cleaned).length > 0 ? cleaned : undefined;
+          })(),
+          workContractCustomClauses: this.normalizeOptionalString(dto.workContractCustomClauses),
+          workContractStartDate: dto.workContractStartDate ? new Date(dto.workContractStartDate) : undefined,
+          edad: dto.edad,
+          tieneHijos: dto.tieneHijos ?? false,
+          estaCasado: dto.estaCasado ?? false,
+          casaPropia: dto.casaPropia ?? false,
+          vehiculo: dto.vehiculo ?? false,
+          licenciaConducir: dto.licenciaConducir ?? false,
+          fechaIngreso: dto.fechaIngreso ? new Date(dto.fechaIngreso) : undefined,
+          fechaNacimiento: dto.fechaNacimiento ? new Date(dto.fechaNacimiento) : undefined,
+          cuentaNominaPreferencial: this.normalizeOptionalString(dto.cuentaNominaPreferencial),
+          habilidades: dto.habilidades,
+          userPermissions: this.normalizeBooleanMap(dto.userPermissions),
+          role: dto.role,
+          blocked: dto.blocked ?? false
+        },
+        select: { id: true },
+      });
+      await tx.companyMember.create({
+        data: {
+          userId: user.id,
+          companyId,
+          role: CompanyMemberRole.VIEWER,
+          status: CompanyMemberStatus.ACTIVE,
+          invitedBy: requestUser.id,
+          joinedAt: new Date(),
+        },
+      });
+      return user;
+    });
+
+    return this.prisma.user.findUniqueOrThrow({
+      where: { id: created.id },
       select: {
         id: true,
         email: true,
@@ -786,7 +846,8 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     return this.findById(userId);
   }
 
-  async update(id: string, dto: UpdateUserDto) {
+  async update(requestUser: TenantUser, id: string, dto: UpdateUserDto) {
+    await this.assertTargetUserInTenant(requestUser, id);
     const existing = await this.prisma.user.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('User not found');
 
@@ -866,7 +927,8 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     return this.findById(id);
   }
 
-  async updatePermissions(id: string, permissions: Record<string, boolean>) {
+  async updatePermissions(requestUser: TenantUser, id: string, permissions: Record<string, boolean>) {
+    await this.assertTargetUserInTenant(requestUser, id);
     const existing = await this.prisma.user.findUnique({
       where: { id },
       select: { id: true, role: true },
@@ -992,7 +1054,8 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     return this.findById(id);
   }
 
-  async setBlocked(id: string, blocked?: boolean) {
+  async setBlocked(requestUser: TenantUser, id: string, blocked?: boolean) {
+    await this.assertTargetUserInTenant(requestUser, id);
     const existing = await this.prisma.user.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('User not found');
     const next = blocked ?? !existing.blocked;
@@ -1010,7 +1073,8 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     });
   }
 
-  async remove(id: string) {
+  async remove(requestUser: TenantUser, id: string) {
+    await this.assertTargetUserInTenant(requestUser, id);
     const existing = await this.prisma.user.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('User not found');
     await this.prisma.user.delete({ where: { id } });

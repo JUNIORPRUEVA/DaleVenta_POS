@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'auth_repository.dart';
 import 'auth_session_events.dart';
 import 'token_storage.dart';
+import '../cache/fulltech_cache_manager.dart';
 import '../debug/trace_log.dart';
 import '../models/user_model.dart';
+import '../offline/sync_queue_service.dart';
 import '../utils/is_flutter_test.dart';
 
 class AuthState {
@@ -302,6 +304,41 @@ class AuthController extends StateNotifier<AuthState> {
       restoringSession: false,
       hasSessionHint: false,
     );
+  }
+
+  Future<AccountDeletionResult> deleteAccount({
+    required String password,
+    String? confirmationPhrase,
+  }) async {
+    if (state.loading) {
+      throw StateError('Ya hay una operacion de autenticacion en curso');
+    }
+
+    state = state.copyWith(loading: true);
+    try {
+      final result = await ref.read(authRepositoryProvider).deleteAccount(
+            password: password,
+            confirmationPhrase: confirmationPhrase,
+          );
+      await ref.read(offlineStoreProvider).clearAll();
+      await FulltechImageCacheManager.clear();
+      await ref.read(tokenStorageProvider).clearTokens();
+      _markSessionHealthy();
+      state = AuthState(
+        initialized: true,
+        isAuthenticated: false,
+        user: null,
+        loading: false,
+        restoringSession: false,
+        hasSessionHint: false,
+      );
+      return result;
+    } catch (_) {
+      if (mounted) {
+        state = state.copyWith(loading: false);
+      }
+      rethrow;
+    }
   }
 
   void setUser(UserModel user) {

@@ -108,6 +108,165 @@ export class AuthService {
     return user;
   }
 
+  async deletionPreview(userId: string, activeCompanyId?: string | null) {
+    const user = await this.findAccountDeletionUser(userId);
+    if (!user) throw new UnauthorizedException("No autorizado");
+
+    const memberships = user.companyMemberships.filter(
+      (membership) => membership.status === CompanyMemberStatus.ACTIVE,
+    );
+    const activeMembership =
+      memberships.find((membership) => membership.companyId === activeCompanyId) ??
+      memberships.find((membership) => membership.companyId === user.companyId) ??
+      memberships[0] ??
+      null;
+
+    if (!activeMembership) {
+      return {
+        mode: "personal_account",
+        memberships: 0,
+        activeCompanyId: null,
+        activeCompanyRole: null,
+        isOnlyOwner: false,
+        companyWillBeDeleted: false,
+        requiresCompanyConfirmationPhrase: false,
+        blockingOwnedCompanies: 0,
+        affectedDataCategories: ["personal profile", "sessions"],
+      };
+    }
+
+    const ownerCount = await this.prisma.companyMember.count({
+      where: {
+        companyId: activeMembership.companyId,
+        role: CompanyMemberRole.OWNER,
+        status: CompanyMemberStatus.ACTIVE,
+      },
+    });
+    const isOnlyOwner =
+      activeMembership.role === CompanyMemberRole.OWNER && ownerCount <= 1;
+
+    const blockingOwnedCompanies = await this.countSoleOwnedCompanies(user.id);
+
+    return {
+      mode: isOnlyOwner ? "company_and_personal_account" : "personal_account",
+      memberships: memberships.length,
+      activeCompanyId: activeMembership.companyId,
+      activeCompanyRole: activeMembership.role,
+      isOnlyOwner,
+      companyWillBeDeleted: isOnlyOwner,
+      requiresCompanyConfirmationPhrase: isOnlyOwner,
+      blockingOwnedCompanies,
+      affectedDataCategories: isOnlyOwner
+        ? [
+            "company settings",
+            "products",
+            "clients",
+            "sales",
+            "purchases",
+            "cash",
+            "payroll",
+            "documents",
+            "uploads metadata",
+          ]
+        : ["personal profile", "company memberships", "sessions"],
+    };
+  }
+
+  async deleteAccount(
+    userId: string,
+    activeCompanyId: string | null | undefined,
+    dto: {
+      password?: unknown;
+      confirmationPhrase?: unknown;
+      idempotencyKey?: unknown;
+    },
+  ) {
+    const password = typeof dto.password === "string" ? dto.password : "";
+    if (!password) throw new BadRequestException("La contrasena es obligatoria");
+
+    const user = await this.findAccountDeletionUser(userId);
+    if (!user) throw new UnauthorizedException("No autorizado");
+
+    const passwordOk = await bcrypt.compare(password, user.passwordHash);
+    if (!passwordOk) throw new UnauthorizedException("Credenciales invalidas");
+
+    const memberships = user.companyMemberships.filter(
+      (membership) => membership.status === CompanyMemberStatus.ACTIVE,
+    );
+    const activeMembership =
+      memberships.find((membership) => membership.companyId === activeCompanyId) ??
+      memberships.find((membership) => membership.companyId === user.companyId) ??
+      memberships[0] ??
+      null;
+
+    const soleOwnedCompanyIds = await this.findSoleOwnedCompanyIds(user.id);
+    const activeCompanyIsSoleOwned =
+      !!activeMembership &&
+      soleOwnedCompanyIds.includes(activeMembership.companyId);
+
+    if (soleOwnedCompanyIds.length > (activeCompanyIsSoleOwned ? 1 : 0)) {
+      throw new ConflictException(
+        "Transfiere o elimina primero las otras empresas donde eres el unico propietario",
+      );
+    }
+
+    if (activeCompanyIsSoleOwned) {
+      const phrase =
+        typeof dto.confirmationPhrase === "string"
+          ? dto.confirmationPhrase.trim()
+          : "";
+      if (phrase !== "DELETE MY COMPANY") {
+        throw new BadRequestException(
+          "Debes confirmar escribiendo DELETE MY COMPANY",
+        );
+      }
+    }
+
+    const deletionReceiptId = `del_${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+
+    await this.prisma.$transaction(async (tx) => {
+      if (activeCompanyIsSoleOwned && activeMembership) {
+        await this.deleteCompanyOwnedRows(tx, activeMembership.companyId);
+        await tx.companyMember.deleteMany({
+          where: { companyId: activeMembership.companyId },
+        });
+        await tx.company.delete({ where: { id: activeMembership.companyId } });
+      }
+
+      await tx.companyMember.updateMany({
+        where: { userId: user.id },
+        data: { status: CompanyMemberStatus.REMOVED },
+      });
+
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          blocked: true,
+          companyId: null,
+          email: `deleted-${user.id}@deleted.local`,
+          nombreCompleto: "Usuario eliminado",
+          telefono: "eliminado",
+          numeroFlota: null,
+          telefonoFamiliar: null,
+          cedula: null,
+          fotoCedulaUrl: null,
+          fotoLicenciaUrl: null,
+          fotoPersonalUrl: null,
+          workContractSignatureUrl: null,
+          userPermissions: Prisma.DbNull,
+        },
+      });
+    });
+
+    return {
+      ok: true,
+      deletionReceiptId,
+      companyDeleted: activeCompanyIsSoleOwned,
+    };
+  }
+
   async registerBusiness(dto: {
     firstName?: string;
     lastName?: string;
@@ -231,6 +390,79 @@ export class AuthService {
       { sub: userId, tokenType: "refresh" },
       { expiresIn: this.refreshExpiresIn() },
     );
+  }
+
+  private async countSoleOwnedCompanies(userId: string) {
+    return (await this.findSoleOwnedCompanyIds(userId)).length;
+  }
+
+  private async findSoleOwnedCompanyIds(userId: string) {
+    const ownerMemberships = await this.prisma.companyMember.findMany({
+      where: {
+        userId,
+        role: CompanyMemberRole.OWNER,
+        status: CompanyMemberStatus.ACTIVE,
+      },
+      select: { companyId: true },
+    });
+
+    const soleOwned: string[] = [];
+    for (const membership of ownerMemberships) {
+      const ownerCount = await this.prisma.companyMember.count({
+        where: {
+          companyId: membership.companyId,
+          role: CompanyMemberRole.OWNER,
+          status: CompanyMemberStatus.ACTIVE,
+        },
+      });
+      if (ownerCount <= 1) soleOwned.push(membership.companyId);
+    }
+    return soleOwned;
+  }
+
+  private async deleteCompanyOwnedRows(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+  ) {
+    const rows = await tx.$queryRaw<Array<{ table_name: string }>>(Prisma.sql`
+      SELECT table_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND column_name = 'company_id'
+        AND table_name NOT IN ('companies', 'company_members', 'users')
+      ORDER BY table_name ASC
+    `);
+
+    for (const row of rows) {
+      const tableName = row.table_name;
+      if (!/^[a-zA-Z0-9_]+$/.test(tableName)) {
+        throw new Error(`Unsafe table name discovered: ${tableName}`);
+      }
+      await tx.$executeRawUnsafe(
+        `DELETE FROM "${tableName}" WHERE company_id = $1`,
+        companyId,
+      );
+    }
+  }
+
+  private async findAccountDeletionUser(userId: string) {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true,
+        companyId: true,
+        companyMemberships: {
+          select: {
+            id: true,
+            companyId: true,
+            role: true,
+            status: true,
+          },
+        },
+      },
+    });
   }
 
   private slugify(value: string) {

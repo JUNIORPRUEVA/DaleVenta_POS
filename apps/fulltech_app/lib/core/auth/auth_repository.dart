@@ -418,6 +418,59 @@ class AuthRepository {
     }
   }
 
+  Future<AccountDeletionPreview> getAccountDeletionPreview() async {
+    try {
+      final res = await _dio
+          .get(ApiRoutes.accountDeletionPreview)
+          .timeout(_bootstrapTimeout);
+      return AccountDeletionPreview.fromJson(
+        (res.data as Map).cast<String, dynamic>(),
+      );
+    } on DioException catch (e) {
+      throw _mapDioError(e, 'No se pudo preparar la eliminacion de cuenta');
+    } on TimeoutException {
+      throw const ApiException.detailed(
+        message: 'El servidor tardó demasiado preparando la eliminación.',
+        type: ApiErrorType.timeout,
+        displayCode: 'NETWORK_TIMEOUT',
+        retryable: true,
+      );
+    }
+  }
+
+  Future<AccountDeletionResult> deleteAccount({
+    required String password,
+    String? confirmationPhrase,
+  }) async {
+    try {
+      final res = await _dio
+          .delete(
+            ApiRoutes.accountDelete,
+            data: {
+              'password': password,
+              if (confirmationPhrase != null)
+                'confirmationPhrase': confirmationPhrase,
+              'idempotencyKey': DateTime.now().microsecondsSinceEpoch
+                  .toString(),
+            },
+          )
+          .timeout(_loginTimeout);
+      return AccountDeletionResult.fromJson(
+        (res.data as Map).cast<String, dynamic>(),
+      );
+    } on DioException catch (e) {
+      throw _mapDioError(e, 'No se pudo eliminar la cuenta');
+    } on TimeoutException {
+      throw const ApiException.detailed(
+        message:
+            'El servidor tardó demasiado eliminando la cuenta. Verifica el estado antes de intentar de nuevo.',
+        type: ApiErrorType.timeout,
+        displayCode: 'NETWORK_TIMEOUT',
+        retryable: true,
+      );
+    }
+  }
+
   Future<UserModel?> getMeOrNull({bool silent = false}) async {
     // Widget tests (smoke test) should not block on secure storage/network.
     // Those calls can hang in tests and leave pending timeout timers.
@@ -532,5 +585,64 @@ class AuthRepository {
       return false;
     }
     return false;
+  }
+}
+
+class AccountDeletionPreview {
+  const AccountDeletionPreview({
+    required this.mode,
+    required this.memberships,
+    required this.activeCompanyRole,
+    required this.isOnlyOwner,
+    required this.companyWillBeDeleted,
+    required this.requiresCompanyConfirmationPhrase,
+    required this.blockingOwnedCompanies,
+    required this.affectedDataCategories,
+  });
+
+  final String mode;
+  final int memberships;
+  final String? activeCompanyRole;
+  final bool isOnlyOwner;
+  final bool companyWillBeDeleted;
+  final bool requiresCompanyConfirmationPhrase;
+  final int blockingOwnedCompanies;
+  final List<String> affectedDataCategories;
+
+  factory AccountDeletionPreview.fromJson(Map<String, dynamic> json) {
+    return AccountDeletionPreview(
+      mode: (json['mode'] ?? 'personal_account').toString(),
+      memberships: (json['memberships'] as num?)?.toInt() ?? 0,
+      activeCompanyRole: json['activeCompanyRole']?.toString(),
+      isOnlyOwner: json['isOnlyOwner'] == true,
+      companyWillBeDeleted: json['companyWillBeDeleted'] == true,
+      requiresCompanyConfirmationPhrase:
+          json['requiresCompanyConfirmationPhrase'] == true,
+      blockingOwnedCompanies:
+          (json['blockingOwnedCompanies'] as num?)?.toInt() ?? 0,
+      affectedDataCategories: (json['affectedDataCategories'] as List? ?? [])
+          .map((item) => item.toString())
+          .toList(growable: false),
+    );
+  }
+}
+
+class AccountDeletionResult {
+  const AccountDeletionResult({
+    required this.ok,
+    required this.deletionReceiptId,
+    required this.companyDeleted,
+  });
+
+  final bool ok;
+  final String deletionReceiptId;
+  final bool companyDeleted;
+
+  factory AccountDeletionResult.fromJson(Map<String, dynamic> json) {
+    return AccountDeletionResult(
+      ok: json['ok'] == true,
+      deletionReceiptId: (json['deletionReceiptId'] ?? '').toString(),
+      companyDeleted: json['companyDeleted'] == true,
+    );
   }
 }

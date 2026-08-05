@@ -11,6 +11,7 @@ import '../../core/api/env.dart';
 import '../../core/app_update/app_update_controller.dart';
 import '../../core/app_update/app_update_models.dart';
 import '../../core/auth/auth_provider.dart';
+import '../../core/auth/auth_repository.dart';
 import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/routing/app_navigator.dart';
@@ -266,6 +267,188 @@ class AccountSettingsScreen extends ConsumerWidget {
           description: 'Descarga la información de la nube a respaldo local.',
           route: Routes.configuracionBackup,
         ),
+        const _DeleteAccountLaunchCard(),
+      ],
+    );
+  }
+}
+
+class _DeleteAccountLaunchCard extends ConsumerWidget {
+  const _DeleteAccountLaunchCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return _SettingsActionCard(
+      icon: Icons.delete_forever_outlined,
+      title: 'Eliminar mi cuenta',
+      description: 'Requiere contraseña y confirmación del servidor.',
+      accent: AppColors.error,
+      onTap: () => _showDeleteAccountDialog(context, ref),
+    );
+  }
+
+  Future<void> _showDeleteAccountDialog(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    AccountDeletionPreview preview;
+    try {
+      preview = await ref.read(authRepositoryProvider).getAccountDeletionPreview();
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo preparar la eliminación: $error')),
+      );
+      return;
+    }
+
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _DeleteAccountDialog(preview: preview),
+    );
+  }
+}
+
+class _DeleteAccountDialog extends ConsumerStatefulWidget {
+  const _DeleteAccountDialog({required this.preview});
+
+  final AccountDeletionPreview preview;
+
+  @override
+  ConsumerState<_DeleteAccountDialog> createState() =>
+      _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
+  final _password = TextEditingController();
+  final _phrase = TextEditingController();
+  bool _submitting = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _password.dispose();
+    _phrase.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_submitting) return;
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      final result = await ref.read(authStateProvider.notifier).deleteAccount(
+            password: _password.text,
+            confirmationPhrase: widget.preview.requiresCompanyConfirmationPhrase
+                ? _phrase.text
+                : null,
+          );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.companyDeleted
+                ? 'Cuenta y empresa eliminadas. Recibo: ${result.deletionReceiptId}'
+                : 'Cuenta eliminada. Recibo: ${result.deletionReceiptId}',
+          ),
+        ),
+      );
+      context.go(Routes.login);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.toString();
+        _submitting = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = widget.preview;
+    final fullCompanyDeletion = preview.companyWillBeDeleted;
+    return AlertDialog(
+      title: Text(
+        fullCompanyDeletion ? 'Eliminar empresa y cuenta' : 'Eliminar cuenta',
+      ),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 460),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                fullCompanyDeletion
+                    ? 'Eres el único propietario activo. Esta acción intentará eliminar permanentemente la empresa activa y bloquear tu cuenta.'
+                    : 'Esta acción eliminará tu acceso, bloqueará el inicio de sesión y retirará tus membresías activas.',
+                style: _bodyStyle(),
+              ),
+              const SizedBox(height: 12),
+              _StatusBanner(
+                icon: Icons.warning_amber_rounded,
+                title: 'Acción permanente',
+                message:
+                    'La app solo cerrará la sesión después de que el backend confirme la eliminación.',
+                accent: AppColors.error,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _password,
+                obscureText: true,
+                enabled: !_submitting,
+                decoration: const InputDecoration(
+                  labelText: 'Contraseña actual',
+                  prefixIcon: Icon(Icons.lock_outline_rounded),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              if (preview.requiresCompanyConfirmationPhrase) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _phrase,
+                  enabled: !_submitting,
+                  decoration: const InputDecoration(
+                    labelText: 'Escribe DELETE MY COMPANY',
+                    prefixIcon: Icon(Icons.priority_high_rounded),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!, style: const TextStyle(color: AppColors.error)),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton.icon(
+          onPressed: _submitting ? null : _submit,
+          icon: _submitting
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.delete_forever_outlined),
+          label: Text(_submitting ? 'Eliminando' : 'Eliminar definitivamente'),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.error,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
       ],
     );
   }
@@ -510,7 +693,7 @@ class _SettingsHubScaffold extends ConsumerWidget {
                       final twoColumns = constraints.maxWidth >= 720;
                       return GridView.count(
                         crossAxisCount: twoColumns ? 2 : 1,
-                        childAspectRatio: twoColumns ? 5.15 : 5.4,
+                        childAspectRatio: twoColumns ? 5.15 : 4.0,
                         crossAxisSpacing: 10,
                         mainAxisSpacing: 10,
                         children: children,
@@ -731,6 +914,73 @@ class _SettingsLaunchCard extends StatelessWidget {
                 color: Color(0xFF60758A),
                 size: 20,
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsActionCard extends StatelessWidget {
+  const _SettingsActionCard({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.onTap,
+    required this.accent,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final VoidCallback onTap;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: accent.withValues(alpha: 0.35)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.09),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: accent, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: _titleStyle(15).copyWith(color: accent)),
+                    const SizedBox(height: 2),
+                    Text(
+                      description,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _bodyStyle(),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right_rounded, color: accent, size: 20),
             ],
           ),
         ),

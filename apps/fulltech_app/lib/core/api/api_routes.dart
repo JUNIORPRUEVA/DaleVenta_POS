@@ -5,6 +5,8 @@ class ApiRoutes {
   static const registerBusiness = '/auth/register-business';
   static const refresh = '/auth/refresh';
   static const me = '/auth/me';
+  static const accountDeletionPreview = '/auth/account/deletion-preview';
+  static const accountDelete = '/auth/account';
   static const settings = '/settings';
   static const settingsAdminPin = '/settings/admin-pin';
   static const settingsAdminPinVerify = '/settings/admin-pin/verify';
