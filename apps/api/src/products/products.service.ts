@@ -9,6 +9,7 @@ import { Prisma, Product } from "@prisma/client";
 import { createHash } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { requireTenant, type TenantUser } from "../auth/tenant-context";
+import { LicenseService } from "../license/license.service";
 import { CatalogProductsService } from "./catalog-products.service";
 import { CreateProductDto } from "./dto/create-product.dto";
 import { UpdateProductDto } from "./dto/update-product.dto";
@@ -26,6 +27,7 @@ export class ProductsService {
     private readonly prisma: PrismaService,
     private readonly catalogProducts: CatalogProductsService,
     private readonly config: ConfigService,
+    private readonly licenses: LicenseService,
   ) {
     const base =
       this.config.get<string>("PUBLIC_BASE_URL") ??
@@ -296,6 +298,7 @@ export class ProductsService {
   async create(user: TenantUser, dto: CreateProductDto): Promise<any> {
     this.assertWritable();
     const companyId = requireTenant(user);
+    await this.licenses.assertCanCreateProduct(companyId);
     const operationProductIdForRecovery = this.operationProductId(
       companyId,
       dto.operationId,

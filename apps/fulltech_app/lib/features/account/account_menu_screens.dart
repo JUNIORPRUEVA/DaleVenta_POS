@@ -14,6 +14,7 @@ import '../../core/auth/auth_provider.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
+import '../../core/license/license_repository.dart';
 import '../../core/routing/app_navigator.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
@@ -71,30 +72,36 @@ class AccountLicensesScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final company = ref.watch(companySettingsProvider);
     final user = ref.watch(authStateProvider).user;
+    final license = ref.watch(licenseStatusProvider);
 
     return _AccountSidePanelScaffold(
       icon: Icons.verified_user_outlined,
       title: 'Licencias',
-      subtitle: 'Estado de uso, empresa activa y alcance contratado.',
+      subtitle: 'Control de prueba, acceso y límites del sistema.',
       children: [
-        _InfoTile(
-          icon: Icons.business_rounded,
-          title: 'Empresa activa',
-          value: company.maybeWhen(
-            data: (settings) => settings.companyName.trim().isEmpty
-                ? 'FullPOS Cloud'
-                : settings.companyName.trim(),
-            orElse: () => 'FullPOS Cloud',
-          ),
-        ),
         _InfoTile(
           icon: Icons.person_outline_rounded,
           title: 'Usuario actual',
           value: user?.email ?? 'Usuario conectado',
         ),
-        const _LicensePlanCard(),
+        license.when(
+          data: (value) => _LicensePlanCard(license: value),
+          loading: () => const _SurfacePanel(
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+          error: (error, _) => _StatusBanner(
+            icon: Icons.error_outline_rounded,
+            title: 'No se pudo cargar la licencia',
+            message: '$error',
+            accent: AppColors.error,
+          ),
+        ),
       ],
     );
   }
@@ -1233,40 +1240,382 @@ class _InfoTile extends StatelessWidget {
   }
 }
 
-class _LicensePlanCard extends StatelessWidget {
-  const _LicensePlanCard();
+class _LicensePlanCard extends ConsumerStatefulWidget {
+  const _LicensePlanCard({required this.license});
+
+  final LicenseStatusModel license;
+
+  @override
+  ConsumerState<_LicensePlanCard> createState() => _LicensePlanCardState();
+}
+
+class _LicensePlanCardState extends ConsumerState<_LicensePlanCard> {
+  late final TextEditingController _users;
+  late final TextEditingController _products;
+  late final TextEditingController _notes;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _users = TextEditingController(text: '${widget.license.maxUsers}');
+    _products = TextEditingController(text: '${widget.license.maxProducts}');
+    _notes = TextEditingController(text: widget.license.notes ?? '');
+  }
+
+  @override
+  void didUpdateWidget(covariant _LicensePlanCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.license.companyId != widget.license.companyId ||
+        oldWidget.license.maxUsers != widget.license.maxUsers) {
+      _users.text = '${widget.license.maxUsers}';
+    }
+    if (oldWidget.license.maxProducts != widget.license.maxProducts) {
+      _products.text = '${widget.license.maxProducts}';
+    }
+    if ((oldWidget.license.notes ?? '') != (widget.license.notes ?? '')) {
+      _notes.text = widget.license.notes ?? '';
+    }
+  }
+
+  @override
+  void dispose() {
+    _users.dispose();
+    _products.dispose();
+    _notes.dispose();
+    super.dispose();
+  }
+
+  Future<void> _run(Future<LicenseStatusModel> Function() action) async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await action();
+      ref.invalidate(licenseStatusProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Licencia actualizada.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo actualizar: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  int _intValue(TextEditingController controller, int fallback) {
+    return int.tryParse(controller.text.trim()) ?? fallback;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final license = widget.license;
+    final accent = _licenseAccent(license.status);
+    final periodLabel = license.status == 'TRIAL'
+        ? _dateLabel(license.trialEndsAt)
+        : _dateLabel(license.licenseExpiresAt);
     return _SurfacePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              _TileIcon(icon: Icons.workspace_premium_outlined),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text('Plan profesional POS', style: _titleStyle(15)),
-              ),
-              const _StatusPill(label: 'Activo'),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 430;
+              final heading = Row(
+                children: [
+                  _TileIcon(icon: Icons.workspace_premium_outlined, color: accent),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          license.companyName.trim().isEmpty
+                              ? 'Plan profesional POS'
+                              : license.companyName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: _titleStyle(15),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(_licenseSubtitle(license), style: _bodyStyle()),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+              final pill = _StatusPill(label: _licenseStatusLabel(license.status));
+              if (compact) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [heading, const SizedBox(height: 10), pill],
+                );
+              }
+              return Row(children: [Expanded(child: heading), pill]);
+            },
+          ),
+          const SizedBox(height: 14),
+          if (!license.isUsable)
+            _StatusBanner(
+              icon: Icons.lock_outline_rounded,
+              title: 'Acceso bloqueado',
+              message: license.blockReason ?? 'La licencia no está disponible.',
+              accent: AppColors.error,
+            )
+          else if (license.status == 'TRIAL')
+            _StatusBanner(
+              icon: Icons.hourglass_top_rounded,
+              title: 'Prueba gratis activa',
+              message: 'Incluye 7 días de uso inicial con límites controlados.',
+              accent: AppColors.warning,
+            ),
+          const SizedBox(height: 12),
+          _UsageMeter(
+            icon: Icons.people_outline_rounded,
+            title: 'Usuarios',
+            used: license.users,
+            max: license.maxUsers,
+            accent: const Color(0xFF0F766E),
+          ),
+          const SizedBox(height: 10),
+          _UsageMeter(
+            icon: Icons.inventory_2_outlined,
+            title: 'Productos',
+            used: license.products,
+            max: license.maxProducts,
+            accent: const Color(0xFF7C3AED),
           ),
           const SizedBox(height: 12),
-          const _DetailRow('Empresas preparadas', 'Multiempresa'),
-          const _DetailRow('Usuarios', 'Según permisos de la empresa'),
-          const _DetailRow(
-            'Módulos incluidos',
-            'Ventas, clientes, inventario y caja',
+          _DetailRow('Plan', license.plan),
+          _DetailRow('Fin del periodo', periodLabel),
+          _DetailRow('Clave', license.licenseKey ?? 'Se genera al activar'),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 460;
+              final fields = [
+                _licenseField(_users, 'Usuarios', Icons.group_add_outlined),
+                _licenseField(_products, 'Productos', Icons.add_box_outlined),
+              ];
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  for (final field in fields)
+                    SizedBox(
+                      width: compact ? constraints.maxWidth : (constraints.maxWidth - 10) / 2,
+                      child: field,
+                    ),
+                  SizedBox(
+                    width: constraints.maxWidth,
+                    child: _licenseField(
+                      _notes,
+                      'Notas',
+                      Icons.notes_outlined,
+                      maxLines: 2,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
-          const _DetailRow(
-            'Soporte',
-            'Operación y actualizaciones del sistema',
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final stack = constraints.maxWidth < 420;
+              final save = FilledButton.icon(
+                onPressed: _saving
+                    ? null
+                    : () => _run(
+                          () => ref.read(licenseRepositoryProvider).updateLimits(
+                                maxUsers: _intValue(_users, license.maxUsers),
+                                maxProducts: _intValue(
+                                  _products,
+                                  license.maxProducts,
+                                ),
+                                notes: _notes.text,
+                              ),
+                        ),
+                icon: _saving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save_outlined),
+                label: const Text('Guardar límites'),
+                style: _filledButtonStyle(),
+              );
+              final activate = OutlinedButton.icon(
+                onPressed: _saving
+                    ? null
+                    : () => _run(
+                          () => ref.read(licenseRepositoryProvider).activate(
+                                maxUsers: _intValue(_users, license.maxUsers),
+                                maxProducts: _intValue(
+                                  _products,
+                                  license.maxProducts,
+                                ),
+                                notes: _notes.text,
+                              ),
+                        ),
+                icon: const Icon(Icons.verified_outlined),
+                label: const Text('Activar'),
+                style: _outlinedButtonStyle(),
+              );
+              final block = OutlinedButton.icon(
+                onPressed: _saving
+                    ? null
+                    : () => _run(
+                          () => ref
+                              .read(licenseRepositoryProvider)
+                              .block(notes: _notes.text),
+                        ),
+                icon: const Icon(Icons.block_outlined),
+                label: const Text('Bloquear'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.error,
+                  side: const BorderSide(color: AppColors.errorBorder),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  textStyle: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0,
+                  ),
+                ),
+              );
+              if (stack) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    save,
+                    const SizedBox(height: 8),
+                    activate,
+                    const SizedBox(height: 8),
+                    block,
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: save),
+                  const SizedBox(width: 8),
+                  Expanded(child: activate),
+                  const SizedBox(width: 8),
+                  Expanded(child: block),
+                ],
+              );
+            },
           ),
         ],
       ),
     );
   }
+
+  Widget _licenseField(
+    TextEditingController controller,
+    String label,
+    IconData icon, {
+    int maxLines = 1,
+  }) {
+    return TextField(
+      controller: controller,
+      maxLines: maxLines,
+      keyboardType: maxLines == 1 ? TextInputType.number : TextInputType.text,
+      decoration: InputDecoration(
+        prefixIcon: Icon(icon, size: 18),
+        labelText: label,
+        border: const OutlineInputBorder(),
+        isDense: true,
+      ),
+    );
+  }
+}
+
+class _UsageMeter extends StatelessWidget {
+  const _UsageMeter({
+    required this.icon,
+    required this.title,
+    required this.used,
+    required this.max,
+    required this.accent,
+  });
+
+  final IconData icon;
+  final String title;
+  final int used;
+  final int max;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = max <= 0 ? 0.0 : (used / max).clamp(0.0, 1.0);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FBFF),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: const Color(0xFFDDE7EE)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: accent, size: 18),
+              const SizedBox(width: 8),
+              Expanded(child: Text(title, style: _strongBodyStyle())),
+              Text('$used / $max', style: _strongBodyStyle()),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              minHeight: 8,
+              value: ratio,
+              backgroundColor: const Color(0xFFE6EEF5),
+              valueColor: AlwaysStoppedAnimation<Color>(accent),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Color _licenseAccent(String status) {
+  return switch (status) {
+    'ACTIVE' => AppColors.success,
+    'TRIAL' => AppColors.warning,
+    'BLOCKED' || 'EXPIRED' => AppColors.error,
+    _ => AppColors.secondary,
+  };
+}
+
+String _licenseStatusLabel(String status) {
+  return switch (status) {
+    'ACTIVE' => 'Activa',
+    'TRIAL' => 'Prueba',
+    'BLOCKED' => 'Bloqueada',
+    'EXPIRED' => 'Expirada',
+    _ => status,
+  };
+}
+
+String _licenseSubtitle(LicenseStatusModel license) {
+  if (license.daysRemaining == null) return 'Licencia sin fecha de cierre';
+  if (license.daysRemaining! < 0) return 'Periodo vencido';
+  if (license.daysRemaining == 0) return 'Vence hoy';
+  return 'Quedan ${license.daysRemaining} días';
+}
+
+String _dateLabel(DateTime? value) {
+  if (value == null) return 'Sin expiración configurada';
+  final local = value.toLocal();
+  return '${local.day.toString().padLeft(2, '0')}/'
+      '${local.month.toString().padLeft(2, '0')}/${local.year}';
 }
 
 class _StatusBanner extends StatelessWidget {

@@ -9,12 +9,14 @@ import * as bcrypt from 'bcryptjs';
 import { SelfUpdateUserDto } from './dto/self-update-user.dto';
 import { ConfigService } from '@nestjs/config';
 import { requireTenant, type TenantUser } from '../auth/tenant-context';
+import { LicenseService } from '../license/license.service';
 
 @Injectable()
 export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly licenses: LicenseService,
   ) {}
 
   private normalizeEmail(value: string) {
@@ -628,6 +630,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
 
   async create(requestUser: TenantUser, dto: CreateUserDto) {
     const companyId = requireTenant(requestUser);
+    await this.licenses.assertCanCreateUser(companyId);
     const email = this.normalizeEmail(dto.email);
     const cedula = this.normalizeOptionalString(dto.cedula);
 

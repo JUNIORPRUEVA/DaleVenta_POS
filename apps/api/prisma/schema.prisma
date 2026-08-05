@@ -31,6 +31,15 @@ enum CompanyPlan {
   @@map("company_plan")
 }
 
+enum LicenseStatus {
+  TRIAL
+  ACTIVE
+  BLOCKED
+  EXPIRED
+
+  @@map("license_status")
+}
+
 enum CompanyMemberRole {
   OWNER
   ADMIN
@@ -587,22 +596,52 @@ enum EmployeeWarningSignatureType {
 }
 
 model Company {
-  id        String        @id @default(uuid()) @db.Uuid
-  name      String
-  slug      String        @unique
-  status    CompanyStatus @default(ACTIVE)
-  plan      CompanyPlan   @default(STANDARD)
-  maxUsers  Int           @default(1000) @map("max_users")
-  createdAt DateTime      @default(now()) @map("created_at")
-  updatedAt DateTime      @updatedAt @map("updated_at")
+  id                String        @id @default(uuid()) @db.Uuid
+  name              String
+  slug              String        @unique
+  status            CompanyStatus @default(ACTIVE)
+  plan              CompanyPlan   @default(STANDARD)
+  licenseStatus     LicenseStatus @default(TRIAL) @map("license_status")
+  licenseKey        String?       @unique @map("license_key")
+  trialStartedAt    DateTime?     @default(now()) @map("trial_started_at")
+  trialEndsAt       DateTime?     @map("trial_ends_at")
+  licenseActivatedAt DateTime?    @map("license_activated_at")
+  licenseExpiresAt  DateTime?     @map("license_expires_at")
+  licenseBlockedAt  DateTime?     @map("license_blocked_at")
+  licenseNotes      String?       @map("license_notes") @db.Text
+  maxUsers         Int           @default(2) @map("max_users")
+  maxProducts      Int           @default(500) @map("max_products")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
 
   users       User[]
   appConfigs  AppConfig[]
   members     CompanyMember[]
   AuthSession AuthSession[]
+  licenseAuditLogs CompanyLicenseAuditLog[]
 
   @@index([status])
+  @@index([licenseStatus])
+  @@index([licenseExpiresAt])
   @@map("companies")
+}
+
+model CompanyLicenseAuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  actorId   String?  @map("actor_id") @db.Uuid
+  actorEmail String? @map("actor_email")
+  action    String
+  reason    String?
+  before    Json?
+  after     Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@index([action])
+  @@map("company_license_audit_logs")
 }
 
 model CompanyMember {

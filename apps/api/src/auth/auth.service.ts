@@ -19,6 +19,7 @@ import {
 import * as bcrypt from "bcryptjs";
 import { ConfigService } from "@nestjs/config";
 import { JwtUser } from "./jwt-user.type";
+import { LicenseService } from "../license/license.service";
 
 @Injectable()
 export class AuthService {
@@ -27,6 +28,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly r2: R2Service,
+    private readonly licenses: LicenseService,
   ) {}
 
   async login(identifier: string, password: string) {
@@ -39,6 +41,7 @@ export class AuthService {
     if (!ok) throw new UnauthorizedException("Invalid credentials");
 
     const session = this.resolveCompanySession(user);
+    await this.licenses.assertCompanyCanUseApp(session.activeCompany?.id ?? user.companyId);
     const sessionRecord = await this.createAuthSession(user.id, session.activeCompany?.id ?? user.companyId ?? null);
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
@@ -104,6 +107,7 @@ export class AuthService {
     }
 
     const session = this.resolveCompanySession(user);
+    await this.licenses.assertCompanyCanUseApp(session.activeCompany?.id ?? user.companyId);
     const nextSessionRecord = await this.rotateAuthSession(existingSession.id);
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
@@ -366,7 +370,11 @@ export class AuthService {
           slug: await this.nextCompanySlug(tx, baseSlug),
           status: "ACTIVE",
           plan: "STANDARD",
-          maxUsers: 1000,
+          licenseStatus: "TRIAL",
+          trialStartedAt: new Date(),
+          trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          maxUsers: 2,
+          maxProducts: 500,
         },
       });
 

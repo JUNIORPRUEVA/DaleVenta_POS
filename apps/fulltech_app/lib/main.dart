@@ -15,11 +15,14 @@ import 'core/theme/app_theme.dart';
 import 'core/loading/app_loading_overlay.dart';
 import 'core/auth/app_role.dart';
 import 'core/auth/auth_provider.dart';
+import 'core/auth/auth_session_events.dart';
 import 'core/debug/app_error_reporter.dart';
 import 'core/debug/app_error_overlay.dart';
+import 'core/license/license_repository.dart';
 import 'core/offline/sync_queue_service.dart';
 import 'core/offline/offline_sync_handlers_bootstrap.dart';
 import 'core/realtime/catalog_realtime_service.dart';
+import 'core/realtime/operations_realtime_service.dart';
 import 'core/startup/app_startup_controller.dart';
 import 'core/startup/initial_release_check.dart';
 import 'core/app_update/update_guard_overlay.dart';
@@ -127,6 +130,7 @@ class MyApp extends ConsumerStatefulWidget {
 class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   bool _backgroundStartupStarted = false;
   ProviderSubscription<AuthState>? _authStateSubscription;
+  StreamSubscription<LicenseRealtimeMessage>? _licenseRealtimeSubscription;
 
   @override
   void initState() {
@@ -143,8 +147,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         if (!mounted) return;
         if (next.isAuthenticated) {
           unawaited(ref.read(catalogRealtimeServiceProvider).connect(next));
+          unawaited(ref.read(operationsRealtimeServiceProvider).connect(next));
         } else if (previous?.isAuthenticated == true && !next.isAuthenticated) {
           ref.read(catalogRealtimeServiceProvider).disconnect();
+          ref.read(operationsRealtimeServiceProvider).disconnect();
         }
       });
     });
@@ -166,14 +172,21 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       final authState = ref.read(authStateProvider);
       if (authState.isAuthenticated) {
         unawaited(ref.read(catalogRealtimeServiceProvider).connect(authState));
+        unawaited(ref.read(operationsRealtimeServiceProvider).connect(authState));
       } else {
         ref.read(catalogRealtimeServiceProvider).disconnect();
+        ref.read(operationsRealtimeServiceProvider).disconnect();
       }
+      _licenseRealtimeSubscription ??= ref
+          .read(operationsRealtimeServiceProvider)
+          .licenseStream
+          .listen(_handleLicenseRealtimeMessage);
     });
   }
 
   @override
   void dispose() {
+    _licenseRealtimeSubscription?.cancel();
     _authStateSubscription?.close();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -187,6 +200,27 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
     unawaited(ref.read(syncQueueServiceProvider.notifier).processPending());
     unawaited(ref.read(appUpdateProvider.notifier).checkNow());
+    final authState = ref.read(authStateProvider);
+    if (authState.isAuthenticated) {
+      unawaited(ref.read(operationsRealtimeServiceProvider).connect(authState));
+      unawaited(ref.read(licenseRepositoryProvider).getLicense().then((license) {
+        if (!license.isUsable) {
+          ref.read(authSessionEventsProvider).requestUnauthorizedLogout();
+        }
+      }).catchError((_) {}));
+    }
+  }
+
+  void _handleLicenseRealtimeMessage(LicenseRealtimeMessage message) {
+    ref.invalidate(licenseStatusProvider);
+    final status = (message.license['status'] ?? '').toString().toUpperCase();
+    final blockedEvent = message.type == 'license.blocked' ||
+        message.type == 'license.deleted' ||
+        status == 'BLOCKED' ||
+        status == 'EXPIRED';
+    if (blockedEvent) {
+      ref.read(authSessionEventsProvider).requestUnauthorizedLogout();
+    }
   }
 
   @override

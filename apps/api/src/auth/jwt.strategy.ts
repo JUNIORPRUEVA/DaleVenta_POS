@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { JwtUser } from './jwt-user.type';
 import { CompanyMemberRole, CompanyMemberStatus, Prisma, Role } from '@prisma/client';
 import { normalizeJwtSecret } from './jwt.util';
+import { LicenseService } from '../license/license.service';
 
 type JwtLookupUser = {
   id: string;
@@ -25,7 +26,8 @@ type JwtLookupUser = {
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     private readonly config: ConfigService,
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
+    private readonly licenses: LicenseService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -44,6 +46,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     await this.assertActiveSession(payload);
     const membership = this.resolveActiveMembership(user, payload.companyId);
     const companyId = membership?.companyId ?? user.companyId ?? null;
+    await this.licenses.assertCompanyCanUseApp(companyId);
     const role = membership ? this.mapMemberRoleToLegacyRole(membership.role) : user.role;
     return { id: user.id, email: user.email, role, memberRole: membership?.role ?? null, companyId };
   }

@@ -36,6 +36,20 @@ class ClientsRealtimeMessage {
   final Map<String, dynamic>? client;
 }
 
+class LicenseRealtimeMessage {
+  const LicenseRealtimeMessage({
+    required this.eventId,
+    required this.type,
+    required this.companyId,
+    required this.license,
+  });
+
+  final String eventId;
+  final String type;
+  final String companyId;
+  final Map<String, dynamic> license;
+}
+
 class OperationsRealtimeService {
   OperationsRealtimeService(this._storage);
 
@@ -46,6 +60,8 @@ class OperationsRealtimeService {
       StreamController<ClientsRealtimeMessage>.broadcast();
   final StreamController<Map<String, dynamic>> _whatsappController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<LicenseRealtimeMessage> _licenseController =
+      StreamController<LicenseRealtimeMessage>.broadcast();
   final Set<String> _seenEventIds = <String>{};
 
   io.Socket? _socket;
@@ -53,6 +69,7 @@ class OperationsRealtimeService {
   Stream<OperationsRealtimeMessage> get stream => _controller.stream;
   Stream<ClientsRealtimeMessage> get clientStream => _clientsController.stream;
   Stream<Map<String, dynamic>> get whatsappStream => _whatsappController.stream;
+  Stream<LicenseRealtimeMessage> get licenseStream => _licenseController.stream;
 
   /// Register a callback for incoming WhatsApp CRM messages.
   void onWhatsappMessage(void Function(Map<String, dynamic> data) callback) {
@@ -170,6 +187,31 @@ class OperationsRealtimeService {
               ? resolvedId
               : null,
           client: client,
+        ),
+      );
+    });
+
+    socket.on('license.event', (data) {
+      if (data is! Map) return;
+      final payload = Map<String, dynamic>.from(data);
+      final eventId = payload['eventId']?.toString() ?? '';
+      if (eventId.isNotEmpty && !_seenEventIds.add(eventId)) {
+        return;
+      }
+      if (_seenEventIds.length > 300) {
+        _seenEventIds.remove(_seenEventIds.first);
+      }
+
+      final licenseJson = payload['license'];
+      final companyId = payload['companyId']?.toString().trim() ?? '';
+      if (companyId.isEmpty || licenseJson is! Map) return;
+
+      _licenseController.add(
+        LicenseRealtimeMessage(
+          eventId: eventId,
+          type: payload['type']?.toString() ?? 'license.updated',
+          companyId: companyId,
+          license: Map<String, dynamic>.from(licenseJson),
         ),
       );
     });

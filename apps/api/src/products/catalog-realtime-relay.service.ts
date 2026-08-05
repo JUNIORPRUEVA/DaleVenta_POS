@@ -70,12 +70,14 @@ export class CatalogRealtimeRelayService implements OnModuleDestroy {
         const payload = jwt.verify(token, this.jwtSecret) as {
           sub?: unknown;
           role?: unknown;
+          companyId?: unknown;
           tokenType?: unknown;
         };
 
         // Persist minimal identity on the socket for room routing.
         socket.data.userId = payload?.sub?.toString?.() ?? '';
         socket.data.role = payload?.role?.toString?.() ?? '';
+        socket.data.companyId = payload?.companyId?.toString?.() ?? '';
         return next();
       } catch {
         return next(new Error('No autorizado'));
@@ -93,6 +95,11 @@ export class CatalogRealtimeRelayService implements OnModuleDestroy {
         socket.join(`ops:user:${userId}`);
       }
 
+      const companyId = (socket.data.companyId ?? '').toString().trim();
+      if (companyId) {
+        socket.join(`company:${companyId}`);
+      }
+
       const role = (socket.data.role ?? '').toString().trim().toLowerCase();
       if (role) {
         socket.join(`ops:role:${role}`);
@@ -106,6 +113,11 @@ export class CatalogRealtimeRelayService implements OnModuleDestroy {
 
   emitOps(event: string, payload: unknown) {
     this.emitTo('ops', event, payload);
+  }
+
+  emitCompany(companyId: string, event: string, payload: unknown) {
+    const room = `company:${companyId.trim()}`;
+    this.emitTo(room, event, payload);
   }
 
   start() {

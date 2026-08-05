@@ -23,6 +23,7 @@ import { CashModule } from './cash/cash.module';
 import { ReportsModule } from './reports/reports.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { SettingsModule } from './settings/settings.module';
+import { LicenseModule } from './license/license.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { SettingsModule } from './settings/settings.module';
     AuthModule,
     UsersModule,
     ProductsModule,
+    LicenseModule,
     ClientsModule,
     ContabilidadModule,
     SalesModule,

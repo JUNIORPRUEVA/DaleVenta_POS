@@ -10,6 +10,10 @@ class ApiRoutes {
   static const settings = '/settings';
   static const settingsAdminPin = '/settings/admin-pin';
   static const settingsAdminPinVerify = '/settings/admin-pin/verify';
+  static const license = '/license';
+  static const licenseActivate = '/license/activate';
+  static const licenseBlock = '/license/block';
+  static const licenseLimits = '/license/limits';
 
   // Usuarios
   static const users = '/users';
