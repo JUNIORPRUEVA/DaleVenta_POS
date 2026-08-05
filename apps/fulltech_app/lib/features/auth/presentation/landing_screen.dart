@@ -8,10 +8,12 @@ import 'pwa_install_prompt.dart';
 class LandingScreen extends StatelessWidget {
   const LandingScreen({super.key});
 
-  static Uri get _windowsDownloadUri =>
-      Uri.base.resolve('downloads/fullpos-cloud-windows.exe');
-  static Uri get _androidDownloadUri =>
-      Uri.base.resolve('downloads/fullpos-cloud-android.apk');
+  static Uri get _windowsDownloadUri => Uri.parse(
+    'https://github.com/JUNIORPRUEVA/DaleVenta_POS/releases/latest/download/fullpos-cloud-windows.exe',
+  );
+  static Uri get _androidDownloadUri => Uri.parse(
+    'https://github.com/JUNIORPRUEVA/DaleVenta_POS/releases/latest/download/fullpos-cloud-android.apk',
+  );
 
   @override
   Widget build(BuildContext context) {
