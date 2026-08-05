@@ -17,35 +17,46 @@ class LandingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final isCompact = size.width < 820;
-    final contentPadding = EdgeInsets.symmetric(
-      horizontal: isCompact ? 18 : 44,
-      vertical: isCompact ? 18 : 28,
-    );
+    final isMobile = MediaQuery.sizeOf(context).width < 760;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF6FAFC),
+      backgroundColor: const Color(0xFFF4F8FB),
+      endDrawer: const _LandingDrawer(),
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
-              child: Padding(
-                padding: contentPadding,
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1180),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1180),
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      isMobile ? 18 : 38,
+                      isMobile ? 16 : 26,
+                      isMobile ? 18 : 38,
+                      30,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _LandingTopBar(isCompact: isCompact),
-                        SizedBox(height: isCompact ? 22 : 46),
-                        _HeroSection(isCompact: isCompact),
-                        const SizedBox(height: 34),
-                        const _ModuleGrid(),
-                        const SizedBox(height: 34),
-                        const _DownloadSection(),
-                        const SizedBox(height: 24),
+                        _TopBar(isMobile: isMobile),
+                        SizedBox(height: isMobile ? 24 : 44),
+                        _Hero(isMobile: isMobile),
+                        const SizedBox(height: 18),
+                        const _InstallPanel(),
+                        if (isMobile) ...[
+                          const SizedBox(height: 18),
+                          const _HeroImage(),
+                        ],
+                        const SizedBox(height: 28),
+                        const _ProofSection(),
+                        const SizedBox(height: 28),
+                        const _BusinessSection(),
+                        const SizedBox(height: 28),
+                        const _MobileExperienceSection(),
+                        const SizedBox(height: 28),
+                        const _PlatformSecuritySection(),
+                        const SizedBox(height: 22),
                         const _Footer(),
                       ],
                     ),
@@ -76,25 +87,25 @@ class LandingScreen extends StatelessWidget {
   }
 }
 
-class _LandingTopBar extends StatelessWidget {
-  const _LandingTopBar({required this.isCompact});
+class _TopBar extends StatelessWidget {
+  const _TopBar({required this.isMobile});
 
-  final bool isCompact;
+  final bool isMobile;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
         Container(
-          width: 46,
-          height: 46,
+          width: 48,
+          height: 48,
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(14),
             boxShadow: const [
               BoxShadow(
-                color: Color(0x170B4A6F),
-                blurRadius: 18,
+                color: Color(0x160B2744),
+                blurRadius: 22,
                 offset: Offset(0, 10),
               ),
             ],
@@ -112,17 +123,17 @@ class _LandingTopBar extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: Color(0xFF102033),
+                  color: Color(0xFF0D1B2A),
                   fontSize: 18,
                   fontWeight: FontWeight.w900,
                 ),
               ),
               Text(
-                'Sistema de facturacion y gestion comercial',
+                'POS en la nube para colmados, farmacias y tiendas',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: Color(0xFF62748C),
+                  color: Color(0xFF5E7187),
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                 ),
@@ -130,12 +141,24 @@ class _LandingTopBar extends StatelessWidget {
             ],
           ),
         ),
-        if (!isCompact) ...[
+        if (isMobile)
+          Builder(
+            builder: (context) => IconButton.filledTonal(
+              tooltip: 'Menu',
+              onPressed: () => Scaffold.of(context).openEndDrawer(),
+              icon: const Icon(Icons.menu_rounded),
+            ),
+          )
+        else ...[
+          TextButton(
+            onPressed: () => _showInfoSheet(context),
+            child: const Text('Beneficios'),
+          ),
           TextButton(
             onPressed: () => context.go(Routes.login),
             child: const Text('Iniciar sesion'),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           FilledButton.icon(
             onPressed: () => context.go(Routes.register),
             icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
@@ -147,53 +170,49 @@ class _LandingTopBar extends StatelessWidget {
   }
 }
 
-class _HeroSection extends StatelessWidget {
-  const _HeroSection({required this.isCompact});
+class _Hero extends StatelessWidget {
+  const _Hero({required this.isMobile});
 
-  final bool isCompact;
+  final bool isMobile;
 
   @override
   Widget build(BuildContext context) {
-    final heroText = Column(
+    final text = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: const Color(0xFFE8F7F4),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: const Color(0xFFB9E7DD)),
-          ),
-          child: const Text(
-            'PWA, Windows y Android en un solo ecosistema',
-            style: TextStyle(
-              color: Color(0xFF0E766E),
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
+        const Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _Pill('PWA web'),
+            _Pill('Windows'),
+            _Pill('Android'),
+            _Pill('Datos seguros'),
+          ],
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 16),
         Text(
           'FullPOS Cloud',
           style: TextStyle(
-            color: const Color(0xFF0E1B2A),
-            fontSize: isCompact ? 38 : 58,
-            height: 1.02,
+            color: const Color(0xFF0B1728),
+            fontSize: isMobile ? 42 : 66,
+            height: 1,
             fontWeight: FontWeight.w900,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         const Text(
-          'Controla ventas, inventario, compras, clientes, caja y contabilidad desde una experiencia moderna preparada para mostrador, oficina y movilidad.',
+          'Factura, cobra y controla tu negocio completo desde la nube. Ideal para colmados, farmacias, minimarkets y tiendas que necesitan vender rapido sin perder control del inventario.',
           style: TextStyle(
-            color: Color(0xFF44566C),
+            color: Color(0xFF3E536B),
             fontSize: 17,
-            height: 1.55,
+            height: 1.5,
             fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 18),
+        const _ValueBullets(),
+        const SizedBox(height: 22),
         Wrap(
           spacing: 12,
           runSpacing: 12,
@@ -204,383 +223,114 @@ class _HeroSection extends StatelessWidget {
               label: const Text('Crear mi cuenta'),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
+                  horizontal: 22,
                   vertical: 17,
                 ),
               ),
             ),
             OutlinedButton.icon(
-              onPressed: () => context.go(Routes.login),
-              icon: const Icon(Icons.login_rounded, size: 19),
-              label: const Text('Iniciar sesion'),
+              onPressed: () => _requestInstall(context),
+              icon: const Icon(Icons.add_to_home_screen_rounded, size: 19),
+              label: const Text('Instalar PWA'),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
+                  horizontal: 22,
                   vertical: 17,
                 ),
               ),
+            ),
+            TextButton.icon(
+              onPressed: () => context.go(Routes.login),
+              icon: const Icon(Icons.login_rounded, size: 18),
+              label: const Text('Iniciar sesion'),
             ),
           ],
         ),
       ],
     );
 
-    final preview = const _ProductPreview();
+    const visual = _HeroImage();
 
-    if (isCompact) {
+    if (isMobile) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [heroText, const SizedBox(height: 26), preview],
+        children: [text],
       );
     }
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Expanded(flex: 10, child: heroText),
-        const SizedBox(width: 42),
-        Expanded(flex: 9, child: preview),
+        Expanded(flex: 8, child: text),
+        const SizedBox(width: 36),
+        const Expanded(flex: 9, child: visual),
       ],
     );
   }
 }
 
-class _ProductPreview extends StatelessWidget {
-  const _ProductPreview();
+class _HeroImage extends StatelessWidget {
+  const _HeroImage();
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFD8E6EE)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x1A113B5A),
-            blurRadius: 38,
-            offset: Offset(0, 20),
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 700),
+      tween: Tween(begin: 0.96, end: 1),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        return Transform.translate(
+          offset: Offset(0, (1 - value) * 26),
+          child: Transform.scale(
+            scale: value,
+            child: Opacity(opacity: value, child: child),
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              _StatusDot(color: Color(0xFF10B981)),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Panel comercial activo',
-                  style: TextStyle(
-                    color: Color(0xFF0F2237),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              Icon(Icons.more_horiz_rounded, color: Color(0xFF7A8FA6)),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: const [
-              _MetricTile(label: 'Ventas hoy', value: 'RD\$ 42,850'),
-              _MetricTile(label: 'Tickets', value: '128'),
-              _MetricTile(label: 'Stock bajo', value: '17'),
-            ],
-          ),
-          const SizedBox(height: 18),
-          const _PreviewRow(
-            icon: Icons.point_of_sale_rounded,
-            label: 'Facturacion',
-            value: 'Caja rapida y tickets',
-            color: Color(0xFF2563EB),
-          ),
-          const _PreviewRow(
-            icon: Icons.inventory_2_rounded,
-            label: 'Inventario',
-            value: 'Catalogo, ajuste y conteo',
-            color: Color(0xFF0E9F6E),
-          ),
-          const _PreviewRow(
-            icon: Icons.receipt_long_rounded,
-            label: 'Contabilidad',
-            value: 'Cierres, pagos y fiscal',
-            color: Color(0xFF7C3AED),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MetricTile extends StatelessWidget {
-  const _MetricTile({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 138,
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF4F8FB),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE0EAF0)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFF6B7F94),
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Color(0xFF102033),
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PreviewRow extends StatelessWidget {
-  const _PreviewRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE2EAF0)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
+        );
+      },
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 520;
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
+              color: Colors.white,
               borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: Color(0xFF102033),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF64748B),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
+              border: Border.all(color: const Color(0xFFD7E5EF)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x2310253E),
+                  blurRadius: 42,
+                  offset: Offset(0, 24),
                 ),
               ],
             ),
-          ),
-          const Icon(
-            Icons.chevron_right_rounded,
-            color: Color(0xFF8EA0B3),
-            size: 20,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ModuleGrid extends StatelessWidget {
-  const _ModuleGrid();
-
-  @override
-  Widget build(BuildContext context) {
-    final modules = [
-      _ModuleItem(
-        icon: Icons.point_of_sale_rounded,
-        title: 'Ventas y caja',
-        description:
-            'Facturacion agil, tickets abiertos, turnos y movimientos.',
-        color: Color(0xFF2563EB),
-      ),
-      _ModuleItem(
-        icon: Icons.inventory_2_rounded,
-        title: 'Inventario',
-        description: 'Catalogo, categorias, ajustes de stock y conteo fisico.',
-        color: Color(0xFF0F766E),
-      ),
-      _ModuleItem(
-        icon: Icons.shopping_cart_checkout_rounded,
-        title: 'Compras',
-        description: 'Nueva compra, listado, suplidores, facturas y sugeridos.',
-        color: Color(0xFF0EA5E9),
-      ),
-      _ModuleItem(
-        icon: Icons.account_balance_rounded,
-        title: 'Contabilidad',
-        description: 'Cierres, depositos, NCF, pagos pendientes y nomina.',
-        color: Color(0xFF7C3AED),
-      ),
-      _ModuleItem(
-        icon: Icons.groups_rounded,
-        title: 'Clientes',
-        description:
-            'Historial, creditos, ubicaciones y seguimiento comercial.',
-        color: Color(0xFF16A34A),
-      ),
-      _ModuleItem(
-        icon: Icons.analytics_rounded,
-        title: 'Reportes',
-        description:
-            'Indicadores para tomar decisiones desde cualquier equipo.',
-        color: Color(0xFFEA580C),
-      ),
-    ];
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final columns = constraints.maxWidth > 980
-            ? 3
-            : constraints.maxWidth > 620
-            ? 2
-            : 1;
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: modules.length,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columns,
-            mainAxisSpacing: 14,
-            crossAxisSpacing: 14,
-            mainAxisExtent: 150,
-          ),
-          itemBuilder: (context, index) => _ModuleCard(item: modules[index]),
-        );
-      },
-    );
-  }
-}
-
-class _ModuleItem {
-  const _ModuleItem({
-    required this.icon,
-    required this.title,
-    required this.description,
-    required this.color,
-  });
-
-  final IconData icon;
-  final String title;
-  final String description;
-  final Color color;
-}
-
-class _ModuleCard extends StatelessWidget {
-  const _ModuleCard({required this.item});
-
-  final _ModuleItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFDCE8EF)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: item.color.withValues(alpha: 0.12),
+            child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
+              child: AspectRatio(
+                aspectRatio: compact ? 1.12 : 1.38,
+                child: Image.asset(
+                  'assets/image/landing-pos-cloud.png',
+                  fit: compact ? BoxFit.scaleDown : BoxFit.cover,
+                ),
+              ),
             ),
-            child: Icon(item.icon, color: item.color, size: 22),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            item.title,
-            style: const TextStyle(
-              color: Color(0xFF102033),
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 7),
-          Text(
-            item.description,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Color(0xFF64748B),
-              fontSize: 13,
-              height: 1.35,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 }
 
-class _DownloadSection extends StatelessWidget {
-  const _DownloadSection();
+class _InstallPanel extends StatelessWidget {
+  const _InstallPanel();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF102033),
+        color: const Color(0xFF0D1B2A),
         borderRadius: BorderRadius.circular(8),
         boxShadow: const [
           BoxShadow(
@@ -590,79 +340,486 @@ class _DownloadSection extends StatelessWidget {
           ),
         ],
       ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = constraints.maxWidth > 900
+              ? 3
+              : constraints.maxWidth > 620
+              ? 2
+              : 1;
+          final gap = 12.0;
+          final cardWidth =
+              (constraints.maxWidth - (gap * (columns - 1))) / columns;
+          final actions = [
+            _InstallAction(
+              icon: Icons.add_to_home_screen_rounded,
+              title: 'Instalar PWA',
+              copy: 'Abre como app desde Chrome o Edge.',
+              label: 'Instalar',
+              isPrimary: true,
+              onTap: () => _requestInstall(context),
+            ),
+            _InstallAction(
+              icon: Icons.desktop_windows_rounded,
+              title: 'Windows',
+              copy: 'Para caja y mostrador.',
+              label: 'Descargar',
+              onTap: () => LandingScreen.openWindowsDownload(context),
+            ),
+            _InstallAction(
+              icon: Icons.android_rounded,
+              title: 'Android APK',
+              copy: 'Para telefono o tablet.',
+              label: 'Descargar',
+              onTap: () => LandingScreen.openAndroidDownload(context),
+            ),
+          ];
+          return Wrap(
+            spacing: gap,
+            runSpacing: gap,
+            children: [
+              for (final action in actions)
+                SizedBox(width: cardWidth, child: action),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _InstallAction extends StatelessWidget {
+  const _InstallAction({
+    required this.icon,
+    required this.title,
+    required this.copy,
+    required this.label,
+    required this.onTap,
+    this.isPrimary = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final String copy;
+  final String label;
+  final VoidCallback onTap;
+  final bool isPrimary;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stacked = constraints.maxWidth < 360;
+        final iconBox = Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: Colors.white, size: 22),
+        );
+        final textBlock = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              copy,
+              maxLines: stacked ? 2 : 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xFFD7E3EF),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        );
+
+        return Container(
+          constraints: BoxConstraints(minHeight: stacked ? 150 : 104),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isPrimary
+                ? const Color(0xFF1D4ED8)
+                : Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+          ),
+          child: stacked
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        iconBox,
+                        const SizedBox(width: 12),
+                        Expanded(child: textBlock),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.tonal(onPressed: onTap, child: Text(label)),
+                  ],
+                )
+              : Row(
+                  children: [
+                    iconBox,
+                    const SizedBox(width: 12),
+                    Expanded(child: textBlock),
+                    const SizedBox(width: 8),
+                    FilledButton.tonal(onPressed: onTap, child: Text(label)),
+                  ],
+                ),
+        );
+      },
+    );
+  }
+}
+
+class _ProofSection extends StatelessWidget {
+  const _ProofSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final items = [
+      _ProofItem(
+        Icons.point_of_sale_rounded,
+        'Venta rapida',
+        'Catalogo visual, tickets y cobro en pocos toques.',
+      ),
+      _ProofItem(
+        Icons.inventory_2_rounded,
+        'Inventario claro',
+        'Stock bajo, categorias, ajustes y conteo.',
+      ),
+      _ProofItem(
+        Icons.receipt_long_rounded,
+        'Control completo',
+        'Compras, clientes, reportes y contabilidad conectados.',
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth > 860
+            ? 3
+            : constraints.maxWidth > 560
+            ? 2
+            : 1;
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: items.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            mainAxisExtent: 132,
+          ),
+          itemBuilder: (context, index) => _ProofCard(item: items[index]),
+        );
+      },
+    );
+  }
+}
+
+class _ProofItem {
+  const _ProofItem(this.icon, this.title, this.copy);
+
+  final IconData icon;
+  final String title;
+  final String copy;
+}
+
+class _ProofCard extends StatelessWidget {
+  const _ProofCard({required this.item});
+
+  final _ProofItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDCE8EF)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEAF2FF),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(item.icon, color: const Color(0xFF2563EB), size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  item.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF0D1B2A),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  item.copy,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF60748C),
+                    fontSize: 13,
+                    height: 1.3,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BusinessSection extends StatelessWidget {
+  const _BusinessSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return const _SplitSection(
+      eyebrow: 'Hecho para vender mas ordenado',
+      title: 'Colmados, farmacias y tiendas pueden operar sin complicarse',
+      copy:
+          'FullPOS Cloud ayuda a tu equipo a facturar rapido, evitar ventas sin stock, revisar ganancias y mantener cada movimiento del negocio bajo control.',
+      points: [
+        'Facturacion y cotizaciones',
+        'Inventario por categorias',
+        'Compras y suplidores',
+        'Reportes para decidir mejor',
+      ],
+      image: 'assets/image/landing-mobile-sale.png',
+      imageOnRight: true,
+    );
+  }
+}
+
+class _MobileExperienceSection extends StatelessWidget {
+  const _MobileExperienceSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return const _SplitSection(
+      eyebrow: 'Experiencia clara para tu equipo',
+      title: 'Un menu limpio para entrar rapido a cada modulo',
+      copy:
+          'Ventas, caja, clientes, inventario, compras, reportes y contabilidad quedan organizados para que el usuario encuentre lo que necesita sin perder tiempo.',
+      points: [
+        'Menu por modulos',
+        'Acceso rapido desde movil',
+        'Diseño preparado para PWA',
+        'Sesiones y permisos de usuario',
+      ],
+      image: 'assets/image/landing-mobile-drawer.png',
+      imageOnRight: false,
+    );
+  }
+}
+
+class _SplitSection extends StatelessWidget {
+  const _SplitSection({
+    required this.eyebrow,
+    required this.title,
+    required this.copy,
+    required this.points,
+    required this.image,
+    required this.imageOnRight,
+  });
+
+  final String eyebrow;
+  final String title;
+  final String copy;
+  final List<String> points;
+  final String image;
+  final bool imageOnRight;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = _InfoText(
+      eyebrow: eyebrow,
+      title: title,
+      copy: copy,
+      points: points,
+    );
+    final visual = _TallImage(image: image);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 760) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [text, const SizedBox(height: 16), visual],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              flex: imageOnRight ? 7 : 5,
+              child: imageOnRight ? text : visual,
+            ),
+            const SizedBox(width: 22),
+            Expanded(
+              flex: imageOnRight ? 5 : 7,
+              child: imageOnRight ? visual : text,
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _InfoText extends StatelessWidget {
+  const _InfoText({
+    required this.eyebrow,
+    required this.title,
+    required this.copy,
+    required this.points,
+  });
+
+  final String eyebrow;
+  final String title;
+  final String copy;
+  final List<String> points;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDCE8EF)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Elige como quieres usar FullPOS Cloud',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-            ),
+          _SectionHeader(eyebrow: eyebrow, title: title, copy: copy),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [for (final point in points) _CheckChip(label: point)],
           ),
-          const SizedBox(height: 8),
-          const Text(
-            'Instala la PWA en el navegador o descarga las versiones nativas para Windows y Android.',
-            style: TextStyle(
-              color: Color(0xFFC8D4DF),
-              fontSize: 14,
-              height: 1.45,
-              fontWeight: FontWeight.w600,
-            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TallImage extends StatelessWidget {
+  const _TallImage({required this.image});
+
+  final String image;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDCE8EF)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x140B2440),
+            blurRadius: 26,
+            offset: Offset(0, 16),
           ),
-          const SizedBox(height: 18),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: AspectRatio(
+          aspectRatio: 0.72,
+          child: Image.asset(image, fit: BoxFit.cover),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlatformSecuritySection extends StatelessWidget {
+  const _PlatformSecuritySection();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDCE8EF)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionHeader(
+            eyebrow: 'Sistema en la nube',
+            title: 'Tus datos disponibles y protegidos',
+            copy:
+                'El negocio puede trabajar desde web, Windows o Android con informacion centralizada, usuarios controlados y actualizaciones de PWA sin instalaciones pesadas.',
+          ),
+          const SizedBox(height: 16),
           LayoutBuilder(
             builder: (context, constraints) {
-              final columns = constraints.maxWidth > 840
-                  ? 3
+              final columns = constraints.maxWidth > 860
+                  ? 4
                   : constraints.maxWidth > 560
                   ? 2
                   : 1;
-              return GridView.count(
+              final items = [
+                _SecurityItem(Icons.cloud_done_rounded, 'Nube centralizada'),
+                _SecurityItem(Icons.lock_rounded, 'Acceso protegido'),
+                _SecurityItem(Icons.sync_rounded, 'Actualizaciones simples'),
+                _SecurityItem(Icons.devices_rounded, 'Multi-plataforma'),
+              ];
+              return GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: columns,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: columns == 1 ? 3.3 : 2.2,
-                children: [
-                  _DownloadCard(
-                    icon: Icons.desktop_windows_rounded,
-                    title: 'Windows',
-                    description:
-                        'Instalador para equipos de mostrador y oficina.',
-                    label: 'Descargar Windows',
-                    onPressed: () => LandingScreen.openWindowsDownload(context),
-                  ),
-                  _DownloadCard(
-                    icon: Icons.android_rounded,
-                    title: 'Android APK',
-                    description:
-                        'App movil para trabajar desde telefono o tablet.',
-                    label: 'Descargar APK',
-                    onPressed: () => LandingScreen.openAndroidDownload(context),
-                  ),
-                  _DownloadCard(
-                    icon: Icons.install_desktop_rounded,
-                    title: 'PWA',
-                    description:
-                        'Instala desde el navegador sin descargar paquetes.',
-                    label: 'Instalar PWA',
-                    onPressed: () {
-                      final shown = requestPwaInstallPrompt();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            shown
-                                ? 'Abriendo opcion de instalacion PWA.'
-                                : 'Usa el menu del navegador para instalar esta PWA.',
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ],
+                itemCount: items.length,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: columns,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  mainAxisExtent: 74,
+                ),
+                itemBuilder: (context, index) =>
+                    _SecurityMiniCard(item: items[index]),
               );
             },
           ),
@@ -672,101 +829,319 @@ class _DownloadSection extends StatelessWidget {
   }
 }
 
-class _DownloadCard extends StatelessWidget {
-  const _DownloadCard({
-    required this.icon,
-    required this.title,
-    required this.description,
-    required this.label,
-    required this.onPressed,
-  });
+class _SecurityItem {
+  const _SecurityItem(this.icon, this.label);
 
   final IconData icon;
-  final String title;
-  final String description;
   final String label;
-  final VoidCallback onPressed;
+}
+
+class _SecurityMiniCard extends StatelessWidget {
+  const _SecurityMiniCard({required this.item});
+
+  final _SecurityItem item;
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 430;
-        final button = FilledButton.tonalIcon(
-          onPressed: onPressed,
-          icon: const Icon(Icons.download_rounded, size: 18),
-          label: Text(label),
-        );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6FAFC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDCE8EF)),
+      ),
+      child: Row(
+        children: [
+          Icon(item.icon, color: const Color(0xFF0F8C7D), size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              item.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xFF0D1B2A),
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-        final textBlock = Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
+class _Pill extends StatelessWidget {
+  const _Pill(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF4FF),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFCBE3FF)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Color(0xFF075EB8),
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _ValueBullets extends StatelessWidget {
+  const _ValueBullets();
+
+  @override
+  Widget build(BuildContext context) {
+    const bullets = [
+      (Icons.speed_rounded, 'Vende rapido'),
+      (Icons.inventory_rounded, 'Controla stock'),
+      (Icons.account_balance_rounded, 'Cierra el dia'),
+    ];
+
+    Widget bullet((IconData, String) item, bool stacked) {
+      return Container(
+        width: stacked ? double.infinity : null,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFDCE8EF)),
+        ),
+        child: Row(
+          mainAxisSize: stacked ? MainAxisSize.max : MainAxisSize.min,
+          children: [
+            Icon(item.$1, color: const Color(0xFF2563EB), size: 18),
+            const SizedBox(width: 8),
+            if (stacked)
+              Expanded(
+                child: Text(
+                  item.$2,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF20344C),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              )
+            else
               Text(
-                title,
+                item.$2,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
+                  color: Color(0xFF20344C),
+                  fontSize: 13,
                   fontWeight: FontWeight.w900,
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                description,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Color(0xFFC8D4DF),
-                  fontSize: 12,
-                  height: 1.25,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+          ],
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stacked = constraints.maxWidth < 520;
+        if (stacked) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final item in bullets) ...[
+                bullet(item, true),
+                if (item != bullets.last) const SizedBox(height: 10),
+              ],
             ],
-          ),
-        );
+          );
+        }
 
-        final leading = Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, color: Colors.white, size: 23),
+        return Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [for (final item in bullets) bullet(item, false)],
         );
+      },
+    );
+  }
+}
 
-        return Container(
+class _CheckChip extends StatelessWidget {
+  const _CheckChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF8F5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.check_rounded, color: Color(0xFF0F8C7D), size: 18),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF163A3A),
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.eyebrow,
+    required this.title,
+    required this.copy,
+  });
+
+  final String eyebrow;
+  final String title;
+  final String copy;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          eyebrow,
+          style: const TextStyle(
+            color: Color(0xFF2563EB),
+            fontSize: 12,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 7),
+        Text(
+          title,
+          style: const TextStyle(
+            color: Color(0xFF0D1B2A),
+            fontSize: 25,
+            height: 1.15,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          copy,
+          style: const TextStyle(
+            color: Color(0xFF60748C),
+            fontSize: 14,
+            height: 1.45,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LandingDrawer extends StatelessWidget {
+  const _LandingDrawer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Drawer(
+      child: SafeArea(
+        child: ListView(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-          ),
-          child: isNarrow
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [leading, const SizedBox(width: 14), textBlock],
+          children: [
+            Row(
+              children: [
+                Image.asset('assets/image/logo.png', width: 42, height: 42),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'FullPOS Cloud',
+                    style: TextStyle(
+                      color: Color(0xFF0D1B2A),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
                     ),
-                    const SizedBox(height: 12),
-                    button,
-                  ],
-                )
-              : Row(
-                  children: [
-                    leading,
-                    const SizedBox(width: 14),
-                    textBlock,
-                    const SizedBox(width: 10),
-                    button,
-                  ],
+                  ),
                 ),
-        );
+              ],
+            ),
+            const SizedBox(height: 18),
+            _DrawerAction(
+              icon: Icons.person_add_alt_1_rounded,
+              label: 'Crear mi cuenta',
+              onTap: () => context.go(Routes.register),
+            ),
+            _DrawerAction(
+              icon: Icons.login_rounded,
+              label: 'Iniciar sesion',
+              onTap: () => context.go(Routes.login),
+            ),
+            _DrawerAction(
+              icon: Icons.add_to_home_screen_rounded,
+              label: 'Instalar PWA',
+              onTap: () => _requestInstall(context),
+            ),
+            _DrawerAction(
+              icon: Icons.desktop_windows_rounded,
+              label: 'Descargar Windows',
+              onTap: () => LandingScreen.openWindowsDownload(context),
+            ),
+            _DrawerAction(
+              icon: Icons.android_rounded,
+              label: 'Descargar Android APK',
+              onTap: () => LandingScreen.openAndroidDownload(context),
+            ),
+            const Divider(height: 28),
+            _DrawerAction(
+              icon: Icons.info_outline_rounded,
+              label: 'Ver beneficios',
+              onTap: () => _showInfoSheet(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DrawerAction extends StatelessWidget {
+  const _DrawerAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon, color: const Color(0xFF2563EB)),
+      title: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+      onTap: () {
+        Navigator.of(context).maybePop();
+        onTap();
       },
     );
   }
@@ -777,32 +1152,63 @@ class _Footer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.only(bottom: 10),
-      child: Text(
-        '© 2026 FullPOS Cloud - Plataforma comercial para negocios modernos.',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: Color(0xFF66788D),
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-        ),
+    return const Text(
+      '© 2026 FullPOS Cloud - Facturacion, inventario y gestion comercial en la nube.',
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        color: Color(0xFF66788D),
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
       ),
     );
   }
 }
 
-class _StatusDot extends StatelessWidget {
-  const _StatusDot({required this.color});
+void _requestInstall(BuildContext context) {
+  final shown = requestPwaInstallPrompt();
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(
+        shown
+            ? 'Abriendo opcion de instalacion PWA.'
+            : 'Usa el menu del navegador para instalar esta PWA.',
+      ),
+    ),
+  );
+}
 
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 9,
-      height: 9,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-    );
-  }
+void _showInfoSheet(BuildContext context) {
+  showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) {
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(22, 8, 22, 26),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'FullPOS Cloud resume tu operacion diaria',
+              style: TextStyle(
+                color: Color(0xFF0D1B2A),
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            SizedBox(height: 10),
+            Text(
+              'Facturacion, inventario, compras, clientes, caja, reportes y contabilidad trabajan juntos para que el negocio venda mas ordenado desde cualquier dispositivo.',
+              style: TextStyle(
+                color: Color(0xFF60748C),
+                fontSize: 14,
+                height: 1.45,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
 }
