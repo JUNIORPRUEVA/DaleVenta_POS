@@ -284,7 +284,7 @@ export class ProductsService {
         );
         continue;
       }
-      await tx.product.delete({ where: { id: duplicate.id } });
+        await tx.product.deleteMany({ where: { id: duplicate.id, companyId } });
       deleted += 1;
       this.logger.log(
         `product-duplicate-prune deleted companyId=${companyId} canonicalProductId=${canonical.id} duplicateProductId=${duplicate.id}`,
@@ -626,7 +626,14 @@ export class ProductsService {
       }
 
       try {
-        const updated = await tx.product.update({ where: { id }, data });
+        const updateResult = await tx.product.updateMany({ where: { id, companyId }, data });
+        if (updateResult.count !== 1) {
+          throw new NotFoundException("Producto no encontrado");
+        }
+        const updated = await tx.product.findFirst({ where: { id, companyId } });
+        if (!updated) {
+          throw new NotFoundException("Producto no encontrado");
+        }
         const prune = await this.pruneSafeDuplicateProducts(
           tx,
           companyId,
@@ -649,7 +656,14 @@ export class ProductsService {
           );
         }
         if (!this.isSchemaMismatch(error)) throw error;
-        const updated = await tx.product.update({ where: { id }, data });
+        const updateResult = await tx.product.updateMany({ where: { id, companyId }, data });
+        if (updateResult.count !== 1) {
+          throw new NotFoundException("Producto no encontrado");
+        }
+        const updated = await tx.product.findFirst({ where: { id, companyId } });
+        if (!updated) {
+          throw new NotFoundException("Producto no encontrado");
+        }
         await this.pruneSafeDuplicateProducts(tx, companyId, updated);
         return this.mapProduct(updated);
       }
@@ -658,8 +672,9 @@ export class ProductsService {
 
   async remove(user: TenantUser, id: string) {
     this.assertWritable();
+    const companyId = requireTenant(user);
     await this.findOne(user, id);
-    await this.prisma.product.delete({ where: { id } });
+    await this.prisma.product.deleteMany({ where: { id, companyId } });
     return { ok: true };
   }
 

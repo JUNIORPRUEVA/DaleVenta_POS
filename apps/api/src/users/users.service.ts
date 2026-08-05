@@ -130,26 +130,30 @@ export class UsersService {
   }
 
   private async assertTargetUserInTenant(requestUser: TenantUser, targetUserId: string) {
-    const companyId = requireTenant(requestUser);
     const target = await this.prisma.user.findFirst({
-      where: {
-        id: targetUserId,
-        OR: [
-          { companyId },
-          {
-            companyMemberships: {
-              some: {
-                companyId,
-                status: CompanyMemberStatus.ACTIVE,
-              },
-            },
-          },
-        ],
-      },
+      where: this.targetUserTenantWhere(requestUser, targetUserId),
       select: { id: true },
     });
     if (!target) throw new NotFoundException('User not found');
     return target;
+  }
+
+  private targetUserTenantWhere(requestUser: TenantUser, targetUserId: string): Prisma.UserWhereInput {
+    const companyId = requireTenant(requestUser);
+    return {
+      id: targetUserId,
+      OR: [
+        { companyId },
+        {
+          companyMemberships: {
+            some: {
+              companyId,
+              status: CompanyMemberStatus.ACTIVE,
+            },
+          },
+        },
+      ],
+    };
   }
 
   private parseAiFieldUpdates(value: unknown) {
@@ -237,7 +241,7 @@ export class UsersService {
   }
 
   async generateBirthdayGreeting(userId: string) {
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prisma.user.findFirst({
       where: { id: userId },
       select: { id: true, nombreCompleto: true, fechaNacimiento: true }
     });
@@ -539,7 +543,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     let user: any;
 
     try {
-      user = await this.prisma.user.findUnique({
+      user = await this.prisma.user.findFirst({
         where: { id },
         select: {
           id: true,
@@ -813,7 +817,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     if (!signatureUrl) throw new BadRequestException('Firma inválida');
     if (!version) throw new BadRequestException('Versión inválida');
 
-    const existing = await this.prisma.user.findUnique({
+    const existing = await this.prisma.user.findFirst({
       where: { id: userId },
       select: {
         id: true,
@@ -848,7 +852,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
 
   async update(requestUser: TenantUser, id: string, dto: UpdateUserDto) {
     await this.assertTargetUserInTenant(requestUser, id);
-    const existing = await this.prisma.user.findUnique({ where: { id } });
+    const existing = await this.prisma.user.findFirst({ where: this.targetUserTenantWhere(requestUser, id) });
     if (!existing) throw new NotFoundException('User not found');
 
     const existingNumeroFlota = ((existing as any).numeroFlota ?? '').toString().trim();
@@ -929,8 +933,8 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
 
   async updatePermissions(requestUser: TenantUser, id: string, permissions: Record<string, boolean>) {
     await this.assertTargetUserInTenant(requestUser, id);
-    const existing = await this.prisma.user.findUnique({
-      where: { id },
+    const existing = await this.prisma.user.findFirst({
+      where: this.targetUserTenantWhere(requestUser, id),
       select: { id: true, role: true },
     });
     if (!existing) throw new NotFoundException('User not found');
@@ -1022,7 +1026,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
   }
 
   async updateSelf(id: string, dto: SelfUpdateUserDto) {
-    const existing = await this.prisma.user.findUnique({ where: { id } });
+    const existing = await this.prisma.user.findFirst({ where: { id } });
     if (!existing) throw new NotFoundException('User not found');
 
     const nextEmail = this.hasValue(dto.email) ? this.normalizeEmail(dto.email) : undefined;
@@ -1056,7 +1060,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
 
   async setBlocked(requestUser: TenantUser, id: string, blocked?: boolean) {
     await this.assertTargetUserInTenant(requestUser, id);
-    const existing = await this.prisma.user.findUnique({ where: { id } });
+    const existing = await this.prisma.user.findFirst({ where: this.targetUserTenantWhere(requestUser, id) });
     if (!existing) throw new NotFoundException('User not found');
     const next = blocked ?? !existing.blocked;
 
@@ -1075,9 +1079,15 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
 
   async remove(requestUser: TenantUser, id: string) {
     await this.assertTargetUserInTenant(requestUser, id);
-    const existing = await this.prisma.user.findUnique({ where: { id } });
+    const existing = await this.prisma.user.findFirst({ where: this.targetUserTenantWhere(requestUser, id) });
     if (!existing) throw new NotFoundException('User not found');
-    await this.prisma.user.delete({ where: { id } });
+    const companyId = requireTenant(requestUser);
+    await this.prisma.companyMember.deleteMany({ where: { userId: id, companyId } });
+    await this.prisma.user.update({
+      where: { id },
+      data: { blocked: true, companyId: null },
+      select: { id: true },
+    });
     return { ok: true };
   }
 }

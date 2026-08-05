@@ -41,10 +41,35 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
     const user = await this.findUserForJwt(payload.sub);
     if (!user || user.blocked === true) throw new UnauthorizedException('User blocked');
+    await this.assertActiveSession(payload);
     const membership = this.resolveActiveMembership(user, payload.companyId);
     const companyId = membership?.companyId ?? user.companyId ?? null;
     const role = membership ? this.mapMemberRoleToLegacyRole(membership.role) : user.role;
     return { id: user.id, email: user.email, role, memberRole: membership?.role ?? null, companyId };
+  }
+
+  private async assertActiveSession(payload: JwtUser) {
+    const sessionId = (payload.sessionId ?? '').trim();
+    if (!sessionId) {
+      throw new UnauthorizedException('Invalid session');
+    }
+
+    const session = await this.prisma.authSession.findFirst({
+      where: {
+        id: sessionId,
+        userId: payload.sub,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      select: {
+        id: true,
+        company: { select: { id: true, status: true } },
+      },
+    });
+    if (!session) throw new UnauthorizedException('Invalid session');
+    if (session.company && session.company.status !== 'ACTIVE') {
+      throw new UnauthorizedException('Company inactive');
+    }
   }
 
   private mapMemberRoleToLegacyRole(role?: CompanyMemberRole | string | null): Role {

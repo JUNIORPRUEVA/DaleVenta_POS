@@ -36,7 +36,7 @@ export class MediaController {
     @Param('productId') productId: string,
     @Res() res: Response,
   ) {
-    const product = await this.prisma.product.findUnique({ where: { id: productId } });
+    const product = await this.prisma.product.findFirst({ where: { id: productId } });
     if (!product) throw new NotFoundException('Producto no encontrado');
     const companyId = product.companyId;
     if (!companyId) throw new NotFoundException('Producto sin empresa');

@@ -21,6 +21,7 @@ import {
 import { RedisService } from "../common/redis/redis.service";
 import { EvolutionWhatsAppService } from "../notifications/evolution-whatsapp.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { requireTenant } from "../auth/tenant-context";
 import { normalizePhone } from "../common/utils/normalize-phone";
 import { AnalyzeCotizacionAiDto } from "./dto/analyze-cotizacion-ai.dto";
 import { ChatCotizacionAiDto } from "./dto/chat-cotizacion-ai.dto";
@@ -554,7 +555,8 @@ export class CotizacionesService {
     return response;
   }
 
-  async findOne(user: { id: string; role: Role }, id: string) {
+  async findOne(user: { id: string; role: Role; companyId?: string | null }, id: string) {
+    const companyId = requireTenant(user);
     const cacheKey = this.buildQuoteDetailCacheKey(user, id);
     const cached = await this.redis.get<any>(cacheKey);
     if (cached) {
@@ -563,8 +565,8 @@ export class CotizacionesService {
     }
     if (this.redis.isEnabled()) this.logger.log(`Redis MISS ${cacheKey}`);
 
-    const item = await this.prisma.cotizacion.findUnique({
-      where: { id },
+    const item = await this.prisma.cotizacion.findFirst({
+      where: { id, companyId },
       include: this.buildQuoteInclude(),
     });
 
@@ -574,7 +576,8 @@ export class CotizacionesService {
     return item;
   }
 
-  async create(user: { id: string; role: Role }, dto: CreateCotizacionDto) {
+  async create(user: { id: string; role: Role; companyId?: string | null }, dto: CreateCotizacionDto) {
+    const companyId = requireTenant(user);
     if (!dto.items?.length) {
       throw new BadRequestException("Agrega al menos un producto al ticket");
     }
@@ -636,6 +639,7 @@ export class CotizacionesService {
 
         const created = await tx.cotizacion.create({
           data: {
+            companyId,
             createdByUserId: user.id,
             customerId,
             customerName,
@@ -680,11 +684,12 @@ export class CotizacionesService {
   }
 
   async update(
-    user: { id: string; role: Role },
+    user: { id: string; role: Role; companyId?: string | null },
     id: string,
     dto: UpdateCotizacionDto,
   ) {
-    const current = await this.prisma.cotizacion.findUnique({ where: { id } });
+    const companyId = requireTenant(user);
+    const current = await this.prisma.cotizacion.findFirst({ where: { id, companyId } });
     if (!current) throw new NotFoundException("Cotización no encontrada");
 
     if (user.role !== Role.ADMIN && current.createdByUserId !== user.id) {
@@ -847,27 +852,29 @@ export class CotizacionesService {
       });
   }
 
-  async remove(user: { id: string; role: Role }, id: string) {
-    const current = await this.prisma.cotizacion.findUnique({ where: { id } });
+  async remove(user: { id: string; role: Role; companyId?: string | null }, id: string) {
+    const companyId = requireTenant(user);
+    const current = await this.prisma.cotizacion.findFirst({ where: { id, companyId } });
     if (!current) throw new NotFoundException("Cotización no encontrada");
 
     if (user.role !== Role.ADMIN && current.createdByUserId !== user.id) {
       throw new ForbiddenException("No puedes eliminar esta cotización");
     }
 
-    await this.prisma.cotizacion.delete({ where: { id } });
+    await this.prisma.cotizacion.deleteMany({ where: { id, companyId } });
     await this.invalidateQuoteCache("cotizacion.remove");
     return { ok: true };
   }
 
   async createPdfShareLink(
-    user: { id: string; role: Role },
+    user: { id: string; role: Role; companyId?: string | null },
     dto: CreateCotizacionPdfShareLinkDto,
     requestBaseUrl?: string,
   ) {
+    const companyId = requireTenant(user);
     const quotationId = dto.quotationId.trim();
-    const quotation = await this.prisma.cotizacion.findUnique({
-      where: { id: quotationId },
+    const quotation = await this.prisma.cotizacion.findFirst({
+      where: { id: quotationId, companyId },
       select: {
         id: true,
         createdByUserId: true,
@@ -915,14 +922,15 @@ export class CotizacionesService {
   }
 
   async sendWhatsApp(
-    user: { id: string; role: Role },
+    user: { id: string; role: Role; companyId?: string | null },
     dto: SendCotizacionWhatsappDto,
   ) {
+    const companyId = requireTenant(user);
     const quotationId = dto.quotationId.trim();
     const destinationType = dto.destinationType;
     const customMessage = (dto.messageText ?? "").trim();
-    const quotation = await this.prisma.cotizacion.findUnique({
-      where: { id: quotationId },
+    const quotation = await this.prisma.cotizacion.findFirst({
+      where: { id: quotationId, companyId },
       select: {
         id: true,
         createdByUserId: true,

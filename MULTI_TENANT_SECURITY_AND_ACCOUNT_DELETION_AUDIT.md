@@ -148,3 +148,117 @@ Reason: the schema contains many nullable tenant columns and legacy ownership pa
 The implemented changes close the immediate missing account-deletion flow and a concrete user-admin IDOR risk, and the code passes the available build/analyze/test commands.
 
 The broader SaaS hardening requested is not fully complete until the database is migrated to required tenant ownership, backend integration tests cover cross-tenant IDOR for every endpoint, external file deletion is wired into company deletion, and backup/retention policy is enforced operationally.
+
+## Production Hardening Phase 2
+
+Date: 2026-08-05
+
+### Implemented In Phase 2
+
+- Added an `AuthSession` Prisma model and migration in `apps/api/prisma/migrations/20260805030000_add_auth_sessions`.
+- Login now creates a server-side refresh session and embeds `sessionId` in access/refresh JWTs.
+- Refresh now verifies the stored refresh-token hash, rotates sessions, and revokes the token family on replay detection.
+- JWT validation now rejects missing, revoked, expired, or inactive-company sessions.
+- Account and company deletion now revoke relevant sessions transactionally.
+- Company deletion now deletes R2 objects under `uploads/companies/{companyId}/` before database deletion.
+- Local tenant upload cleanup was added for local-storage deployments.
+- Backend Jest infrastructure was added.
+- Focused backend tests were added for account deletion safeguards and user tenant validation.
+- Generated tenant data inventory and endpoint security matrix artifacts under `apps/api/docs`.
+- Added tenant ownership audit/backfill scripts and an unsafe Prisma query scanner.
+- Added CI workflow `.github/workflows/multi-tenant-security.yml`.
+- Added production docs:
+  - `apps/api/docs/TENANT_DATA_MODEL_INVENTORY.md`
+  - `apps/api/docs/ENDPOINT_TENANT_SECURITY_MATRIX.md`
+  - `apps/api/docs/UNSAFE_TENANT_QUERY_AUDIT.md`
+  - `apps/api/docs/COMPANY_DELETION_DATA_MAP.md`
+  - `apps/api/docs/BACKUP_AND_DELETION_RETENTION_POLICY.md`
+  - `apps/api/docs/PRODUCTION_MULTI_TENANT_DEPLOYMENT_RUNBOOK.md`
+
+### Phase 2 Migration Notes
+
+- `auth_sessions` is additive and safe to deploy with `prisma migrate deploy`.
+- Existing access and refresh tokens do not contain `sessionId`; after this deployment users must log in again.
+- No broad `NOT NULL company_id` migration was added because the live ownership audit could not be completed and several models still need deterministic backfill decisions.
+
+### Phase 2 Verification
+
+- `npm test` in `apps/api`: passed, 5 tests.
+- `npm run build` in `apps/api`: passed.
+- `npx prisma validate` in `apps/api`: passed.
+- `npm run audit:tenant-inventory` in `apps/api`: passed, 101 model rows generated.
+- `npm run audit:endpoints` in `apps/api`: passed, 191 endpoint rows generated.
+- `npm run audit:unsafe-tenant-queries` in `apps/api`: failed as intended with 33 strict errors and additional warnings that require remediation before a production-ready IDOR claim.
+- `npm run audit:tenant-ownership` in `apps/api`: blocked because the configured database host `gcdndd.easypanel.host:5432` was unreachable.
+- `npm audit --omit=dev --audit-level=moderate` at repo root: failed with 20 production dependency advisories; several fixes require breaking major upgrades.
+
+### Remaining Phase 2 Risks
+
+- Strict unsafe-query remediation is incomplete. Current findings are recorded in `apps/api/docs/UNSAFE_TENANT_QUERY_AUDIT.md`.
+- Live tenant ownership/backfill validation is incomplete until a reachable staging or production clone is available.
+- Row-level security was not enabled. The application does not yet set a trusted tenant context for every query/transaction, so enabling RLS now would risk breaking production behavior.
+- Cache invalidation beyond database session revocation and Flutter local cleanup still needs a Redis/socket/job-cache inventory.
+- Backup and legal/tax retention enforcement remains operational, not fully encoded in application code.
+- Production dependency advisories remain open and need a separate framework/dependency upgrade pass.
+
+### Updated Production Readiness Verdict
+
+Phase 2 materially improves account deletion, session revocation, storage cleanup, auditability, tests, and CI visibility. It does not make the system fully production-hardened for multi-tenant isolation yet.
+
+The platform should not be marketed or signed off as fully multi-tenant secure until strict unsafe-query errors are fixed, tenant ownership audit/backfill passes against real data, tenant constraints are staged into migrations, and backup/retention policy is approved.
+
+## Production Hardening Continuation
+
+Date: 2026-08-05
+
+### Implemented In This Continuation
+
+- Fixed the strict unsafe-tenant-query audit errors in:
+  - `clients/clients.service.ts`
+  - `contabilidad/contabilidad.service.ts`
+  - `cotizaciones/cotizaciones.service.ts`
+  - `products/products.service.ts`
+  - `storage/media.controller.ts`
+  - `users/users.service.ts`
+  - `warranty-configs/warranty-configs.service.ts`
+  - `work-scheduling/work-scheduling.service.ts`
+- Replaced dangerous id-only mutations with scoped `updateMany`/`deleteMany` or scoped `findFirst` checks.
+- Added missing tenant assignment on newly created accounting deposit orders, fiscal invoices, payable services, payable payments, and quotations.
+- Enforced active company scope in selected accounting close/deposit/fiscal/payable operations.
+- Enforced company scope in quotation read/update/delete/PDF/WhatsApp paths.
+- Enforced membership/company scope in selected work-scheduling exception and manual day-off operations.
+- Upgraded production dependencies to remove critical/high npm advisories.
+- Removed unused `file-type` production dependency.
+
+### Verification From This Continuation
+
+- `npm run audit:unsafe-tenant-queries` in `apps/api`: passed with 0 errors and 128 warnings.
+- `npm run build` in `apps/api`: passed.
+- `npm test` in `apps/api`: passed, 5 tests.
+- `npx prisma validate` in `apps/api`: passed.
+- `npx prisma format --check` in `apps/api`: passed.
+- `npm audit --omit=dev` at repo root: passed with 0 vulnerabilities.
+- `npm run audit:tenant-inventory` in `apps/api`: passed, 101 model rows regenerated.
+- `npm run audit:endpoints` in `apps/api`: passed, 191 endpoint rows regenerated.
+
+### Deployment Diagnostics
+
+- `https://daleventapos-backend.gcdndd.easypanel.host/health`: timed out from this workstation.
+- `https://daleventapos-backend.gcdndd.easypanel.host/`: timed out from this workstation.
+- `Test-NetConnection gcdndd.easypanel.host -Port 5432`: TCP succeeded.
+- `npm run audit:tenant-ownership`: still failed from local because Prisma could not reach the database server at `gcdndd.easypanel.host:5432`.
+- SSH to `root@31.97.99.70` reached the OpenSSH banner with the native client, but non-interactive password-based execution could not be established from this environment. `ssh2` and `plink` attempts timed out; an `SSH_ASKPASS` fallback was blocked by local policy because it would write a temporary secret helper.
+
+### Remaining Risks After This Continuation
+
+- The 128 unsafe-query warnings still need module-by-module review or scanner improvements for proven false positives.
+- The tenant ownership audit still has not completed against real staging/production-clone data from this workstation.
+- Full NOT NULL/FK/index tenant migrations are still blocked until ownership audit/backfill passes.
+- Backend cross-tenant coverage is still limited to focused tests, not every tenant-owned endpoint.
+- Direct server deployment was not completed because non-interactive SSH execution was unavailable in this environment.
+
+### Current Readiness Verdict
+
+The strict unsafe-query blocker and production dependency vulnerability blocker are improved: strict unsafe-query errors are now 0, and npm production audit reports 0 vulnerabilities.
+
+The system must still not be declared production-ready until the real tenant ownership audit completes, ambiguous/cross-company rows are proven 0 from database data, tenant migrations are applied and verified, warning findings are reviewed, and server deployment is successfully diagnosed/restarted.

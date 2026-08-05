@@ -429,6 +429,7 @@ export class ClientsService {
   }
 
   async updateLocation(user: AuthUser, id: string, dto: UpdateClientLocationDto) {
+    const companyId = requireTenant(user);
     await this.findAccessibleClientOrThrow(user, id);
     const locationData = this.resolveLocationPayload(dto, true);
 
@@ -436,10 +437,12 @@ export class ClientsService {
       throw new BadRequestException('Debe enviar latitude/longitude o location_url.');
     }
 
-    const client = await this.prisma.client.update({
-      where: { id },
+    const result = await this.prisma.client.updateMany({
+      where: { id, companyId },
       data: locationData,
     });
+    if (result.count !== 1) throw new NotFoundException('Cliente no encontrado');
+    const client = await this.findAccessibleClientOrThrow(user, id);
 
     this.emitClientEvent('client.updated', client);
 
@@ -448,8 +451,11 @@ export class ClientsService {
 
   async remove(user: AuthUser, id: string) {
     this.assertAdmin(user, 'Only admin can delete clients');
+    const companyId = requireTenant(user);
     await this.findAccessibleClientOrThrow(user, id);
-    const client = await this.prisma.client.update({ where: { id }, data: { isDeleted: true } });
+    const result = await this.prisma.client.updateMany({ where: { id, companyId }, data: { isDeleted: true } });
+    if (result.count !== 1) throw new NotFoundException('Cliente no encontrado');
+    const client = await this.findAccessibleClientOrThrow(user, id);
     this.emitClientEvent('client.deleted', client, id);
     return { ok: true };
   }

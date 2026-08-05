@@ -16,6 +16,7 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { R2Service } from '../storage/r2.service';
+import { requireTenant } from '../auth/tenant-context';
 import {
   CloseFinancialSummaryQueryDto,
   CloseStatus,
@@ -44,7 +45,7 @@ import {
   UpdatePayableServiceDto,
 } from './payable.dto';
 
-type Actor = { id?: string; role?: string };
+type Actor = { id?: string; role?: string; companyId?: string | null };
 
 type GetClosesQuery = {
   date?: string;
@@ -784,9 +785,9 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     });
   }
 
-  private async findCloseOrThrow(id: string) {
-    const close = await this.prisma.close.findUnique({
-      where: { id },
+  private async findCloseOrThrow(id: string, companyId?: string) {
+    const close = await this.prisma.close.findFirst({
+      where: { id, ...(companyId ? { companyId } : {}) },
       include: {
         transfers: {
           include: { vouchers: true },
@@ -1153,7 +1154,8 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
   }
 
   async getCloseById(id: string, actor?: Actor) {
-    const close = await this.findCloseOrThrow(id);
+    const companyId = requireTenant(actor as any);
+    const close = await this.findCloseOrThrow(id, companyId);
     if (!this.canReadAllCloses(actor ?? {})) {
       this.normalizeRoleGuard(actor ?? {});
     }
@@ -1169,8 +1171,9 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
   async updateClose(id: string, dto: UpdateCloseDto, actor: Actor) {
     this.normalizeRoleGuard(actor);
     this.ensureAdmin(actor);
+    const companyId = requireTenant(actor as any);
 
-    const close = await this.prisma.close.findUnique({ where: { id } });
+    const close = await this.prisma.close.findFirst({ where: { id, companyId } });
     if (!close) throw new NotFoundException('Cierre no encontrado');
     if (!this.isReviewer(actor) && close.createdById !== actor.id) {
       throw new ForbiddenException('No puedes editar cierres de otro usuario.');
@@ -1293,9 +1296,9 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     }
   }
 
-  private async cleanupCloseStorage(closeId: string) {
-    const close = await this.prisma.close.findUnique({
-      where: { id: closeId },
+  private async cleanupCloseStorage(closeId: string, companyId: string) {
+    const close = await this.prisma.close.findFirst({
+      where: { id: closeId, companyId },
       include: {
         transfers: {
           include: { vouchers: true },
@@ -1341,12 +1344,13 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
   async deleteClose(id: string, adminPassword: string, actor: Actor) {
     this.normalizeRoleGuard(actor);
     await this.validateAdminPassword(actor, adminPassword);
+    const companyId = requireTenant(actor as any);
 
-    const close = await this.prisma.close.findUnique({ where: { id } });
+    const close = await this.prisma.close.findFirst({ where: { id, companyId } });
     if (!close) throw new NotFoundException('Cierre no encontrado');
 
-    await this.cleanupCloseStorage(id);
-    await this.prisma.close.delete({ where: { id } });
+    await this.cleanupCloseStorage(id, companyId);
+    await this.prisma.close.deleteMany({ where: { id, companyId } });
 
     return { deletedCount: 1, deletedIds: [id] };
   }
@@ -1354,6 +1358,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
   async deleteClosesBulk(closeIds: string[], adminPassword: string, actor: Actor) {
     this.normalizeRoleGuard(actor);
     await this.validateAdminPassword(actor, adminPassword);
+    const companyId = requireTenant(actor as any);
 
     const uniqueIds = Array.from(
       new Set((closeIds ?? []).map((item) => (item ?? '').trim()).filter((item) => item.length > 0)),
@@ -1363,7 +1368,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     }
 
     const existing = await this.prisma.close.findMany({
-      where: { id: { in: uniqueIds } },
+      where: { id: { in: uniqueIds }, companyId },
       select: { id: true },
     });
     const foundIds = existing.map((row) => row.id);
@@ -1373,18 +1378,19 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     }
 
     for (const closeId of foundIds) {
-      await this.cleanupCloseStorage(closeId);
+      await this.cleanupCloseStorage(closeId, companyId);
     }
-    await this.prisma.close.deleteMany({ where: { id: { in: foundIds } } });
+    await this.prisma.close.deleteMany({ where: { id: { in: foundIds }, companyId } });
 
     return { deletedCount: foundIds.length, deletedIds: foundIds };
   }
 
   async toggleCloseCashDeposit(id: string, cashDeposited: boolean, actor: Actor) {
     this.ensureAdmin(actor);
+    const companyId = requireTenant(actor as any);
 
-    const close = await this.prisma.close.findUnique({
-      where: { id },
+    const close = await this.prisma.close.findFirst({
+      where: { id, companyId },
       select: { id: true },
     });
     if (!close) throw new NotFoundException('Cierre no encontrado');
@@ -1410,11 +1416,12 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
 
   async reviewClose(id: string, status: CloseStatus, actor: Actor) {
     this.ensureReviewer(actor);
+    const companyId = requireTenant(actor as any);
     if (status !== CloseStatus.APPROVED && status !== CloseStatus.REJECTED) {
       throw new BadRequestException('Estado de revisión inválido');
     }
 
-    const close = await this.prisma.close.findUnique({ where: { id } });
+    const close = await this.prisma.close.findFirst({ where: { id, companyId } });
     if (!close) throw new NotFoundException('Cierre no encontrado');
     if (close.status !== CloseStatus.PENDING) {
       throw new BadRequestException(
@@ -2172,6 +2179,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
 
   async createDepositOrder(dto: CreateDepositOrderDto, actor: Actor) {
     this.normalizeRoleGuard(actor);
+    const companyId = requireTenant(actor as any);
 
     const payload = await this.normalizeDepositPayload({
       windowFrom: dto.windowFrom,
@@ -2207,6 +2215,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     const created = await this.prisma.depositOrder.create({
       data: {
         ...payload,
+        companyId,
         note: this.toNullableTrimmed(correctedNote),
         status: DepositOrderStatus.PENDING,
         createdById: actor.id!,
@@ -2534,16 +2543,17 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
 
   async deleteDepositOrder(id: string, actor: Actor) {
     this.ensureAdmin(actor);
+    const companyId = requireTenant(actor as any);
 
-    const existing = await this.prisma.depositOrder.findUnique({
-      where: { id },
+    const existing = await this.prisma.depositOrder.findFirst({
+      where: { id, companyId },
       select: { id: true },
     });
     if (!existing)
       throw new NotFoundException('Depósito bancario no encontrado');
 
     const correctionCount = await this.prisma.depositOrder.count({
-      where: { correctionOfDepositOrderId: id },
+      where: { correctionOfDepositOrderId: id, companyId },
     });
     if (correctionCount > 0) {
       throw new BadRequestException(
@@ -2551,7 +2561,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
       );
     }
 
-    await this.prisma.depositOrder.delete({ where: { id } });
+    await this.prisma.depositOrder.deleteMany({ where: { id, companyId } });
 
     return {
       ok: true,
@@ -2561,6 +2571,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
 
   async createFiscalInvoice(dto: CreateFiscalInvoiceDto, actor: Actor) {
     this.normalizeRoleGuard(actor);
+    const companyId = requireTenant(actor as any);
 
     const creator = await this.prisma.user.findUnique({
       where: { id: actor.id! },
@@ -2569,6 +2580,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
 
     return this.prisma.fiscalInvoice.create({
       data: {
+        companyId,
         kind: dto.kind,
         invoiceDate: new Date(dto.invoiceDate),
         imageUrl: dto.imageUrl.trim(),
@@ -2608,9 +2620,10 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     actor: Actor,
   ) {
     this.normalizeRoleGuard(actor);
+    const companyId = requireTenant(actor as any);
 
-    const existing = await this.prisma.fiscalInvoice.findUnique({
-      where: { id },
+    const existing = await this.prisma.fiscalInvoice.findFirst({
+      where: { id, companyId },
     });
     if (!existing) throw new NotFoundException('Factura fiscal no encontrada');
 
@@ -2629,17 +2642,20 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
 
   async deleteFiscalInvoice(id: string, actor: Actor) {
     this.normalizeRoleGuard(actor);
+    const companyId = requireTenant(actor as any);
 
-    const existing = await this.prisma.fiscalInvoice.findUnique({
-      where: { id },
+    const existing = await this.prisma.fiscalInvoice.findFirst({
+      where: { id, companyId },
     });
     if (!existing) throw new NotFoundException('Factura fiscal no encontrada');
 
-    return this.prisma.fiscalInvoice.delete({ where: { id } });
+    await this.prisma.fiscalInvoice.deleteMany({ where: { id, companyId } });
+    return existing;
   }
 
   async createPayableService(dto: CreatePayableServiceDto, actor: Actor) {
     this.normalizeRoleGuard(actor);
+    const companyId = requireTenant(actor as any);
 
     const creator = await this.prisma.user.findUnique({
       where: { id: actor.id! },
@@ -2648,6 +2664,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
 
     return this.prisma.payableService.create({
       data: {
+        companyId,
         title: dto.title.trim(),
         providerKind: dto.providerKind,
         providerName: dto.providerName.trim(),
@@ -2695,9 +2712,10 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     actor: Actor,
   ) {
     this.normalizeRoleGuard(actor);
+    const companyId = requireTenant(actor as any);
 
-    const existing = await this.prisma.payableService.findUnique({
-      where: { id },
+    const existing = await this.prisma.payableService.findFirst({
+      where: { id, companyId },
     });
     if (!existing) {
       throw new NotFoundException('Servicio por pagar no encontrado');
@@ -2737,13 +2755,14 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     actor: Actor,
   ) {
     this.normalizeRoleGuard(actor);
+    const companyId = requireTenant(actor as any);
 
     if (dto.amount <= 0) {
       throw new BadRequestException('El monto debe ser mayor a 0');
     }
 
-    const service = await this.prisma.payableService.findUnique({
-      where: { id: serviceId },
+    const service = await this.prisma.payableService.findFirst({
+      where: { id: serviceId, companyId },
     });
 
     if (!service) {
@@ -2761,6 +2780,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     const result = await this.prisma.$transaction(async (tx) => {
       const payment = await tx.payablePayment.create({
         data: {
+          companyId,
           serviceId: service.id,
           amount: dto.amount,
           paidAt,
@@ -2818,23 +2838,26 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
 
   async deletePayableService(id: string, actor: Actor) {
     this.ensureAdmin(actor);
-    const existing = await this.prisma.payableService.findUnique({ where: { id } });
+    const companyId = requireTenant(actor as any);
+    const existing = await this.prisma.payableService.findFirst({ where: { id, companyId } });
     if (!existing) throw new NotFoundException('Servicio por pagar no encontrado');
-    await this.prisma.payableService.delete({ where: { id } });
+    await this.prisma.payableService.deleteMany({ where: { id, companyId } });
     return { deleted: true, id };
   }
 
   async deletePayablePayment(id: string, actor: Actor) {
     this.ensureAdmin(actor);
-    const existing = await this.prisma.payablePayment.findUnique({ where: { id } });
+    const companyId = requireTenant(actor as any);
+    const existing = await this.prisma.payablePayment.findFirst({ where: { id, companyId } });
     if (!existing) throw new NotFoundException('Pago no encontrado');
-    await this.prisma.payablePayment.delete({ where: { id } });
+    await this.prisma.payablePayment.deleteMany({ where: { id, companyId } });
     return { deleted: true, id };
   }
 
   async updatePayablePayment(id: string, dto: UpdatePayablePaymentDto, actor: Actor) {
     this.ensureAdmin(actor);
-    const existing = await this.prisma.payablePayment.findUnique({ where: { id } });
+    const companyId = requireTenant(actor as any);
+    const existing = await this.prisma.payablePayment.findFirst({ where: { id, companyId } });
     if (!existing) throw new NotFoundException('Pago no encontrado');
     if (dto.amount !== undefined && dto.amount <= 0) {
       throw new BadRequestException('El monto debe ser mayor a 0');

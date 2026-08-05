@@ -7,4 +7,5 @@ export type JwtUser = {
   role?: Role;
   memberRole?: string | null;
   tokenType?: 'access' | 'refresh';
+  sessionId?: string | null;
 };

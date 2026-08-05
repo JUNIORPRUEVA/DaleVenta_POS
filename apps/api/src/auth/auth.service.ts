@@ -5,7 +5,11 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
+import { randomUUID, createHash } from "node:crypto";
+import * as fs from "node:fs/promises";
+import { resolve, join, relative, isAbsolute } from "node:path";
 import { PrismaService } from "../prisma/prisma.service";
+import { R2Service } from "../storage/r2.service";
 import {
   CompanyMemberRole,
   CompanyMemberStatus,
@@ -22,6 +26,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly r2: R2Service,
   ) {}
 
   async login(identifier: string, password: string) {
@@ -34,16 +39,19 @@ export class AuthService {
     if (!ok) throw new UnauthorizedException("Invalid credentials");
 
     const session = this.resolveCompanySession(user);
+    const sessionRecord = await this.createAuthSession(user.id, session.activeCompany?.id ?? user.companyId ?? null);
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
       companyId: session.activeCompany?.id ?? user.companyId,
       email: user.email,
       role: session.legacyRole,
       memberRole: session.activeMembership?.role ?? null,
+      sessionId: sessionRecord.sessionId,
       tokenType: "access",
     });
 
-    const refreshToken = await this.signRefreshToken(user.id);
+    const refreshToken = await this.signRefreshToken(user.id, sessionRecord.sessionId);
+    await this.storeRefreshHash(sessionRecord.sessionId, refreshToken);
 
     return {
       accessToken,
@@ -75,18 +83,40 @@ export class AuthService {
     const user = await this.findUserForRefresh(payload.sub);
     if (!user || user.blocked === true)
       throw new UnauthorizedException("User blocked");
+    const sessionId = (payload.sessionId ?? "").trim();
+    if (!sessionId) throw new UnauthorizedException("Invalid refresh token");
+    const existingSession = await this.prisma.authSession.findFirst({
+      where: {
+        id: sessionId,
+        userId: user.id,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      select: { id: true, refreshTokenHash: true, tokenFamily: true },
+    });
+    if (!existingSession) throw new UnauthorizedException("Invalid refresh token");
+    if (existingSession.refreshTokenHash !== this.hashRefreshToken(refreshToken)) {
+      await this.prisma.authSession.updateMany({
+        where: { tokenFamily: existingSession.tokenFamily, revokedAt: null },
+        data: { revokedAt: new Date(), revocationReason: "refresh_replay_detected" },
+      });
+      throw new UnauthorizedException("Invalid refresh token");
+    }
 
     const session = this.resolveCompanySession(user);
+    const nextSessionRecord = await this.rotateAuthSession(existingSession.id);
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
       companyId: session.activeCompany?.id ?? user.companyId,
       email: user.email,
       role: session.legacyRole,
       memberRole: session.activeMembership?.role ?? null,
+      sessionId: nextSessionRecord.sessionId,
       tokenType: "access",
     });
 
-    const newRefreshToken = await this.signRefreshToken(user.id);
+    const newRefreshToken = await this.signRefreshToken(user.id, nextSessionRecord.sessionId);
+    await this.storeRefreshHash(nextSessionRecord.sessionId, newRefreshToken);
 
     return {
       accessToken,
@@ -228,7 +258,12 @@ export class AuthService {
 
     await this.prisma.$transaction(async (tx) => {
       if (activeCompanyIsSoleOwned && activeMembership) {
+        await this.cleanupCompanyStorage(activeMembership.companyId);
         await this.deleteCompanyOwnedRows(tx, activeMembership.companyId);
+        await tx.authSession.updateMany({
+          where: { companyId: activeMembership.companyId, revokedAt: null },
+          data: { revokedAt: new Date(), revocationReason: "company_deleted" },
+        });
         await tx.companyMember.deleteMany({
           where: { companyId: activeMembership.companyId },
         });
@@ -238,6 +273,11 @@ export class AuthService {
       await tx.companyMember.updateMany({
         where: { userId: user.id },
         data: { status: CompanyMemberStatus.REMOVED },
+      });
+
+      await tx.authSession.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: new Date(), revocationReason: "account_deleted" },
       });
 
       await tx.user.update({
@@ -385,11 +425,75 @@ export class AuthService {
     return this.config.get<string>("JWT_REFRESH_EXPIRES_IN") ?? "30d";
   }
 
-  private async signRefreshToken(userId: string) {
+  private async signRefreshToken(userId: string, sessionId: string) {
     return this.jwt.signAsync(
-      { sub: userId, tokenType: "refresh" },
-      { expiresIn: this.refreshExpiresIn() },
+      { sub: userId, sessionId, tokenType: "refresh" },
+      { expiresIn: this.refreshExpiresIn() as any },
     );
+  }
+
+  private refreshExpiresAt() {
+    const raw = this.refreshExpiresIn().trim();
+    const match = raw.match(/^(\d+)([smhd])$/i);
+    if (!match) return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const amount = Number(match[1]);
+    const unit = match[2].toLowerCase();
+    const multiplier =
+      unit === "s" ? 1000 :
+      unit === "m" ? 60 * 1000 :
+      unit === "h" ? 60 * 60 * 1000 :
+      24 * 60 * 60 * 1000;
+    return new Date(Date.now() + amount * multiplier);
+  }
+
+  private hashRefreshToken(token: string) {
+    return createHash("sha256").update(token).digest("hex");
+  }
+
+  private async createAuthSession(userId: string, companyId: string | null) {
+    const row = await this.prisma.authSession.create({
+      data: {
+        userId,
+        companyId,
+        tokenFamily: randomUUID(),
+        refreshTokenHash: "pending",
+        expiresAt: this.refreshExpiresAt(),
+      },
+      select: { id: true },
+    });
+    return { sessionId: row.id };
+  }
+
+  private async storeRefreshHash(sessionId: string, refreshToken: string) {
+    await this.prisma.authSession.update({
+      where: { id: sessionId },
+      data: { refreshTokenHash: this.hashRefreshToken(refreshToken) },
+      select: { id: true },
+    });
+  }
+
+  private async rotateAuthSession(sessionId: string) {
+    const current = await this.prisma.authSession.findUnique({
+      where: { id: sessionId },
+      select: { userId: true, companyId: true, tokenFamily: true },
+    });
+    if (!current) throw new UnauthorizedException("Invalid refresh token");
+    await this.prisma.authSession.update({
+      where: { id: sessionId },
+      data: { revokedAt: new Date(), revocationReason: "refresh_rotated", lastUsedAt: new Date() },
+      select: { id: true },
+    });
+    const next = await this.prisma.authSession.create({
+      data: {
+        userId: current.userId,
+        companyId: current.companyId,
+        tokenFamily: current.tokenFamily,
+        refreshTokenHash: "pending",
+        expiresAt: this.refreshExpiresAt(),
+      },
+      select: { id: true },
+    });
+    return { sessionId: next.id };
   }
 
   private async countSoleOwnedCompanies(userId: string) {
@@ -443,6 +547,33 @@ export class AuthService {
         companyId,
       );
     }
+  }
+
+  private async cleanupCompanyStorage(companyId: string) {
+    await this.r2.deleteAllCompanyObjects(companyId);
+    await this.deleteLocalCompanyUploads(companyId);
+  }
+
+  private async deleteLocalCompanyUploads(companyId: string) {
+    const uploadRoot = this.resolveUploadDir();
+    const companiesRoot = resolve(uploadRoot, "companies");
+    const companyRoot = resolve(companiesRoot, companyId);
+    const pathFromCompaniesRoot = relative(companiesRoot, companyRoot);
+    if (pathFromCompaniesRoot.startsWith("..") || isAbsolute(pathFromCompaniesRoot)) {
+      throw new Error("Unsafe company upload path");
+    }
+
+    try {
+      await fs.rm(companyRoot, { recursive: true, force: true });
+    } catch (error) {
+      throw new Error(`No se pudo eliminar storage local de empresa: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private resolveUploadDir(): string {
+    const fromEnv = (this.config.get<string>("UPLOAD_DIR") ?? process.env.UPLOAD_DIR ?? "").trim();
+    const volumeDir = "/uploads";
+    return fromEnv || volumeDir || join(process.cwd(), "uploads");
   }
 
   private async findAccountDeletionUser(userId: string) {

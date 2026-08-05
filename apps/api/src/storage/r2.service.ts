@@ -2,12 +2,14 @@ import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   S3Client,
+  DeleteObjectsCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   GetObjectCommandOutput,
   HeadObjectCommand,
   HeadObjectCommandOutput,
   PutObjectCommand,
+  ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { Readable } from 'node:stream';
@@ -236,5 +238,53 @@ export class R2Service {
     );
 
     return { ok: true };
+  }
+
+  async deleteAllCompanyObjects(companyId: string) {
+    const normalizedCompanyId = (companyId ?? '').trim();
+    if (!/^[0-9a-fA-F-]{36}$/.test(normalizedCompanyId)) {
+      throw new InternalServerErrorException('Company id invalido para limpieza de storage');
+    }
+    if (!this.bucket) {
+      return { ok: true, skipped: true, deleted: 0, prefix: null };
+    }
+
+    const prefix = `uploads/companies/${normalizedCompanyId}/`;
+    let continuationToken: string | undefined;
+    let deleted = 0;
+
+    do {
+      const listed = await this.s3.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+          MaxKeys: 1000,
+        }),
+      );
+
+      const objects = (listed.Contents ?? [])
+        .map((item) => item.Key)
+        .filter((key): key is string => typeof key === 'string' && key.startsWith(prefix));
+
+      for (let i = 0; i < objects.length; i += 1000) {
+        const batch = objects.slice(i, i + 1000);
+        if (!batch.length) continue;
+        await this.s3.send(
+          new DeleteObjectsCommand({
+            Bucket: this.bucket,
+            Delete: {
+              Objects: batch.map((Key) => ({ Key })),
+              Quiet: true,
+            },
+          }),
+        );
+        deleted += batch.length;
+      }
+
+      continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+    } while (continuationToken);
+
+    return { ok: true, skipped: false, deleted, prefix };
   }
 }

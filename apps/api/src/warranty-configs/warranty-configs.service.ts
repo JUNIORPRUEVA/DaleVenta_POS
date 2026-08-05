@@ -110,7 +110,7 @@ export class WarrantyConfigsService {
       select: { id: true },
     });
     if (!existing) throw new NotFoundException('La configuración de garantía no existe');
-    await this.prisma.warrantyProductConfig.delete({ where: { id } });
+    await this.prisma.warrantyProductConfig.deleteMany({ where: { id, ownerId } });
     return { ok: true };
   }
 

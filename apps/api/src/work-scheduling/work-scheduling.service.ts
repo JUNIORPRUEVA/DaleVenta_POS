@@ -8,6 +8,7 @@ import {
   WorkShiftKind,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { requireTenant } from '../auth/tenant-context';
 
 type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0=Mon ... 6=Sun
 
@@ -15,6 +16,7 @@ type JwtActor = {
   id: string;
   role: Role;
   nombreCompleto?: string;
+  companyId?: string | null;
 };
 
 type CoverageRuleMap = Map<string, Map<Weekday, number>>; // role -> weekday -> min
@@ -574,7 +576,25 @@ export class WorkSchedulingService {
   }
 
   async updateException(id: string, dto: { type?: WorkScheduleExceptionType; date_from?: string; date_to?: string; note?: string | null }, actor?: JwtActor) {
-    const existing = await this.prisma.workScheduleException.findUnique({ where: { id } });
+    const companyId = requireTenant(actor);
+    const existing = await this.prisma.workScheduleException.findFirst({
+      where: {
+        id,
+        OR: [
+          { userId: null },
+          {
+            employeeConfig: {
+              user: {
+                OR: [
+                  { companyId },
+                  { companyMemberships: { some: { companyId, status: 'ACTIVE' } } },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    });
     if (!existing) throw new NotFoundException('Excepción no encontrada');
 
     const data: Prisma.WorkScheduleExceptionUpdateInput = {};
@@ -586,7 +606,26 @@ export class WorkSchedulingService {
     }
     if (dto.note !== undefined) data.note = (dto.note ?? '').trim() || null;
 
-    const updated = await this.prisma.workScheduleException.update({ where: { id }, data });
+    await this.prisma.workScheduleException.updateMany({ where: { id }, data });
+    const updated = await this.prisma.workScheduleException.findFirst({
+      where: {
+        id,
+        OR: [
+          { userId: null },
+          {
+            employeeConfig: {
+              user: {
+                OR: [
+                  { companyId },
+                  { companyMemberships: { some: { companyId, status: 'ACTIVE' } } },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    });
+    if (!updated) throw new NotFoundException('Excepción no encontrada');
 
     if (actor) {
       await this.createAudit({
@@ -621,10 +660,28 @@ export class WorkSchedulingService {
   }
 
   async deleteException(id: string, actor?: JwtActor) {
-    const existing = await this.prisma.workScheduleException.findUnique({ where: { id } });
+    const companyId = requireTenant(actor);
+    const existing = await this.prisma.workScheduleException.findFirst({
+      where: {
+        id,
+        OR: [
+          { userId: null },
+          {
+            employeeConfig: {
+              user: {
+                OR: [
+                  { companyId },
+                  { companyMemberships: { some: { companyId, status: 'ACTIVE' } } },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    });
     if (!existing) throw new NotFoundException('Excepción no encontrada');
 
-    await this.prisma.workScheduleException.delete({ where: { id } });
+    await this.prisma.workScheduleException.deleteMany({ where: { id } });
 
     if (actor) {
       await this.createAudit({
@@ -1261,8 +1318,9 @@ export class WorkSchedulingService {
   }
 
   async manualMoveDayOff(dto: { week_start_date: string; user_id: string; from_date: string; to_date: string; reason?: string }, actor: JwtActor) {
+    const companyId = requireTenant(actor);
     const weekStart = startOfWeekMonday(new Date(dto.week_start_date));
-    const schedule = await this.prisma.workWeekSchedule.findUnique({ where: { weekStartDate: weekStart }, select: { id: true } });
+    const schedule = await this.prisma.workWeekSchedule.findFirst({ where: { weekStartDate: weekStart, companyId }, select: { id: true } });
     if (!schedule) throw new NotFoundException('Semana no encontrada. Primero genera la semana.');
 
     await this.ensureEmployeeConfigs([dto.user_id]);
@@ -1285,7 +1343,16 @@ export class WorkSchedulingService {
     if (aFrom.status !== WorkAssignmentStatus.DAY_OFF) throw new BadRequestException('La fecha origen no es un día libre');
     if (aTo.status !== WorkAssignmentStatus.WORK) throw new BadRequestException('La fecha destino debe ser un día laborable');
 
-    const user = await this.prisma.user.findUnique({ where: { id: dto.user_id }, select: { role: true, blocked: true } });
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: dto.user_id,
+        OR: [
+          { companyId },
+          { companyMemberships: { some: { companyId, status: 'ACTIVE' } } },
+        ],
+      },
+      select: { role: true, blocked: true },
+    });
     if (!user || user.blocked) throw new BadRequestException('Empleado inválido o bloqueado');
 
     const defaultProfileId = await this.ensureDefaultProfile();
@@ -1332,7 +1399,7 @@ export class WorkSchedulingService {
       await this.assertNoCoverageShortage(schedule.id, weekStart);
 
       const allWarnings = await this.computeValidationForSchedule(schedule.id, weekStart);
-      await tx.workWeekSchedule.update({ where: { id: schedule.id }, data: { warnings: allWarnings as any } });
+      await tx.workWeekSchedule.updateMany({ where: { id: schedule.id, companyId }, data: { warnings: allWarnings as any } });
     });
 
     await this.createAudit({
@@ -1350,8 +1417,9 @@ export class WorkSchedulingService {
   }
 
   async manualSwapDayOff(dto: { week_start_date: string; user_a_id: string; user_a_day_off_date: string; user_b_id: string; user_b_day_off_date: string; reason?: string }, actor: JwtActor) {
+    const companyId = requireTenant(actor);
     const weekStart = startOfWeekMonday(new Date(dto.week_start_date));
-    const schedule = await this.prisma.workWeekSchedule.findUnique({ where: { weekStartDate: weekStart }, select: { id: true } });
+    const schedule = await this.prisma.workWeekSchedule.findFirst({ where: { weekStartDate: weekStart, companyId }, select: { id: true } });
     if (!schedule) throw new NotFoundException('Semana no encontrada. Primero genera la semana.');
 
     await this.ensureEmployeeConfigs([dto.user_a_id, dto.user_b_id]);
@@ -1380,8 +1448,30 @@ export class WorkSchedulingService {
 
     const defaultProfileId = await this.ensureDefaultProfile();
 
-    const cfgA = await this.prisma.workEmployeeConfig.findUnique({ where: { userId: dto.user_a_id }, select: { scheduleProfileId: true, enabled: true } });
-    const cfgB = await this.prisma.workEmployeeConfig.findUnique({ where: { userId: dto.user_b_id }, select: { scheduleProfileId: true, enabled: true } });
+    const cfgA = await this.prisma.workEmployeeConfig.findFirst({
+      where: {
+        userId: dto.user_a_id,
+        user: {
+          OR: [
+            { companyId },
+            { companyMemberships: { some: { companyId, status: 'ACTIVE' } } },
+          ],
+        },
+      },
+      select: { scheduleProfileId: true, enabled: true },
+    });
+    const cfgB = await this.prisma.workEmployeeConfig.findFirst({
+      where: {
+        userId: dto.user_b_id,
+        user: {
+          OR: [
+            { companyId },
+            { companyMemberships: { some: { companyId, status: 'ACTIVE' } } },
+          ],
+        },
+      },
+      select: { scheduleProfileId: true, enabled: true },
+    });
     if (cfgA && !cfgA.enabled) throw new BadRequestException('Empleado A inactivo en horarios');
     if (cfgB && !cfgB.enabled) throw new BadRequestException('Empleado B inactivo en horarios');
 
@@ -1458,7 +1548,7 @@ export class WorkSchedulingService {
 
       await this.assertNoCoverageShortage(schedule.id, weekStart);
       const allWarnings = await this.computeValidationForSchedule(schedule.id, weekStart);
-      await tx.workWeekSchedule.update({ where: { id: schedule.id }, data: { warnings: allWarnings as any } });
+      await tx.workWeekSchedule.updateMany({ where: { id: schedule.id, companyId }, data: { warnings: allWarnings as any } });
     });
 
     await this.createAudit({
