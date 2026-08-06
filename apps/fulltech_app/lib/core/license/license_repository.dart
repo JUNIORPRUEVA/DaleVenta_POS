@@ -140,8 +140,11 @@ class LicenseStatusModel {
     required this.users,
     required this.products,
     this.blockReason,
+    this.trialStartedAt,
     this.trialEndsAt,
+    this.licenseActivatedAt,
     this.licenseExpiresAt,
+    this.licenseBlockedAt,
     this.licenseKey,
     this.notes,
     this.daysRemaining,
@@ -153,8 +156,11 @@ class LicenseStatusModel {
   final String status;
   final bool isUsable;
   final String? blockReason;
+  final DateTime? trialStartedAt;
   final DateTime? trialEndsAt;
+  final DateTime? licenseActivatedAt;
   final DateTime? licenseExpiresAt;
+  final DateTime? licenseBlockedAt;
   final String? licenseKey;
   final String? notes;
   final int maxUsers;
@@ -173,8 +179,11 @@ class LicenseStatusModel {
       status: (json['status'] ?? 'TRIAL').toString(),
       isUsable: json['isUsable'] == true,
       blockReason: json['blockReason']?.toString(),
+      trialStartedAt: _date(json['trialStartedAt']),
       trialEndsAt: _date(json['trialEndsAt']),
+      licenseActivatedAt: _date(json['licenseActivatedAt']),
       licenseExpiresAt: _date(json['licenseExpiresAt']),
+      licenseBlockedAt: _date(json['licenseBlockedAt']),
       licenseKey: json['licenseKey']?.toString(),
       notes: json['notes']?.toString(),
       maxUsers: (limits['maxUsers'] as num?)?.toInt() ?? 2,
@@ -188,5 +197,23 @@ class LicenseStatusModel {
   static DateTime? _date(dynamic value) {
     if (value == null) return null;
     return DateTime.tryParse('$value');
+  }
+
+  String get planLabel {
+    final cleaned = plan.trim();
+    if (cleaned.isEmpty || cleaned.toUpperCase() == 'STANDARD') {
+      return 'Plan basico';
+    }
+    return cleaned;
+  }
+
+  DateTime? get acquiredAt {
+    if (licenseActivatedAt != null) return licenseActivatedAt;
+    return trialStartedAt;
+  }
+
+  DateTime? get periodEndsAt {
+    if (status.toUpperCase() == 'TRIAL') return trialEndsAt;
+    return licenseExpiresAt ?? trialEndsAt;
   }
 }

@@ -86,7 +86,12 @@ class AccountLicensesScreen extends ConsumerWidget {
           value: user?.email ?? 'Usuario conectado',
         ),
         license.when(
-          data: (value) => _LicensePlanCard(license: value),
+          data: (value) => _LicensePlanCard(
+            license: value,
+            responsible: user?.nombreCompleto.trim().isNotEmpty == true
+                ? user!.nombreCompleto
+                : user?.email ?? 'Usuario conectado',
+          ),
           loading: () => const _SurfacePanel(
             child: Center(
               child: Padding(
@@ -300,7 +305,9 @@ class _DeleteAccountLaunchCard extends ConsumerWidget {
   ) async {
     AccountDeletionPreview preview;
     try {
-      preview = await ref.read(authRepositoryProvider).getAccountDeletionPreview();
+      preview = await ref
+          .read(authRepositoryProvider)
+          .getAccountDeletionPreview();
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -348,7 +355,9 @@ class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
       _error = null;
     });
     try {
-      final result = await ref.read(authStateProvider.notifier).deleteAccount(
+      final result = await ref
+          .read(authStateProvider.notifier)
+          .deleteAccount(
             password: _password.text,
             confirmationPhrase: widget.preview.requiresCompanyConfirmationPhrase
                 ? _phrase.text
@@ -453,7 +462,9 @@ class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
           style: FilledButton.styleFrom(
             backgroundColor: AppColors.error,
             foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
         ),
       ],
@@ -1240,83 +1251,16 @@ class _InfoTile extends StatelessWidget {
   }
 }
 
-class _LicensePlanCard extends ConsumerStatefulWidget {
-  const _LicensePlanCard({required this.license});
+class _LicensePlanCard extends StatelessWidget {
+  const _LicensePlanCard({required this.license, required this.responsible});
 
   final LicenseStatusModel license;
-
-  @override
-  ConsumerState<_LicensePlanCard> createState() => _LicensePlanCardState();
-}
-
-class _LicensePlanCardState extends ConsumerState<_LicensePlanCard> {
-  late final TextEditingController _users;
-  late final TextEditingController _products;
-  late final TextEditingController _notes;
-  bool _saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _users = TextEditingController(text: '${widget.license.maxUsers}');
-    _products = TextEditingController(text: '${widget.license.maxProducts}');
-    _notes = TextEditingController(text: widget.license.notes ?? '');
-  }
-
-  @override
-  void didUpdateWidget(covariant _LicensePlanCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.license.companyId != widget.license.companyId ||
-        oldWidget.license.maxUsers != widget.license.maxUsers) {
-      _users.text = '${widget.license.maxUsers}';
-    }
-    if (oldWidget.license.maxProducts != widget.license.maxProducts) {
-      _products.text = '${widget.license.maxProducts}';
-    }
-    if ((oldWidget.license.notes ?? '') != (widget.license.notes ?? '')) {
-      _notes.text = widget.license.notes ?? '';
-    }
-  }
-
-  @override
-  void dispose() {
-    _users.dispose();
-    _products.dispose();
-    _notes.dispose();
-    super.dispose();
-  }
-
-  Future<void> _run(Future<LicenseStatusModel> Function() action) async {
-    if (_saving) return;
-    setState(() => _saving = true);
-    try {
-      await action();
-      ref.invalidate(licenseStatusProvider);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Licencia actualizada.')),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo actualizar: $error')),
-      );
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  int _intValue(TextEditingController controller, int fallback) {
-    return int.tryParse(controller.text.trim()) ?? fallback;
-  }
+  final String responsible;
 
   @override
   Widget build(BuildContext context) {
-    final license = widget.license;
     final accent = _licenseAccent(license.status);
-    final periodLabel = license.status == 'TRIAL'
-        ? _dateLabel(license.trialEndsAt)
-        : _dateLabel(license.licenseExpiresAt);
+    final statusLabel = _licenseStatusLabel(license.status);
     return _SurfacePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1326,7 +1270,10 @@ class _LicensePlanCardState extends ConsumerState<_LicensePlanCard> {
               final compact = constraints.maxWidth < 430;
               final heading = Row(
                 children: [
-                  _TileIcon(icon: Icons.workspace_premium_outlined, color: accent),
+                  _TileIcon(
+                    icon: Icons.workspace_premium_outlined,
+                    color: accent,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -1334,27 +1281,37 @@ class _LicensePlanCardState extends ConsumerState<_LicensePlanCard> {
                       children: [
                         Text(
                           license.companyName.trim().isEmpty
-                              ? 'Plan profesional POS'
+                              ? 'Empresa sin nombre'
                               : license.companyName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: _titleStyle(15),
                         ),
                         const SizedBox(height: 3),
-                        Text(_licenseSubtitle(license), style: _bodyStyle()),
+                        Text(
+                          '${license.planLabel} · $statusLabel · ${_licenseSubtitle(license)}',
+                          style: _bodyStyle(),
+                        ),
                       ],
                     ),
                   ),
                 ],
               );
-              final pill = _StatusPill(label: _licenseStatusLabel(license.status));
+              final pill = _StatusPill(
+                label: _licenseStatusLabel(license.status),
+              );
               if (compact) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [heading, const SizedBox(height: 10), pill],
                 );
               }
-              return Row(children: [Expanded(child: heading), pill]);
+              return Row(
+                children: [
+                  Expanded(child: heading),
+                  pill,
+                ],
+              );
             },
           ),
           const SizedBox(height: 14),
@@ -1373,6 +1330,33 @@ class _LicensePlanCardState extends ConsumerState<_LicensePlanCard> {
               accent: AppColors.warning,
             ),
           const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _LicenseInfoTile(
+                icon: Icons.badge_outlined,
+                title: 'Responsable',
+                value: responsible,
+              ),
+              _LicenseInfoTile(
+                icon: Icons.workspace_premium_outlined,
+                title: 'Plan contratado',
+                value: license.planLabel,
+              ),
+              _LicenseInfoTile(
+                icon: Icons.event_available_outlined,
+                title: 'Adquirida / iniciada',
+                value: _dateLabel(license.acquiredAt),
+              ),
+              _LicenseInfoTile(
+                icon: Icons.event_busy_outlined,
+                title: 'Vence',
+                value: _dateLabel(license.periodEndsAt),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           _UsageMeter(
             icon: Icons.people_outline_rounded,
             title: 'Usuarios',
@@ -1389,146 +1373,61 @@ class _LicensePlanCardState extends ConsumerState<_LicensePlanCard> {
             accent: const Color(0xFF7C3AED),
           ),
           const SizedBox(height: 12),
-          _DetailRow('Plan', license.plan),
-          _DetailRow('Fin del periodo', periodLabel),
-          _DetailRow('Clave', license.licenseKey ?? 'Se genera al activar'),
-          const SizedBox(height: 14),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final compact = constraints.maxWidth < 460;
-              final fields = [
-                _licenseField(_users, 'Usuarios', Icons.group_add_outlined),
-                _licenseField(_products, 'Productos', Icons.add_box_outlined),
-              ];
-              return Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  for (final field in fields)
-                    SizedBox(
-                      width: compact ? constraints.maxWidth : (constraints.maxWidth - 10) / 2,
-                      child: field,
-                    ),
-                  SizedBox(
-                    width: constraints.maxWidth,
-                    child: _licenseField(
-                      _notes,
-                      'Notas',
-                      Icons.notes_outlined,
-                      maxLines: 2,
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final stack = constraints.maxWidth < 420;
-              final save = FilledButton.icon(
-                onPressed: _saving
-                    ? null
-                    : () => _run(
-                          () => ref.read(licenseRepositoryProvider).updateLimits(
-                                maxUsers: _intValue(_users, license.maxUsers),
-                                maxProducts: _intValue(
-                                  _products,
-                                  license.maxProducts,
-                                ),
-                                notes: _notes.text,
-                              ),
-                        ),
-                icon: _saving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save_outlined),
-                label: const Text('Guardar límites'),
-                style: _filledButtonStyle(),
-              );
-              final activate = OutlinedButton.icon(
-                onPressed: _saving
-                    ? null
-                    : () => _run(
-                          () => ref.read(licenseRepositoryProvider).activate(
-                                maxUsers: _intValue(_users, license.maxUsers),
-                                maxProducts: _intValue(
-                                  _products,
-                                  license.maxProducts,
-                                ),
-                                notes: _notes.text,
-                              ),
-                        ),
-                icon: const Icon(Icons.verified_outlined),
-                label: const Text('Activar'),
-                style: _outlinedButtonStyle(),
-              );
-              final block = OutlinedButton.icon(
-                onPressed: _saving
-                    ? null
-                    : () => _run(
-                          () => ref
-                              .read(licenseRepositoryProvider)
-                              .block(notes: _notes.text),
-                        ),
-                icon: const Icon(Icons.block_outlined),
-                label: const Text('Bloquear'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.error,
-                  side: const BorderSide(color: AppColors.errorBorder),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  textStyle: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0,
-                  ),
-                ),
-              );
-              if (stack) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    save,
-                    const SizedBox(height: 8),
-                    activate,
-                    const SizedBox(height: 8),
-                    block,
-                  ],
-                );
-              }
-              return Row(
-                children: [
-                  Expanded(child: save),
-                  const SizedBox(width: 8),
-                  Expanded(child: activate),
-                  const SizedBox(width: 8),
-                  Expanded(child: block),
-                ],
-              );
-            },
-          ),
+          _DetailRow('Estado', statusLabel),
+          _DetailRow('Empresa', license.companyName),
+          _DetailRow('Clave', license.licenseKey ?? 'Sin llave permanente'),
+          _DetailRow('Notas', license.notes ?? 'Sin notas internas'),
+          if (license.licenseBlockedAt != null)
+            _DetailRow('Bloqueada el', _dateLabel(license.licenseBlockedAt)),
         ],
       ),
     );
   }
+}
 
-  Widget _licenseField(
-    TextEditingController controller,
-    String label,
-    IconData icon, {
-    int maxLines = 1,
-  }) {
-    return TextField(
-      controller: controller,
-      maxLines: maxLines,
-      keyboardType: maxLines == 1 ? TextInputType.number : TextInputType.text,
-      decoration: InputDecoration(
-        prefixIcon: Icon(icon, size: 18),
-        labelText: label,
-        border: const OutlineInputBorder(),
-        isDense: true,
+class _LicenseInfoTile extends StatelessWidget {
+  const _LicenseInfoTile({
+    required this.icon,
+    required this.title,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String title;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 220,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFDDE7EE)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: AppColors.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: _mutedStyle(11)),
+                  const SizedBox(height: 3),
+                  Text(
+                    value,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: _titleStyle(13),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2632,6 +2531,16 @@ TextStyle _bodyStyle() {
     fontSize: 13,
     height: 1.3,
     fontWeight: FontWeight.w600,
+    letterSpacing: 0,
+  );
+}
+
+TextStyle _mutedStyle(double size) {
+  return TextStyle(
+    color: const Color(0xFF6B7D90),
+    fontSize: size,
+    height: 1.2,
+    fontWeight: FontWeight.w700,
     letterSpacing: 0,
   );
 }

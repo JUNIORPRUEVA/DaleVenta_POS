@@ -131,6 +131,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   bool _backgroundStartupStarted = false;
   ProviderSubscription<AuthState>? _authStateSubscription;
   StreamSubscription<LicenseRealtimeMessage>? _licenseRealtimeSubscription;
+  Timer? _licensePollTimer;
 
   @override
   void initState() {
@@ -148,9 +149,11 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         if (next.isAuthenticated) {
           unawaited(ref.read(catalogRealtimeServiceProvider).connect(next));
           unawaited(ref.read(operationsRealtimeServiceProvider).connect(next));
+          _startLicensePolling();
         } else if (previous?.isAuthenticated == true && !next.isAuthenticated) {
           ref.read(catalogRealtimeServiceProvider).disconnect();
           ref.read(operationsRealtimeServiceProvider).disconnect();
+          _stopLicensePolling();
         }
       });
     });
@@ -172,10 +175,14 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       final authState = ref.read(authStateProvider);
       if (authState.isAuthenticated) {
         unawaited(ref.read(catalogRealtimeServiceProvider).connect(authState));
-        unawaited(ref.read(operationsRealtimeServiceProvider).connect(authState));
+        unawaited(
+          ref.read(operationsRealtimeServiceProvider).connect(authState),
+        );
+        _startLicensePolling();
       } else {
         ref.read(catalogRealtimeServiceProvider).disconnect();
         ref.read(operationsRealtimeServiceProvider).disconnect();
+        _stopLicensePolling();
       }
       _licenseRealtimeSubscription ??= ref
           .read(operationsRealtimeServiceProvider)
@@ -186,10 +193,38 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _stopLicensePolling();
     _licenseRealtimeSubscription?.cancel();
     _authStateSubscription?.close();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  void _startLicensePolling() {
+    if (_licensePollTimer?.isActive == true) return;
+    unawaited(_checkLicenseNow());
+    _licensePollTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+      unawaited(_checkLicenseNow());
+    });
+  }
+
+  void _stopLicensePolling() {
+    _licensePollTimer?.cancel();
+    _licensePollTimer = null;
+  }
+
+  Future<void> _checkLicenseNow() async {
+    if (!mounted || !ref.read(authStateProvider).isAuthenticated) return;
+    try {
+      final license = await ref.read(licenseRepositoryProvider).getLicense();
+      ref.invalidate(licenseStatusProvider);
+      if (!license.isUsable) {
+        ref.read(authSessionEventsProvider).requestUnauthorizedLogout();
+      }
+    } catch (_) {
+      // 401/403 responses are handled by AuthInterceptor. Temporary network
+      // failures should not log out an otherwise valid user.
+    }
   }
 
   @override
@@ -203,18 +238,15 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     final authState = ref.read(authStateProvider);
     if (authState.isAuthenticated) {
       unawaited(ref.read(operationsRealtimeServiceProvider).connect(authState));
-      unawaited(ref.read(licenseRepositoryProvider).getLicense().then((license) {
-        if (!license.isUsable) {
-          ref.read(authSessionEventsProvider).requestUnauthorizedLogout();
-        }
-      }).catchError((_) {}));
+      unawaited(_checkLicenseNow());
     }
   }
 
   void _handleLicenseRealtimeMessage(LicenseRealtimeMessage message) {
     ref.invalidate(licenseStatusProvider);
     final status = (message.license['status'] ?? '').toString().toUpperCase();
-    final blockedEvent = message.type == 'license.blocked' ||
+    final blockedEvent =
+        message.type == 'license.blocked' ||
         message.type == 'license.deleted' ||
         status == 'BLOCKED' ||
         status == 'EXPIRED';
