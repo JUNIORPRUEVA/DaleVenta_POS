@@ -24,7 +24,10 @@ class LicenseRepository {
   Future<LicenseStatusModel> getLicense() async {
     try {
       final res = await _dio
-          .get(ApiRoutes.license, options: Options(extra: const {'skipLoader': true}))
+          .get(
+            ApiRoutes.license,
+            options: Options(extra: const {'skipLoader': true}),
+          )
           .timeout(_timeout);
       return LicenseStatusModel.fromJson(_map(res.data));
     } on TimeoutException {
@@ -66,10 +69,17 @@ class LicenseRepository {
     });
   }
 
-  Future<LicenseStatusModel> _send(String path, Map<String, dynamic> payload) async {
+  Future<LicenseStatusModel> _send(
+    String path,
+    Map<String, dynamic> payload,
+  ) async {
     try {
       final res = await _dio
-          .post(path, data: payload, options: Options(extra: const {'skipLoader': true}))
+          .post(
+            path,
+            data: payload,
+            options: Options(extra: const {'skipLoader': true}),
+          )
           .timeout(_timeout);
       return LicenseStatusModel.fromJson(_map(res.data));
     } on TimeoutException {
@@ -79,10 +89,17 @@ class LicenseRepository {
     }
   }
 
-  Future<LicenseStatusModel> _patch(String path, Map<String, dynamic> payload) async {
+  Future<LicenseStatusModel> _patch(
+    String path,
+    Map<String, dynamic> payload,
+  ) async {
     try {
       final res = await _dio
-          .patch(path, data: payload, options: Options(extra: const {'skipLoader': true}))
+          .patch(
+            path,
+            data: payload,
+            options: Options(extra: const {'skipLoader': true}),
+          )
           .timeout(_timeout);
       return LicenseStatusModel.fromJson(_map(res.data));
     } on TimeoutException {
@@ -161,7 +178,7 @@ class LicenseStatusModel {
       licenseKey: json['licenseKey']?.toString(),
       notes: json['notes']?.toString(),
       maxUsers: (limits['maxUsers'] as num?)?.toInt() ?? 2,
-      maxProducts: (limits['maxProducts'] as num?)?.toInt() ?? 500,
+      maxProducts: (limits['maxProducts'] as num?)?.toInt() ?? 100,
       users: (usage['users'] as num?)?.toInt() ?? 0,
       products: (usage['products'] as num?)?.toInt() ?? 0,
       daysRemaining: (json['daysRemaining'] as num?)?.toInt(),

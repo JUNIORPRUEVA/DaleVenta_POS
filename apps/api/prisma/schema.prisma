@@ -610,7 +610,7 @@ model Company {
   licenseBlockedAt  DateTime?     @map("license_blocked_at")
   licenseNotes      String?       @map("license_notes") @db.Text
   maxUsers         Int           @default(2) @map("max_users")
-  maxProducts      Int           @default(500) @map("max_products")
+  maxProducts      Int           @default(100) @map("max_products")
   createdAt        DateTime      @default(now()) @map("created_at")
   updatedAt        DateTime      @updatedAt @map("updated_at")
 

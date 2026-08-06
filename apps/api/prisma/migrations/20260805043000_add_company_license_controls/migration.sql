@@ -9,7 +9,7 @@ ALTER TABLE "companies"
   ADD COLUMN "license_expires_at" TIMESTAMP(3),
   ADD COLUMN "license_blocked_at" TIMESTAMP(3),
   ADD COLUMN "license_notes" TEXT,
-  ADD COLUMN "max_products" INTEGER NOT NULL DEFAULT 500;
+  ADD COLUMN "max_products" INTEGER NOT NULL DEFAULT 100;
 
 UPDATE "companies"
 SET
@@ -17,7 +17,7 @@ SET
   "trial_started_at" = COALESCE("trial_started_at", "created_at", CURRENT_TIMESTAMP),
   "trial_ends_at" = COALESCE("trial_ends_at", "created_at" + INTERVAL '7 days', CURRENT_TIMESTAMP + INTERVAL '7 days'),
   "max_users" = CASE WHEN "max_users" IS NULL OR "max_users" >= 1000 THEN 2 ELSE "max_users" END,
-  "max_products" = 500
+  "max_products" = CASE WHEN "max_products" IS NULL OR "max_products" >= 1000 THEN 100 ELSE "max_products" END
 WHERE "license_status" = 'TRIAL';
 
 CREATE UNIQUE INDEX "companies_license_key_key" ON "companies"("license_key");

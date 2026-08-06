@@ -340,10 +340,11 @@ export class AuthService {
     const phone = (dto.phone ?? "").trim();
     const commercialName = (dto.commercialName ?? "").trim();
 
-    if (!firstName) throw new BadRequestException("El nombre es obligatorio");
+    if (!firstName)
+      throw new BadRequestException("El nombre de la persona responsable es obligatorio");
     if (!email || !email.includes("@"))
       throw new BadRequestException("Correo invalido");
-    if (!phone) throw new BadRequestException("El telefono es obligatorio");
+    if (!phone) throw new BadRequestException("El WhatsApp es obligatorio");
     if (password.length < 8)
       throw new BadRequestException(
         "La contrasena debe tener al menos 8 caracteres",
@@ -374,7 +375,7 @@ export class AuthService {
           trialStartedAt: new Date(),
           trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
           maxUsers: 2,
-          maxProducts: 500,
+          maxProducts: 100,
         },
       });
 

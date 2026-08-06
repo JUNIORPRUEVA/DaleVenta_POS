@@ -155,7 +155,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             const SizedBox(height: 12),
                             _Field(
                               controller: _ownerName,
-                              label: 'Tu nombre',
+                              label: 'Persona responsable',
                               icon: Icons.person_outline_rounded,
                               textInputAction: TextInputAction.next,
                             ),
@@ -171,7 +171,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             const SizedBox(height: 12),
                             _Field(
                               controller: _phone,
-                              label: 'Teléfono',
+                              label: 'WhatsApp',
                               icon: Icons.phone_outlined,
                               keyboardType: TextInputType.phone,
                               textInputAction: TextInputAction.next,
@@ -309,7 +309,7 @@ class _Header extends StatelessWidget {
               ),
               SizedBox(height: 5),
               Text(
-                'Solo necesitamos lo esencial para empezar.',
+                '7 dias gratis. Plan basico: 2 usuarios y 100 productos.',
                 style: TextStyle(
                   color: Color(0xFF52667C),
                   fontSize: 13,

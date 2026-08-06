@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 import '../../core/api/env.dart';
 import '../../core/auth/auth_provider.dart';
@@ -4348,21 +4349,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     Expanded(
                       child: ColoredBox(
                         color: Colors.white,
-                        child: PdfPreview(
-                          canChangePageFormat: false,
-                          canChangeOrientation: false,
-                          canDebug: false,
-                          allowPrinting: false,
-                          allowSharing: false,
-                          maxPageWidth: compact ? 700 : 980,
-                          scrollViewDecoration: const BoxDecoration(
-                            color: Colors.white,
-                          ),
-                          pdfPreviewPageDecoration: const BoxDecoration(
-                            color: Colors.white,
-                            boxShadow: <BoxShadow>[],
-                          ),
-                          build: (_) async => bytes,
+                        child: SfPdfViewer.memory(
+                          bytes,
+                          canShowScrollHead: true,
+                          canShowPaginationDialog: true,
                         ),
                       ),
                     ),

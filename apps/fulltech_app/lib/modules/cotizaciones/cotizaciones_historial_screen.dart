@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:printing/printing.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
@@ -657,21 +657,10 @@ class _CotizacionesHistorialScreenState
                     Expanded(
                       child: ColoredBox(
                         color: Colors.white,
-                        child: PdfPreview(
-                          canChangePageFormat: false,
-                          canChangeOrientation: false,
-                          canDebug: false,
-                          allowPrinting: false,
-                          allowSharing: false,
-                          maxPageWidth: compact ? 700 : 980,
-                          scrollViewDecoration: const BoxDecoration(
-                            color: Colors.white,
-                          ),
-                          pdfPreviewPageDecoration: const BoxDecoration(
-                            color: Colors.white,
-                            boxShadow: <BoxShadow>[],
-                          ),
-                          build: (_) async => bytes,
+                        child: SfPdfViewer.memory(
+                          bytes,
+                          canShowScrollHead: true,
+                          canShowPaginationDialog: true,
                         ),
                       ),
                     ),
@@ -1195,10 +1184,12 @@ class _CotizacionesHistorialScreenState
         final quoteCode = item.id.length >= 8
             ? item.id.substring(0, 8).toUpperCase()
             : (item.id.isEmpty ? 'S/N' : item.id.toUpperCase());
-        String qty(double value) =>
-            value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(2);
-        final itbisPct =
-            (item.itbisRate * 100).toStringAsFixed(item.itbisRate % 1 == 0 ? 0 : 1);
+        String qty(double value) => value % 1 == 0
+            ? value.toStringAsFixed(0)
+            : value.toStringAsFixed(2);
+        final itbisPct = (item.itbisRate * 100).toStringAsFixed(
+          item.itbisRate % 1 == 0 ? 0 : 1,
+        );
 
         Widget docMeta(IconData icon, String label, String value) {
           return Padding(
@@ -1236,7 +1227,9 @@ class _CotizacionesHistorialScreenState
 
         return Dialog(
           insetPadding: const EdgeInsets.all(10),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
           clipBehavior: Clip.antiAlias,
           child: ConstrainedBox(
             constraints: BoxConstraints(
@@ -1301,7 +1294,10 @@ class _CotizacionesHistorialScreenState
                       IconButton(
                         tooltip: 'Cerrar',
                         onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close_rounded, color: Colors.white),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white,
+                        ),
                       ),
                     ],
                   ),
@@ -1321,9 +1317,8 @@ class _CotizacionesHistorialScreenState
                             color: theme.colorScheme.surfaceContainerLow,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: theme.colorScheme.outlineVariant.withValues(
-                                alpha: 0.6,
-                              ),
+                              color: theme.colorScheme.outlineVariant
+                                  .withValues(alpha: 0.6),
                             ),
                           ),
                           child: Column(
@@ -1335,9 +1330,8 @@ class _CotizacionesHistorialScreenState
                                     width: 38,
                                     height: 38,
                                     decoration: BoxDecoration(
-                                      color: theme.colorScheme.primary.withValues(
-                                        alpha: 0.12,
-                                      ),
+                                      color: theme.colorScheme.primary
+                                          .withValues(alpha: 0.12),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     child: Icon(
@@ -1369,7 +1363,11 @@ class _CotizacionesHistorialScreenState
                                 ).format(item.createdAt),
                               ),
                               if (createdBy.isNotEmpty)
-                                docMeta(Icons.badge_outlined, 'Creada por', createdBy),
+                                docMeta(
+                                  Icons.badge_outlined,
+                                  'Creada por',
+                                  createdBy,
+                                ),
                             ],
                           ),
                         ),
@@ -1515,7 +1513,8 @@ class _CotizacionesHistorialScreenState
                               if (item.globalDiscountAmount > 0)
                                 _DetailTotalRow(
                                   label: 'Descuento',
-                                  value: '-${_money(item.globalDiscountAmount)}',
+                                  value:
+                                      '-${_money(item.globalDiscountAmount)}',
                                 ),
                               const Divider(height: 18),
                               _DetailTotalRow(
@@ -1992,9 +1991,7 @@ class _HistorialFiltersSheetState extends State<_HistorialFiltersSheet> {
   }
 
   void _apply() {
-    Navigator.of(
-      context,
-    ).pop(
+    Navigator.of(context).pop(
       _HistorialFilterState(
         clientKey: _clientKey,
         quoteTag: _quoteTag,
@@ -2149,8 +2146,7 @@ class _HistorialFiltersSheetState extends State<_HistorialFiltersSheet> {
                             ),
                           ),
                         ],
-                        onChanged: (value) =>
-                            setState(() => _quoteTag = value),
+                        onChanged: (value) => setState(() => _quoteTag = value),
                       ),
                       const SizedBox(height: 18),
                       const _HistorialFilterSectionLabel('Rango de fechas'),
