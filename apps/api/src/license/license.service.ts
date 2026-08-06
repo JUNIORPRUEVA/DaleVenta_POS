@@ -287,12 +287,42 @@ export class LicenseService {
       (effectiveStatus === LicenseStatus.TRIAL ||
         effectiveStatus === LicenseStatus.ACTIVE);
 
-    const [users, products] = await Promise.all([
+    const [users, products, owner, appConfig] = await Promise.all([
       this.prisma.user.count({
         where: this.activeUserWhere(companyId),
       }),
       this.prisma.product.count({ where: { companyId } }),
+      this.prisma.companyMember.findFirst({
+        where: {
+          companyId,
+          status: 'ACTIVE',
+          role: 'OWNER',
+        },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              nombreCompleto: true,
+              telefono: true,
+            },
+          },
+        },
+      }),
+      this.prisma.appConfig.findFirst({
+        where: { companyId },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          companyName: true,
+          rnc: true,
+          phone: true,
+          address: true,
+          description: true,
+        },
+      }),
     ]);
+    const responsible = owner?.user ?? null;
 
     return {
       companyId: company.id,
@@ -322,6 +352,17 @@ export class LicenseService {
       usage: {
         users,
         products,
+      },
+      account: {
+        businessName: appConfig?.companyName || company.name,
+        taxId: appConfig?.rnc || null,
+        businessPhone: appConfig?.phone || null,
+        businessAddress: appConfig?.address || null,
+        businessType: appConfig?.description || null,
+        responsibleName: responsible?.nombreCompleto || null,
+        responsibleEmail: responsible?.email || null,
+        responsibleWhatsapp: responsible?.telefono || null,
+        responsibleUserId: responsible?.id || null,
       },
     };
   }
