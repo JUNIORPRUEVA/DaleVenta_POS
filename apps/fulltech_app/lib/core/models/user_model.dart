@@ -30,6 +30,9 @@ class UserModel {
   final List<String> habilidades;
   final Map<String, bool> userPermissions;
   final String? role;
+  final String? companyId;
+  final String? companyName;
+  final String? companySlug;
   final bool blocked;
   final int? edad;
   final bool tieneHijos;
@@ -69,6 +72,9 @@ class UserModel {
     this.habilidades = const [],
     this.userPermissions = const {},
     this.role,
+    this.companyId,
+    this.companyName,
+    this.companySlug,
     this.blocked = false,
     this.edad,
     this.tieneHijos = false,
@@ -118,6 +124,11 @@ class UserModel {
           )
         : <String, bool>{};
 
+    final companyRaw = json['company'];
+    final company = companyRaw is Map
+        ? companyRaw.cast<String, dynamic>()
+        : const <String, dynamic>{};
+
     return UserModel(
       id: json['id'] ?? '',
       email: json['email'] ?? '',
@@ -156,6 +167,15 @@ class UserModel {
       habilidades: habilidades,
       userPermissions: permissions,
       role: json['role'] ?? json['rol'] ?? 'CAJERO',
+      companyId: (json['companyId'] ?? json['activeCompanyId'] ?? company['id'])
+          ?.toString(),
+      companyName:
+          (json['companyName'] ??
+                  json['businessName'] ??
+                  company['name'] ??
+                  company['commercialName'])
+              ?.toString(),
+      companySlug: (json['companySlug'] ?? company['slug'])?.toString(),
       blocked: json['blocked'] ?? false,
       edad: json['edad'],
       tieneHijos: json['tieneHijos'] ?? false,
@@ -213,6 +233,9 @@ class UserModel {
       'habilidades': habilidades,
       'userPermissions': userPermissions,
       'role': role,
+      'companyId': companyId,
+      'companyName': companyName,
+      'companySlug': companySlug,
       'blocked': blocked,
       'edad': edad,
       'tieneHijos': tieneHijos,

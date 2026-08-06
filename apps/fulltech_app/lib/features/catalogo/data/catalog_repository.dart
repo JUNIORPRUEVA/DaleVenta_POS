@@ -3,15 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
+import '../../../core/auth/token_storage.dart';
 import '../../../core/cache/local_json_cache.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/models/product_model.dart';
 import '../../../core/offline/sync_queue_service.dart';
 import '../../../core/utils/file_utils.dart';
+import '../../../core/utils/is_flutter_test.dart';
 
 final catalogRepositoryProvider = Provider<CatalogRepository>((ref) {
   final repository = CatalogRepository(
     ref.watch(dioProvider),
+    ref.watch(tokenStorageProvider),
     ref.read(syncQueueServiceProvider.notifier),
   );
   repository.registerSyncHandlers();
@@ -20,18 +23,20 @@ final catalogRepositoryProvider = Provider<CatalogRepository>((ref) {
 
 class CatalogRepository {
   final Dio _dio;
+  final TokenStorage _tokenStorage;
   final SyncQueueService? _syncQueue;
   final LocalJsonCache _cache = LocalJsonCache();
 
   static const String _createSyncType = 'catalog.products.create';
   static const String _updateSyncType = 'catalog.products.update';
   static const String _deleteSyncType = 'catalog.products.delete';
-  static const String _productsCacheKey = 'catalog.products.snapshot';
+  static const String _productsCacheKeyPrefix = 'catalog.products.snapshot';
   static const Duration _cacheTtl = Duration(days: 7);
 
   bool _handlersRegistered = false;
 
-  CatalogRepository(this._dio, [this._syncQueue]);
+  CatalogRepository(this._dio, [TokenStorage? tokenStorage, this._syncQueue])
+    : _tokenStorage = tokenStorage ?? TokenStorage();
 
   void registerSyncHandlers() {
     final syncQueue = _syncQueue;
@@ -84,6 +89,26 @@ class CatalogRepository {
   bool _shouldQueueSync(ApiException error) {
     final code = error.code;
     return code == null || code >= 500;
+  }
+
+  Future<String> _activeCompanyStorageId() async {
+    if (isFlutterTest) return 'default';
+    try {
+      final user = await _tokenStorage.getUserSnapshot();
+      final companyId = user?.companyId?.trim() ?? '';
+      if (companyId.isNotEmpty) return companyId;
+    } catch (_) {}
+    return 'default';
+  }
+
+  Future<String> _productsCacheKey() async {
+    final companyId = await _activeCompanyStorageId();
+    return '$_productsCacheKeyPrefix.$companyId';
+  }
+
+  Future<String> _syncScope() async {
+    final companyId = await _activeCompanyStorageId();
+    return 'catalog.$companyId';
   }
 
   List<dynamic> _extractRows(dynamic data) {
@@ -149,6 +174,13 @@ class CatalogRepository {
       await saveProductsSnapshot(products);
       return products;
     } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      if (status == 401 || status == 402 || status == 403 || status == 423) {
+        throw ApiException(
+          _formatDioError(e, 'No se pudieron cargar los productos'),
+          status,
+        );
+      }
       final cached = await getCachedProducts();
       if (cached.isNotEmpty) return cached;
       throw ApiException(
@@ -161,7 +193,10 @@ class CatalogRepository {
   }
 
   Future<List<ProductModel>> getCachedProducts() async {
-    final cached = await _cache.readMap(_productsCacheKey, maxAge: _cacheTtl);
+    final cached = await _cache.readMap(
+      await _productsCacheKey(),
+      maxAge: _cacheTtl,
+    );
     final rows = cached?['items'];
     if (rows is! List) return const [];
     return rows
@@ -170,8 +205,8 @@ class CatalogRepository {
         .toList(growable: false);
   }
 
-  Future<void> saveProductsSnapshot(List<ProductModel> items) {
-    return _cache.writeMap(_productsCacheKey, {
+  Future<void> saveProductsSnapshot(List<ProductModel> items) async {
+    return _cache.writeMap(await _productsCacheKey(), {
       'items': items.map((item) => item.toJson()).toList(growable: false),
     });
   }
@@ -259,7 +294,7 @@ class CatalogRepository {
       await _syncQueue.enqueue(
         id: queueId,
         type: _createSyncType,
-        scope: 'catalog',
+        scope: await _syncScope(),
         payload: payload,
       );
       return ProductModel(
@@ -353,7 +388,7 @@ class CatalogRepository {
       await _syncQueue.enqueue(
         id: '$_updateSyncType:$id',
         type: _updateSyncType,
-        scope: 'catalog',
+        scope: await _syncScope(),
         payload: payload,
       );
       return ProductModel(
@@ -414,7 +449,7 @@ class CatalogRepository {
       await _syncQueue.enqueue(
         id: '$_deleteSyncType:$id',
         type: _deleteSyncType,
-        scope: 'catalog',
+        scope: await _syncScope(),
         payload: {'id': id},
       );
     }
