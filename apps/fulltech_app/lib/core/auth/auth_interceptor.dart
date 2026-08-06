@@ -150,8 +150,21 @@ class AuthInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
+    final statusCode = err.response?.statusCode;
+    final responseData = err.response?.data;
+    final errorCode = responseData is Map
+        ? responseData['errorCode']?.toString().toUpperCase()
+        : null;
+    if (statusCode == 403 &&
+        (errorCode == 'LICENSE_BLOCKED' ||
+            errorCode == 'LICENSE_PRODUCT_LIMIT_REACHED' ||
+            errorCode == 'LICENSE_USER_LIMIT_REACHED')) {
+      sessionEvents.requestUnauthorizedLogout();
+      return handler.next(err);
+    }
+
     final alreadyRetried = err.requestOptions.extra[_retryFlagKey] == true;
-    if (err.response?.statusCode == 401 &&
+    if (statusCode == 401 &&
         !_isAuthRefreshPath(err.requestOptions.path) &&
         !alreadyRetried) {
       final seq = TraceLog.nextSeq();
