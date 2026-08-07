@@ -12,6 +12,7 @@ import {
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 import type { Readable } from 'node:stream';
 
 @Injectable()
@@ -67,6 +68,16 @@ export class R2Service {
           ? { accessKeyId, secretAccessKey }
           : undefined,
       forcePathStyle: true,
+      // Evitar que las operaciones contra R2 se cuelguen cuando el servicio
+      // está lento o inaccesible: falla rápido y permite el fallback a
+      // almacenamiento local (media.controller) en lugar de agotar los
+      // timeouts de conexión del cliente (ej. semaphore timeout en Windows).
+      requestHandler: new NodeHttpHandler({
+        connectionTimeout: 6000,
+        requestTimeout: 8000,
+        socketTimeout: 15000,
+      }),
+      maxAttempts: 2,
     });
   }
 

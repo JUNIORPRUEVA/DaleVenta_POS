@@ -2,7 +2,6 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 
@@ -11,7 +10,6 @@ import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/printing/unified_ticket_printer.dart';
-import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
@@ -557,7 +555,6 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
             cashierFilter: _cashierFilter,
             fromDate: _fromDate,
             toDate: _toDate,
-            onBack: () => context.go(Routes.cotizaciones),
             onOpenFilters: _openFilterPanel,
             onClearFilters: _clearFilters,
           ),
@@ -755,7 +752,6 @@ class _Toolbar extends StatelessWidget {
     required this.cashierFilter,
     required this.fromDate,
     required this.toDate,
-    required this.onBack,
     required this.onOpenFilters,
     required this.onClearFilters,
   });
@@ -766,7 +762,6 @@ class _Toolbar extends StatelessWidget {
   final String? cashierFilter;
   final DateTime fromDate;
   final DateTime toDate;
-  final VoidCallback onBack;
   final VoidCallback onOpenFilters;
   final VoidCallback onClearFilters;
 
@@ -832,8 +827,6 @@ class _Toolbar extends StatelessWidget {
             )
           : Row(
               children: [
-                _ToolbarBackButton(onBack: onBack),
-                const SizedBox(width: 10),
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 720),
                   child: searchField,
@@ -906,31 +899,6 @@ class _Toolbar extends StatelessWidget {
                 ),
               ],
             ),
-    );
-  }
-}
-
-class _ToolbarBackButton extends StatelessWidget {
-  const _ToolbarBackButton({required this.onBack});
-
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 44,
-      height: 42,
-      child: OutlinedButton(
-        onPressed: onBack,
-        style: OutlinedButton.styleFrom(
-          padding: EdgeInsets.zero,
-          foregroundColor: const Color(0xFF0E5261),
-          side: const BorderSide(color: Color(0xFFBFD3E0)),
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
-        ),
-        child: const Icon(Icons.arrow_back_rounded),
-      ),
     );
   }
 }
@@ -2199,13 +2167,31 @@ class _MetricBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // En desktop el topbar tiene fondo blanco, por lo que los textos
+    // claros (diseñados para el fondo oscuro del móvil) quedan invisibles.
+    final isMobile = MediaQuery.sizeOf(context).width < 760;
+    final boxColor = isMobile
+        ? Colors.white.withValues(alpha: 0.10)
+        : const Color(0xFFEAF1FF);
+    final borderColor = isMobile
+        ? Colors.white.withValues(alpha: 0.22)
+        : const Color(0xFFCFE0FF);
+    final iconBoxColor = isMobile
+        ? Colors.white.withValues(alpha: 0.16)
+        : const Color(0xFF1957E6).withValues(alpha: 0.10);
+    final iconColor = isMobile ? Colors.white : const Color(0xFF1957E6);
+    final labelColor = isMobile
+        ? const Color(0xFFCFE8F2)
+        : const Color(0xFF1957E6).withValues(alpha: 0.80);
+    final valueColor = isMobile ? Colors.white : const Color(0xFF111827);
+
     return Container(
       constraints: const BoxConstraints(minWidth: 124, minHeight: 46),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.10),
+        color: boxColor,
         borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+        border: Border.all(color: borderColor),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -2214,10 +2200,10 @@ class _MetricBadge extends StatelessWidget {
             width: 26,
             height: 26,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.16),
+              color: iconBoxColor,
               borderRadius: BorderRadius.circular(7),
             ),
-            child: Icon(icon, color: Colors.white, size: 16),
+            child: Icon(icon, color: iconColor, size: 16),
           ),
           const SizedBox(width: 8),
           Column(
@@ -2227,17 +2213,17 @@ class _MetricBadge extends StatelessWidget {
             children: [
               Text(
                 label.toUpperCase(),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 9.5,
                   fontWeight: FontWeight.w900,
-                  color: Color(0xFFCFE8F2),
+                  color: labelColor,
                 ),
               ),
               const SizedBox(height: 1),
               Text(
                 value,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: valueColor,
                   fontWeight: FontWeight.w900,
                   fontSize: 13,
                 ),

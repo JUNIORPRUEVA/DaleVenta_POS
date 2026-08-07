@@ -20,6 +20,7 @@ import '../../core/company/company_settings_repository.dart';
 import '../../core/design_system/icons/app_icon.dart';
 import '../../core/design_system/icons/app_icons.dart';
 import '../../core/errors/api_exception.dart';
+import '../../core/license/license_repository.dart';
 import '../../core/models/user_model.dart';
 import '../../core/models/product_model.dart';
 import '../../core/printing/unified_ticket_printer.dart';
@@ -7055,6 +7056,7 @@ class _CompanyLicensesSidePanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final company = ref.watch(companySettingsProvider);
     final user = ref.watch(authStateProvider).user;
+    final licenseAsync = ref.watch(licenseStatusProvider);
     final companyName = company.maybeWhen(
       data: (settings) => settings.companyName.trim().isEmpty
           ? 'DaleVenta POS'
@@ -7067,34 +7069,540 @@ class _CompanyLicensesSidePanel extends ConsumerWidget {
       title: 'Licencias',
       subtitle: 'Estado de uso, empresa activa y alcance contratado.',
       children: [
-        _CompanySideInfoTile(
-          icon: Icons.business_rounded,
-          title: 'Empresa activa',
-          value: companyName,
+        _LicenseAccountCard(
+          companyName: companyName,
+          userEmail: user?.email ?? 'Usuario conectado',
         ),
-        _CompanySideInfoTile(
-          icon: Icons.person_outline_rounded,
-          title: 'Usuario actual',
-          value: user?.email ?? 'Usuario conectado',
+        ...licenseAsync.when(
+          loading: () => const [_LicenseLoadingTile()],
+          error: (error, _) => [_LicenseErrorTile(message: '$error')],
+          data: (license) => [_LicenseDetailsCard(license: license)],
         ),
-        _CompanySideInfoTile(
-          icon: Icons.workspace_premium_outlined,
-          title: 'Plan profesional POS',
-          value: 'Activo',
-          highlighted: true,
-        ),
-        const _CompanySideDetailsCard(
-          title: 'Alcance de la licencia',
-          rows: [
-            ('Empresas preparadas', 'Multiempresa'),
-            ('Usuarios', 'Según permisos de la empresa'),
-            ('Módulos incluidos', 'Ventas, clientes, inventario y caja'),
-            ('Soporte', 'Operación y actualizaciones del sistema'),
+        _LicenseUpgradeCard(onPressed: () => _openUpgradeWhatsApp(context)),
+      ],
+    );
+  }
+}
+
+void _openUpgradeWhatsApp(BuildContext context) {
+  safeOpenWhatsApp(
+    context,
+    Uri(
+      scheme: 'https',
+      host: 'wa.me',
+      path: '18295344286',
+      queryParameters: {'text': 'Quiero hacer un upgrade'},
+    ),
+  );
+}
+
+String _licenseStatusLabel(String status) {
+  return switch (status) {
+    'ACTIVE' => 'Activa',
+    'TRIAL' => 'Prueba',
+    'BLOCKED' => 'Bloqueada',
+    'EXPIRED' => 'Expirada',
+    _ => status,
+  };
+}
+
+(Color, Color) _licenseStatusColors(String status) {
+  return switch (status) {
+    'ACTIVE' => (const Color(0xFF15803D), const Color(0xFFE7F6EC)),
+    'TRIAL' => (const Color(0xFFB45309), const Color(0xFFFDF1E0)),
+    'BLOCKED' ||
+    'EXPIRED' => (const Color(0xFFDC2626), const Color(0xFFFDEBEA)),
+    _ => (const Color(0xFF52667C), const Color(0xFFEEF2F6)),
+  };
+}
+
+String _licenseDateLabel(DateTime? value) {
+  if (value == null) return 'Sin configuración';
+  final local = value.toLocal();
+  return '${local.day.toString().padLeft(2, '0')}/'
+      '${local.month.toString().padLeft(2, '0')}/${local.year}';
+}
+
+String _licenseRemainingLabel(LicenseStatusModel license) {
+  if (license.daysRemaining == null) return 'Sin fecha de cierre';
+  if (license.daysRemaining! < 0) return 'Periodo vencido';
+  if (license.daysRemaining == 0) return 'Vence hoy';
+  return 'Quedan ${license.daysRemaining} días';
+}
+
+class _LicenseLoadingTile extends StatelessWidget {
+  const _LicenseLoadingTile();
+
+  @override
+  Widget build(BuildContext context) {
+    return _CompanySideSurface(
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.4,
+              color: Color(0xFF1957E6),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Cargando los datos de tu licencia…',
+              style: _companySideBodyStyle(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LicenseErrorTile extends StatelessWidget {
+  const _LicenseErrorTile({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return _CompanySideSurface(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.error_outline_rounded,
+                color: Color(0xFFDC2626),
+                size: 20,
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'No se pudo cargar la licencia',
+                  style: TextStyle(
+                    color: Color(0xFFDC2626),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: _companySideBodyStyle(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LicenseAccountCard extends StatelessWidget {
+  const _LicenseAccountCard({
+    required this.companyName,
+    required this.userEmail,
+  });
+
+  final String companyName;
+  final String userEmail;
+
+  @override
+  Widget build(BuildContext context) {
+    return _CompanySideSurface(
+      child: Column(
+        children: [
+          Row(
+            children: [
+              _CompanySideIcon(icon: Icons.business_rounded, size: 30),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Empresa activa', style: _companySideBodyStyle()),
+                    const SizedBox(height: 2),
+                    Text(
+                      companyName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _companySideTitleStyle(15),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const _CompanySideDivider(),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _CompanySideIcon(icon: Icons.person_outline_rounded, size: 30),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Usuario actual', style: _companySideBodyStyle()),
+                    const SizedBox(height: 2),
+                    Text(
+                      userEmail,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _companySideTitleStyle(15),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LicenseDetailsCard extends StatelessWidget {
+  const _LicenseDetailsCard({required this.license});
+
+  final LicenseStatusModel license;
+
+  @override
+  Widget build(BuildContext context) {
+    final statusLabel = _licenseStatusLabel(license.status);
+    final (fg, bg) = _licenseStatusColors(license.status);
+    final hasKey =
+        license.licenseKey != null && license.licenseKey!.trim().isNotEmpty;
+    final hasNotes = license.notes != null && license.notes!.trim().isNotEmpty;
+
+    return _CompanySideSurface(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('PLAN CONTRATADO', style: _licenseSectionStyle()),
+                    const SizedBox(height: 4),
+                    Text(
+                      license.planLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _companySideTitleStyle(17),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              _LicenseStatusPill(label: statusLabel, fg: fg, bg: bg),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const _CompanySideDivider(),
+          const SizedBox(height: 12),
+          Text('VIGENCIA', style: _licenseSectionStyle()),
+          const SizedBox(height: 6),
+          _LicenseInfoRow(
+            label: 'Inicio',
+            value: _licenseDateLabel(license.acquiredAt),
+          ),
+          _LicenseInfoRow(
+            label: 'Vence',
+            value: _licenseDateLabel(license.periodEndsAt),
+          ),
+          _LicenseInfoRow(
+            label: 'Tiempo restante',
+            value: _licenseRemainingLabel(license),
+            valueColor: _licenseRemainingColor(license),
+          ),
+          const SizedBox(height: 14),
+          const _CompanySideDivider(),
+          const SizedBox(height: 12),
+          Text('USO DE LA LICENCIA', style: _licenseSectionStyle()),
+          const SizedBox(height: 10),
+          _LicenseMeter(
+            icon: Icons.people_outline_rounded,
+            title: 'Usuarios',
+            used: license.users,
+            max: license.maxUsers,
+          ),
+          const SizedBox(height: 14),
+          _LicenseMeter(
+            icon: Icons.inventory_2_outlined,
+            title: 'Productos',
+            used: license.products,
+            max: license.maxProducts,
+          ),
+          if (hasKey || hasNotes) ...[
+            const SizedBox(height: 14),
+            const _CompanySideDivider(),
+            const SizedBox(height: 12),
+            Text('CLAVE Y NOTAS', style: _licenseSectionStyle()),
+            const SizedBox(height: 6),
+            if (hasKey)
+              _LicenseInfoRow(label: 'Clave', value: license.licenseKey!),
+            if (hasNotes)
+              _LicenseInfoRow(label: 'Notas', value: license.notes!),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _LicenseInfoRow extends StatelessWidget {
+  const _LicenseInfoRow({
+    required this.label,
+    required this.value,
+    this.valueColor = const Color(0xFF183548),
+  });
+
+  final String label;
+  final String value;
+  final Color valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: Text(label, style: _companySideBodyStyle())),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: valueColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LicenseMeter extends StatelessWidget {
+  const _LicenseMeter({
+    required this.icon,
+    required this.title,
+    required this.used,
+    required this.max,
+  });
+
+  final IconData icon;
+  final String title;
+  final int used;
+  final int max;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasLimit = max > 0;
+    final fraction = hasLimit ? (used / max).clamp(0.0, 1.0).toDouble() : 0.0;
+    final percent = hasLimit ? (fraction * 100).round() : 100;
+    final exceeded = hasLimit && used > max;
+    final Color barColor = !hasLimit
+        ? const Color(0xFF1957E6)
+        : exceeded
+        ? const Color(0xFFDC2626)
+        : fraction >= 0.8
+        ? const Color(0xFFD97706)
+        : const Color(0xFF1957E6);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 16, color: const Color(0xFF64748B)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _companySideBodyStyle(),
+              ),
+            ),
+            Text(
+              hasLimit ? '$used de $max' : '$used',
+              style: const TextStyle(
+                color: Color(0xFF183548),
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0,
+              ),
+            ),
+            if (hasLimit) ...[
+              const SizedBox(width: 8),
+              Text(
+                '$percent%',
+                style: const TextStyle(
+                  color: Color(0xFF7A8B9F),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0,
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: fraction,
+            minHeight: 6,
+            backgroundColor: const Color(0xFFE9F0F6),
+            valueColor: AlwaysStoppedAnimation<Color>(barColor),
+          ),
         ),
       ],
     );
   }
+}
+
+class _LicenseStatusPill extends StatelessWidget {
+  const _LicenseStatusPill({
+    required this.label,
+    required this.fg,
+    required this.bg,
+  });
+
+  final String label;
+  final Color fg;
+  final Color bg;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: fg,
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0,
+        ),
+      ),
+    );
+  }
+}
+
+class _LicenseUpgradeCard extends StatelessWidget {
+  const _LicenseUpgradeCard({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F6FF),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFC9DCFB)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const _CompanySideIcon(icon: Icons.upgrade_rounded, size: 28),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Solicitar upgrade',
+                      style: _companySideTitleStyle(15),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Más usuarios, más productos o un plan superior.',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: _companySideBodyStyle(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: onPressed,
+              icon: const Icon(Icons.chat_rounded, size: 18),
+              label: const Text('Solicitar upgrade'),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF25D366),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                textStyle: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13.5,
+                  letterSpacing: 0,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompanySideDivider extends StatelessWidget {
+  const _CompanySideDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(height: 1, color: const Color(0xFFE8EEF4));
+  }
+}
+
+TextStyle _licenseSectionStyle() {
+  return const TextStyle(
+    color: Color(0xFF7A8B9F),
+    fontSize: 11,
+    fontWeight: FontWeight.w800,
+    letterSpacing: 0.8,
+    height: 1.2,
+  );
+}
+
+Color _licenseRemainingColor(LicenseStatusModel license) {
+  if (license.daysRemaining == null) return const Color(0xFF183548);
+  if (license.daysRemaining! <= 0) return const Color(0xFFDC2626);
+  return const Color(0xFF183548);
 }
 
 class _CompanySidePanelScaffold extends StatelessWidget {
@@ -7258,86 +7766,6 @@ class _CompanySideActionTile extends StatelessWidget {
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CompanySideInfoTile extends StatelessWidget {
-  const _CompanySideInfoTile({
-    required this.icon,
-    required this.title,
-    required this.value,
-    this.highlighted = false,
-  });
-
-  final IconData icon;
-  final String title;
-  final String value;
-  final bool highlighted;
-
-  @override
-  Widget build(BuildContext context) {
-    return _CompanySideSurface(
-      child: Row(
-        children: [
-          _CompanySideIcon(
-            icon: icon,
-            color: highlighted
-                ? const Color(0xFF16A34A)
-                : const Color(0xFF1957E6),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: _companySideBodyStyle()),
-                const SizedBox(height: 3),
-                Text(value, style: _companySideTitleStyle(15)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CompanySideDetailsCard extends StatelessWidget {
-  const _CompanySideDetailsCard({required this.title, required this.rows});
-
-  final String title;
-  final List<(String, String)> rows;
-
-  @override
-  Widget build(BuildContext context) {
-    return _CompanySideSurface(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: _companySideTitleStyle(15)),
-          const SizedBox(height: 10),
-          for (final row in rows)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 5),
-              child: Row(
-                children: [
-                  Expanded(child: Text(row.$1, style: _companySideBodyStyle())),
-                  const SizedBox(width: 10),
-                  Flexible(
-                    child: Text(
-                      row.$2,
-                      textAlign: TextAlign.end,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: _companySideStrongStyle(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
         ],
       ),
     );

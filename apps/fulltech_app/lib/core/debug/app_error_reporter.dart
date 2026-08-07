@@ -289,6 +289,7 @@ class AppErrorReporter {
     final isKnownKeyboardStateIssue = _isKnownKeyboardStateIssue(
       exceptionMessage,
     );
+    final isTransientNetworkIssue = _isTransientNetworkError(exceptionMessage);
 
     if (isKnownKeyboardStateIssue) {
       record(
@@ -301,6 +302,26 @@ class AppErrorReporter {
         technicalDetails: exceptionMessage,
         severity: AppErrorSeverity.warning,
         dedupeKey: 'flutter-keyboard-state-assertion',
+        notifyUser: false,
+      );
+      return;
+    }
+
+    if (isTransientNetworkIssue) {
+      // Fallos de red al cargar recursos (p. ej. imágenes de perfil servidas
+      // por /media/object). No son críticos: el widget cae a su fallback
+      // (iniciales) sin requerir intervención del usuario. Se registran para
+      // diagnóstico pero no se muestra el toast de error.
+      record(
+        exception,
+        stack,
+        context: 'FlutterError',
+        title: 'Fallo de red al cargar un recurso',
+        userMessage:
+            'No se pudo cargar un recurso (imagen) por un problema temporal de red.',
+        technicalDetails: exceptionMessage,
+        severity: AppErrorSeverity.warning,
+        dedupeKey: 'flutter-transient-network-image-load',
         notifyUser: false,
       );
       return;
@@ -323,6 +344,30 @@ class AppErrorReporter {
           : null,
       notifyUser: !isRenderFlexOverflow,
     );
+  }
+
+  bool _isTransientNetworkError(String value) {
+    final normalized = value.toLowerCase();
+    const markers = <String>[
+      'clientexception with socketexception',
+      'clientsocketexception',
+      'socketexception',
+      'sockettimeout',
+      'timed out',
+      'timeoutexception',
+      'semaphore timeout',
+      'connection refused',
+      'connection reset',
+      'connection failed',
+      'connection timed out',
+      'failed host lookup',
+      'no address associated',
+      'network is unreachable',
+      'host unreachable',
+      'operation timed out',
+      'address is unreachable',
+    ];
+    return markers.any(normalized.contains);
   }
 
   bool _isRenderFlexOverflowMessage(String value) {

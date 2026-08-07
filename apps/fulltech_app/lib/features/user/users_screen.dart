@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/env.dart';
 import '../../core/auth/admin_authorization.dart';
+import '../../core/auth/token_storage.dart';
 import '../../core/auth/app_permissions.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
@@ -13,6 +15,7 @@ import '../../core/company/company_settings_repository.dart';
 import '../../core/models/user_model.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/is_flutter_test.dart';
 import '../../core/utils/string_utils.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
@@ -2804,6 +2807,14 @@ class _DetailSection extends StatelessWidget {
   }
 }
 
+/// Provee el token de sesión para cargar imágenes de documentos que el
+/// endpoint /media/object sirve únicamente con autenticación JWT.
+class _UserDocImageCache {
+  static final TokenStorage storage = TokenStorage();
+
+  static Future<String?> token() => storage.getAccessToken();
+}
+
 class _UserDocumentPreviewCard extends StatelessWidget {
   const _UserDocumentPreviewCard({required this.title, required this.imageUrl});
 
@@ -2837,12 +2848,30 @@ class _UserDocumentPreviewCard extends StatelessWidget {
               width: double.infinity,
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
               child: hasImage
-                  ? Image.network(
-                      imageUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _DocumentImageFallback(
-                        text: 'No se pudo cargar la imagen',
-                      ),
+                  ? FutureBuilder<String?>(
+                      future: isFlutterTest
+                          ? Future<String?>.value()
+                          : _UserDocImageCache.token(),
+                      builder: (context, snapshot) {
+                        final token = snapshot.data?.trim();
+                        final headers = token == null || token.isEmpty
+                            ? null
+                            : <String, String>{
+                                'Authorization': 'Bearer $token',
+                              };
+                        return CachedNetworkImage(
+                          imageUrl: imageUrl!,
+                          httpHeaders: headers,
+                          fit: BoxFit.cover,
+                          placeholder: (_, __) => const _DocumentImageFallback(
+                            text: 'Cargando imagen...',
+                          ),
+                          errorWidget: (_, __, ___) =>
+                              const _DocumentImageFallback(
+                                text: 'No se pudo cargar la imagen',
+                              ),
+                        );
+                      },
                     )
                   : const _DocumentImageFallback(text: 'Sin imagen'),
             ),

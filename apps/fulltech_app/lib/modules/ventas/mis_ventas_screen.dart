@@ -692,24 +692,6 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
       ),
       child: Row(
         children: [
-          SizedBox.square(
-            dimension: 40,
-            child: IconButton(
-              tooltip: 'Volver a facturación',
-              onPressed: () => context.go(Routes.registrarVenta),
-              icon: const Icon(Icons.arrow_back_rounded, size: 22),
-              padding: EdgeInsets.zero,
-              style: IconButton.styleFrom(
-                backgroundColor: const Color(0xFFEAF1FF),
-                foregroundColor: const Color(0xFF1957E6),
-                side: const BorderSide(color: Color(0xFF9CB7FF)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(11),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
           const Expanded(
             child: Text(
               'Facturación',
