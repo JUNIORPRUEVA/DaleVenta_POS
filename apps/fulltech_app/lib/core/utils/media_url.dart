@@ -1,4 +1,4 @@
-import 'env.dart';
+import '../api/env.dart';
 
 /// Si [value] apunta a una foto de perfil servida por `/media/object` (que
 /// exige JWT), la reescribe a la ruta pública `/media/photo` para que la

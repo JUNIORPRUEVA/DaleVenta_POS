@@ -9,7 +9,6 @@ import '../../core/widgets/app_drawer.dart';
 import '../../core/utils/string_utils.dart';
 import '../../core/models/user_model.dart';
 import '../user/data/users_repository.dart';
-import 'work_contract_screen.dart';
 import '../../core/widgets/user_avatar.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -30,15 +29,8 @@ class ProfileScreen extends ConsumerWidget {
               onEdit: () => _showEditDialog(context, ref, user),
               onPhotoTap: () => _pickAndUploadProfilePhoto(context, ref),
               onPassword: () => _showPasswordDialog(context, ref),
-              onContract: () => _openContract(context),
             ),
     );
-  }
-
-  Future<void> _openContract(BuildContext context) async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const WorkContractScreen()));
   }
 
   void _showEditDialog(BuildContext context, WidgetRef ref, UserModel user) {
@@ -276,14 +268,12 @@ class _ProfileContent extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onPhotoTap;
   final VoidCallback onPassword;
-  final VoidCallback onContract;
 
   const _ProfileContent({
     required this.user,
     required this.onEdit,
     required this.onPhotoTap,
     required this.onPassword,
-    required this.onContract,
   });
 
   @override
@@ -305,14 +295,7 @@ class _ProfileContent extends StatelessWidget {
                     onEdit: onEdit,
                   ),
                   const SizedBox(height: 20),
-                  _buildPersonalSection(cols),
-                  const SizedBox(height: 20),
-                  _buildHrSection(cols),
-                  if (user.habilidades.isNotEmpty) ...[
-                    const SizedBox(height: 20),
-                    _buildSkillsSection(),
-                  ],
-                  ..._buildDocsSection(),
+                  _buildMainSection(cols),
                   const SizedBox(height: 20),
                   _buildActionsRow(),
                 ],
@@ -324,47 +307,16 @@ class _ProfileContent extends StatelessWidget {
     );
   }
 
-  Widget _buildPersonalSection(int cols) {
+  Widget _buildMainSection(int cols) {
     final items = <(String, String)>[];
     if ((user.cedula ?? '').trim().isNotEmpty) {
       items.add(('Cédula', user.cedula!.trim()));
     }
-    if (user.edad != null) {
-      items.add(('Edad', '${user.edad} años'));
-    }
-    if (user.fechaNacimiento != null) {
-      items.add((
-        'Nacimiento',
-        DateFormat('dd/MM/yyyy').format(user.fechaNacimiento!),
-      ));
-    }
-    items.add(('Estado civil', user.estaCasado == true ? 'Casado' : 'Soltero'));
-    items.add(('Hijos', user.tieneHijos == true ? 'Sí' : 'No'));
-    if ((user.telefonoFamiliar ?? '').trim().isNotEmpty) {
-      items.add(('Tel. familiar', user.telefonoFamiliar!.trim()));
-    }
-    if (items.isEmpty) return const SizedBox.shrink();
-    return _CompactSection(
-      icon: Icons.badge_outlined,
-      title: 'Personal',
-      child: _DataGrid(items: items, cols: cols),
-    );
-  }
-
-  Widget _buildHrSection(int cols) {
-    final items = <(String, String)>[];
     if (user.fechaIngreso != null) {
       items.add((
-        'Ingreso',
+        'Fecha de ingreso',
         DateFormat('dd/MM/yyyy').format(user.fechaIngreso!),
       ));
-      items.add(('En empresa', '${user.diasEnEmpresa ?? 0} días'));
-    }
-    items.add(('Lic. conducir', user.licenciaConducir == true ? 'Sí' : 'No'));
-    items.add(('Vehículo', user.vehiculo == true ? 'Sí' : 'No'));
-    items.add(('Casa propia', user.casaPropia == true ? 'Sí' : 'No'));
-    if ((user.cuentaNominaPreferencial ?? '').trim().isNotEmpty) {
-      items.add(('Nómina', user.cuentaNominaPreferencial!.trim()));
     }
     if (user.createdAt != null) {
       items.add((
@@ -372,80 +324,22 @@ class _ProfileContent extends StatelessWidget {
         DateFormat('dd/MM/yyyy').format(user.createdAt!),
       ));
     }
+    if (items.isEmpty) return const SizedBox.shrink();
     return _CompactSection(
-      icon: Icons.work_outline_rounded,
-      title: 'RRHH',
+      icon: Icons.badge_outlined,
+      title: 'Datos principales',
       child: _DataGrid(items: items, cols: cols),
     );
   }
 
-  Widget _buildSkillsSection() {
-    return _CompactSection(
-      icon: Icons.star_border_rounded,
-      title: 'Habilidades',
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: user.habilidades
-            .map(
-              (h) => Chip(
-                label: Text(h, style: const TextStyle(fontSize: 12)),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
-              ),
-            )
-            .toList(growable: false),
-      ),
-    );
-  }
-
-  List<Widget> _buildDocsSection() {
-    final docs = <(String, String)>[];
-    if ((user.fotoCedulaUrl ?? '').trim().isNotEmpty) {
-      docs.add(('Cédula', user.fotoCedulaUrl!.trim()));
-    }
-    if ((user.fotoLicenciaUrl ?? '').trim().isNotEmpty) {
-      docs.add(('Licencia', user.fotoLicenciaUrl!.trim()));
-    }
-    if (docs.isEmpty) return [];
-    return [
-      const SizedBox(height: 20),
-      _CompactSection(
-        icon: Icons.photo_library_outlined,
-        title: 'Documentos',
-        child: Row(
-          children: docs
-              .map((doc) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: _DocThumbnail(label: doc.$1, url: doc.$2),
-                );
-              })
-              .toList(growable: false),
-        ),
-      ),
-    ];
-  }
-
   Widget _buildActionsRow() {
-    return Row(
-      children: [
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: onPassword,
-            icon: const Icon(Icons.lock_outline_rounded, size: 18),
-            label: const Text('Contraseña'),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: onContract,
-            icon: const Icon(Icons.description_outlined, size: 18),
-            label: const Text('Contrato'),
-          ),
-        ),
-      ],
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: onPassword,
+        icon: const Icon(Icons.lock_outline_rounded, size: 18),
+        label: const Text('Contraseña'),
+      ),
     );
   }
 }
@@ -717,52 +611,6 @@ class _DataCell extends StatelessWidget {
           ),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-        ),
-      ],
-    );
-  }
-}
-
-// ─── Document thumbnail ───────────────────────────────────────────────────────
-
-class _DocThumbnail extends StatelessWidget {
-  final String label;
-  final String url;
-
-  const _DocThumbnail({required this.label, required this.url});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.network(
-            url,
-            width: 96,
-            height: 68,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
-              width: 96,
-              height: 68,
-              color: theme.colorScheme.surfaceContainerHighest,
-              child: Icon(
-                Icons.broken_image_outlined,
-                color: theme.colorScheme.outline,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: theme.colorScheme.outline,
-            fontWeight: FontWeight.w600,
-          ),
         ),
       ],
     );
