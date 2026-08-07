@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/api/env.dart';
 import '../../core/auth/admin_authorization.dart';
 import '../../core/auth/token_storage.dart';
 import '../../core/auth/app_permissions.dart';
@@ -16,6 +15,7 @@ import '../../core/models/user_model.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/is_flutter_test.dart';
+import '../../core/utils/media_url.dart';
 import '../../core/utils/string_utils.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
@@ -24,15 +24,8 @@ import '../user/application/users_controller.dart';
 import 'utils/work_contract_preview_screen.dart';
 
 String? _resolveUserDocUrl(String? url) {
-  if (url == null || url.isEmpty) return null;
-  if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  final base = Env.apiBaseUrl;
-  if (base.isEmpty) return url;
-  final trimmedBase = base.endsWith('/')
-      ? base.substring(0, base.length - 1)
-      : base;
-  final normalizedPath = url.startsWith('/') ? url : '/$url';
-  return '$trimmedBase$normalizedPath';
+  final resolved = resolvePublicMediaUrl(url);
+  return resolved.isEmpty ? null : resolved;
 }
 
 class UsersScreen extends ConsumerWidget {

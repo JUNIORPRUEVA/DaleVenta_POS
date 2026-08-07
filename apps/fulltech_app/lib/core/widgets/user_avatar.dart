@@ -1,9 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
-import '../api/env.dart';
 import '../auth/token_storage.dart';
 import '../utils/is_flutter_test.dart';
+import '../utils/media_url.dart';
 
 /// A CircleAvatar replacement that loads [imageUrl] via [CachedNetworkImage]
 /// and falls back to [child] on error or when the URL is empty.
@@ -37,10 +37,10 @@ class UserAvatar extends StatelessWidget {
       );
     }
 
-    // El endpoint que sirve las fotos de usuario (/media/object) exige
-    // autenticación JWT (sistema multi-empresa). Sin el token la petición
-    // devuelve 401 y el avatar cae a las iniciales, por eso adjuntamos el
-    // Bearer token como cabecera HTTP (mismo patrón que ProductNetworkImage).
+    // Las fotos de perfil se reescriben a la ruta pública /uploads (ver
+    // media_url.dart) para que carguen en cualquier plataforma sin JWT.
+    // Se adjunta el Bearer token igualmente como respaldo por si la URL
+    // aún apunta a /media/object (protegida), igual que ProductNetworkImage.
     return FutureBuilder<String?>(
       future: isFlutterTest
           ? Future<String?>.value()
@@ -75,22 +75,5 @@ class UserAvatar extends StatelessWidget {
     );
   }
 
-  String _resolveAvatarUrl(String? rawUrl) {
-    final value = (rawUrl ?? '').trim();
-    if (value.isEmpty) return '';
-    if (value.startsWith('http://') || value.startsWith('https://')) {
-      return value;
-    }
-
-    final base = Env.apiBaseUrl.trim();
-    if (base.isEmpty) return value;
-
-    final normalizedBase = base.endsWith('/')
-        ? base.substring(0, base.length - 1)
-        : base;
-    final normalizedPath = value.startsWith('/')
-        ? value
-        : (value.startsWith('uploads/') ? '/$value' : '/uploads/$value');
-    return '$normalizedBase$normalizedPath';
-  }
+  String _resolveAvatarUrl(String? rawUrl) => resolvePublicMediaUrl(rawUrl);
 }
