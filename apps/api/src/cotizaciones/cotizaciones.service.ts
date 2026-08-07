@@ -15,13 +15,15 @@ import { ConfigService } from "@nestjs/config";
 import {
   CompanyManualAudience,
   CompanyManualEntryKind,
+  CompanyMemberRole,
+  CompanyMemberStatus,
   Prisma,
   Role,
 } from "@prisma/client";
 import { RedisService } from "../common/redis/redis.service";
 import { EvolutionWhatsAppService } from "../notifications/evolution-whatsapp.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { requireTenant } from "../auth/tenant-context";
+import { requireTenant, TenantUser } from "../auth/tenant-context";
 import { normalizePhone } from "../common/utils/normalize-phone";
 import { AnalyzeCotizacionAiDto } from "./dto/analyze-cotizacion-ai.dto";
 import { ChatCotizacionAiDto } from "./dto/chat-cotizacion-ai.dto";
@@ -279,7 +281,7 @@ export class CotizacionesService {
   }
 
   private ensureQuoteAccessForSend(
-    user: { id: string; role: Role },
+    user: TenantUser,
     quotation: { createdByUserId: string },
   ) {
     if (user.role === Role.ADMIN) return;
@@ -312,11 +314,17 @@ export class CotizacionesService {
     return instance;
   }
 
-  private async resolveAdminDestinationPhones() {
+  private async resolveAdminDestinationPhones(companyId: string) {
     const adminUsers = await this.prisma.user.findMany({
       where: {
-        role: Role.ADMIN,
         blocked: false,
+        companyMemberships: {
+          some: {
+            companyId,
+            status: CompanyMemberStatus.ACTIVE,
+            role: { in: [CompanyMemberRole.OWNER, CompanyMemberRole.ADMIN] },
+          },
+        },
       },
       select: {
         id: true,
@@ -377,7 +385,7 @@ export class CotizacionesService {
     return number.length >= 11 && number.length <= 15;
   }
 
-  private async resolveClientDestination(quotation: {
+  private async resolveClientDestination(companyId: string, quotation: {
     id: string;
     customerId: string | null;
     customerPhone: string;
@@ -391,8 +399,8 @@ export class CotizacionesService {
     }
 
     if (quotation.customerId) {
-      const customer = await this.prisma.client.findUnique({
-        where: { id: quotation.customerId },
+      const customer = await this.prisma.client.findFirst({
+        where: { id: quotation.customerId, companyId },
         select: { telefono: true, phoneNormalized: true },
       });
 
@@ -421,10 +429,11 @@ export class CotizacionesService {
   }
 
   private buildQuotesListCacheKey(
-    user: { id: string; role: Role },
+    user: TenantUser,
     query: { customerPhone?: string; take?: number },
   ) {
     const scope = {
+      companyId: user.companyId?.trim() ?? null,
       userId: user.id,
       role: user.role,
       customerPhone: query.customerPhone?.trim() ?? null,
@@ -435,12 +444,17 @@ export class CotizacionesService {
   }
 
   private buildQuoteDetailCacheKey(
-    user: { id: string; role: Role },
+    user: TenantUser,
     id: string,
   ) {
     const hash = createHash("sha1")
       .update(
-        JSON.stringify({ userId: user.id, role: user.role, id: id.trim() }),
+        JSON.stringify({
+          companyId: user.companyId?.trim() ?? null,
+          userId: user.id,
+          role: user.role,
+          id: id.trim(),
+        }),
       )
       .digest("hex");
     return `quotes:detail:${hash}`;
@@ -461,6 +475,7 @@ export class CotizacionesService {
   private async resolveCustomerIdByPhone(
     tx: Prisma.TransactionClient,
     input: {
+      companyId: string;
       userId: string;
       customerId?: string | null;
       customerName: string;
@@ -468,12 +483,26 @@ export class CotizacionesService {
       customerPhoneNormalized: string;
     },
   ) {
-    if (input.customerId) return input.customerId;
+    if (input.customerId) {
+      const customer = await tx.client.findFirst({
+        where: {
+          id: input.customerId,
+          companyId: input.companyId,
+          isDeleted: false,
+        },
+        select: { id: true },
+      });
+      if (!customer) {
+        throw new BadRequestException("Cliente no pertenece a esta empresa.");
+      }
+      return customer.id;
+    }
 
     if (!input.customerPhoneNormalized) return null;
 
     const existing = await tx.client.findFirst({
       where: {
+        companyId: input.companyId,
         isDeleted: false,
         phoneNormalized: input.customerPhoneNormalized,
       },
@@ -485,6 +514,7 @@ export class CotizacionesService {
       const created = await tx.client.create({
         data: {
           ownerId: input.userId,
+          companyId: input.companyId,
           nombre: input.customerName,
           telefono: input.customerPhone,
           phoneNormalized: input.customerPhoneNormalized,
@@ -497,6 +527,7 @@ export class CotizacionesService {
       // In case of race condition with unique constraint.
       const found = await tx.client.findFirst({
         where: {
+          companyId: input.companyId,
           isDeleted: false,
           phoneNormalized: input.customerPhoneNormalized,
         },
@@ -509,20 +540,22 @@ export class CotizacionesService {
 
   private async touchClientActivity(
     tx: Prisma.TransactionClient,
+    companyId: string,
     clientId: string | null,
     at: Date,
   ) {
     if (!clientId) return;
-    await tx.client.update({
-      where: { id: clientId },
+    await tx.client.updateMany({
+      where: { id: clientId, companyId },
       data: { lastActivityAt: at },
     });
   }
 
   async list(
-    user: { id: string; role: Role },
+    user: TenantUser,
     query: { customerPhone?: string; take?: number },
   ) {
+    const companyId = requireTenant(user);
     const take = Math.min(Math.max(query.take ?? 80, 1), 500);
     const cacheKey = this.buildQuotesListCacheKey(user, query);
     const cached = await this.redis.get<{ items: any[] }>(cacheKey);
@@ -532,7 +565,7 @@ export class CotizacionesService {
     }
     if (this.redis.isEnabled()) this.logger.log(`Redis MISS ${cacheKey}`);
 
-    const where: Prisma.CotizacionWhereInput = {};
+    const where: Prisma.CotizacionWhereInput = { companyId };
 
     const customerPhone = query.customerPhone?.trim();
     if (customerPhone) {
@@ -555,7 +588,7 @@ export class CotizacionesService {
     return response;
   }
 
-  async findOne(user: { id: string; role: Role; companyId?: string | null }, id: string) {
+  async findOne(user: TenantUser, id: string) {
     const companyId = requireTenant(user);
     const cacheKey = this.buildQuoteDetailCacheKey(user, id);
     const cached = await this.redis.get<any>(cacheKey);
@@ -576,7 +609,7 @@ export class CotizacionesService {
     return item;
   }
 
-  async create(user: { id: string; role: Role; companyId?: string | null }, dto: CreateCotizacionDto) {
+  async create(user: TenantUser, dto: CreateCotizacionDto) {
     const companyId = requireTenant(user);
     if (!dto.items?.length) {
       throw new BadRequestException("Agrega al menos un producto al ticket");
@@ -598,7 +631,7 @@ export class CotizacionesService {
       Math.max(0, Math.min(itbisRateRaw, 1)),
     );
 
-    const normalized = await this.normalizeItems(dto.items);
+    const normalized = await this.normalizeItems(companyId, dto.items);
 
     let subtotal = new Prisma.Decimal(0);
     let subtotalCost = new Prisma.Decimal(0);
@@ -630,6 +663,7 @@ export class CotizacionesService {
     return this.prisma
       .$transaction(async (tx) => {
         const customerId = await this.resolveCustomerIdByPhone(tx, {
+          companyId,
           userId: user.id,
           customerId: dto.customerId,
           customerName,
@@ -673,7 +707,12 @@ export class CotizacionesService {
           include: this.buildQuoteInclude(),
         });
 
-        await this.touchClientActivity(tx, customerId, created.createdAt);
+        await this.touchClientActivity(
+          tx,
+          companyId,
+          customerId,
+          created.createdAt,
+        );
 
         return created;
       })
@@ -684,7 +723,7 @@ export class CotizacionesService {
   }
 
   async update(
-    user: { id: string; role: Role; companyId?: string | null },
+    user: TenantUser,
     id: string,
     dto: UpdateCotizacionDto,
   ) {
@@ -710,7 +749,7 @@ export class CotizacionesService {
     );
 
     const nextItems = dto.items
-      ? await this.normalizeItems(dto.items as CreateCotizacionItemDto[])
+      ? await this.normalizeItems(companyId, dto.items as CreateCotizacionItemDto[])
       : null;
 
     let subtotal = new Prisma.Decimal(current.subtotal);
@@ -788,6 +827,7 @@ export class CotizacionesService {
           ? dto.customerId
           : dto.customerPhone
             ? await this.resolveCustomerIdByPhone(tx, {
+                companyId,
                 userId: user.id,
                 customerId: null,
                 customerName: nextCustomerName,
@@ -840,6 +880,7 @@ export class CotizacionesService {
 
         await this.touchClientActivity(
           tx,
+          companyId,
           nextCustomerId ?? null,
           updated.updatedAt,
         );
@@ -852,7 +893,7 @@ export class CotizacionesService {
       });
   }
 
-  async remove(user: { id: string; role: Role; companyId?: string | null }, id: string) {
+  async remove(user: TenantUser, id: string) {
     const companyId = requireTenant(user);
     const current = await this.prisma.cotizacion.findFirst({ where: { id, companyId } });
     if (!current) throw new NotFoundException("Cotización no encontrada");
@@ -867,7 +908,7 @@ export class CotizacionesService {
   }
 
   async createPdfShareLink(
-    user: { id: string; role: Role; companyId?: string | null },
+    user: TenantUser,
     dto: CreateCotizacionPdfShareLinkDto,
     requestBaseUrl?: string,
   ) {
@@ -922,7 +963,7 @@ export class CotizacionesService {
   }
 
   async sendWhatsApp(
-    user: { id: string; role: Role; companyId?: string | null },
+    user: TenantUser,
     dto: SendCotizacionWhatsappDto,
   ) {
     const companyId = requireTenant(user);
@@ -950,8 +991,8 @@ export class CotizacionesService {
 
     const destinationPhones =
       destinationType === "admin"
-        ? await this.resolveAdminDestinationPhones()
-        : [await this.resolveClientDestination(quotation)];
+        ? await this.resolveAdminDestinationPhones(companyId)
+        : [await this.resolveClientDestination(companyId, quotation)];
 
     const bytes = this.parsePdfBase64(dto.pdfBase64);
     const fileName = (dto.fileName ?? "").trim() || "cotizacion.pdf";
@@ -1002,7 +1043,8 @@ export class CotizacionesService {
     };
   }
 
-  async purgeAllForDebug(user: { id: string; role: Role }) {
+  async purgeAllForDebug(user: TenantUser) {
+    const companyId = requireTenant(user);
     if (user.role !== Role.ADMIN) {
       throw new ForbiddenException(
         "Solo un administrador puede limpiar cotizaciones.",
@@ -1010,6 +1052,7 @@ export class CotizacionesService {
     }
 
     const quotes = await this.prisma.cotizacion.findMany({
+      where: { companyId },
       select: { id: true },
     });
     const quoteIds = quotes.map((item) => item.id);
@@ -1023,7 +1066,7 @@ export class CotizacionesService {
         where: { quotationId: { in: quoteIds } },
       });
       const deletedQuotes = await tx.cotizacion.deleteMany({
-        where: { id: { in: quoteIds } },
+        where: { id: { in: quoteIds }, companyId },
       });
       return {
         deletedQuotes: deletedQuotes.count,
@@ -1039,7 +1082,7 @@ export class CotizacionesService {
   }
 
   async analyzeAssistant(
-    user: { id: string; role: Role },
+    user: TenantUser,
     dto: AnalyzeCotizacionAiDto,
   ) {
     const rules = await this.loadRelevantBusinessRules(
@@ -1111,7 +1154,7 @@ export class CotizacionesService {
   }
 
   async chatAssistant(
-    user: { id: string; role: Role },
+    user: TenantUser,
     dto: ChatCotizacionAiDto,
   ) {
     const message = dto.message.trim();
@@ -1217,7 +1260,7 @@ export class CotizacionesService {
     };
   }
 
-  private async normalizeItems(items: CreateCotizacionItemDto[]) {
+  private async normalizeItems(companyId: string, items: CreateCotizacionItemDto[]) {
     const productIds = Array.from(
       new Set(
         items.map((i) => i.productId).filter((id): id is string => Boolean(id)),
@@ -1232,7 +1275,7 @@ export class CotizacionesService {
     }> = [];
     if (productIds.length) {
       products = await this.prisma.product.findMany({
-        where: { id: { in: productIds } },
+        where: { id: { in: productIds }, companyId },
         select: { id: true, nombre: true, imagen: true, costo: true },
       });
     }
@@ -1442,7 +1485,7 @@ export class CotizacionesService {
   }
 
   private async loadRelevantBusinessRules(
-    user: { id: string; role: Role },
+    user: TenantUser,
     context: AnalyzeCotizacionAiDto["context"],
     prompt?: string,
   ) {
@@ -1467,7 +1510,7 @@ export class CotizacionesService {
         { audience: CompanyManualAudience.GENERAL },
         {
           audience: CompanyManualAudience.ROLE_SPECIFIC,
-          targetRoles: { has: user.role },
+          targetRoles: { has: user.role as Role },
         },
       ],
     };
@@ -1617,10 +1660,11 @@ export class CotizacionesService {
   }
 
   private async buildAuthorizedDataKnowledge(
-    user: { id: string; role: Role },
+    user: TenantUser,
     prompt: string,
     context: AnalyzeCotizacionAiDto["context"],
   ): Promise<BusinessRuleRecord[]> {
+    const companyId = requireTenant(user);
     const tokens = new Set(
       this.tokenize(
         [prompt, context.module, context.screenName].filter(Boolean).join(" "),
@@ -1641,8 +1685,8 @@ export class CotizacionesService {
       const totalSales = await this.prisma.sale.count({
         where:
           user.role === Role.ADMIN
-            ? { isDeleted: false }
-            : { userId: user.id, isDeleted: false },
+            ? { companyId, isDeleted: false }
+            : { companyId, userId: user.id, isDeleted: false },
       });
       knowledge.push(
         this.createAppKnowledgeRecord(
@@ -1661,8 +1705,8 @@ export class CotizacionesService {
       const totalClients = await this.prisma.client.count({
         where:
           user.role === Role.ADMIN
-            ? { isDeleted: false }
-            : { ownerId: user.id, isDeleted: false },
+            ? { companyId, isDeleted: false }
+            : { companyId, ownerId: user.id, isDeleted: false },
       });
       knowledge.push(
         this.createAppKnowledgeRecord(
@@ -1679,7 +1723,10 @@ export class CotizacionesService {
 
     if (wantsQuotes) {
       const totalQuotes = await this.prisma.cotizacion.count({
-        where: user.role === Role.ADMIN ? {} : { createdByUserId: user.id },
+        where:
+          user.role === Role.ADMIN
+            ? { companyId }
+            : { companyId, createdByUserId: user.id },
       });
       knowledge.push(
         this.createAppKnowledgeRecord(

@@ -1,10 +1,11 @@
 # Tenant Data Model Inventory
 
-Generated at: 2026-08-05T03:46:18.090Z
+Generated at: 2026-08-07T02:08:14.573Z
 
 | Model | Table | Classification | Tenant Column | Nullable | FK | Index | Recommended Action |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Company | companies | Global platform data | - | - | not_applicable | not_applicable | No tenant migration required. |
+| CompanyLicenseAuditLog | company_license_audit_logs | Audit/retention data | company_id | false | present | present | No tenant migration required. |
 | CompanyMember | company_members | Join table | company_id | false | present | present | No tenant migration required. |
 | AuthSession | auth_sessions | Session/security data | company_id | true | present | present | No tenant migration required. |
 | User | users | User-personal data | company_id | true | present | present | No tenant migration required. |
@@ -38,16 +39,16 @@ Generated at: 2026-08-05T03:46:18.090Z
 | NotificationOutbox | notification_outbox | Audit/retention data | - | - | not_applicable | not_applicable | No tenant migration required. |
 | ServiceOrderNotificationJob | service_order_notification_jobs | Audit/retention data | - | - | not_applicable | not_applicable | No tenant migration required. |
 | Punch | Punch | Global platform data | - | - | not_applicable | not_applicable | No tenant migration required. |
-| Product | Product | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
-| Supplier | suppliers | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
-| PurchaseInvoice | purchase_invoices | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
+| Product | Product | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| Supplier | suppliers | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| PurchaseInvoice | purchase_invoices | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | PurchaseOrderSequence | purchase_order_sequences | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
-| PurchaseOrder | purchase_orders | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
+| PurchaseOrder | purchase_orders | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | PurchaseOrderItem | purchase_order_items | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
 | PurchaseReceipt | purchase_receipts | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
 | PurchaseReceiptItem | purchase_receipt_items | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
 | WebsiteProductOverride | website_product_overrides | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
-| Client | Client | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
+| Client | Client | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | CrmCommercialCustomer | crm_commercial_customers | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
 | CrmCommercialStatusHistory | crm_commercial_status_history | Audit/retention data | - | - | not_applicable | not_applicable | No tenant migration required. |
 | CrmCommercialNote | crm_commercial_notes | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
@@ -55,29 +56,29 @@ Generated at: 2026-08-05T03:46:18.090Z
 | CrmCommercialFollowupTask | crm_commercial_followup_tasks | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
 | CrmCommercialSetting | crm_commercial_settings | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
 | CrmCommercialLibraryItem | crm_commercial_library_items | Company-owned root entity | company_id | false | missing | present | Add Company foreign key after ownership audit passes. |
-| Sale | Sale | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
-| SaleCreditPayment | sale_credit_payments | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
-| CashboxDaily | cashbox_daily | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
-| CashSession | cash_sessions | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
-| CashMovement | cash_movements | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
+| Sale | Sale | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| SaleCreditPayment | sale_credit_payments | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| CashboxDaily | cashbox_daily | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| CashSession | cash_sessions | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| CashMovement | cash_movements | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | SaleItem | SaleItem | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
-| Close | Close | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
+| Close | Close | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | CloseTransfer | CloseTransfer | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
 | CloseTransferVoucher | CloseTransferVoucher | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
-| DepositOrder | DepositOrder | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
-| FiscalInvoice | FiscalInvoice | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
-| PayableService | PayableService | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
-| PayablePayment | PayablePayment | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
-| PayrollEmployee | PayrollEmployee | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
-| PayrollPeriod | PayrollPeriod | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
-| PayrollEmployeeConfig | PayrollEmployeeConfig | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
-| PayrollEntry | PayrollEntry | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
-| PayrollEmployeePeriodStatus | PayrollEmployeePeriodStatus | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
-| PayrollServiceCommissionRequest | payroll_service_commission_requests | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
+| DepositOrder | DepositOrder | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| FiscalInvoice | FiscalInvoice | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| PayableService | PayableService | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| PayablePayment | PayablePayment | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| PayrollEmployee | PayrollEmployee | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| PayrollPeriod | PayrollPeriod | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| PayrollEmployeeConfig | PayrollEmployeeConfig | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| PayrollEntry | PayrollEntry | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| PayrollEmployeePeriodStatus | PayrollEmployeePeriodStatus | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| PayrollServiceCommissionRequest | payroll_service_commission_requests | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | CompanyManualEntry | CompanyManualEntry | Global platform data | - | - | not_applicable | not_applicable | No tenant migration required. |
 | Service | Service | Global platform data | - | - | not_applicable | not_applicable | No tenant migration required. |
 | ServiceClosing | ServiceClosing | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
-| WarrantyProductConfig | warranty_product_configs | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
+| WarrantyProductConfig | warranty_product_configs | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | TechnicalVisit | technical_visits | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
 | Vehiculo | vehiculos | Global platform data | - | - | not_applicable | not_applicable | No tenant migration required. |
 | PrecioCombustible | precios_combustible | Global platform data | - | - | not_applicable | not_applicable | No tenant migration required. |
@@ -93,18 +94,18 @@ Generated at: 2026-08-05T03:46:18.090Z
 | ServiceEvidence | service_evidences | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
 | ServiceReport | service_reports | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
 | PublicidadImage | publicidad_images | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
-| Cotizacion | Cotizacion | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
+| Cotizacion | Cotizacion | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | CotizacionItem | CotizacionItem | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
-| WorkScheduleProfile | work_schedule_profiles | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
+| WorkScheduleProfile | work_schedule_profiles | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | WorkScheduleProfileDay | work_schedule_profile_days | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
-| WorkCoverageRule | work_coverage_rules | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
-| WorkEmployeeConfig | work_employee_configs | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
-| WorkScheduleException | work_schedule_exceptions | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
-| WorkWeekSchedule | work_week_schedules | Company-owned root entity | company_id | true | missing | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
+| WorkCoverageRule | work_coverage_rules | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| WorkEmployeeConfig | work_employee_configs | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| WorkScheduleException | work_schedule_exceptions | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| WorkWeekSchedule | work_week_schedules | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | WorkDayAssignment | work_day_assignments | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
-| WorkScheduleAuditLog | work_schedule_audit_logs | Audit/retention data | company_id | true | missing | present | Add Company foreign key after ownership audit passes. |
-| AiAssistantConversationTurn | ai_assistant_conversation_turns | Audit/retention data | company_id | true | missing | present | Add Company foreign key after ownership audit passes. |
-| AiAssistantMemory | ai_assistant_memories | Audit/retention data | company_id | true | missing | present | Add Company foreign key after ownership audit passes. |
+| WorkScheduleAuditLog | work_schedule_audit_logs | Audit/retention data | company_id | false | present | present | No tenant migration required. |
+| AiAssistantConversationTurn | ai_assistant_conversation_turns | Audit/retention data | company_id | false | present | present | No tenant migration required. |
+| AiAssistantMemory | ai_assistant_memories | Audit/retention data | company_id | false | present | present | No tenant migration required. |
 
 ## Notes
 

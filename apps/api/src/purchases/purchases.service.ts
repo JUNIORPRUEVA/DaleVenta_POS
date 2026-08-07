@@ -53,10 +53,12 @@ export class PurchasesService {
     } satisfies Prisma.PurchaseOrderInclude;
   }
 
-  async listSuppliers(q?: string, includeInactive = false) {
+  async listSuppliers(user: RequestUser, q?: string, includeInactive = false) {
+    const companyId = requireTenant(user);
     const query = (q ?? "").trim();
     const rows = await this.prisma.supplier.findMany({
       where: {
+        companyId,
         deletedAt: null,
         ...(includeInactive ? {} : { isActive: true }),
         ...(query
@@ -73,39 +75,45 @@ export class PurchasesService {
       },
       orderBy: { commercialName: "asc" },
     });
-    return this.suppliersWithStats(rows);
+    return this.suppliersWithStats(companyId, rows);
   }
 
-  async createSupplier(dto: UpsertSupplierDto) {
+  async createSupplier(user: RequestUser, dto: UpsertSupplierDto) {
     this.validateSupplier(dto);
-    return this.prisma.supplier.create({ data: this.supplierData(dto) });
-  }
-
-  async updateSupplier(id: string, dto: UpsertSupplierDto) {
-    await this.assertSupplier(id);
-    this.validateSupplier(dto);
-    return this.prisma.supplier.update({
-      where: { id },
-      data: this.supplierData(dto),
+    return this.prisma.supplier.create({
+      data: this.supplierData(requireTenant(user), dto),
     });
   }
 
-  async deactivateSupplier(id: string) {
-    await this.assertSupplier(id);
+  async updateSupplier(user: RequestUser, id: string, dto: UpsertSupplierDto) {
+    const companyId = requireTenant(user);
+    await this.assertSupplier(companyId, id);
+    this.validateSupplier(dto);
+    return this.prisma.supplier.update({
+      where: { id },
+      data: this.supplierData(companyId, dto),
+    });
+  }
+
+  async deactivateSupplier(user: RequestUser, id: string) {
+    const companyId = requireTenant(user);
+    await this.assertSupplier(companyId, id);
     return this.prisma.supplier.update({
       where: { id },
       data: { isActive: false, deletedAt: new Date() },
     });
   }
 
-  async listInvoices(filters: {
+  async listInvoices(user: RequestUser, filters: {
     q?: string;
     supplierId?: string;
     purchaseOrderId?: string;
   }) {
+    const companyId = requireTenant(user);
     const q = (filters.q ?? "").trim();
     return this.prisma.purchaseInvoice.findMany({
       where: {
+        companyId,
         deletedAt: null,
         ...(this.cleanId(filters.supplierId)
           ? { supplierId: this.cleanId(filters.supplierId)! }
@@ -152,12 +160,13 @@ export class PurchasesService {
   ) {
     const supplierId = this.cleanId(dto.supplierId);
     if (!supplierId) throw new BadRequestException("Selecciona un suplidor.");
-    await this.assertSupplier(supplierId);
+    const companyId = requireTenant(user);
+    await this.assertSupplier(companyId, supplierId);
 
     const purchaseOrderId = this.cleanId(dto.purchaseOrderId);
     if (purchaseOrderId) {
       const order = await this.prisma.purchaseOrder.findFirst({
-        where: { id: purchaseOrderId, deletedAt: null },
+        where: { id: purchaseOrderId, companyId, deletedAt: null },
         select: { id: true, supplierId: true },
       });
       if (!order) throw new NotFoundException("Orden de compra no encontrada.");
@@ -179,6 +188,7 @@ export class PurchasesService {
 
     return this.prisma.purchaseInvoice.create({
       data: {
+        companyId,
         supplierId,
         purchaseOrderId,
         invoiceNumber: this.clean(dto.invoiceNumber),
@@ -203,11 +213,15 @@ export class PurchasesService {
     });
   }
 
-  async deleteInvoice(id: string) {
-    await this.prisma.purchaseInvoice.update({
-      where: { id },
+  async deleteInvoice(user: RequestUser, id: string) {
+    const companyId = requireTenant(user);
+    const updated = await this.prisma.purchaseInvoice.updateMany({
+      where: { id, companyId },
       data: { deletedAt: new Date() },
     });
+    if (updated.count !== 1) {
+      throw new NotFoundException("Factura de compra no encontrada.");
+    }
     return { ok: true };
   }
 
@@ -215,10 +229,12 @@ export class PurchasesService {
     user: RequestUser,
     filters: { q?: string; status?: string; supplierId?: string },
   ) {
+    const companyId = requireTenant(user);
     const q = (filters.q ?? "").trim();
     const status = this.parseStatus(filters.status, false);
     return this.prisma.purchaseOrder.findMany({
       where: {
+        companyId,
         deletedAt: null,
         ...(this.canSeeAll(user) ? {} : { createdById: user.id }),
         ...(status ? { status } : {}),
@@ -252,6 +268,7 @@ export class PurchasesService {
     const order = await this.prisma.purchaseOrder.findFirst({
       where: {
         id,
+        companyId: requireTenant(user),
         deletedAt: null,
         ...(this.canSeeAll(user) ? {} : { createdById: user.id }),
       },
@@ -262,14 +279,18 @@ export class PurchasesService {
   }
 
   async createOrder(user: RequestUser, dto: CreatePurchaseOrderDto) {
-    const items = await this.normalizeItems(dto.items ?? []);
+    const companyId = requireTenant(user);
+    const items = await this.normalizeItems(companyId, dto.items ?? []);
     const totals = this.computeTotals(items, dto);
+    const supplierId = this.cleanId(dto.supplierId);
+    if (supplierId) await this.assertSupplier(companyId, supplierId);
     return this.prisma.$transaction(async (tx) => {
-      const orderNumber = await this.nextOrderNumber(tx);
+      const orderNumber = await this.nextOrderNumber(tx, companyId);
       return tx.purchaseOrder.create({
         data: {
+          companyId,
           orderNumber,
-          supplierId: this.cleanId(dto.supplierId),
+          supplierId,
           expectedDeliveryDate: this.parseDate(dto.expectedDeliveryDate),
           discount: totals.discount,
           shippingCost: totals.shippingCost,
@@ -310,14 +331,17 @@ export class PurchasesService {
         "Necesitas permiso para editar una orden aprobada o enviada.",
       );
     }
-    const items = await this.normalizeItems(dto.items ?? []);
+    const companyId = requireTenant(user);
+    const items = await this.normalizeItems(companyId, dto.items ?? []);
     const totals = this.computeTotals(items, dto);
+    const supplierId = this.cleanId(dto.supplierId);
+    if (supplierId) await this.assertSupplier(companyId, supplierId);
     return this.prisma.$transaction(async (tx) => {
       await tx.purchaseOrderItem.deleteMany({ where: { purchaseOrderId: id } });
       return tx.purchaseOrder.update({
         where: { id },
         data: {
-          supplierId: this.cleanId(dto.supplierId),
+          supplierId,
           expectedDeliveryDate: this.parseDate(dto.expectedDeliveryDate),
           discount: totals.discount,
           shippingCost: totals.shippingCost,
@@ -545,8 +569,10 @@ export class PurchasesService {
     });
   }
 
-  async recommendations() {
+  async recommendations(user: RequestUser) {
+    const companyId = requireTenant(user);
     const products = await this.prisma.product.findMany({
+      where: { companyId },
       orderBy: { nombre: "asc" },
     });
     const pending = await this.prisma.purchaseOrderItem.groupBy({
@@ -554,6 +580,7 @@ export class PurchasesService {
       where: {
         productId: { not: null },
         purchaseOrder: {
+          companyId,
           deletedAt: null,
           status: {
             in: [
@@ -722,7 +749,7 @@ export class PurchasesService {
     };
   }
 
-  private async normalizeItems(items: PurchaseOrderItemDto[]) {
+  private async normalizeItems(companyId: string, items: PurchaseOrderItemDto[]) {
     const productIds = [
       ...new Set(
         items
@@ -732,9 +759,23 @@ export class PurchasesService {
     ];
     const products = productIds.length
       ? await this.prisma.product.findMany({
-          where: { id: { in: productIds } },
+          where: { id: { in: productIds }, companyId },
         })
       : [];
+    const supplierIds = [
+      ...new Set(
+        items
+          .map((item) => this.cleanId(item.supplierId))
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const suppliers = supplierIds.length
+      ? await this.prisma.supplier.findMany({
+          where: { id: { in: supplierIds }, companyId, deletedAt: null },
+          select: { id: true },
+        })
+      : [];
+    const validSupplierIds = new Set(suppliers.map((supplier) => supplier.id));
     const productMap = new Map(
       products.map((product) => [product.id, product]),
     );
@@ -771,7 +812,11 @@ export class PurchasesService {
           pendingQuantity: quantity,
           unitCost,
           subtotal,
-          supplierId: this.cleanId(item.supplierId),
+          supplierId: this.validatedSupplierId(
+            validSupplierIds,
+            item.supplierId,
+            index,
+          ),
           notes: this.clean(item.notes),
           createInventoryProductOnReceipt: Boolean(
             item.createInventoryProductOnReceipt,
@@ -812,8 +857,8 @@ export class PurchasesService {
     return { subtotal, discount, shippingCost, additionalCost, tax, total };
   }
 
-  private async nextOrderNumber(tx: Prisma.TransactionClient) {
-    const scope = "default";
+  private async nextOrderNumber(tx: Prisma.TransactionClient, companyId: string) {
+    const scope = companyId;
     const current = await tx.purchaseOrderSequence.upsert({
       where: { scope },
       create: { scope, nextValue: 2 },
@@ -824,6 +869,7 @@ export class PurchasesService {
   }
 
   private async suppliersWithStats(
+    companyId: string,
     rows: Array<{ id: string; [key: string]: unknown }>,
   ) {
     const ids = rows.map((row) => row.id);
@@ -834,6 +880,7 @@ export class PurchasesService {
         by: ["supplierId"],
         where: {
           supplierId: { in: ids },
+          companyId,
           deletedAt: null,
           status: { not: PurchaseOrderStatus.CANCELLED },
         },
@@ -841,7 +888,7 @@ export class PurchasesService {
         _sum: { total: true },
       }),
       this.prisma.purchaseOrder.findMany({
-        where: { supplierId: { in: ids }, deletedAt: null },
+        where: { supplierId: { in: ids }, companyId, deletedAt: null },
         orderBy: [{ supplierId: "asc" }, { orderDate: "desc" }],
         select: {
           supplierId: true,
@@ -900,10 +947,27 @@ export class PurchasesService {
       throw new BadRequestException("El nombre comercial es obligatorio.");
   }
 
+  private validatedSupplierId(
+    validSupplierIds: Set<string>,
+    value: string | undefined,
+    index: number,
+  ) {
+    const supplierId = this.cleanId(value);
+    if (!supplierId) return null;
+    if (!validSupplierIds.has(supplierId)) {
+      throw new BadRequestException(
+        `Suplidor inválido en línea ${index + 1}.`,
+      );
+    }
+    return supplierId;
+  }
+
   private supplierData(
+    companyId: string,
     dto: UpsertSupplierDto,
   ): Prisma.SupplierUncheckedCreateInput {
     return {
+      companyId,
       commercialName: this.clean(dto.commercialName)!,
       legalName: this.clean(dto.legalName),
       taxId: this.clean(dto.taxId),
@@ -923,9 +987,9 @@ export class PurchasesService {
     };
   }
 
-  private async assertSupplier(id: string) {
+  private async assertSupplier(companyId: string, id: string) {
     const supplier = await this.prisma.supplier.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, companyId, deletedAt: null },
     });
     if (!supplier) throw new NotFoundException("Suplidor no encontrado.");
     return supplier;

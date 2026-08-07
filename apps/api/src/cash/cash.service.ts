@@ -122,7 +122,7 @@ export class CashService {
     const session = await this.requireOpenSession(user.id, companyId);
     const amount = new Prisma.Decimal(dto.amount);
     if (dto.type === "OUT") {
-      const summary = await this.buildSummaryForSession(session.id);
+      const summary = await this.buildSummaryForSession(session.id, companyId);
       if (summary.expectedCash < dto.amount) {
         throw new BadRequestException(
           "No hay efectivo suficiente en caja para este retiro.",
@@ -151,7 +151,7 @@ export class CashService {
   async closeSession(user: RequestUser, dto: CloseCashSessionDto) {
     const companyId = requireTenant(user);
     const session = await this.requireOpenSession(user.id, companyId);
-    const summary = await this.buildSummaryForSession(session.id);
+    const summary = await this.buildSummaryForSession(session.id, companyId);
     const closingAmount = new Prisma.Decimal(dto.closingAmount);
     const expectedAmount = new Prisma.Decimal(summary.expectedCash);
     const difference = closingAmount.minus(expectedAmount);
@@ -179,8 +179,8 @@ export class CashService {
         throw new ConflictException("Este turno ya fue cerrado.");
       }
 
-      const closed = await tx.cashSession.findUnique({
-        where: { id: session.id },
+      const closed = await tx.cashSession.findFirst({
+        where: { id: session.id, companyId },
       });
       if (!closed) {
         throw new NotFoundException("No encontramos el turno cerrado.");
@@ -189,6 +189,7 @@ export class CashService {
       const otherOpen = await tx.cashSession.findFirst({
         where: {
           cashboxDailyId: session.cashboxDailyId,
+          companyId,
           status: "OPEN",
           closedAt: null,
           id: { not: session.id },
@@ -217,14 +218,16 @@ export class CashService {
   }
 
   async summary(user: RequestUser) {
-    const session = await this.requireOpenSession(user.id, requireTenant(user));
-    return this.buildSummaryForSession(session.id);
+    const companyId = requireTenant(user);
+    const session = await this.requireOpenSession(user.id, companyId);
+    return this.buildSummaryForSession(session.id, companyId);
   }
 
   async movements(user: RequestUser) {
-    const session = await this.requireOpenSession(user.id, requireTenant(user));
+    const companyId = requireTenant(user);
+    const session = await this.requireOpenSession(user.id, companyId);
     return this.prisma.cashMovement.findMany({
-      where: { sessionId: session.id },
+      where: { sessionId: session.id, companyId },
       orderBy: { createdAt: "desc" },
     });
   }
@@ -336,9 +339,9 @@ export class CashService {
       throw new NotFoundException("No encontramos el turno solicitado.");
     }
     const [summary, movements] = await Promise.all([
-      this.buildSummaryForSession(sessionId),
+      this.buildSummaryForSession(sessionId, companyId),
       this.prisma.cashMovement.findMany({
-        where: { sessionId },
+        where: { sessionId, companyId },
         orderBy: { createdAt: "asc" },
       }),
     ]);
@@ -372,9 +375,9 @@ export class CashService {
     return session;
   }
 
-  async buildSummaryForSession(sessionId: string) {
-    const session = await this.prisma.cashSession.findUnique({
-      where: { id: sessionId },
+  async buildSummaryForSession(sessionId: string, companyId: string) {
+    const session = await this.prisma.cashSession.findFirst({
+      where: { id: sessionId, companyId },
     });
     if (!session) {
       throw new NotFoundException("No encontramos el turno solicitado.");
@@ -382,7 +385,7 @@ export class CashService {
 
     const [sales, movements, creditPayments] = await Promise.all([
       this.prisma.sale.findMany({
-        where: { cashSessionId: sessionId },
+        where: { cashSessionId: sessionId, companyId },
         select: {
           totalSold: true,
           totalProfit: true,
@@ -405,9 +408,9 @@ export class CashService {
           },
         },
       }),
-      this.prisma.cashMovement.findMany({ where: { sessionId } }),
+      this.prisma.cashMovement.findMany({ where: { sessionId, companyId } }),
       this.prisma.saleCreditPayment.findMany({
-        where: { cashSessionId: sessionId },
+        where: { cashSessionId: sessionId, companyId },
       }),
     ]);
 

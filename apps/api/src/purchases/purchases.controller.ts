@@ -40,28 +40,37 @@ export class PurchasesController {
 
   @Get("suppliers")
   listSuppliers(
+    @Req() req: Request,
     @Query("q") q?: string,
     @Query("includeInactive") includeInactive?: string,
   ) {
-    return this.purchases.listSuppliers(q, includeInactive === "true");
+    return this.purchases.listSuppliers(
+      req.user as RequestUser,
+      q,
+      includeInactive === "true",
+    );
   }
 
   @Post("suppliers")
   @Roles(Role.ADMIN)
-  createSupplier(@Body() dto: UpsertSupplierDto) {
-    return this.purchases.createSupplier(dto);
+  createSupplier(@Req() req: Request, @Body() dto: UpsertSupplierDto) {
+    return this.purchases.createSupplier(req.user as RequestUser, dto);
   }
 
   @Patch("suppliers/:id")
   @Roles(Role.ADMIN)
-  updateSupplier(@Param("id") id: string, @Body() dto: UpsertSupplierDto) {
-    return this.purchases.updateSupplier(id, dto);
+  updateSupplier(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() dto: UpsertSupplierDto,
+  ) {
+    return this.purchases.updateSupplier(req.user as RequestUser, id, dto);
   }
 
   @Delete("suppliers/:id")
   @Roles(Role.ADMIN)
-  deactivateSupplier(@Param("id") id: string) {
-    return this.purchases.deactivateSupplier(id);
+  deactivateSupplier(@Req() req: Request, @Param("id") id: string) {
+    return this.purchases.deactivateSupplier(req.user as RequestUser, id);
   }
 
   @Get("orders")
@@ -80,11 +89,16 @@ export class PurchasesController {
 
   @Get("invoices")
   listInvoices(
+    @Req() req: Request,
     @Query("q") q?: string,
     @Query("supplierId") supplierId?: string,
     @Query("purchaseOrderId") purchaseOrderId?: string,
   ) {
-    return this.purchases.listInvoices({ q, supplierId, purchaseOrderId });
+    return this.purchases.listInvoices(req.user as RequestUser, {
+      q,
+      supplierId,
+      purchaseOrderId,
+    });
   }
 
   @Post("invoices")
@@ -142,8 +156,8 @@ export class PurchasesController {
 
   @Delete("invoices/:id")
   @Roles(Role.ADMIN)
-  deleteInvoice(@Param("id") id: string) {
-    return this.purchases.deleteInvoice(id);
+  deleteInvoice(@Req() req: Request, @Param("id") id: string) {
+    return this.purchases.deleteInvoice(req.user as RequestUser, id);
   }
 
   @Get("orders/:id")
@@ -212,8 +226,8 @@ export class PurchasesController {
   }
 
   @Get("recommendations")
-  recommendations() {
-    return this.purchases.recommendations();
+  recommendations(@Req() req: Request) {
+    return this.purchases.recommendations(req.user as RequestUser);
   }
 
   @Post("pdf-share-link")

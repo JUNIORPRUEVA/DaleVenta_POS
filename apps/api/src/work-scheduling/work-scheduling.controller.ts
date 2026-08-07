@@ -18,6 +18,7 @@ type JwtUser = {
   id: string;
   role: Role;
   nombreCompleto?: string;
+  companyId?: string | null;
 };
 
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -27,8 +28,8 @@ export class WorkSchedulingController {
 
   @Get('employees')
   @Roles(Role.ADMIN)
-  listEmployees() {
-    return this.scheduling.listEmployees();
+  listEmployees(@Req() req: Request) {
+    return this.scheduling.listEmployees(req.user as JwtUser);
   }
 
   @Patch('employees/:id')
@@ -52,8 +53,8 @@ export class WorkSchedulingController {
 
   @Get('profiles')
   @Roles(Role.ADMIN)
-  listProfiles() {
-    return this.scheduling.listProfiles();
+  listProfiles(@Req() req: Request) {
+    return this.scheduling.listProfiles(req.user as JwtUser);
   }
 
   @Post('profiles/upsert')
@@ -79,8 +80,8 @@ export class WorkSchedulingController {
 
   @Get('coverage-rules')
   @Roles(Role.ADMIN)
-  listCoverageRules() {
-    return this.scheduling.listCoverageRules();
+  listCoverageRules(@Req() req: Request) {
+    return this.scheduling.listCoverageRules(req.user as JwtUser);
   }
 
   @Post('coverage-rules/upsert')
@@ -97,8 +98,8 @@ export class WorkSchedulingController {
 
   @Get('exceptions')
   @Roles(Role.ADMIN)
-  listExceptions(@Query('week_start_date') weekStartDate?: string) {
-    return this.scheduling.listExceptions(weekStartDate ? new Date(weekStartDate) : undefined);
+  listExceptions(@Req() req: Request, @Query('week_start_date') weekStartDate?: string) {
+    return this.scheduling.listExceptions(req.user as JwtUser, weekStartDate ? new Date(weekStartDate) : undefined);
   }
 
   @Post('exceptions')
@@ -157,7 +158,7 @@ export class WorkSchedulingController {
   @Get('weeks/:weekStartDate')
   getWeek(@Req() req: Request, @Param('weekStartDate') weekStartDate: string) {
     const user = req.user as JwtUser;
-    return this.scheduling.getWeek(weekStartDate).then((week) => {
+    return this.scheduling.getWeek(weekStartDate, user).then((week) => {
       if (!week) return null;
       if (user.role === Role.ADMIN) return week;
       // Non-admin: only return their own assignments.
@@ -203,23 +204,23 @@ export class WorkSchedulingController {
 
   @Get('audit')
   @Roles(Role.ADMIN)
-  listAudit(@Query() query: AuditQueryDto) {
+  listAudit(@Req() req: Request, @Query() query: AuditQueryDto) {
     return this.scheduling.listAudit({
       target_user_id: query.target_user_id,
       from: query.from,
       to: query.to,
-    });
+    }, req.user as JwtUser);
   }
 
   @Get('reports/most-changes')
   @Roles(Role.ADMIN)
-  mostChanges(@Query() query: ReportsQueryDto) {
-    return this.scheduling.reportMostChanges({ from: query.from, to: query.to });
+  mostChanges(@Req() req: Request, @Query() query: ReportsQueryDto) {
+    return this.scheduling.reportMostChanges({ from: query.from, to: query.to }, req.user as JwtUser);
   }
 
   @Get('reports/low-coverage')
   @Roles(Role.ADMIN)
-  lowCoverage(@Query() query: ReportsQueryDto) {
-    return this.scheduling.reportLowCoverage({ from: query.from, to: query.to });
+  lowCoverage(@Req() req: Request, @Query() query: ReportsQueryDto) {
+    return this.scheduling.reportLowCoverage({ from: query.from, to: query.to }, req.user as JwtUser);
   }
 }

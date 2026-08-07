@@ -619,6 +619,37 @@ model Company {
   members     CompanyMember[]
   AuthSession AuthSession[]
   licenseAuditLogs CompanyLicenseAuditLog[]
+  products Product[]
+  suppliers Supplier[]
+  purchaseInvoices PurchaseInvoice[]
+  purchaseOrders PurchaseOrder[]
+  clients Client[]
+  sales Sale[]
+  saleCreditPayments SaleCreditPayment[]
+  cashboxDailies CashboxDaily[]
+  cashSessions CashSession[]
+  cashMovements CashMovement[]
+  closes Close[]
+  depositOrders DepositOrder[]
+  fiscalInvoices FiscalInvoice[]
+  payableServices PayableService[]
+  payablePayments PayablePayment[]
+  payrollEmployees PayrollEmployee[]
+  payrollPeriods PayrollPeriod[]
+  payrollEmployeeConfigs PayrollEmployeeConfig[]
+  payrollEntries PayrollEntry[]
+  payrollEmployeePeriodStatuses PayrollEmployeePeriodStatus[]
+  payrollServiceCommissionRequests PayrollServiceCommissionRequest[]
+  warrantyProductConfigs WarrantyProductConfig[]
+  cotizaciones Cotizacion[]
+  workScheduleProfiles WorkScheduleProfile[]
+  workCoverageRules WorkCoverageRule[]
+  workEmployeeConfigs WorkEmployeeConfig[]
+  workScheduleExceptions WorkScheduleException[]
+  workWeekSchedules WorkWeekSchedule[]
+  workScheduleAuditLogs WorkScheduleAuditLog[]
+  aiAssistantConversationTurns AiAssistantConversationTurn[]
+  aiAssistantMemories AiAssistantMemory[]
 
   @@index([status])
   @@index([licenseStatus])
@@ -1681,7 +1712,7 @@ model Punch {
 
 model Product {
   id                    String    @id @default(uuid()) @db.Uuid
-  companyId             String?   @map("company_id") @db.Uuid
+  companyId             String    @map("company_id") @db.Uuid
   nombre                String
   codigo                String?
   categoria             String
@@ -1698,6 +1729,7 @@ model Product {
   saleItems          SaleItem[]
   cotizacionItems    CotizacionItem[]
   purchaseOrderItems PurchaseOrderItem[]
+  company            Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
   @@index([companyId, nombre])
@@ -1706,7 +1738,7 @@ model Product {
 
 model Supplier {
   id                    String    @id @default(uuid()) @db.Uuid
-  companyId             String?   @map("company_id") @db.Uuid
+  companyId             String    @map("company_id") @db.Uuid
   businessId            String?   @map("business_id") @db.Uuid
   commercialName        String    @map("commercial_name")
   legalName             String?   @map("legal_name")
@@ -1731,6 +1763,7 @@ model Supplier {
   purchaseOrders   PurchaseOrder[]
   purchaseItems    PurchaseOrderItem[]
   purchaseInvoices PurchaseInvoice[]
+  company          Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
   @@index([companyId, commercialName])
@@ -1741,7 +1774,7 @@ model Supplier {
 
 model PurchaseInvoice {
   id              String    @id @default(uuid()) @db.Uuid
-  companyId       String?   @map("company_id") @db.Uuid
+  companyId       String    @map("company_id") @db.Uuid
   supplierId      String    @map("supplier_id") @db.Uuid
   purchaseOrderId String?   @map("purchase_order_id") @db.Uuid
   invoiceNumber   String?   @map("invoice_number")
@@ -1762,6 +1795,7 @@ model PurchaseInvoice {
   supplier      Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
   uploadedBy    User           @relation("PurchaseInvoiceUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([supplierId])
   @@index([purchaseOrderId])
@@ -1780,7 +1814,7 @@ model PurchaseOrderSequence {
 
 model PurchaseOrder {
   id                   String              @id @default(uuid()) @db.Uuid
-  companyId            String?             @map("company_id") @db.Uuid
+  companyId            String              @map("company_id") @db.Uuid
   businessId           String?             @map("business_id") @db.Uuid
   branchId             String?             @map("branch_id") @db.Uuid
   orderNumber          String              @map("order_number")
@@ -1815,6 +1849,7 @@ model PurchaseOrder {
   items      PurchaseOrderItem[]
   receipts   PurchaseReceipt[]
   invoices   PurchaseInvoice[]
+  company    Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, orderNumber])
   @@index([companyId, supplierId])
@@ -1921,7 +1956,7 @@ model WebsiteProductOverride {
 
 model Client {
   id              String    @id @default(uuid()) @db.Uuid
-  companyId       String?   @map("company_id") @db.Uuid
+  companyId       String    @map("company_id") @db.Uuid
   ownerId         String    @db.Uuid
   nombre          String
   telefono        String
@@ -1943,6 +1978,7 @@ model Client {
   serviceOrders          ServiceOrder[]
   cotizaciones           Cotizacion[]
   crmCommercialCustomers CrmCommercialCustomer[]
+  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([ownerId])
   @@index([ownerId, nombre])
@@ -2127,7 +2163,7 @@ model CrmCommercialLibraryItem {
 
 model Sale {
   id                    String    @id @default(uuid()) @db.Uuid
-  companyId             String?   @map("company_id") @db.Uuid
+  companyId             String    @map("company_id") @db.Uuid
   userId                String    @db.Uuid
   customerId            String?   @db.Uuid
   cashSessionId         String?   @db.Uuid
@@ -2160,6 +2196,7 @@ model Sale {
   deletedBy      User?               @relation("SaleDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   items          SaleItem[]
   creditPayments SaleCreditPayment[]
+  company        Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, clientRequestId])
   @@index([userId])
@@ -2172,7 +2209,7 @@ model Sale {
 
 model SaleCreditPayment {
   id             String   @id @default(uuid()) @db.Uuid
-  companyId      String?  @map("company_id") @db.Uuid
+  companyId      String   @map("company_id") @db.Uuid
   saleId         String   @db.Uuid
   userId         String   @db.Uuid
   cashSessionId  String?  @db.Uuid
@@ -2186,6 +2223,7 @@ model SaleCreditPayment {
   sale        Sale         @relation(fields: [saleId], references: [id], onDelete: Cascade)
   user        User         @relation(fields: [userId], references: [id], onDelete: Restrict)
   cashSession CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([saleId])
   @@index([userId])
@@ -2196,7 +2234,7 @@ model SaleCreditPayment {
 
 model CashboxDaily {
   id             String    @id @default(uuid()) @db.Uuid
-  companyId      String?   @map("company_id") @db.Uuid
+  companyId      String    @map("company_id") @db.Uuid
   businessDate   String
   openedAt       DateTime  @default(now())
   openedByUserId String    @db.Uuid
@@ -2210,6 +2248,7 @@ model CashboxDaily {
   updatedAt      DateTime  @updatedAt
 
   sessions CashSession[]
+  company  Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, businessDate])
   @@index([companyId, status])
@@ -2218,7 +2257,7 @@ model CashboxDaily {
 
 model CashSession {
   id              String    @id @default(uuid()) @db.Uuid
-  companyId       String?   @map("company_id") @db.Uuid
+  companyId       String    @map("company_id") @db.Uuid
   openedByUserId  String    @db.Uuid
   userName        String?
   openedAt        DateTime  @default(now())
@@ -2240,6 +2279,7 @@ model CashSession {
   movements      CashMovement[]
   sales          Sale[]
   creditPayments SaleCreditPayment[]
+  company        Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([openedByUserId, status])
   @@index([companyId, status])
@@ -2250,7 +2290,7 @@ model CashSession {
 
 model CashMovement {
   id            String   @id @default(uuid()) @db.Uuid
-  companyId     String?  @map("company_id") @db.Uuid
+  companyId     String   @map("company_id") @db.Uuid
   sessionId     String   @db.Uuid
   type          String
   amount        Decimal  @db.Decimal(12, 2)
@@ -2262,6 +2302,7 @@ model CashMovement {
   updatedAt     DateTime @updatedAt
 
   session CashSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  company Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
   @@index([companyId, createdAt])
@@ -2291,7 +2332,7 @@ model SaleItem {
 
 model Close {
   id                  String          @id @default(uuid()) @db.Uuid
-  companyId           String?         @map("company_id") @db.Uuid
+  companyId           String          @map("company_id") @db.Uuid
   type                CloseType
   date                DateTime        @default(now())
   status              String          @default("pending") // pending/approved/rejected
@@ -2337,6 +2378,7 @@ model Close {
   transfers           CloseTransfer[]
   correctionOf        Close?          @relation("CloseCorrections", fields: [correctionOfCloseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   corrections         Close[]         @relation("CloseCorrections")
+  company             Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, date])
   @@index([companyId, type])
@@ -2379,7 +2421,7 @@ model CloseTransferVoucher {
 
 model DepositOrder {
   id                         String             @id @default(uuid()) @db.Uuid
-  companyId                  String?            @map("company_id") @db.Uuid
+  companyId                  String             @map("company_id") @db.Uuid
   windowFrom                 DateTime
   windowTo                   DateTime
   bankName                   String
@@ -2409,6 +2451,7 @@ model DepositOrder {
   deletedReason              String?
   createdAt                  DateTime           @default(now())
   updatedAt                  DateTime           @updatedAt
+  company                    Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, windowFrom, windowTo])
   @@index([companyId, status])
@@ -2419,7 +2462,7 @@ model DepositOrder {
 
 model FiscalInvoice {
   id            String            @id @default(uuid()) @db.Uuid
-  companyId     String?           @map("company_id") @db.Uuid
+  companyId     String            @map("company_id") @db.Uuid
   kind          FiscalInvoiceKind
   invoiceDate   DateTime
   imageUrl      String
@@ -2428,6 +2471,7 @@ model FiscalInvoice {
   createdByName String?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
+  company       Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, kind])
   @@index([companyId, invoiceDate])
@@ -2436,7 +2480,7 @@ model FiscalInvoice {
 
 model PayableService {
   id            String              @id @default(uuid()) @db.Uuid
-  companyId     String?             @map("company_id") @db.Uuid
+  companyId     String              @map("company_id") @db.Uuid
   title         String
   providerKind  PayableProviderKind
   providerName  String
@@ -2452,6 +2496,7 @@ model PayableService {
   updatedAt     DateTime            @updatedAt
 
   payments PayablePayment[]
+  company  Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, active, nextDueDate])
   @@index([companyId, providerKind])
@@ -2460,7 +2505,7 @@ model PayableService {
 
 model PayablePayment {
   id            String   @id @default(uuid()) @db.Uuid
-  companyId     String?  @map("company_id") @db.Uuid
+  companyId     String   @map("company_id") @db.Uuid
   serviceId     String   @db.Uuid
   amount        Decimal  @db.Decimal(12, 2)
   paidAt        DateTime @default(now())
@@ -2470,6 +2515,7 @@ model PayablePayment {
   createdAt     DateTime @default(now())
 
   service PayableService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  company Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([serviceId, paidAt])
   @@index([companyId, paidAt])
@@ -2478,7 +2524,7 @@ model PayablePayment {
 
 model PayrollEmployee {
   id                   String   @id @default(uuid()) @db.Uuid
-  companyId            String?  @map("company_id") @db.Uuid
+  companyId            String   @map("company_id") @db.Uuid
   ownerId              String   @db.Uuid
   userId               String?  @unique @map("user_id") @db.Uuid
   nombre               String
@@ -2498,6 +2544,7 @@ model PayrollEmployee {
   entries                   PayrollEntry[]
   periodStatuses            PayrollEmployeePeriodStatus[]
   serviceCommissionRequests PayrollServiceCommissionRequest[]
+  company                   Company                           @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([ownerId])
   @@index([companyId])
@@ -2507,7 +2554,7 @@ model PayrollEmployee {
 
 model PayrollPeriod {
   id        String              @id @default(uuid()) @db.Uuid
-  companyId String?             @map("company_id") @db.Uuid
+  companyId String              @map("company_id") @db.Uuid
   ownerId   String              @db.Uuid
   title     String
   startDate DateTime
@@ -2521,6 +2568,7 @@ model PayrollPeriod {
   entries                   PayrollEntry[]
   employeeStatuses          PayrollEmployeePeriodStatus[]
   serviceCommissionRequests PayrollServiceCommissionRequest[]
+  company                   Company                           @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([ownerId])
   @@index([companyId, status])
@@ -2529,7 +2577,7 @@ model PayrollPeriod {
 
 model PayrollEmployeeConfig {
   id                 String   @id @default(uuid()) @db.Uuid
-  companyId          String?  @map("company_id") @db.Uuid
+  companyId          String   @map("company_id") @db.Uuid
   ownerId            String   @db.Uuid
   periodId           String   @db.Uuid
   employeeId         String   @db.Uuid
@@ -2542,6 +2590,7 @@ model PayrollEmployeeConfig {
   owner    User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   period   PayrollPeriod   @relation(fields: [periodId], references: [id], onDelete: Cascade)
   employee PayrollEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company  Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([ownerId, periodId, employeeId])
   @@index([companyId])
@@ -2550,7 +2599,7 @@ model PayrollEmployeeConfig {
 
 model PayrollEntry {
   id                       String           @id @default(uuid()) @db.Uuid
-  companyId                String?          @map("company_id") @db.Uuid
+  companyId                String           @map("company_id") @db.Uuid
   ownerId                  String           @db.Uuid
   periodId                 String           @db.Uuid
   employeeId               String           @db.Uuid
@@ -2567,6 +2616,7 @@ model PayrollEntry {
   employee                        PayrollEmployee                  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   pagoCombustibleTecnico          PagoCombustibleTecnico?          @relation(fields: [pagoCombustibleTecnicoId], references: [id], onDelete: SetNull)
   payrollServiceCommissionRequest PayrollServiceCommissionRequest? @relation("PayrollServiceCommissionRequestToEntry")
+  company                         Company                          @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
   @@index([periodId, employeeId])
@@ -2576,7 +2626,7 @@ model PayrollEntry {
 
 model PayrollEmployeePeriodStatus {
   id         String               @id @default(uuid()) @db.Uuid
-  companyId  String?              @map("company_id") @db.Uuid
+  companyId  String               @map("company_id") @db.Uuid
   ownerId    String               @db.Uuid
   periodId   String               @db.Uuid
   employeeId String               @db.Uuid
@@ -2589,6 +2639,7 @@ model PayrollEmployeePeriodStatus {
   owner    User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   period   PayrollPeriod   @relation(fields: [periodId], references: [id], onDelete: Cascade)
   employee PayrollEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company  Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([ownerId, periodId, employeeId])
   @@index([companyId])
@@ -2598,7 +2649,7 @@ model PayrollEmployeePeriodStatus {
 
 model PayrollServiceCommissionRequest {
   id                 String                         @id @default(uuid()) @db.Uuid
-  companyId          String?                        @map("company_id") @db.Uuid
+  companyId          String                         @map("company_id") @db.Uuid
   ownerId            String                         @db.Uuid
   serviceOrderId     String                         @unique @map("service_order_id") @db.Uuid
   quotationId        String?                        @map("quotation_id") @db.Uuid
@@ -2629,6 +2680,7 @@ model PayrollServiceCommissionRequest {
   technicianUser User            @relation("PayrollServiceCommissionTechnicianUser", fields: [technicianUserId], references: [id], onDelete: Cascade)
   createdByUser  User?           @relation("PayrollServiceCommissionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
   reviewedByUser User?           @relation("PayrollServiceCommissionReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
   @@index([ownerId])
@@ -2800,7 +2852,7 @@ model ServiceClosing {
 
 model WarrantyProductConfig {
   id                String                @id @default(uuid()) @db.Uuid
-  companyId         String?               @map("company_id") @db.Uuid
+  companyId         String                @map("company_id") @db.Uuid
   ownerId           String                @map("owner_id") @db.Uuid
   categoryId        String?               @map("category_id") @db.Uuid
   categoryCode      String?               @map("category_code")
@@ -2820,6 +2872,7 @@ model WarrantyProductConfig {
 
   owner    User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   category ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  company  Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([ownerId])
   @@index([companyId, isActive])
@@ -3193,7 +3246,7 @@ model PublicidadImage {
 
 model Cotizacion {
   id                      String   @id @default(uuid()) @db.Uuid
-  companyId               String?  @map("company_id") @db.Uuid
+  companyId               String   @map("company_id") @db.Uuid
   createdByUserId         String   @db.Uuid
   customerId              String?  @db.Uuid
   customerName            String
@@ -3216,6 +3269,7 @@ model Cotizacion {
   customer      Client?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
   items         CotizacionItem[]
   serviceOrders ServiceOrder[]
+  company       Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([createdByUserId])
   @@index([customerId])
@@ -3248,7 +3302,7 @@ model CotizacionItem {
 
 model WorkScheduleProfile {
   id        String   @id @default(uuid()) @db.Uuid
-  companyId String?  @map("company_id") @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
   name      String
   isDefault Boolean  @default(false) @map("is_default")
   createdAt DateTime @default(now())
@@ -3256,6 +3310,7 @@ model WorkScheduleProfile {
 
   days            WorkScheduleProfileDay[]
   employeeConfigs WorkEmployeeConfig[]
+  company         Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, isDefault])
   @@map("work_schedule_profiles")
@@ -3279,20 +3334,23 @@ model WorkScheduleProfileDay {
 
 model WorkCoverageRule {
   id          String   @id @default(uuid()) @db.Uuid
-  companyId   String?  @map("company_id") @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
   role        Role
   weekday     Int // 0=Mon ... 6=Sun
   minRequired Int      @default(0) @map("min_required")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@unique([role, weekday])
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, role, weekday])
   @@index([companyId, weekday])
   @@map("work_coverage_rules")
 }
 
 model WorkEmployeeConfig {
   id                        String   @id @default(uuid()) @db.Uuid
+  companyId                 String   @map("company_id") @db.Uuid
   userId                    String   @unique @map("user_id") @db.Uuid
   enabled                   Boolean  @default(true)
   scheduleProfileId         String?  @map("schedule_profile_id") @db.Uuid
@@ -3305,18 +3363,21 @@ model WorkEmployeeConfig {
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
 
+  company         Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user            User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
   scheduleProfile WorkScheduleProfile?    @relation(fields: [scheduleProfileId], references: [id], onDelete: SetNull)
   exceptions      WorkScheduleException[]
   assignments     WorkDayAssignment[]
 
   @@index([enabled])
+  @@index([companyId, enabled])
   @@index([scheduleProfileId])
   @@map("work_employee_configs")
 }
 
 model WorkScheduleException {
   id            String                    @id @default(uuid()) @db.Uuid
+  companyId     String                    @map("company_id") @db.Uuid
   userId        String?                   @map("user_id") @db.Uuid
   type          WorkScheduleExceptionType
   dateFrom      DateTime                  @map("date_from")
@@ -3327,8 +3388,10 @@ model WorkScheduleException {
   createdAt     DateTime                  @default(now())
   updatedAt     DateTime                  @updatedAt
 
+  company        Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   employeeConfig WorkEmployeeConfig? @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
+  @@index([companyId, dateFrom, dateTo])
   @@index([userId])
   @@index([type])
   @@index([dateFrom, dateTo])
@@ -3337,8 +3400,8 @@ model WorkScheduleException {
 
 model WorkWeekSchedule {
   id              String                 @id @default(uuid()) @db.Uuid
-  companyId       String?                @map("company_id") @db.Uuid
-  weekStartDate   DateTime               @unique @map("week_start_date")
+  companyId       String                 @map("company_id") @db.Uuid
+  weekStartDate   DateTime               @map("week_start_date")
   status          WorkWeekScheduleStatus @default(GENERATED)
   generatedById   String?                @map("generated_by_id") @db.Uuid
   generatedByName String?                @map("generated_by_name")
@@ -3348,7 +3411,9 @@ model WorkWeekSchedule {
   updatedAt       DateTime               @updatedAt
 
   days WorkDayAssignment[]
+  company Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
+  @@unique([companyId, weekStartDate])
   @@index([companyId, generatedAt])
   @@map("work_week_schedules")
 }
@@ -3381,7 +3446,7 @@ model WorkDayAssignment {
 
 model WorkScheduleAuditLog {
   id            String                  @id @default(uuid()) @db.Uuid
-  companyId     String?                 @map("company_id") @db.Uuid
+  companyId     String                  @map("company_id") @db.Uuid
   action        WorkScheduleAuditAction
   actorUserId   String?                 @map("actor_user_id") @db.Uuid
   actorUserName String?                 @map("actor_user_name")
@@ -3392,6 +3457,7 @@ model WorkScheduleAuditLog {
   before        Json?
   after         Json?
   createdAt     DateTime                @default(now())
+  company       Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([action])
   @@index([companyId, createdAt])
@@ -3404,7 +3470,7 @@ model WorkScheduleAuditLog {
 
 model AiAssistantConversationTurn {
   id                String   @id @default(uuid()) @db.Uuid
-  companyId         String?  @map("company_id") @db.Uuid
+  companyId         String   @map("company_id") @db.Uuid
   ownerId           String   @map("owner_id") @db.Uuid
   userId            String   @map("user_id") @db.Uuid
   module            String   @default("general")
@@ -3417,6 +3483,7 @@ model AiAssistantConversationTurn {
   denied            Boolean  @default(false)
   citations         Json?
   createdAt         DateTime @default(now())
+  company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([ownerId, userId, createdAt])
   @@index([companyId, module, createdAt])
@@ -3426,7 +3493,7 @@ model AiAssistantConversationTurn {
 
 model AiAssistantMemory {
   id           String   @id @default(uuid()) @db.Uuid
-  companyId    String?  @map("company_id") @db.Uuid
+  companyId    String   @map("company_id") @db.Uuid
   ownerId      String   @map("owner_id") @db.Uuid
   userId       String   @map("user_id") @db.Uuid
   scope        String   @default("user")
@@ -3439,6 +3506,7 @@ model AiAssistantMemory {
   lastSourceAt DateTime @default(now()) @map("last_source_at")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([ownerId, userId, scope, topicKey])
   @@index([companyId, module])

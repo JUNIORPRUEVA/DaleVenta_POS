@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
+  CompanyMemberRole,
+  CompanyMemberStatus,
   PayrollEntryType,
   PayrollPaymentStatus,
   PayrollPeriodStatus,
@@ -27,13 +29,30 @@ export class PayrollService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  async resolveCompanyOwnerId(fallbackUserId: string) {
-    const admin = await this.prisma.user.findFirst({
-      where: { role: Role.ADMIN },
+  async resolveCompanyOwnerId(fallbackUserId: string, companyId?: string | null) {
+    const tenantId = companyId?.trim();
+    if (!tenantId) return fallbackUserId;
+    const owner = await this.prisma.companyMember.findFirst({
+      where: {
+        companyId: tenantId,
+        status: CompanyMemberStatus.ACTIVE,
+        role: CompanyMemberRole.OWNER,
+      },
       orderBy: { createdAt: 'asc' },
-      select: { id: true },
+      select: { userId: true },
     });
-    return admin?.id ?? fallbackUserId;
+    return owner?.userId ?? fallbackUserId;
+  }
+
+  private async companyIdForOwner(ownerId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: ownerId },
+      select: { companyId: true },
+    });
+    if (!user?.companyId) {
+      throw new BadRequestException('El usuario no tiene empresa activa para nómina.');
+    }
+    return user.companyId;
   }
 
   async listPeriods(ownerId: string) {
@@ -60,6 +79,7 @@ export class PayrollService {
   }
 
   async createPeriod(ownerId: string, start: Date, end: Date, title: string) {
+    const companyId = await this.companyIdForOwner(ownerId);
     if (end < start) {
       throw new BadRequestException('La fecha final no puede ser menor que la inicial');
     }
@@ -71,6 +91,7 @@ export class PayrollService {
 
     return this.prisma.payrollPeriod.create({
       data: {
+        companyId,
         ownerId,
         title: title.trim(),
         startDate: start,
@@ -81,6 +102,7 @@ export class PayrollService {
   }
 
   async ensureCurrentOpenPeriod(ownerId: string) {
+    const companyId = await this.companyIdForOwner(ownerId);
     const now = new Date();
     const expectedStart = this.periodStartFor(now);
     const expectedEnd = this.periodEndFor(now);
@@ -105,6 +127,7 @@ export class PayrollService {
 
     return this.prisma.payrollPeriod.create({
       data: {
+        companyId,
         ownerId,
         title: this.periodTitle(now),
         startDate: expectedStart,
@@ -126,6 +149,7 @@ export class PayrollService {
   }
 
   async createNextOpenPeriod(ownerId: string, closedPeriodId: string) {
+    const companyId = await this.companyIdForOwner(ownerId);
     const closed = await this.getPeriodById(ownerId, closedPeriodId);
     if (!closed) {
       throw new NotFoundException('Quincena no encontrada');
@@ -151,6 +175,7 @@ export class PayrollService {
 
     return this.prisma.payrollPeriod.create({
       data: {
+        companyId,
         ownerId,
         title,
         startDate: start,
@@ -177,6 +202,7 @@ export class PayrollService {
   }
 
   async upsertEmployee(ownerId: string, dto: UpsertPayrollEmployeeDto) {
+    const companyId = await this.companyIdForOwner(ownerId);
     const nombre = dto.nombre.trim();
     if (!nombre) {
       throw new BadRequestException('El nombre del empleado es obligatorio');
@@ -217,6 +243,7 @@ export class PayrollService {
     }
 
     const payload = {
+      companyId,
       ownerId,
       userId: linkedUser?.id,
       nombre,
@@ -279,6 +306,7 @@ export class PayrollService {
   }
 
   async upsertEmployeeConfig(ownerId: string, dto: UpsertPayrollConfigDto) {
+    const companyId = await this.companyIdForOwner(ownerId);
     return this.prisma.payrollEmployeeConfig.upsert({
       where: {
         ownerId_periodId_employeeId: {
@@ -288,6 +316,7 @@ export class PayrollService {
         },
       },
       create: {
+        companyId,
         ownerId,
         periodId: dto.periodId,
         employeeId: dto.employeeId,
@@ -311,6 +340,7 @@ export class PayrollService {
   }
 
   async addEntry(ownerId: string, dto: AddPayrollEntryDto) {
+    const companyId = await this.companyIdForOwner(ownerId);
     await this.assertPayrollEditable(ownerId, dto.periodId, dto.employeeId);
     const [employee, config] = await Promise.all([
       this.getEmployeeById(ownerId, dto.employeeId),
@@ -331,6 +361,7 @@ export class PayrollService {
 
     const entry = await this.prisma.payrollEntry.create({
       data: {
+        companyId,
         ownerId,
         periodId: dto.periodId,
         employeeId: dto.employeeId,
@@ -536,6 +567,7 @@ export class PayrollService {
     commissionAmount: number;
     concept: string;
   }) {
+    const companyId = await this.companyIdForOwner(params.ownerId);
     const recipientUserId = params.recipientUserId.trim();
     if (!recipientUserId) {
       return null;
@@ -583,6 +615,7 @@ export class PayrollService {
       }
 
       const payload = {
+        companyId,
         ownerId: params.ownerId,
         quotationId: params.quotationId ?? null,
         employeeId: employee.id,
@@ -655,6 +688,7 @@ export class PayrollService {
     reviewedByUserId: string,
   ) {
     const period = await this.ensureCurrentOpenPeriod(ownerId);
+    const companyId = await this.companyIdForOwner(ownerId);
 
     return this.prisma.$transaction(async (tx) => {
       const request = await tx.payrollServiceCommissionRequest.findFirst({
@@ -690,6 +724,7 @@ export class PayrollService {
 
       const entry = await tx.payrollEntry.create({
         data: {
+          companyId,
           ownerId,
           periodId: period.id,
           employeeId: request.employeeId,
@@ -828,6 +863,7 @@ export class PayrollService {
   }
 
   async markPayrollPaid(ownerId: string, periodId: string, employeeId: string, paidById: string) {
+    const companyId = await this.companyIdForOwner(ownerId);
     const [period, employee] = await Promise.all([
       this.getPeriodById(ownerId, periodId),
       this.getEmployeeById(ownerId, employeeId),
@@ -845,6 +881,7 @@ export class PayrollService {
         },
       },
       create: {
+        companyId,
         ownerId,
         periodId,
         employeeId,
@@ -1465,6 +1502,7 @@ export class PayrollService {
     ownerId: string,
     userId: string,
   ) {
+    const companyId = await this.companyIdForOwner(ownerId);
     const existing = await tx.payrollEmployee.findFirst({
       where: {
         ownerId,
@@ -1501,6 +1539,7 @@ export class PayrollService {
 
     return tx.payrollEmployee.create({
       data: {
+        companyId,
         id: user.id,
         ownerId,
         userId: user.id,

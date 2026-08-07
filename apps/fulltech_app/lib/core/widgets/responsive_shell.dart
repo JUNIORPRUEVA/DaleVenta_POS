@@ -13,6 +13,7 @@ import '../design_system/icons/app_icon.dart';
 import '../design_system/icons/app_icon_sizes.dart';
 import '../design_system/icons/app_icons.dart';
 import '../location/location_tracker_provider.dart';
+import '../license/license_repository.dart';
 import '../models/user_model.dart';
 import '../routing/app_navigator.dart';
 import '../routing/routes.dart';
@@ -1009,6 +1010,16 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                   scale: scale,
                   onToggle: _toggleSidebar,
                 ),
+                _SidebarLicenseSummary(
+                  collapsed: visualCollapsed,
+                  textColor: textColor,
+                  mutedText: mutedText,
+                  activeColor: activeColor,
+                  borderColor: borderColor,
+                  baseColor: baseColor,
+                  scale: scale,
+                  onTap: () => widget.onNavigate(Routes.licencias),
+                ),
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
@@ -1633,6 +1644,227 @@ class _PremiumSidebarHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SidebarLicenseSummary extends ConsumerWidget {
+  const _SidebarLicenseSummary({
+    required this.collapsed,
+    required this.textColor,
+    required this.mutedText,
+    required this.activeColor,
+    required this.borderColor,
+    required this.baseColor,
+    required this.scale,
+    required this.onTap,
+  });
+
+  final bool collapsed;
+  final Color textColor;
+  final Color mutedText;
+  final Color activeColor;
+  final Color borderColor;
+  final Color baseColor;
+  final double scale;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final license = ref.watch(licenseStatusProvider);
+
+    String tooltip = 'Licencia';
+    Widget icon = const Icon(Icons.workspace_premium_outlined, size: 18);
+    Widget content = license.when(
+      loading: () {
+        tooltip = 'Licencia cargando';
+        return _SidebarLicenseBody(
+          title: 'Licencia',
+          subtitle: 'Cargando datos...',
+          details: const ['Usuarios: ...', 'Productos: ...'],
+          accentColor: activeColor,
+          mutedText: mutedText,
+        );
+      },
+      error: (_, __) {
+        tooltip = 'Licencia no disponible';
+        return _SidebarLicenseBody(
+          title: 'Licencia',
+          subtitle: 'No disponible',
+          details: const ['Usuarios: --', 'Productos: --'],
+          accentColor: const Color(0xFFE11D48),
+          mutedText: mutedText,
+        );
+      },
+      data: (value) {
+        final status = _sidebarLicenseStatusLabel(value.status);
+        final days = _sidebarLicenseDaysLabel(value);
+        final users = '${value.users}/${value.maxUsers} usuarios';
+        final products = '${value.products}/${value.maxProducts} productos';
+        final company = value.companyName.trim().isEmpty
+            ? 'Empresa'
+            : value.companyName.trim();
+        tooltip = '$company · $status · $days · $users · $products';
+        final accent = value.isUsable
+            ? value.status.toUpperCase() == 'TRIAL'
+                  ? const Color(0xFFB45309)
+                  : activeColor
+            : const Color(0xFFE11D48);
+        icon = Icon(
+          value.isUsable
+              ? Icons.verified_user_outlined
+              : Icons.warning_amber_rounded,
+          size: 18,
+          color: collapsed ? accent : null,
+        );
+        return _SidebarLicenseBody(
+          title: 'Licencia',
+          subtitle: '$status · $days',
+          details: [users, products],
+          accentColor: accent,
+          mutedText: mutedText,
+        );
+      },
+    );
+
+    if (collapsed) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(8, 2, 8, 8 * scale),
+        child: Tooltip(
+          message: tooltip,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              width: 40,
+              height: 38,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.70),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: borderColor),
+              ),
+              child: Center(child: icon),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(10, 2, 10, 8 * scale),
+      child: Tooltip(
+        message: tooltip,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(10, 9, 10, 9),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.66),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: borderColor),
+            ),
+            child: content,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SidebarLicenseBody extends StatelessWidget {
+  const _SidebarLicenseBody({
+    required this.title,
+    required this.subtitle,
+    required this.details,
+    required this.accentColor,
+    required this.mutedText,
+  });
+
+  final String title;
+  final String subtitle;
+  final List<String> details;
+  final Color accentColor;
+  final Color mutedText;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.workspace_premium_outlined,
+              size: 16,
+              color: accentColor,
+            ),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF1E293B),
+                  fontSize: 11.8,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 5),
+        Text(
+          subtitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: accentColor,
+            fontSize: 10.5,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 4),
+        for (final detail in details)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              detail,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: mutedText,
+                fontSize: 10.2,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+String _sidebarLicenseStatusLabel(String status) {
+  switch (status.toUpperCase()) {
+    case 'TRIAL':
+      return 'Modo prueba';
+    case 'ACTIVE':
+      return 'Full';
+    case 'BLOCKED':
+      return 'Bloqueada';
+    case 'EXPIRED':
+      return 'Vencida';
+  }
+  return status.trim().isEmpty ? 'Sin estado' : status;
+}
+
+String _sidebarLicenseDaysLabel(LicenseStatusModel license) {
+  final days = license.daysRemaining;
+  if (days == null) return 'Sin fecha';
+  if (days < 0) return 'Vencida';
+  if (days == 0) return 'Vence hoy';
+  if (days == 1) return '1 dia restante';
+  return '$days dias restantes';
 }
 
 class _PremiumSectionLabel extends StatelessWidget {

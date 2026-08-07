@@ -1,10 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, Role, WarrantyDurationUnit } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { requireTenant } from '../auth/tenant-context';
 import { WarrantyProductConfigQueryDto } from './dto/warranty-product-config-query.dto';
 import { UpsertWarrantyProductConfigDto } from './dto/upsert-warranty-product-config.dto';
 
-type AuthUser = { id: string; role: Role };
+type AuthUser = { id: string; role: Role; companyId?: string | null };
 type WarrantyConfigRow = Prisma.WarrantyProductConfigGetPayload<{ include: { category: true } }>;
 
 export type WarrantyConfigResolution = {
@@ -64,7 +65,7 @@ export class WarrantyConfigsService {
 
   async create(user: AuthUser, dto: UpsertWarrantyProductConfigDto) {
     const ownerId = await this.resolveCompanyOwnerId(user.id);
-    const data = await this.buildData(ownerId, dto);
+    const data = await this.buildData(requireTenant(user), ownerId, dto);
     const item = await this.prisma.warrantyProductConfig.create({
       data,
       include: { category: true },
@@ -79,7 +80,7 @@ export class WarrantyConfigsService {
       select: { id: true },
     });
     if (!existing) throw new NotFoundException('La configuración de garantía no existe');
-    const data = await this.buildData(ownerId, dto);
+    const data = await this.buildData(requireTenant(user), ownerId, dto);
     const item = await this.prisma.warrantyProductConfig.update({
       where: { id },
       data,
@@ -198,7 +199,7 @@ export class WarrantyConfigsService {
     return where;
   }
 
-  private async buildData(ownerId: string, dto: UpsertWarrantyProductConfigDto) {
+  private async buildData(companyId: string, ownerId: string, dto: UpsertWarrantyProductConfigDto) {
     const categoryId = dto.categoryId?.trim() || null;
     const categoryCode = this.normalizeCode(dto.categoryCode ?? '');
     const categoryName = this.cleanText(dto.categoryName);
@@ -238,6 +239,7 @@ export class WarrantyConfigsService {
     }
 
     return {
+      companyId,
       ownerId,
       categoryId,
       categoryCode: resolvedCategoryCode || null,

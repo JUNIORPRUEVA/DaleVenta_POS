@@ -832,6 +832,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
 
   async createClose(dto: CreateCloseDto, actor: Actor) {
     this.normalizeRoleGuard(actor);
+    const companyId = requireTenant(actor as any);
     this.ensureAllowedDailyCloseType(dto.type);
 
     const creator = await this.prisma.user.findUnique({
@@ -862,7 +863,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     const correction = await this.resolveCorrectionMetadata(dto, actor);
     if (!correction.correctionOfCloseId) {
       const existing = await this.prisma.close.findFirst({
-        where: { type: dto.type, date, status: { not: CloseStatus.REJECTED } },
+        where: { companyId, type: dto.type, date, status: { not: CloseStatus.REJECTED } },
         select: { id: true },
       });
       if (existing) {
@@ -874,6 +875,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
 
     const close = await this.prisma.close.create({
       data: {
+        companyId,
         type: dto.type,
         date,
         status: CloseStatus.PENDING,

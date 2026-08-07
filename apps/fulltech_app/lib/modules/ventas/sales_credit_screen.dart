@@ -22,6 +22,7 @@ import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/app_navigation.dart';
 import '../../core/widgets/custom_app_bar.dart';
+import '../../core/widgets/desktop_sales_style.dart';
 import '../../core/widgets/pdf_action_menu.dart';
 import '../../core/widgets/sync_status_banner.dart';
 import '../cash/cash_dialogs.dart';
@@ -49,11 +50,7 @@ bool _shouldUseCreditDesktopLayout(double width) {
 }
 
 double _creditInfoColumnWidth(double width) {
-  if (width >= 1600) return 480;
-  if (width >= 1360) return 440;
-  if (width >= 1040) return 400;
-  if (width >= 900) return 370;
-  return 340;
+  return (width * 0.33).clamp(420.0, 640.0);
 }
 
 class SalesCreditScreen extends ConsumerStatefulWidget {
@@ -138,7 +135,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
     final selected = _selectedCredit(_credits);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: isDesktop ? desktopSalesSurface : AppColors.background,
       drawer: buildAdaptiveDrawer(context, currentUser: currentUser),
       floatingActionButton: !isDesktop
           ? FloatingActionButton(
@@ -182,46 +179,52 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
       body: SafeArea(
         bottom: false,
         child: isDesktop
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: _buildCreditMainColumn(
-                      rows: _credits,
-                      isAdmin: isAdmin,
-                      desktop: true,
+            ? DesktopSalesFrame(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: DesktopSalesPanel(
+                        padding: EdgeInsets.zero,
+                        child: _buildCreditMainColumn(
+                          rows: _credits,
+                          isAdmin: isAdmin,
+                          desktop: true,
+                        ),
+                      ),
                     ),
-                  ),
-                  SizedBox(
-                    width: _creditInfoColumnWidth(width),
-                    child: _CreditFixedInfoColumn(
-                      sale: selected,
-                      totalCredits: _credits.length,
-                      refreshing: _loading,
-                      onPayment: selected == null
-                          ? null
-                          : () => _openPaymentDialog(selected),
-                      onSettle:
-                          selected == null || selected.creditBalance <= 0.009
-                          ? null
-                          : () => _openPaymentDialog(selected, settle: true),
-                      onPdf: selected == null
-                          ? null
-                          : () => _openCreditPdfPreview(selected),
-                      onPrint: selected == null
-                          ? null
-                          : () => _printCreditPdf(selected),
-                      onWhatsApp: selected == null
-                          ? null
-                          : () => _sendCreditWhatsApp(selected),
-                      onDelete: selected == null
-                          ? null
-                          : isAdmin
-                          ? () => _confirmDeleteCredit(selected)
-                          : null,
+                    const SizedBox(width: 16),
+                    SizedBox(
+                      width: _creditInfoColumnWidth(width),
+                      child: _CreditFixedInfoColumn(
+                        sale: selected,
+                        totalCredits: _credits.length,
+                        refreshing: _loading,
+                        onPayment: selected == null
+                            ? null
+                            : () => _openPaymentDialog(selected),
+                        onSettle:
+                            selected == null || selected.creditBalance <= 0.009
+                            ? null
+                            : () => _openPaymentDialog(selected, settle: true),
+                        onPdf: selected == null
+                            ? null
+                            : () => _openCreditPdfPreview(selected),
+                        onPrint: selected == null
+                            ? null
+                            : () => _printCreditPdf(selected),
+                        onWhatsApp: selected == null
+                            ? null
+                            : () => _sendCreditWhatsApp(selected),
+                        onDelete: selected == null
+                            ? null
+                            : isAdmin
+                            ? () => _confirmDeleteCredit(selected)
+                            : null,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               )
             : _buildCreditMainColumn(
                 rows: _credits,
@@ -345,7 +348,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
       children: [
         if (desktop)
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
             child: _CreditTopPanel(
               searchController: _searchController,
               refreshing: _loading,
@@ -1413,15 +1416,13 @@ class _CreditTopPanel extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Material(
-      color: theme.colorScheme.surface,
-      borderRadius: BorderRadius.circular(22),
+      color: desktopSalesPanel,
+      borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
-          ),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: desktopSalesLine),
           boxShadow: [
             BoxShadow(
               color: theme.colorScheme.shadow.withValues(alpha: 0.04),
@@ -1462,22 +1463,9 @@ class _CreditTopPanel extends StatelessWidget {
             const SizedBox(height: 12),
             TextField(
               controller: searchController,
-              decoration: InputDecoration(
-                isDense: true,
+              decoration: desktopSalesInputDecoration(
                 hintText: 'Buscar por cliente, teléfono o factura',
                 prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 13,
-                ),
-                filled: true,
-                fillColor: theme.colorScheme.surfaceContainerHighest.withValues(
-                  alpha: 0.35,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  borderSide: BorderSide.none,
-                ),
               ),
             ),
           ],
@@ -1500,19 +1488,18 @@ class _CreditTopCircleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Material(
-      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-      borderRadius: BorderRadius.circular(14),
+      color: desktopSalesAccentSoft,
+      borderRadius: BorderRadius.circular(8),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(8),
         onTap: onPressed,
         child: Tooltip(
           message: tooltip,
           child: SizedBox(
             width: 40,
             height: 40,
-            child: Icon(icon, size: 20, color: theme.colorScheme.onSurface),
+            child: Icon(icon, size: 20, color: desktopSalesAccent),
           ),
         ),
       ),

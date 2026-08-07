@@ -10,6 +10,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
+import '../../core/widgets/desktop_sales_style.dart';
 import '../../core/widgets/fulltech_page_header.dart';
 import 'cash_dialogs.dart';
 import 'cash_close_ticket_printer.dart';
@@ -212,6 +213,7 @@ class _CashMovementsHistoryScreenState
   _MovementTypeFilter _type = _MovementTypeFilter.all;
   _MovementDateFilter _date = _MovementDateFilter.today;
   DateTime? _specificDate;
+  String? _selectedMovementId;
 
   @override
   void initState() {
@@ -262,6 +264,17 @@ class _CashMovementsHistoryScreenState
           return text.contains(query);
         })
         .toList(growable: false);
+  }
+
+  CashMovementModel? _selectedMovementFrom(List<CashMovementModel> rows) {
+    if (rows.isEmpty) return null;
+    final selectedId = (_selectedMovementId ?? '').trim();
+    if (selectedId.isNotEmpty) {
+      for (final row in rows) {
+        if (row.id == selectedId) return row;
+      }
+    }
+    return rows.first;
   }
 
   bool _matchesDate(DateTime value) {
@@ -375,6 +388,93 @@ class _CashMovementsHistoryScreenState
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (context, index) =>
                     _CashMovementRow(row: visible[index]),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDesktopMovementsContent(
+    BuildContext context,
+    AsyncValue<List<CashMovementModel>> history,
+  ) {
+    return history.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, _) => _CashPanelMessage(
+        icon: Icons.payments_outlined,
+        title: 'No se pudieron cargar movimientos',
+        detail: resolveCashError(error),
+      ),
+      data: (rows) {
+        final visible = _filter(rows);
+        final entries = visible
+            .where((row) => row.isIn)
+            .fold<double>(0, (sum, row) => sum + row.amount);
+        final exits = visible
+            .where((row) => !row.isIn)
+            .fold<double>(0, (sum, row) => sum + row.amount);
+        final selected = _selectedMovementFrom(visible);
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: DesktopSalesPanel(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    _buildMovementToolbar(isMobile: false),
+                    const SizedBox(height: 14),
+                    _MovementStatsGrid(
+                      isMobile: false,
+                      entries: entries,
+                      exits: exits,
+                      count: visible.length,
+                    ),
+                    const SizedBox(height: 14),
+                    Expanded(
+                      child: visible.isEmpty
+                          ? const _CashPanelMessage(
+                              icon: Icons.history_toggle_off_rounded,
+                              title: 'Sin movimientos',
+                              detail:
+                                  'No hay entradas ni salidas en el rango seleccionado.',
+                            )
+                          : ListView.separated(
+                              padding: EdgeInsets.zero,
+                              itemCount: visible.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 8),
+                              itemBuilder: (context, index) {
+                                final row = visible[index];
+                                return _CashMovementRow(
+                                  row: row,
+                                  selected: selected?.id == row.id,
+                                  onTap: () => setState(
+                                    () => _selectedMovementId = row.id,
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            SizedBox(
+              width: (MediaQuery.sizeOf(context).width * 0.33).clamp(
+                420.0,
+                640.0,
+              ),
+              child: _CashMovementDetailColumn(
+                row: selected,
+                entries: entries,
+                exits: exits,
+                count: visible.length,
+                refreshing: history.isLoading,
               ),
             ),
           ],
@@ -518,25 +618,8 @@ class _CashMovementsHistoryScreenState
                     ],
                   ),
                 )
-              : Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: _CashCard(
-                    child: Column(
-                      children: [
-                        _buildMovementToolbar(isMobile: false),
-                        const SizedBox(height: 14),
-                        Expanded(
-                          child: _buildMovementsContent(
-                            context,
-                            history,
-                            isMobile: false,
-                            showStats: true,
-                            listPadding: EdgeInsets.zero,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+              : DesktopSalesFrame(
+                  child: _buildDesktopMovementsContent(context, history),
                 ),
         ),
       ),
@@ -2106,9 +2189,15 @@ class _ExpenseHistoryRow extends StatelessWidget {
 }
 
 class _CashMovementRow extends StatelessWidget {
-  const _CashMovementRow({required this.row});
+  const _CashMovementRow({
+    required this.row,
+    this.selected = false,
+    this.onTap,
+  });
 
   final CashMovementModel row;
+  final bool selected;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -2130,9 +2219,10 @@ class _CashMovementRow extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(isMobile ? 8 : 8),
-        border: isMobile
-            ? Border.all(color: const Color(0xFFDDE7EE))
-            : Border.all(color: _cashLine),
+        border: Border.all(
+          color: selected ? desktopSalesAccent : const Color(0xFFDDE7EE),
+          width: selected ? 1.4 : 1,
+        ),
         boxShadow: isMobile
             ? const []
             : const [
@@ -2143,107 +2233,374 @@ class _CashMovementRow extends StatelessWidget {
                 ),
               ],
       ),
-      child: isMobile
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _MovementIcon(isIn: isIn, color: color),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _MovementText(row: row, label: label),
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          formatRdCurrencyAccounting(row.amount),
-                          style: TextStyle(
-                            color: color,
-                            fontWeight: FontWeight.w900,
+      child: InkWell(
+        onTap: onTap,
+        child: isMobile
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _MovementIcon(isIn: isIn, color: color),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _MovementText(row: row, label: label),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            formatRdCurrencyAccounting(row.amount),
+                            style: TextStyle(
+                              color: color,
+                              fontWeight: FontWeight.w900,
+                            ),
                           ),
                         ),
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      _MovementTypePill(label: label, color: color),
+                      Text(
+                        date,
+                        style: const TextStyle(
+                          color: _cashMuted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              )
+            : Row(
+                children: [
+                  Container(
+                    width: 4,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(999),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    _MovementTypePill(label: label, color: color),
-                    Text(
+                  ),
+                  const SizedBox(width: 12),
+                  _MovementIcon(isIn: isIn, color: color),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: _MovementText(row: row, label: label),
+                  ),
+                  Expanded(
+                    child: Text(
                       date,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: _cashMuted,
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                  ],
-                ),
-              ],
-            )
-          : Row(
-              children: [
-                Container(
-                  width: 4,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: BorderRadius.circular(999),
                   ),
-                ),
-                const SizedBox(width: 12),
-                _MovementIcon(isIn: isIn, color: color),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: _MovementText(row: row, label: label),
-                ),
-                Expanded(
-                  child: Text(
-                    date,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: _cashMuted,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                _MovementTypePill(label: label, color: color),
-                const SizedBox(width: 16),
-                SizedBox(
-                  width: 140,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 9,
-                    ),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      formatRdCurrencyAccounting(row.amount),
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        color: color,
-                        fontWeight: FontWeight.w900,
+                  _MovementTypePill(label: label, color: color),
+                  const SizedBox(width: 16),
+                  SizedBox(
+                    width: 140,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 9,
+                      ),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        formatRdCurrencyAccounting(row.amount),
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          color: color,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
                     ),
                   ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class _CashMovementDetailColumn extends StatelessWidget {
+  const _CashMovementDetailColumn({
+    required this.row,
+    required this.entries,
+    required this.exits,
+    required this.count,
+    required this.refreshing,
+  });
+
+  final CashMovementModel? row;
+  final double entries;
+  final double exits;
+  final int count;
+  final bool refreshing;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = row;
+    final isIn = selected?.isIn ?? true;
+    final accent = isIn ? _cashBlue : _danger;
+
+    return DesktopSalesPanel(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    selected == null
+                        ? 'Detalle'
+                        : (selected.reason.trim().isEmpty
+                              ? (isIn ? 'Ingreso' : 'Salida')
+                              : selected.reason.trim()),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: desktopSalesText,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                _MovementTypePill(
+                  label: selected == null
+                      ? (refreshing ? 'Cargando' : 'Lista')
+                      : isIn
+                      ? 'Entrada'
+                      : 'Salida',
+                  color: selected == null ? desktopSalesAccent : accent,
                 ),
               ],
             ),
+          ),
+          const Divider(height: 1, color: desktopSalesLine),
+          Expanded(
+            child: selected == null
+                ? const _CashPanelMessage(
+                    icon: Icons.payments_outlined,
+                    title: 'Selecciona un movimiento',
+                    detail: 'El detalle aparecerá fijo en esta columna.',
+                  )
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _CashDetailAmount(
+                          label: isIn ? 'Monto entrada' : 'Monto salida',
+                          value: formatRdCurrencyAccounting(selected.amount),
+                          color: accent,
+                        ),
+                        const SizedBox(height: 20),
+                        _CashDetailLine(
+                          label: 'Fecha',
+                          value: DateFormat(
+                            'dd/MM/yyyy HH:mm',
+                            'es_DO',
+                          ).format(selected.createdAt.toLocal()),
+                        ),
+                        _CashDetailLine(
+                          label: 'Usuario',
+                          value: selected.userName ?? 'Usuario',
+                        ),
+                        _CashDetailLine(
+                          label: 'Turno',
+                          value: selected.businessDate ?? 'Actual',
+                        ),
+                        _CashDetailLine(
+                          label: 'Tipo',
+                          value: selected.movementType,
+                        ),
+                        _CashDetailLine(
+                          label: 'Afecta ganancia',
+                          value: selected.affectsProfit ? 'Si' : 'No',
+                        ),
+                        _CashDetailLine(
+                          label: 'Estado turno',
+                          value: selected.sessionStatus ?? 'Sin estado',
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF7FAFC),
+              border: Border(top: BorderSide(color: desktopSalesLine)),
+            ),
+            child: Column(
+              children: [
+                _CashDetailTotalRow(label: 'Movimientos', value: '$count'),
+                _CashDetailTotalRow(
+                  label: 'Entradas',
+                  value: formatRdCurrencyAccounting(entries),
+                ),
+                _CashDetailTotalRow(
+                  label: 'Salidas',
+                  value: formatRdCurrencyAccounting(exits),
+                ),
+                const Divider(height: 18, color: desktopSalesLine),
+                _CashDetailTotalRow(
+                  label: 'Neto vigente',
+                  value: formatRdCurrencyAccounting(entries - exits),
+                  strong: true,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CashDetailAmount extends StatelessWidget {
+  const _CashDetailAmount({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: desktopSalesMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CashDetailLine extends StatelessWidget {
+  const _CashDetailLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 124,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: desktopSalesMuted,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                color: desktopSalesText,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CashDetailTotalRow extends StatelessWidget {
+  const _CashDetailTotalRow({
+    required this.label,
+    required this.value,
+    this.strong = false,
+  });
+
+  final String label;
+  final String value;
+  final bool strong;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: strong ? desktopSalesText : desktopSalesMuted,
+                fontWeight: strong ? FontWeight.w900 : FontWeight.w700,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: desktopSalesText,
+              fontWeight: strong ? FontWeight.w900 : FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

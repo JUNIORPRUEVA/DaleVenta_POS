@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-05T03:46:18.089Z",
+  "generatedAt": "2026-08-07T02:08:14.572Z",
   "models": [
     {
       "modelName": "Company",
@@ -11,15 +11,39 @@
       "tenantIndex": "not_applicable",
       "parentOwnershipRelationship": null,
       "uniqueConstraints": [
-        "slug      String        @unique"
+        "slug              String        @unique",
+        "licenseKey        String?       @unique @map(\"license_key\")"
       ],
       "indexes": [
-        "@@index([status])"
+        "@@index([status])",
+        "@@index([licenseStatus])",
+        "@@index([licenseExpiresAt])"
       ],
       "deleteBehavior": [],
       "storageDependencies": [],
       "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Global platform data"
+    },
+    {
+      "modelName": "CompanyLicenseAuditLog",
+      "tableName": "company_license_audit_logs",
+      "primaryKey": "id",
+      "tenantColumn": "company_id",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
+      "tenantIndex": "present",
+      "parentOwnershipRelationship": null,
+      "uniqueConstraints": [],
+      "indexes": [
+        "@@index([companyId, createdAt])",
+        "@@index([action])"
+      ],
+      "deleteBehavior": [
+        "Cascade"
+      ],
+      "storageDependencies": [],
+      "recommendedMigrationAction": "No tenant migration required.",
+      "classification": "Audit/retention data"
     },
     {
       "modelName": "CompanyMember",
@@ -820,8 +844,8 @@
       "tableName": "Product",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": null,
       "uniqueConstraints": [],
@@ -830,13 +854,15 @@
         "@@index([companyId, nombre])",
         "@@index([companyId, imageKey])"
       ],
-      "deleteBehavior": [],
+      "deleteBehavior": [
+        "Cascade"
+      ],
       "storageDependencies": [
         "imageStorageProvider",
         "imageKey",
         "@@index([companyId,"
       ],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -844,8 +870,8 @@
       "tableName": "suppliers",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": null,
       "uniqueConstraints": [],
@@ -855,9 +881,11 @@
         "@@index([companyId, isActive])",
         "@@index([businessId])"
       ],
-      "deleteBehavior": [],
+      "deleteBehavior": [
+        "Cascade"
+      ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -865,8 +893,8 @@
       "tableName": "purchase_invoices",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": "supplier, purchaseOrder, uploadedBy",
       "uniqueConstraints": [],
@@ -879,13 +907,14 @@
       "deleteBehavior": [
         "Restrict",
         "SetNull",
-        "Restrict"
+        "Restrict",
+        "Cascade"
       ],
       "storageDependencies": [
         "fileUrl",
         "storageKey"
       ],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -909,8 +938,8 @@
       "tableName": "purchase_orders",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": "supplier, createdBy, approvedBy",
       "uniqueConstraints": [
@@ -926,10 +955,11 @@
       "deleteBehavior": [
         "SetNull",
         "Restrict",
-        "SetNull"
+        "SetNull",
+        "Cascade"
       ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -1031,8 +1061,8 @@
       "tableName": "Client",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": "owner",
       "uniqueConstraints": [],
@@ -1048,12 +1078,13 @@
         "@@index([latitude, longitude])"
       ],
       "deleteBehavior": [
+        "Cascade",
         "Cascade"
       ],
       "storageDependencies": [
         "locationUrl"
       ],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -1224,8 +1255,8 @@
       "tableName": "Sale",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": "user, customer, cashSession, deletedBy",
       "uniqueConstraints": [
@@ -1243,10 +1274,11 @@
         "Cascade",
         "SetNull",
         "SetNull",
-        "SetNull"
+        "SetNull",
+        "Cascade"
       ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -1254,8 +1286,8 @@
       "tableName": "sale_credit_payments",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": "sale, user, cashSession",
       "uniqueConstraints": [],
@@ -1268,10 +1300,11 @@
       "deleteBehavior": [
         "Cascade",
         "Restrict",
-        "SetNull"
+        "SetNull",
+        "Cascade"
       ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -1279,8 +1312,8 @@
       "tableName": "cashbox_daily",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": null,
       "uniqueConstraints": [
@@ -1289,9 +1322,11 @@
       "indexes": [
         "@@index([companyId, status])"
       ],
-      "deleteBehavior": [],
+      "deleteBehavior": [
+        "Cascade"
+      ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -1299,8 +1334,8 @@
       "tableName": "cash_sessions",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": "cashboxDaily",
       "uniqueConstraints": [],
@@ -1311,10 +1346,11 @@
         "@@index([companyId, businessDate])"
       ],
       "deleteBehavior": [
-        "SetNull"
+        "SetNull",
+        "Cascade"
       ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -1322,8 +1358,8 @@
       "tableName": "cash_movements",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": "session",
       "uniqueConstraints": [],
@@ -1332,10 +1368,11 @@
         "@@index([companyId, createdAt])"
       ],
       "deleteBehavior": [
+        "Cascade",
         "Cascade"
       ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -1365,8 +1402,8 @@
       "tableName": "Close",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": "correctionOf, corrections",
       "uniqueConstraints": [],
@@ -1383,7 +1420,8 @@
         "@@index([companyId, date, createdById, type])"
       ],
       "deleteBehavior": [
-        "Restrict"
+        "Restrict",
+        "Cascade"
       ],
       "storageDependencies": [
         "evidenceUrl",
@@ -1391,7 +1429,7 @@
         "pdfUrl",
         "pdfStorageKey"
       ],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -1442,8 +1480,8 @@
       "tableName": "DepositOrder",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": null,
       "uniqueConstraints": [],
@@ -1454,11 +1492,13 @@
         "@@index([correctionOfDepositOrderId])",
         "@@index([deletedById])"
       ],
-      "deleteBehavior": [],
+      "deleteBehavior": [
+        "Cascade"
+      ],
       "storageDependencies": [
         "voucherUrl"
       ],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -1466,8 +1506,8 @@
       "tableName": "FiscalInvoice",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": null,
       "uniqueConstraints": [],
@@ -1476,11 +1516,13 @@
         "@@index([companyId, invoiceDate])",
         "@@index([createdById])"
       ],
-      "deleteBehavior": [],
+      "deleteBehavior": [
+        "Cascade"
+      ],
       "storageDependencies": [
         "imageUrl"
       ],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -1488,8 +1530,8 @@
       "tableName": "PayableService",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": null,
       "uniqueConstraints": [],
@@ -1498,9 +1540,11 @@
         "@@index([companyId, providerKind])",
         "@@index([createdById])"
       ],
-      "deleteBehavior": [],
+      "deleteBehavior": [
+        "Cascade"
+      ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -1508,8 +1552,8 @@
       "tableName": "PayablePayment",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": "service",
       "uniqueConstraints": [],
@@ -1519,10 +1563,11 @@
         "@@index([createdById])"
       ],
       "deleteBehavior": [
+        "Cascade",
         "Cascade"
       ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -1530,8 +1575,8 @@
       "tableName": "PayrollEmployee",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": "owner, user",
       "uniqueConstraints": [
@@ -1545,10 +1590,11 @@
       ],
       "deleteBehavior": [
         "Cascade",
-        "SetNull"
+        "SetNull",
+        "Cascade"
       ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -1556,8 +1602,8 @@
       "tableName": "PayrollPeriod",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": "owner",
       "uniqueConstraints": [],
@@ -1567,10 +1613,11 @@
         "@@index([companyId, startDate, endDate])"
       ],
       "deleteBehavior": [
+        "Cascade",
         "Cascade"
       ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -1578,8 +1625,8 @@
       "tableName": "PayrollEmployeeConfig",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": "owner, period, employee",
       "uniqueConstraints": [
@@ -1592,10 +1639,11 @@
       "deleteBehavior": [
         "Cascade",
         "Cascade",
+        "Cascade",
         "Cascade"
       ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -1603,8 +1651,8 @@
       "tableName": "PayrollEntry",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": "owner, period, employee, pagoCombustibleTecnico, payrollServiceCommissionRequest",
       "uniqueConstraints": [
@@ -1620,10 +1668,11 @@
         "Cascade",
         "Cascade",
         "Cascade",
-        "SetNull"
+        "SetNull",
+        "Cascade"
       ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -1631,8 +1680,8 @@
       "tableName": "PayrollEmployeePeriodStatus",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": "owner, period, employee",
       "uniqueConstraints": [
@@ -1646,10 +1695,11 @@
       "deleteBehavior": [
         "Cascade",
         "Cascade",
+        "Cascade",
         "Cascade"
       ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -1657,8 +1707,8 @@
       "tableName": "payroll_service_commission_requests",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": "owner, serviceOrder, employee, period, payrollEntry, technicianUser",
       "uniqueConstraints": [
@@ -1682,10 +1732,11 @@
         "SetNull",
         "Cascade",
         "SetNull",
-        "SetNull"
+        "SetNull",
+        "Cascade"
       ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -1793,8 +1844,8 @@
       "tableName": "warranty_product_configs",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": "owner, category",
       "uniqueConstraints": [],
@@ -1808,10 +1859,11 @@
       ],
       "deleteBehavior": [
         "Cascade",
-        "SetNull"
+        "SetNull",
+        "Cascade"
       ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -2190,8 +2242,8 @@
       "tableName": "Cotizacion",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": "createdBy, customer",
       "uniqueConstraints": [],
@@ -2204,10 +2256,11 @@
       ],
       "deleteBehavior": [
         "Restrict",
-        "SetNull"
+        "SetNull",
+        "Cascade"
       ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -2237,17 +2290,19 @@
       "tableName": "work_schedule_profiles",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": null,
       "uniqueConstraints": [],
       "indexes": [
         "@@index([companyId, isDefault])"
       ],
-      "deleteBehavior": [],
+      "deleteBehavior": [
+        "Cascade"
+      ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -2277,85 +2332,93 @@
       "tableName": "work_coverage_rules",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": null,
       "uniqueConstraints": [
-        "@@unique([role, weekday])"
+        "@@unique([companyId, role, weekday])"
       ],
       "indexes": [
         "@@index([companyId, weekday])"
       ],
-      "deleteBehavior": [],
+      "deleteBehavior": [
+        "Cascade"
+      ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
       "modelName": "WorkEmployeeConfig",
       "tableName": "work_employee_configs",
       "primaryKey": "id",
-      "tenantColumn": null,
-      "tenantNullable": null,
-      "tenantForeignKey": "not_applicable",
-      "tenantIndex": "not_applicable",
+      "tenantColumn": "company_id",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
+      "tenantIndex": "present",
       "parentOwnershipRelationship": "user, scheduleProfile",
       "uniqueConstraints": [
         "userId                    String   @unique @map(\"user_id\") @db.Uuid"
       ],
       "indexes": [
         "@@index([enabled])",
+        "@@index([companyId, enabled])",
         "@@index([scheduleProfileId])"
       ],
       "deleteBehavior": [
         "Cascade",
+        "Cascade",
         "SetNull"
       ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Add companyId through trusted parent backfill or document inherited parent ownership.",
-      "classification": "Company-owned child entity"
+      "recommendedMigrationAction": "No tenant migration required.",
+      "classification": "Company-owned root entity"
     },
     {
       "modelName": "WorkScheduleException",
       "tableName": "work_schedule_exceptions",
       "primaryKey": "id",
-      "tenantColumn": null,
-      "tenantNullable": null,
-      "tenantForeignKey": "not_applicable",
-      "tenantIndex": "not_applicable",
+      "tenantColumn": "company_id",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
+      "tenantIndex": "present",
       "parentOwnershipRelationship": "employeeConfig",
       "uniqueConstraints": [],
       "indexes": [
+        "@@index([companyId, dateFrom, dateTo])",
         "@@index([userId])",
         "@@index([type])",
         "@@index([dateFrom, dateTo])"
       ],
       "deleteBehavior": [
+        "Cascade",
         "Cascade"
       ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Add companyId through trusted parent backfill or document inherited parent ownership.",
-      "classification": "Company-owned child entity"
+      "recommendedMigrationAction": "No tenant migration required.",
+      "classification": "Company-owned root entity"
     },
     {
       "modelName": "WorkWeekSchedule",
       "tableName": "work_week_schedules",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": null,
       "uniqueConstraints": [
-        "weekStartDate   DateTime               @unique @map(\"week_start_date\")"
+        "@@unique([companyId, weekStartDate])"
       ],
       "indexes": [
         "@@index([companyId, generatedAt])"
       ],
-      "deleteBehavior": [],
+      "deleteBehavior": [
+        "Cascade"
+      ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Company-owned root entity"
     },
     {
@@ -2389,8 +2452,8 @@
       "tableName": "work_schedule_audit_logs",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": null,
       "uniqueConstraints": [],
@@ -2402,9 +2465,11 @@
         "@@index([weekStartDate])",
         "@@index([createdAt])"
       ],
-      "deleteBehavior": [],
+      "deleteBehavior": [
+        "Cascade"
+      ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Add Company foreign key after ownership audit passes.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Audit/retention data"
     },
     {
@@ -2412,8 +2477,8 @@
       "tableName": "ai_assistant_conversation_turns",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": null,
       "uniqueConstraints": [],
@@ -2422,9 +2487,11 @@
         "@@index([companyId, module, createdAt])",
         "@@index([ownerId, module, createdAt])"
       ],
-      "deleteBehavior": [],
+      "deleteBehavior": [
+        "Cascade"
+      ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Add Company foreign key after ownership audit passes.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Audit/retention data"
     },
     {
@@ -2432,8 +2499,8 @@
       "tableName": "ai_assistant_memories",
       "primaryKey": "id",
       "tenantColumn": "company_id",
-      "tenantNullable": true,
-      "tenantForeignKey": "missing",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
       "tenantIndex": "present",
       "parentOwnershipRelationship": null,
       "uniqueConstraints": [
@@ -2444,9 +2511,11 @@
         "@@index([ownerId, userId, module])",
         "@@index([ownerId, userId, lastSourceAt])"
       ],
-      "deleteBehavior": [],
+      "deleteBehavior": [
+        "Cascade"
+      ],
       "storageDependencies": [],
-      "recommendedMigrationAction": "Add Company foreign key after ownership audit passes.",
+      "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Audit/retention data"
     }
   ]

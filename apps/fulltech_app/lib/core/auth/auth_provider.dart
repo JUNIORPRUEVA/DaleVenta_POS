@@ -88,6 +88,8 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> _logoutForUnauthorized() async {
     _markSessionHealthy();
     final storage = ref.read(tokenStorageProvider);
+    await ref.read(offlineStoreProvider).clearAll();
+    await FulltechImageCacheManager.clear();
     await storage.clearTokens();
     if (!mounted) return;
     state = AuthState(
@@ -295,6 +297,8 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> logout() async {
     _markSessionHealthy();
     final storage = ref.read(tokenStorageProvider);
+    await ref.read(offlineStoreProvider).clearAll();
+    await FulltechImageCacheManager.clear();
     await storage.clearTokens();
     state = AuthState(
       initialized: true,
@@ -316,7 +320,9 @@ class AuthController extends StateNotifier<AuthState> {
 
     state = state.copyWith(loading: true);
     try {
-      final result = await ref.read(authRepositoryProvider).deleteAccount(
+      final result = await ref
+          .read(authRepositoryProvider)
+          .deleteAccount(
             password: password,
             confirmationPhrase: confirmationPhrase,
           );

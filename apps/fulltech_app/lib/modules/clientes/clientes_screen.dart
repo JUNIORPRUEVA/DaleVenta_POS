@@ -14,6 +14,7 @@ import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/app_navigation.dart';
 import '../../core/widgets/custom_app_bar.dart';
+import '../../core/widgets/desktop_sales_style.dart';
 import '../../core/widgets/sync_status_banner.dart';
 
 import 'application/clientes_controller.dart';
@@ -39,11 +40,7 @@ bool _shouldUseClientesDesktopLayout(double width) {
 }
 
 double _clientesInfoColumnWidth(double width) {
-  if (width >= 1600) return 480;
-  if (width >= 1360) return 440;
-  if (width >= 1040) return 400;
-  if (width >= 900) return 370;
-  return 340;
+  return (width * 0.33).clamp(420.0, 640.0);
 }
 
 class ClientesScreen extends ConsumerStatefulWidget {
@@ -266,7 +263,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
     ].where((active) => active).length;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: isDesktop ? desktopSalesSurface : AppColors.background,
       drawer: buildAdaptiveDrawer(context, currentUser: currentUser),
       floatingActionButton: !isDesktop
           ? FloatingActionButton(
@@ -316,44 +313,52 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
       body: SafeArea(
         bottom: false,
         child: isDesktop
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: _buildClientesMainColumn(
-                      state: state,
-                      controller: controller,
-                      theme: theme,
-                      activeFilterCount: activeFilterCount,
-                      canShowDebugAction: canUseDebugAdminAction(currentUser),
-                      desktopLayout: true,
-                      selectedClient: selectedClient,
+            ? DesktopSalesFrame(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: DesktopSalesPanel(
+                        padding: EdgeInsets.zero,
+                        child: _buildClientesMainColumn(
+                          state: state,
+                          controller: controller,
+                          theme: theme,
+                          activeFilterCount: activeFilterCount,
+                          canShowDebugAction: canUseDebugAdminAction(
+                            currentUser,
+                          ),
+                          desktopLayout: true,
+                          selectedClient: selectedClient,
+                        ),
+                      ),
                     ),
-                  ),
-                  SizedBox(
-                    width: _clientesInfoColumnWidth(width),
-                    child: _ClienteFixedInfoColumn(
-                      client: selectedClient,
-                      totalClients: state.items.length,
-                      refreshing: state.refreshing,
-                      onOpenDetail: selectedClient == null
-                          ? null
-                          : () => context.push(
-                              Routes.clienteDetail(selectedClient.id),
-                            ),
-                      onCreateService: selectedClient == null
-                          ? null
-                          : () => context.push(
-                              Routes.serviceOrderCreate,
-                              extra: ServiceOrderCreateArgs(
-                                initialClientId: selectedClient.id,
+                    const SizedBox(width: 16),
+                    SizedBox(
+                      width: _clientesInfoColumnWidth(width),
+                      child: _ClienteFixedInfoColumn(
+                        client: selectedClient,
+                        totalClients: state.items.length,
+                        refreshing: state.refreshing,
+                        onOpenDetail: selectedClient == null
+                            ? null
+                            : () => context.push(
+                                Routes.clienteDetail(selectedClient.id),
                               ),
-                            ),
-                      onNewClient: _openCreateClientFlow,
-                      onOpenMap: () => context.push(Routes.clientesMapa),
+                        onCreateService: selectedClient == null
+                            ? null
+                            : () => context.push(
+                                Routes.serviceOrderCreate,
+                                extra: ServiceOrderCreateArgs(
+                                  initialClientId: selectedClient.id,
+                                ),
+                              ),
+                        onNewClient: _openCreateClientFlow,
+                        onOpenMap: () => context.push(Routes.clientesMapa),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               )
             : _buildClientesMainColumn(
                 state: state,
@@ -415,7 +420,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
       children: [
         if (desktopLayout)
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
             child: _ClientesTopPanel(
               searchController: _searchCtrl,
               refreshing: state.refreshing,
@@ -759,29 +764,14 @@ class _ClienteFixedInfoColumn extends StatelessWidget {
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            colorScheme.surface,
-            colorScheme.surfaceContainerLowest,
-            Color.alphaBlend(
-              colorScheme.primary.withValues(alpha: 0.025),
-              colorScheme.surface,
-            ),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        border: Border(
-          left: BorderSide(
-            color: colorScheme.primary.withValues(alpha: 0.16),
-            width: 1.2,
-          ),
-        ),
+        color: desktopSalesPanel,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: desktopSalesLine),
         boxShadow: [
           BoxShadow(
-            color: colorScheme.shadow.withValues(alpha: 0.075),
-            blurRadius: 30,
-            offset: const Offset(-10, 0),
+            color: const Color(0xFF0B3550).withValues(alpha: 0.06),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -796,15 +786,12 @@ class _ClienteFixedInfoColumn extends StatelessWidget {
                   width: 54,
                   height: 54,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [colorScheme.primary, colorScheme.tertiary],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(20),
+                    color: desktopSalesAccentSoft,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFB8CAFF)),
                     boxShadow: [
                       BoxShadow(
-                        color: colorScheme.primary.withValues(alpha: 0.24),
+                        color: desktopSalesAccent.withValues(alpha: 0.16),
                         blurRadius: 18,
                         offset: const Offset(0, 8),
                       ),
@@ -812,7 +799,7 @@ class _ClienteFixedInfoColumn extends StatelessWidget {
                   ),
                   child: const Icon(
                     Icons.person_search_rounded,
-                    color: Colors.white,
+                    color: desktopSalesAccent,
                     size: 27,
                   ),
                 ),
@@ -827,7 +814,7 @@ class _ClienteFixedInfoColumn extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w900,
-                          letterSpacing: -0.25,
+                          letterSpacing: 0,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -1056,13 +1043,11 @@ class _ClientInfoLine extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: colorScheme.primary.withValues(alpha: 0.09),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: colorScheme.primary.withValues(alpha: 0.13),
-              ),
+              color: desktopSalesAccentSoft,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFCFE0FF)),
             ),
-            child: Icon(icon, size: 19, color: colorScheme.primary),
+            child: Icon(icon, size: 19, color: desktopSalesAccent),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -1200,15 +1185,13 @@ class _ClientesTopPanel extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Material(
-      color: theme.colorScheme.surface,
-      borderRadius: BorderRadius.circular(22),
+      color: desktopSalesPanel,
+      borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
-          ),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: desktopSalesLine),
           boxShadow: [
             BoxShadow(
               color: theme.colorScheme.shadow.withValues(alpha: 0.04),
@@ -1292,21 +1275,9 @@ class _ClientesTopPanel extends StatelessWidget {
                   child: TextField(
                     controller: searchController,
                     onChanged: onSearchChanged,
-                    decoration: InputDecoration(
-                      isDense: true,
+                    decoration: desktopSalesInputDecoration(
                       hintText: 'Buscar clientes',
                       prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 13,
-                      ),
-                      filled: true,
-                      fillColor: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.35),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide.none,
-                      ),
                     ),
                   ),
                 ),

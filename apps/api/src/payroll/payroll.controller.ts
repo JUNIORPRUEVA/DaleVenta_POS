@@ -19,6 +19,7 @@ import { PayrollService } from './payroll.service';
 type JwtUser = {
   id: string;
   role: Role;
+  companyId?: string | null;
 };
 
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -249,7 +250,7 @@ export class PayrollController {
 
   private async ownerIdFrom(req: Request) {
     const user = req.user as JwtUser;
-    return this.payroll.resolveCompanyOwnerId(user.id);
+    return this.payroll.resolveCompanyOwnerId(user.id, user.companyId);
   }
 
   private mapEmployee(employee: {

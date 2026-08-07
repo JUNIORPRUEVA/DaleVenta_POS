@@ -17,6 +17,7 @@ import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
+import '../../core/widgets/desktop_sales_style.dart';
 import '../clientes/cliente_model.dart';
 import '../clientes/data/clientes_repository.dart';
 import '../ventas/data/ventas_repository.dart';
@@ -1065,21 +1066,32 @@ class _CotizacionesHistorialScreenState
     final searchField = TextField(
       controller: _searchCtrl,
       style: theme.textTheme.bodyMedium,
-      decoration: InputDecoration(
-        hintText: 'Buscar cliente, telefono o fecha',
-        isDense: true,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 12,
-        ),
-        prefixIcon: const Icon(Icons.search_rounded),
-        suffixIcon: _searchQuery.isEmpty
-            ? null
-            : IconButton(
-                onPressed: () => _searchCtrl.clear(),
-                icon: const Icon(Icons.close_rounded),
+      decoration: isMobile
+          ? InputDecoration(
+              hintText: 'Buscar cliente, telefono o fecha',
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
               ),
-      ),
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: _searchQuery.isEmpty
+                  ? null
+                  : IconButton(
+                      onPressed: () => _searchCtrl.clear(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+            )
+          : desktopSalesInputDecoration(
+              hintText: 'Buscar cliente, telefono o fecha',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: _searchQuery.isEmpty
+                  ? null
+                  : IconButton(
+                      onPressed: () => _searchCtrl.clear(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+            ),
     );
 
     return Container(
@@ -1701,6 +1713,7 @@ class _CotizacionesHistorialScreenState
       final selectedQuotation = _selectedQuotationFrom(visibleItems);
 
       return Scaffold(
+        backgroundColor: desktopSalesSurface,
         appBar: CustomAppBar(
           title: phone.isEmpty
               ? 'Historial cotizaciones'
@@ -1711,88 +1724,93 @@ class _CotizacionesHistorialScreenState
         ),
         body: SafeArea(
           bottom: false,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // ── Left: search bar + list ──────────────────────────────────
-              Expanded(
-                child: Column(
-                  children: [
-                    _buildToolbar(context, isMobile: false),
-                    if (_refreshing || _loading)
-                      const LinearProgressIndicator(minHeight: 2),
-                    Expanded(child: _buildListContent(context, visibleItems)),
-                  ],
+          child: DesktopSalesFrame(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: DesktopSalesPanel(
+                    padding: EdgeInsets.zero,
+                    child: Column(
+                      children: [
+                        _buildToolbar(context, isMobile: false),
+                        if (_refreshing || _loading)
+                          const LinearProgressIndicator(minHeight: 2),
+                        Expanded(
+                          child: _buildListContent(context, visibleItems),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-              // ── Right: fixed sidebar ────────────────────────────────────
-              Container(
-                width: 1,
-                color: Theme.of(
-                  context,
-                ).colorScheme.outlineVariant.withValues(alpha: 0.40),
-              ),
-              SizedBox(
-                width: MediaQuery.sizeOf(context).width >= 1280 ? 430 : 380,
-                child: selectedQuotation == null
-                    ? _HistorialDesktopSidebar(
-                        totalCount: visibleItems.length,
-                        totalAmount: totalVisible,
-                        uniqueClients: uniqueClients,
-                        ownOnly: _ownOnly,
-                        selectedTag: _selectedQuoteTag,
-                        availableTags: _availableTags,
-                        fromDate: _fromDate,
-                        toDate: _toDate,
-                        hasActiveFilters:
-                            _activeFilterCount > 0 ||
-                            _searchQuery.isNotEmpty ||
-                            _ownOnly,
-                        onToggleOwn: (v) => setState(() {
-                          _ownOnly = v;
-                          _selectedClientKey = null;
-                        }),
-                        onSelectTag: (tag) =>
-                            setState(() => _selectedQuoteTag = tag),
-                        onPickFrom: () async {
-                          final now = DateTime.now();
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: _fromDate ?? now,
-                            firstDate: DateTime(now.year - 5),
-                            lastDate: DateTime(now.year + 2),
-                            locale: const Locale('es', 'DO'),
-                          );
-                          if (picked != null) {
-                            setState(() => _fromDate = picked);
-                          }
-                        },
-                        onPickTo: () async {
-                          final now = DateTime.now();
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: _toDate ?? now,
-                            firstDate: DateTime(now.year - 5),
-                            lastDate: DateTime(now.year + 2),
-                            locale: const Locale('es', 'DO'),
-                          );
-                          if (picked != null) setState(() => _toDate = picked);
-                        },
-                        onClearFilters: _clearFilters,
-                      )
-                    : _QuotationDetailSidePanel(
-                        item: selectedQuotation,
-                        money: _money,
-                        canEdit: _canEditOrDelete(selectedQuotation),
-                        onEdit: () => _editQuotation(selectedQuotation),
-                        onDuplicate: () =>
-                            _duplicateQuotation(selectedQuotation),
-                        onPdf: () => _openPdfPreview(selectedQuotation),
-                        onSalesTicket: () =>
-                            _openAsSalesTicket(selectedQuotation),
-                      ),
-              ),
-            ],
+                const SizedBox(width: 16),
+                SizedBox(
+                  width: (MediaQuery.sizeOf(context).width * 0.33).clamp(
+                    420.0,
+                    640.0,
+                  ),
+                  child: selectedQuotation == null
+                      ? _HistorialDesktopSidebar(
+                          totalCount: visibleItems.length,
+                          totalAmount: totalVisible,
+                          uniqueClients: uniqueClients,
+                          ownOnly: _ownOnly,
+                          selectedTag: _selectedQuoteTag,
+                          availableTags: _availableTags,
+                          fromDate: _fromDate,
+                          toDate: _toDate,
+                          hasActiveFilters:
+                              _activeFilterCount > 0 ||
+                              _searchQuery.isNotEmpty ||
+                              _ownOnly,
+                          onToggleOwn: (v) => setState(() {
+                            _ownOnly = v;
+                            _selectedClientKey = null;
+                          }),
+                          onSelectTag: (tag) =>
+                              setState(() => _selectedQuoteTag = tag),
+                          onPickFrom: () async {
+                            final now = DateTime.now();
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: _fromDate ?? now,
+                              firstDate: DateTime(now.year - 5),
+                              lastDate: DateTime(now.year + 2),
+                              locale: const Locale('es', 'DO'),
+                            );
+                            if (picked != null) {
+                              setState(() => _fromDate = picked);
+                            }
+                          },
+                          onPickTo: () async {
+                            final now = DateTime.now();
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: _toDate ?? now,
+                              firstDate: DateTime(now.year - 5),
+                              lastDate: DateTime(now.year + 2),
+                              locale: const Locale('es', 'DO'),
+                            );
+                            if (picked != null) {
+                              setState(() => _toDate = picked);
+                            }
+                          },
+                          onClearFilters: _clearFilters,
+                        )
+                      : _QuotationDetailSidePanel(
+                          item: selectedQuotation,
+                          money: _money,
+                          canEdit: _canEditOrDelete(selectedQuotation),
+                          onEdit: () => _editQuotation(selectedQuotation),
+                          onDuplicate: () =>
+                              _duplicateQuotation(selectedQuotation),
+                          onPdf: () => _openPdfPreview(selectedQuotation),
+                          onSalesTicket: () =>
+                              _openAsSalesTicket(selectedQuotation),
+                        ),
+                ),
+              ],
+            ),
           ),
         ),
       );

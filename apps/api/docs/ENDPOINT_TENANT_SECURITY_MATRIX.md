@@ -1,6 +1,6 @@
 # Endpoint Tenant Security Matrix
 
-Generated at: 2026-08-05T03:46:18.092Z
+Generated at: 2026-08-07T02:08:14.575Z
 
 | Method | Route | Controller | Auth | Permissions | Tenant Source | Class | IDOR | Relationship | Storage | Verdict |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -78,6 +78,16 @@ Generated at: 2026-08-05T03:46:18.092Z
 | GET | / | health/health.controller.ts | Public/no guard detected | - | none | read | not_applicable | not_applicable | not_applicable | needs explicit public-risk review |
 | GET | /health | health/health.controller.ts | Public/no guard detected | - | none | read | not_applicable | not_applicable | not_applicable | public endpoint |
 | GET | /health/db | health/health.controller.ts | Public/no guard detected | - | none | read | not_applicable | not_applicable | not_applicable | public endpoint |
+| GET | /license | license/license.controller.ts | AuthGuard or class guard | - | JWT verified user.companyId / membership | read | not_applicable | not_applicable | not_applicable | reviewed by matrix; automated tests required |
+| POST | /license/activate | license/license.controller.ts | AuthGuard or class guard | - | JWT verified user.companyId / membership | write/destructive | not_applicable | required | not_applicable | reviewed by matrix; automated tests required |
+| POST | /license/block | license/license.controller.ts | AuthGuard or class guard | - | JWT verified user.companyId / membership | write/destructive | not_applicable | required | not_applicable | reviewed by matrix; automated tests required |
+| PATCH | /license/limits | license/license.controller.ts | AuthGuard or class guard | - | JWT verified user.companyId / membership | write/destructive | not_applicable | required | not_applicable | reviewed by matrix; automated tests required |
+| GET | /license/admin/companies | license/license.controller.ts | Public/no guard detected | - | none | read | not_applicable | not_applicable | not_applicable | needs explicit public-risk review |
+| GET | /license/admin/:companyId | license/license.controller.ts | Public/no guard detected | - | none | read | not_applicable | not_applicable | not_applicable | needs explicit public-risk review |
+| POST | /license/admin/:companyId/activate | license/license.controller.ts | Public/no guard detected | - | none | write/destructive | not_applicable | required | not_applicable | needs explicit public-risk review |
+| POST | /license/admin/:companyId/block | license/license.controller.ts | Public/no guard detected | - | none | write/destructive | not_applicable | required | not_applicable | needs explicit public-risk review |
+| PATCH | /license/admin/:companyId | license/license.controller.ts | Public/no guard detected | - | none | write/destructive | not_applicable | required | not_applicable | needs explicit public-risk review |
+| DELETE | /license/admin/:companyId | license/license.controller.ts | Public/no guard detected | - | none | write/destructive | not_applicable | required | not_applicable | needs explicit public-risk review |
 | GET | /admin/locations/latest | locations/admin-locations.controller.ts | AuthGuard or class guard | Role.ADMIN | JWT verified user.companyId / membership | read | not_applicable | not_applicable | not_applicable | reviewed by matrix; automated tests required |
 | POST | /locations | locations/locations.controller.ts | AuthGuard or class guard | - | JWT verified user.companyId / membership | write/destructive | not_applicable | required | not_applicable | reviewed by matrix; automated tests required |
 | GET | /payroll/periods | payroll/payroll.controller.ts | AuthGuard or class guard | - | JWT verified user.companyId / membership | read | not_applicable | not_applicable | not_applicable | reviewed by matrix; automated tests required |
