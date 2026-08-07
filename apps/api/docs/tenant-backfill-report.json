@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-07T02:09:04.608Z",
+  "generatedAt": "2026-08-07T02:35:05.544Z",
   "apply": false,
   "tables": [
     {
@@ -213,6 +213,17 @@
     },
     {
       "table": "cashbox_daily",
+      "totalRows": 0,
+      "rowsWithCompany": 0,
+      "rowsMissingCompany": 0,
+      "invalidCompanyReferences": 0,
+      "ambiguousOwnership": 0,
+      "parentMismatch": 0,
+      "safeToEnforce": true,
+      "repairPreviewSql": []
+    },
+    {
+      "table": "company_license_audit_logs",
       "totalRows": 0,
       "rowsWithCompany": 0,
       "rowsMissingCompany": 0,

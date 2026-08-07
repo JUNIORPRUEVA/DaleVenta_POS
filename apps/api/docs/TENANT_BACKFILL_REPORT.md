@@ -1,6 +1,6 @@
 # Tenant Backfill Report
 
-Generated at: 2026-08-07T02:09:04.608Z
+Generated at: 2026-08-07T02:35:05.545Z
 Mode: dry-run
 
 | Table | Total | With Company | Missing | Invalid FK | Ambiguous | Parent Mismatch | Safe |
@@ -25,6 +25,7 @@ Mode: dry-run
 | cash_movements | 0 | 0 | 0 | 0 | 0 | 0 | true |
 | cash_sessions | 0 | 0 | 0 | 0 | 0 | 0 | true |
 | cashbox_daily | 0 | 0 | 0 | 0 | 0 | 0 | true |
+| company_license_audit_logs | 0 | 0 | 0 | 0 | 0 | 0 | true |
 | company_members | 2 | 2 | 0 | 0 | 0 | 0 | true |
 | crm_commercial_library_items | 0 | 0 | 0 | 0 | 0 | 0 | true |
 | employee_warnings | 0 | 0 | 0 | 0 | 0 | 0 | true |
