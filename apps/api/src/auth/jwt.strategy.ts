@@ -43,9 +43,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
     const user = await this.findUserForJwt(payload.sub);
     if (!user || user.blocked === true) throw new UnauthorizedException('User blocked');
-    await this.assertActiveSession(payload);
+    const sessionCompanyId = await this.assertActiveSession(payload);
     const membership = this.resolveActiveMembership(user, payload.companyId);
-    const companyId = membership?.companyId ?? user.companyId ?? null;
+    const companyId = membership?.companyId ?? payload.companyId ?? sessionCompanyId ?? user.companyId ?? null;
     await this.licenses.assertCompanyCanUseApp(companyId);
     const role = membership ? this.mapMemberRoleToLegacyRole(membership.role) : user.role;
     return { id: user.id, email: user.email, role, memberRole: membership?.role ?? null, companyId };
@@ -66,13 +66,33 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       },
       select: {
         id: true,
-        company: { select: { id: true, status: true } },
+        company: { select: { id: true, status: true, licenseStatus: true, trialEndsAt: true, licenseExpiresAt: true } },
       },
     });
     if (!session) throw new UnauthorizedException('Invalid session');
     if (session.company && session.company.status !== 'ACTIVE') {
       throw new UnauthorizedException('Company inactive');
     }
+    if (session.company) {
+      const now = Date.now();
+      const trialExpired =
+        session.company.licenseStatus === 'TRIAL' &&
+        !!session.company.trialEndsAt &&
+        session.company.trialEndsAt.getTime() < now;
+      const paidExpired =
+        session.company.licenseStatus === 'ACTIVE' &&
+        !!session.company.licenseExpiresAt &&
+        session.company.licenseExpiresAt.getTime() < now;
+      if (
+        session.company.licenseStatus === 'BLOCKED' ||
+        session.company.licenseStatus === 'EXPIRED' ||
+        trialExpired ||
+        paidExpired
+      ) {
+        throw new UnauthorizedException('Licencia no activa');
+      }
+    }
+    return session.company?.id ?? null;
   }
 
   private mapMemberRoleToLegacyRole(role?: CompanyMemberRole | string | null): Role {
