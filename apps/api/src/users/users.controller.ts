@@ -130,13 +130,13 @@ export class UsersController {
     });
 
     const r2ObjectKey = `uploads/${objectKey}`;
-    // Las fotos de perfil se sirven por la ruta pública /uploads (igual que
-    // las imágenes de productos) para que carguen en cualquier plataforma
+    // Las fotos de perfil se sirven por la ruta pública /media/photo (igual
+    // que las imágenes de productos) para que carguen en cualquier plataforma
     // sin depender de headers JWT. Cédula/licencia/expediente siguen usando
     // /media/object, que exige autenticación.
     const mediaUrl =
       kind === 'profile'
-        ? this.buildAbsoluteUrl(req, `/${r2ObjectKey}`)
+        ? this.buildPublicProfileUrl(req, r2ObjectKey)
         : this.buildMediaObjectUrl(req, r2ObjectKey);
     try {
       await this.r2.putObject({
@@ -194,6 +194,11 @@ export class UsersController {
 
   private buildMediaObjectUrl(req: Request, objectKey: string): string {
     const path = `/media/object?key=${encodeURIComponent(objectKey)}`;
+    return this.buildAbsoluteUrl(req, path);
+  }
+
+  private buildPublicProfileUrl(req: Request, objectKey: string): string {
+    const path = `/media/photo?key=${encodeURIComponent(objectKey)}`;
     return this.buildAbsoluteUrl(req, path);
   }
 

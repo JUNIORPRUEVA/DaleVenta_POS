@@ -1,7 +1,7 @@
 import 'env.dart';
 
 /// Si [value] apunta a una foto de perfil servida por `/media/object` (que
-/// exige JWT), la reescribe a la ruta pública `/uploads/...` para que la
+/// exige JWT), la reescribe a la ruta pública `/media/photo` para que la
 /// imagen pueda cargarse en cualquier plataforma (escritorio y web) sin token.
 /// Las URLs que no correspondan a fotos de perfil se devuelven sin cambios
 /// (p. ej. cédula/licencia, que siguen protegidas por autenticación).
@@ -14,7 +14,7 @@ String rewriteProfileMediaUrl(String value) {
   try {
     final key = Uri.decodeComponent(encodedKey);
     if (!key.contains('/users/profile/')) return value;
-    return '$base/$key';
+    return '$base/media/photo?key=${Uri.encodeComponent(key)}';
   } catch (_) {
     return value;
   }

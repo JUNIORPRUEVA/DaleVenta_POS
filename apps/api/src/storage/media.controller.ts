@@ -57,6 +57,33 @@ export class MediaController {
     console.log(`[media] product image served companyId=${companyId} productId=${productId} key=${objectKey}`);
   }
 
+  // Ruta pública para fotos de perfil (avatares). A diferencia de /media/object
+  // (que exige JWT), las fotos de perfil se sirven de forma pública para que
+  // carguen en cualquier plataforma. Solo se permite el patrón users/profile;
+  // cédula, licencia y expediente siguen protegidos con autenticación.
+  @Get('photo')
+  async publicProfilePhoto(
+    @Query('key') rawKey: string | undefined,
+    @Res() res: Response,
+  ) {
+    const objectKey = this.normalizeObjectKey(rawKey);
+    if (!objectKey || !objectKey.includes('/users/profile/')) {
+      throw new NotFoundException('Imagen no encontrada');
+    }
+    const companyId = this.companyIdFromObjectKey(objectKey);
+    if (!companyId) throw new NotFoundException('Imagen no encontrada');
+
+    await this.serveObjectKey({ objectKey, companyId, res });
+  }
+
+  private companyIdFromObjectKey(objectKey: string): string | null {
+    const prefix = 'uploads/companies/';
+    if (!objectKey.startsWith(prefix)) return null;
+    const rest = objectKey.substring(prefix.length);
+    const companyId = rest.split('/')[0] ?? '';
+    return companyId.length > 0 ? companyId : null;
+  }
+
   @UseGuards(AuthGuard('jwt'))
   @Get('object')
   async objectImage(
