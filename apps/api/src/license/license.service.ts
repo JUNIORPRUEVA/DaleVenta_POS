@@ -56,7 +56,7 @@ export class LicenseService {
     if (!id) return;
     const status = await this.getCompanyLicenseStatus(id);
     if (!status.isUsable) {
-      throw new UnauthorizedException(status.blockReason ?? 'Licencia no activa');
+      throw this.licenseInactiveException(status);
     }
   }
 
@@ -161,6 +161,11 @@ export class LicenseService {
   async activateCompany(companyId: string, dto: LicenseUpdateInput) {
     const before = await this.companySnapshot(companyId);
     const data = this.licenseData(dto);
+    const shouldCreateFreshLicense =
+      before.licenseStatus === LicenseStatus.BLOCKED ||
+      before.licenseStatus === LicenseStatus.EXPIRED ||
+      !before.licenseKey ||
+      (before.licenseExpiresAt && before.licenseExpiresAt.getTime() < Date.now());
     await this.prisma.company.update({
       where: { id: companyId },
       data: {
@@ -169,12 +174,20 @@ export class LicenseService {
         licenseStatus: LicenseStatus.ACTIVE,
         licenseActivatedAt: new Date(),
         licenseBlockedAt: null,
-        licenseKey: data.licenseKey ?? this.generateLicenseKey(),
+        licenseKey:
+          data.licenseKey ??
+          (shouldCreateFreshLicense ? this.generateLicenseKey() : before.licenseKey),
       },
       select: { id: true },
     });
     const after = await this.getCompanyLicenseStatus(companyId);
-    await this.writeAuditLog(companyId, 'license.activate', before, after, dto);
+    await this.writeAuditLog(
+      companyId,
+      shouldCreateFreshLicense ? 'license.create_new' : 'license.activate',
+      before,
+      after,
+      dto,
+    );
     this.emitLicenseEvent(companyId, 'license.activated', after);
     return after;
   }
@@ -525,10 +538,40 @@ export class LicenseService {
   }
 
   private blockReason(companyStatus: string, licenseStatus: LicenseStatus) {
-    if (companyStatus !== 'ACTIVE') return 'Empresa suspendida';
     if (licenseStatus === LicenseStatus.BLOCKED) return 'Licencia bloqueada';
     if (licenseStatus === LicenseStatus.EXPIRED) return 'Licencia expirada';
+    if (companyStatus !== 'ACTIVE') return 'Empresa suspendida';
     return null;
+  }
+
+  private licenseInactiveException(status: {
+    status?: LicenseStatus | string | null;
+    rawStatus?: LicenseStatus | string | null;
+    blockReason?: string | null;
+    licenseTypeLabel?: string | null;
+    periodEndsAt?: Date | string | null;
+    daysRemaining?: number | null;
+  }) {
+    const rawStatus = `${status.rawStatus ?? status.status ?? ''}`.toUpperCase();
+    const effectiveStatus = `${status.status ?? rawStatus}`.toUpperCase();
+    const reason = status.blockReason ?? 'Licencia no activa';
+    const errorCode = effectiveStatus === LicenseStatus.EXPIRED
+      ? 'LICENSE_EXPIRED'
+      : rawStatus === LicenseStatus.BLOCKED
+        ? 'LICENSE_BLOCKED'
+        : 'LICENSE_INACTIVE';
+
+    return new UnauthorizedException({
+      message: reason,
+      errorCode,
+      licenseStatus: effectiveStatus,
+      rawLicenseStatus: rawStatus,
+      licenseTypeLabel: status.licenseTypeLabel ?? null,
+      periodEndsAt: status.periodEndsAt ?? null,
+      daysRemaining: status.daysRemaining ?? null,
+      supportPhone: '829-534-4286',
+      purchaseUrl: 'https://wa.me/18295344286',
+    });
   }
 
   private generateLicenseKey() {

@@ -37,4 +37,22 @@ describe('LicenseService limits', () => {
 
     expect(limits).toEqual({ maxUsers: 5, maxProducts: 250 });
   });
+
+  it('returns a structured inactive-license error for blocked accounts', () => {
+    const error = service.licenseInactiveException({
+      status: LicenseStatus.BLOCKED,
+      rawStatus: LicenseStatus.BLOCKED,
+      blockReason: 'Licencia bloqueada',
+      licenseTypeLabel: 'Plan basico',
+      daysRemaining: 0,
+    });
+
+    expect(error.getStatus()).toBe(401);
+    expect(error.getResponse()).toMatchObject({
+      message: 'Licencia bloqueada',
+      errorCode: 'LICENSE_BLOCKED',
+      licenseStatus: 'BLOCKED',
+      supportPhone: '829-534-4286',
+    });
+  });
 });

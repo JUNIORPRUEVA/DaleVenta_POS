@@ -128,6 +128,28 @@ class AuthRepository {
 
   ApiException _mapLoginError(ApiException error) {
     final normalizedMessage = error.message.trim().toLowerCase();
+    final normalizedResponse = (error.responseBody ?? '').toLowerCase();
+    final licenseInactive =
+        normalizedMessage.contains('licencia') ||
+        normalizedResponse.contains('license_inactive') ||
+        normalizedResponse.contains('license_blocked') ||
+        normalizedResponse.contains('license_expired') ||
+        normalizedResponse.contains('licencia');
+
+    if (licenseInactive) {
+      return ApiException.detailed(
+        message:
+            'Tu licencia no está activa. Puedes comprar o renovar tu acceso por WhatsApp al 829-534-4286.',
+        code: error.code,
+        type: error.type,
+        displayCode: 'LICENSE_INACTIVE',
+        technicalDetails: error.technicalDetails,
+        responseBody: error.responseBody,
+        uri: error.uri,
+        method: error.method,
+        retryable: false,
+      );
+    }
 
     if (error.type == ApiErrorType.badRequest &&
         normalizedMessage.contains('email o identifier')) {

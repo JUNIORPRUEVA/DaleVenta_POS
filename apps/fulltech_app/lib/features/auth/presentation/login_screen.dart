@@ -10,6 +10,7 @@ import '../../../core/auth/auth_provider.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/routing/route_access.dart';
 import '../../../core/utils/app_feedback.dart';
+import '../../../core/utils/safe_url_launcher.dart';
 import '../../../core/widgets/primary_button.dart';
 import 'register_screen.dart';
 
@@ -85,6 +86,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   _LoginNoticeData _buildErrorNotice(ApiException error) {
+    if (error.displayCode == 'LICENSE_INACTIVE' ||
+        (error.responseBody ?? '').toLowerCase().contains('license_')) {
+      return _LoginNoticeData.error(
+        title: 'Licencia no activa',
+        message: error.message,
+        helpText:
+            'La empresa está bloqueada, vencida o sin licencia vigente. Para continuar debes renovar o comprar una licencia.',
+        actionLabel: 'Comprar por WhatsApp',
+        actionUri: Uri.https('wa.me', '/18295344286', {
+          'text':
+              'Hola, necesito comprar o renovar mi licencia de FullPOS Cloud.',
+        }),
+      );
+    }
+
     switch (error.type) {
       case ApiErrorType.unauthorized:
         return _LoginNoticeData.error(
@@ -383,23 +399,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 }
 
 class _LoginNoticeData {
-  const _LoginNoticeData({
-    required this.title,
-    required this.message,
-    required this.helpText,
-    required this.isError,
-  });
-
   const _LoginNoticeData.error({
     required this.title,
     required this.message,
     required this.helpText,
+    this.actionLabel,
+    this.actionUri,
   }) : isError = true;
 
   final String title;
   final String message;
   final String helpText;
   final bool isError;
+  final String? actionLabel;
+  final Uri? actionUri;
 }
 
 class _LoginNoticeCard extends StatelessWidget {
@@ -481,6 +494,34 @@ class _LoginNoticeCard extends StatelessWidget {
                     height: 1.3,
                   ),
                 ),
+                if (data.actionLabel != null && data.actionUri != null) ...[
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilledButton.icon(
+                      onPressed: () => safeOpenWhatsApp(
+                        context,
+                        data.actionUri!,
+                        copiedMessage:
+                            'No se pudo abrir WhatsApp. Numero copiado.',
+                      ),
+                      icon: const Icon(Icons.chat_rounded, size: 18),
+                      label: Text(data.actionLabel!),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF1957E6),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        textStyle: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
