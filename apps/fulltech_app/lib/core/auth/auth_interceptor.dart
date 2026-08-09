@@ -33,6 +33,16 @@ class AuthInterceptor extends Interceptor {
     );
 
     try {
+      if (_isPublicAuthPath(options.path)) {
+        TraceLog.log(
+          'AuthInterceptor',
+          'onRequest public auth path -> skip bearer token',
+          seq: seq,
+        );
+        handler.next(options);
+        return;
+      }
+
       // TokenStorage already applies its own timeouts (secure/prefs).
       // Avoid a second outer timeout that can cause requests to go out
       // without Authorization on slower devices (notably Windows).
@@ -69,6 +79,14 @@ class AuthInterceptor extends Interceptor {
   bool _isAuthRefreshPath(String path) {
     // `path` puede venir como '/auth/refresh' o con baseUrl ya aplicada en algunos casos.
     return path == ApiRoutes.refresh || path.endsWith(ApiRoutes.refresh);
+  }
+
+  bool _isPublicAuthPath(String path) {
+    return path == ApiRoutes.login ||
+        path.endsWith(ApiRoutes.login) ||
+        path == ApiRoutes.registerBusiness ||
+        path.endsWith(ApiRoutes.registerBusiness) ||
+        _isAuthRefreshPath(path);
   }
 
   Future<_RefreshAttempt> _ensureRefreshed({required int seq}) {
@@ -161,9 +179,18 @@ class AuthInterceptor extends Interceptor {
     final licenseInactive =
         errorCode == 'LICENSE_BLOCKED' ||
         errorCode == 'LICENSE_EXPIRED' ||
+        errorCode == 'LICENSE_INACTIVE' ||
         errorMessage?.contains('licencia no activa') == true ||
         errorMessage?.contains('licencia expirada') == true ||
         errorMessage?.contains('licencia bloqueada') == true;
+    final publicAuthPath = _isPublicAuthPath(err.requestOptions.path);
+    if ((statusCode == 401 || statusCode == 403) && licenseInactive) {
+      if (!publicAuthPath) {
+        sessionEvents.requestUnauthorizedLogout(reason: 'license_expired');
+      }
+      return handler.next(err);
+    }
+
     if (statusCode == 403 &&
         (licenseInactive ||
             errorCode == 'LICENSE_PRODUCT_LIMIT_REACHED' ||
@@ -176,6 +203,7 @@ class AuthInterceptor extends Interceptor {
 
     final alreadyRetried = err.requestOptions.extra[_retryFlagKey] == true;
     if (statusCode == 401 &&
+        !publicAuthPath &&
         !_isAuthRefreshPath(err.requestOptions.path) &&
         !alreadyRetried) {
       final seq = TraceLog.nextSeq();
