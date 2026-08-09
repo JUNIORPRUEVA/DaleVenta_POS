@@ -18,6 +18,7 @@ type LicenseUpdateInput = {
   expiresAt?: unknown;
   notes?: unknown;
   licenseKey?: unknown;
+  plan?: unknown;
   actorEmail?: unknown;
 };
 
@@ -44,6 +45,7 @@ export class LicenseService {
         trialStartedAt: started,
         trialEndsAt: company.trialEndsAt ?? this.addDays(started, 7),
         maxUsers: 2,
+        maxProducts: 100,
       },
       select: { id: true },
     });
@@ -324,6 +326,8 @@ export class LicenseService {
     ]);
     const responsible = owner?.user ?? null;
 
+    const effectiveLimits = this.effectiveLimits(company);
+
     return {
       companyId: company.id,
       companyName: company.name,
@@ -346,8 +350,10 @@ export class LicenseService {
           : company.licenseExpiresAt,
       ),
       limits: {
-        maxUsers: company.maxUsers,
-        maxProducts: company.maxProducts,
+        maxUsers: effectiveLimits.maxUsers,
+        maxProducts: effectiveLimits.maxProducts,
+        configuredMaxUsers: company.maxUsers,
+        configuredMaxProducts: company.maxProducts,
       },
       usage: {
         users,
@@ -388,11 +394,19 @@ export class LicenseService {
     const expiresAt = this.optionalDate(dto.expiresAt);
     const notes = this.stringValue(dto.notes);
     const licenseKey = this.stringValue(dto.licenseKey);
+    const plan = this.planValue(dto.plan);
     if (maxUsers !== undefined) data.maxUsers = maxUsers;
     if (maxProducts !== undefined) data.maxProducts = maxProducts;
     if (expiresAt !== undefined) data.licenseExpiresAt = expiresAt;
     if (notes !== undefined) data.licenseNotes = notes;
     if (licenseKey !== undefined) data.licenseKey = licenseKey;
+    if (plan !== undefined) {
+      data.plan = plan;
+      if (plan === 'STANDARD') {
+        data.maxUsers = maxUsers ?? 2;
+        data.maxProducts = maxProducts ?? 100;
+      }
+    }
     return data;
   }
 
@@ -409,6 +423,37 @@ export class LicenseService {
       throw new BadRequestException('Los limites deben ser enteros positivos');
     }
     return parsed;
+  }
+
+  private planValue(value: unknown) {
+    if (value === undefined || value === null || value === '') return undefined;
+    const cleaned = `${value}`.trim().toUpperCase();
+    if (cleaned === 'BASIC' || cleaned === 'BASICO' || cleaned === 'BÁSICO') {
+      return 'STANDARD' as const;
+    }
+    if (cleaned === 'STANDARD' || cleaned === 'ENTERPRISE') {
+      return cleaned as 'STANDARD' | 'ENTERPRISE';
+    }
+    throw new BadRequestException('Plan de licencia invalido');
+  }
+
+  private effectiveLimits(company: {
+    plan: string;
+    licenseStatus: LicenseStatus;
+    maxUsers: number;
+    maxProducts: number;
+  }) {
+    if (company.licenseStatus === LicenseStatus.TRIAL || company.plan === 'STANDARD') {
+      return {
+        maxUsers: 2,
+        maxProducts: 100,
+      };
+    }
+
+    return {
+      maxUsers: company.maxUsers,
+      maxProducts: company.maxProducts,
+    };
   }
 
   private optionalDate(value: unknown) {

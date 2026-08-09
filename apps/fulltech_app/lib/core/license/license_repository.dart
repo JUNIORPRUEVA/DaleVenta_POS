@@ -148,6 +148,7 @@ class LicenseStatusModel {
     this.licenseKey,
     this.notes,
     this.daysRemaining,
+    this.account,
   });
 
   final String companyId;
@@ -168,6 +169,7 @@ class LicenseStatusModel {
   final int users;
   final int products;
   final int? daysRemaining;
+  final LicenseAccountInfo? account;
 
   factory LicenseStatusModel.fromJson(Map<String, dynamic> json) {
     final limits = (json['limits'] as Map?) ?? const {};
@@ -191,6 +193,7 @@ class LicenseStatusModel {
       users: (usage['users'] as num?)?.toInt() ?? 0,
       products: (usage['products'] as num?)?.toInt() ?? 0,
       daysRemaining: (json['daysRemaining'] as num?)?.toInt(),
+      account: LicenseAccountInfo.fromJson(json['account']),
     );
   }
 
@@ -215,5 +218,49 @@ class LicenseStatusModel {
   DateTime? get periodEndsAt {
     if (status.toUpperCase() == 'TRIAL') return trialEndsAt;
     return licenseExpiresAt ?? trialEndsAt;
+  }
+}
+
+class LicenseAccountInfo {
+  const LicenseAccountInfo({
+    this.businessName,
+    this.taxId,
+    this.businessPhone,
+    this.businessAddress,
+    this.businessType,
+    this.responsibleName,
+    this.responsibleEmail,
+    this.responsibleWhatsapp,
+    this.responsibleUserId,
+  });
+
+  final String? businessName;
+  final String? taxId;
+  final String? businessPhone;
+  final String? businessAddress;
+  final String? businessType;
+  final String? responsibleName;
+  final String? responsibleEmail;
+  final String? responsibleWhatsapp;
+  final String? responsibleUserId;
+
+  factory LicenseAccountInfo.fromJson(dynamic value) {
+    if (value is! Map) return const LicenseAccountInfo();
+    String? read(String key) {
+      final raw = value[key]?.toString().trim();
+      return raw == null || raw.isEmpty ? null : raw;
+    }
+
+    return LicenseAccountInfo(
+      businessName: read('businessName'),
+      taxId: read('taxId'),
+      businessPhone: read('businessPhone'),
+      businessAddress: read('businessAddress'),
+      businessType: read('businessType'),
+      responsibleName: read('responsibleName'),
+      responsibleEmail: read('responsibleEmail'),
+      responsibleWhatsapp: read('responsibleWhatsapp'),
+      responsibleUserId: read('responsibleUserId'),
+    );
   }
 }

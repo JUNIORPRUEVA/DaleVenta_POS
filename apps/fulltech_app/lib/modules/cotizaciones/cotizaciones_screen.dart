@@ -7280,6 +7280,16 @@ class _LicenseDetailsCard extends StatelessWidget {
     final hasKey =
         license.licenseKey != null && license.licenseKey!.trim().isNotEmpty;
     final hasNotes = license.notes != null && license.notes!.trim().isNotEmpty;
+    final account = license.account;
+    final responsible = account?.responsibleName?.trim();
+    final whatsapp = account?.responsibleWhatsapp?.trim();
+    final businessPhone = account?.businessPhone?.trim();
+    final taxId = account?.taxId?.trim();
+    final businessAddress = account?.businessAddress?.trim();
+    final usersExceeded =
+        license.maxUsers > 0 && license.users > license.maxUsers;
+    final productsExceeded =
+        license.maxProducts > 0 && license.products > license.maxProducts;
 
     return _CompanySideSurface(
       child: Column(
@@ -7306,6 +7316,29 @@ class _LicenseDetailsCard extends StatelessWidget {
               _LicenseStatusPill(label: statusLabel, fg: fg, bg: bg),
             ],
           ),
+          const SizedBox(height: 14),
+          const _CompanySideDivider(),
+          const SizedBox(height: 12),
+          Text('DATOS DE LA CUENTA', style: _licenseSectionStyle()),
+          const SizedBox(height: 6),
+          _LicenseInfoRow(
+            label: 'Negocio',
+            value: account?.businessName?.trim().isNotEmpty == true
+                ? account!.businessName!
+                : license.companyName,
+          ),
+          if (responsible != null && responsible.isNotEmpty)
+            _LicenseInfoRow(label: 'Responsable', value: responsible),
+          if (whatsapp != null && whatsapp.isNotEmpty)
+            _LicenseInfoRow(label: 'WhatsApp', value: whatsapp),
+          if (businessPhone != null &&
+              businessPhone.isNotEmpty &&
+              businessPhone != whatsapp)
+            _LicenseInfoRow(label: 'Teléfono negocio', value: businessPhone),
+          if (taxId != null && taxId.isNotEmpty)
+            _LicenseInfoRow(label: 'RNC/Cédula', value: taxId),
+          if (businessAddress != null && businessAddress.isNotEmpty)
+            _LicenseInfoRow(label: 'Dirección', value: businessAddress),
           const SizedBox(height: 14),
           const _CompanySideDivider(),
           const SizedBox(height: 12),
@@ -7342,6 +7375,17 @@ class _LicenseDetailsCard extends StatelessWidget {
             used: license.products,
             max: license.maxProducts,
           ),
+          if (usersExceeded || productsExceeded) ...[
+            const SizedBox(height: 12),
+            _LicenseLimitBanner(
+              message: [
+                if (usersExceeded)
+                  'Usuarios: ${license.users} de ${license.maxUsers}',
+                if (productsExceeded)
+                  'Productos: ${license.products} de ${license.maxProducts}',
+              ].join(' · '),
+            ),
+          ],
           if (hasKey || hasNotes) ...[
             const SizedBox(height: 14),
             const _CompanySideDivider(),
@@ -7353,6 +7397,48 @@ class _LicenseDetailsCard extends StatelessWidget {
             if (hasNotes)
               _LicenseInfoRow(label: 'Notas', value: license.notes!),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _LicenseLimitBanner extends StatelessWidget {
+  const _LicenseLimitBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7ED),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFFDBA74)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: Color(0xFFD97706),
+            size: 18,
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              'Esta cuenta superó el alcance contratado. $message. El servidor no permitirá crear más hasta aumentar el plan o liberar uso.',
+              style: const TextStyle(
+                color: Color(0xFF92400E),
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                height: 1.25,
+                letterSpacing: 0,
+              ),
+            ),
+          ),
         ],
       ),
     );
