@@ -227,7 +227,7 @@ class LicenseStatusModel {
     final label = licenseTypeLabel?.trim();
     if (label != null && label.isNotEmpty) return label;
     final type = licenseType?.trim().toUpperCase();
-    if (type == 'TRIAL') return 'Prueba gratis';
+    if (type == 'TRIAL') return 'Plan demo';
     if (type == 'BASIC_EXTENDED') return 'Plan basico ampliado';
     if (type == 'ENTERPRISE') return 'Plan enterprise';
     return planLabel;

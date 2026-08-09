@@ -155,11 +155,22 @@ class AuthInterceptor extends Interceptor {
     final errorCode = responseData is Map
         ? responseData['errorCode']?.toString().toUpperCase()
         : null;
+    final errorMessage = responseData is Map
+        ? responseData['message']?.toString().toLowerCase()
+        : responseData?.toString().toLowerCase();
+    final licenseInactive =
+        errorCode == 'LICENSE_BLOCKED' ||
+        errorCode == 'LICENSE_EXPIRED' ||
+        errorMessage?.contains('licencia no activa') == true ||
+        errorMessage?.contains('licencia expirada') == true ||
+        errorMessage?.contains('licencia bloqueada') == true;
     if (statusCode == 403 &&
-        (errorCode == 'LICENSE_BLOCKED' ||
+        (licenseInactive ||
             errorCode == 'LICENSE_PRODUCT_LIMIT_REACHED' ||
             errorCode == 'LICENSE_USER_LIMIT_REACHED')) {
-      sessionEvents.requestUnauthorizedLogout();
+      sessionEvents.requestUnauthorizedLogout(
+        reason: licenseInactive ? 'license_expired' : null,
+      );
       return handler.next(err);
     }
 
@@ -192,7 +203,9 @@ class AuthInterceptor extends Interceptor {
           return handler.resolve(retryResponse);
         }
         if (refreshed.shouldLogout) {
-          sessionEvents.requestUnauthorizedLogout();
+          sessionEvents.requestUnauthorizedLogout(
+            reason: licenseInactive ? 'license_expired' : null,
+          );
         }
       } catch (_) {
         // Fall through to original error.

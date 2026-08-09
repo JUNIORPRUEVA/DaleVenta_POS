@@ -12,6 +12,16 @@ describe('LicenseService limits', () => {
     expect(data.maxProducts).toBe(100);
   });
 
+  it('labels trial accounts as plan demo', () => {
+    const label = service.licenseTypeLabel(
+      'STANDARD',
+      LicenseStatus.TRIAL,
+      { maxUsers: 2, maxProducts: 100 },
+    );
+
+    expect(label).toBe('Plan demo');
+  });
+
   it('keeps Appyra paid add-on limits for a basic license', () => {
     const data = service.licenseData({
       plan: 'STANDARD',

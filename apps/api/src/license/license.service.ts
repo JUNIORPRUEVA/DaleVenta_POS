@@ -478,7 +478,7 @@ export class LicenseService {
   ) {
     switch (this.licenseType(plan, status, limits)) {
       case 'TRIAL':
-        return 'Prueba gratis';
+        return 'Plan demo';
       case 'ENTERPRISE':
         return 'Plan enterprise';
       case 'BASIC_EXTENDED':

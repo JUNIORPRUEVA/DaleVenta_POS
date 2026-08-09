@@ -26,6 +26,7 @@ import 'core/realtime/operations_realtime_service.dart';
 import 'core/startup/app_startup_controller.dart';
 import 'core/startup/initial_release_check.dart';
 import 'core/app_update/update_guard_overlay.dart';
+import 'core/utils/safe_url_launcher.dart';
 import 'core/widgets/fulltech_global_background.dart';
 import 'features/contabilidad/contabilidad_init.dart';
 
@@ -219,7 +220,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       final license = await ref.read(licenseRepositoryProvider).getLicense();
       ref.invalidate(licenseStatusProvider);
       if (!license.isUsable) {
-        ref.read(authSessionEventsProvider).requestUnauthorizedLogout();
+        ref
+            .read(authSessionEventsProvider)
+            .requestUnauthorizedLogout(reason: 'license_expired');
       }
     } catch (_) {
       // 401/403 responses are handled by AuthInterceptor. Temporary network
@@ -251,7 +254,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         status == 'BLOCKED' ||
         status == 'EXPIRED';
     if (blockedEvent) {
-      ref.read(authSessionEventsProvider).requestUnauthorizedLogout();
+      ref
+          .read(authSessionEventsProvider)
+          .requestUnauthorizedLogout(reason: 'license_expired');
     }
   }
 
@@ -295,9 +300,185 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
             const AppLoadingOverlay(),
             const AppErrorOverlay(),
             const UpdateGuardOverlay(),
+            const LicensePurchaseOverlay(),
           ],
         );
       },
+    );
+  }
+}
+
+class LicensePurchaseOverlay extends ConsumerWidget {
+  const LicensePurchaseOverlay({super.key});
+
+  static const _phone = '18295344286';
+
+  Uri get _whatsAppUri => Uri.https('wa.me', '/$_phone', {
+    'text':
+        'Hola, mi plan demo de FullPOS Cloud vencio y quiero comprar o renovar el programa.',
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final events = ref.watch(authSessionEventsProvider);
+    if (!events.isLicenseLogout) return const SizedBox.shrink();
+
+    final size = MediaQuery.sizeOf(context);
+    final compact = size.width < 680;
+
+    return Material(
+      color: const Color(0xEAF3F7FB),
+      child: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(compact ? 18 : 28),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: Container(
+                padding: EdgeInsets.all(compact ? 22 : 30),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFFD9E4F2)),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x260B2744),
+                      blurRadius: 34,
+                      offset: Offset(0, 18),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEAF1FF),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(
+                            Icons.workspace_premium_rounded,
+                            color: Color(0xFF1957E6),
+                            size: 28,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Plan demo finalizado',
+                                style: TextStyle(
+                                  color: Color(0xFF0D1B2A),
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0,
+                                ),
+                              ),
+                              SizedBox(height: 3),
+                              Text(
+                                'Tu prueba de 7 dias ya vencio.',
+                                style: TextStyle(
+                                  color: Color(0xFF5E7187),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 22),
+                    const Text(
+                      'Para continuar usando FullPOS Cloud necesitas comprar o renovar tu licencia. El plan demo incluye 2 usuarios y 100 productos durante una semana.',
+                      style: TextStyle(
+                        color: Color(0xFF31465C),
+                        fontSize: 15,
+                        height: 1.45,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF6FAFF),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFD9E7FB)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.call_rounded,
+                            color: Color(0xFF1957E6),
+                            size: 20,
+                          ),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Compra directa por WhatsApp: 829-534-4286',
+                              style: TextStyle(
+                                color: Color(0xFF183548),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: () => safeOpenWhatsApp(
+                              context,
+                              _whatsAppUri,
+                              copiedMessage:
+                                  'No se pudo abrir WhatsApp. Numero copiado.',
+                            ),
+                            icon: const Icon(Icons.chat_rounded),
+                            label: const Text('Comprar por WhatsApp'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF1957E6),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 15),
+                              textStyle: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        IconButton.outlined(
+                          tooltip: 'Cerrar aviso',
+                          onPressed: () => ref
+                              .read(authSessionEventsProvider)
+                              .dismissReason(),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

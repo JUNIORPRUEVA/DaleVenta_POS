@@ -86,7 +86,7 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> _logoutForUnauthorized() async {
-    _markSessionHealthy();
+    _sessionEvents.markLogoutHandled();
     final storage = ref.read(tokenStorageProvider);
     await ref.read(offlineStoreProvider).clearAll();
     await FulltechImageCacheManager.clear();
