@@ -328,11 +328,22 @@ export class LicenseService {
 
     const effectiveLimits = this.effectiveLimits(company);
 
+    const periodStart =
+      effectiveStatus === LicenseStatus.TRIAL
+        ? company.trialStartedAt
+        : company.licenseActivatedAt ?? company.trialStartedAt;
+    const periodEnd =
+      effectiveStatus === LicenseStatus.TRIAL
+        ? company.trialEndsAt
+        : company.licenseExpiresAt;
+
     return {
       companyId: company.id,
       companyName: company.name,
       slug: company.slug,
       plan: company.plan,
+      licenseType: this.licenseType(company.plan, effectiveStatus, effectiveLimits),
+      licenseTypeLabel: this.licenseTypeLabel(company.plan, effectiveStatus, effectiveLimits),
       status: effectiveStatus,
       rawStatus: company.licenseStatus,
       isUsable,
@@ -342,13 +353,11 @@ export class LicenseService {
       licenseActivatedAt: company.licenseActivatedAt,
       licenseExpiresAt: company.licenseExpiresAt,
       licenseBlockedAt: company.licenseBlockedAt,
+      periodStartedAt: periodStart,
+      periodEndsAt: periodEnd,
       licenseKey: company.licenseKey,
       notes: company.licenseNotes,
-      daysRemaining: this.daysRemaining(
-        effectiveStatus === LicenseStatus.TRIAL
-          ? company.trialEndsAt
-          : company.licenseExpiresAt,
-      ),
+      daysRemaining: this.daysRemaining(periodEnd),
       limits: {
         maxUsers: effectiveLimits.maxUsers,
         maxProducts: effectiveLimits.maxProducts,
@@ -443,17 +452,40 @@ export class LicenseService {
     maxUsers: number;
     maxProducts: number;
   }) {
-    if (company.licenseStatus === LicenseStatus.TRIAL || company.plan === 'STANDARD') {
-      return {
-        maxUsers: 2,
-        maxProducts: 100,
-      };
-    }
-
     return {
-      maxUsers: company.maxUsers,
-      maxProducts: company.maxProducts,
+      maxUsers: Math.max(1, company.maxUsers || 2),
+      maxProducts: Math.max(1, company.maxProducts || 100),
     };
+  }
+
+  private licenseType(
+    plan: string,
+    status: LicenseStatus,
+    limits: { maxUsers: number; maxProducts: number },
+  ) {
+    if (status === LicenseStatus.TRIAL) return 'TRIAL';
+    if (plan === 'ENTERPRISE') return 'ENTERPRISE';
+    if (plan === 'STANDARD' && (limits.maxUsers > 2 || limits.maxProducts > 100)) {
+      return 'BASIC_EXTENDED';
+    }
+    return 'BASIC';
+  }
+
+  private licenseTypeLabel(
+    plan: string,
+    status: LicenseStatus,
+    limits: { maxUsers: number; maxProducts: number },
+  ) {
+    switch (this.licenseType(plan, status, limits)) {
+      case 'TRIAL':
+        return 'Prueba gratis';
+      case 'ENTERPRISE':
+        return 'Plan enterprise';
+      case 'BASIC_EXTENDED':
+        return 'Plan basico ampliado';
+      default:
+        return 'Plan basico';
+    }
   }
 
   private optionalDate(value: unknown) {

@@ -7344,6 +7344,7 @@ class _LicenseDetailsCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text('VIGENCIA', style: _licenseSectionStyle()),
           const SizedBox(height: 6),
+          _LicenseInfoRow(label: 'Tipo', value: license.typeLabel),
           _LicenseInfoRow(
             label: 'Inicio',
             value: _licenseDateLabel(license.acquiredAt),

@@ -145,6 +145,10 @@ class LicenseStatusModel {
     this.licenseActivatedAt,
     this.licenseExpiresAt,
     this.licenseBlockedAt,
+    this.periodStartedAt,
+    this.periodEndsAtOverride,
+    this.licenseType,
+    this.licenseTypeLabel,
     this.licenseKey,
     this.notes,
     this.daysRemaining,
@@ -162,6 +166,10 @@ class LicenseStatusModel {
   final DateTime? licenseActivatedAt;
   final DateTime? licenseExpiresAt;
   final DateTime? licenseBlockedAt;
+  final DateTime? periodStartedAt;
+  final DateTime? periodEndsAtOverride;
+  final String? licenseType;
+  final String? licenseTypeLabel;
   final String? licenseKey;
   final String? notes;
   final int maxUsers;
@@ -186,6 +194,10 @@ class LicenseStatusModel {
       licenseActivatedAt: _date(json['licenseActivatedAt']),
       licenseExpiresAt: _date(json['licenseExpiresAt']),
       licenseBlockedAt: _date(json['licenseBlockedAt']),
+      periodStartedAt: _date(json['periodStartedAt']),
+      periodEndsAtOverride: _date(json['periodEndsAt']),
+      licenseType: json['licenseType']?.toString(),
+      licenseTypeLabel: json['licenseTypeLabel']?.toString(),
       licenseKey: json['licenseKey']?.toString(),
       notes: json['notes']?.toString(),
       maxUsers: (limits['maxUsers'] as num?)?.toInt() ?? 2,
@@ -207,17 +219,30 @@ class LicenseStatusModel {
     if (cleaned.isEmpty || cleaned.toUpperCase() == 'STANDARD') {
       return 'Plan basico';
     }
+    if (cleaned.toUpperCase() == 'ENTERPRISE') return 'Plan enterprise';
     return cleaned;
   }
 
+  String get typeLabel {
+    final label = licenseTypeLabel?.trim();
+    if (label != null && label.isNotEmpty) return label;
+    final type = licenseType?.trim().toUpperCase();
+    if (type == 'TRIAL') return 'Prueba gratis';
+    if (type == 'BASIC_EXTENDED') return 'Plan basico ampliado';
+    if (type == 'ENTERPRISE') return 'Plan enterprise';
+    return planLabel;
+  }
+
   DateTime? get acquiredAt {
+    if (periodStartedAt != null) return periodStartedAt;
     if (licenseActivatedAt != null) return licenseActivatedAt;
     return trialStartedAt;
   }
 
   DateTime? get periodEndsAt {
+    if (periodEndsAtOverride != null) return periodEndsAtOverride;
     if (status.toUpperCase() == 'TRIAL') return trialEndsAt;
-    return licenseExpiresAt ?? trialEndsAt;
+    return licenseExpiresAt;
   }
 }
 
