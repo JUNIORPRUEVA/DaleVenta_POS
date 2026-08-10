@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image/image.dart' as img;
 
-import '../../core/api/env.dart';
+import '../../core/app_access/app_access_links.dart';
 import '../../core/app_update/app_update_controller.dart';
 import '../../core/app_update/app_update_models.dart';
 import '../../core/auth/auth_provider.dart';
@@ -35,33 +35,16 @@ class AccountAppsScreen extends StatelessWidget {
       title: 'Apps',
       subtitle: 'Accesos para usar FullPOS Cloud en distintos dispositivos.',
       children: [
-        _AccessChannelTile(
-          icon: Icons.android_rounded,
-          title: 'App Android',
-          status: 'Preparada para móviles y tablets',
-          description:
-              'Permite entrar a la cuenta de la empresa desde Android para consultar ventas, clientes, inventario y operaciones autorizadas.',
-          actionLabel: 'Ver acceso',
-          onPressed: () => safeOpenUrl(context, Uri.parse(Env.appBaseUrl)),
-        ),
-        _AccessChannelTile(
-          icon: Icons.language_rounded,
-          title: 'App web',
-          status: 'Acceso desde navegador',
-          description:
-              'Abre la versión web para trabajar desde cualquier computador autorizado usando las mismas credenciales de la empresa.',
-          actionLabel: 'Abrir web',
-          onPressed: () => safeOpenUrl(context, Uri.parse(Env.appBaseUrl)),
-        ),
-        _AccessChannelTile(
-          icon: Icons.desktop_windows_rounded,
-          title: 'Windows POS',
-          status: 'Punto de venta instalado',
-          description:
-              'Aplicación de escritorio para caja, facturación, impresión y trabajo diario del punto de venta.',
-          actionLabel: 'Actualizaciones',
-          onPressed: () => context.go(Routes.actualizaciones),
-        ),
+        for (final channel in AppAccessLinks.visibleChannels())
+          _AccessChannelTile(
+            icon: channel.icon,
+            title: channel.title,
+            status: channel.status,
+            description: channel.description,
+            actionLabel: channel.actionLabel,
+            actionIcon: channel.actionIcon,
+            onPressed: () => safeOpenUrl(context, channel.uri),
+          ),
       ],
     );
   }
@@ -1173,16 +1156,18 @@ class _AccessChannelTile extends StatelessWidget {
     required this.title,
     required this.status,
     required this.description,
-    required this.actionLabel,
-    required this.onPressed,
+    this.actionLabel,
+    this.actionIcon,
+    this.onPressed,
   });
 
   final IconData icon;
   final String title;
   final String status;
   final String description;
-  final String actionLabel;
-  final VoidCallback onPressed;
+  final String? actionLabel;
+  final IconData? actionIcon;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -1201,13 +1186,18 @@ class _AccessChannelTile extends StatelessWidget {
                 Text(status, style: _strongBodyStyle()),
                 const SizedBox(height: 8),
                 Text(description, style: _bodyStyle()),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: onPressed,
-                  icon: const Icon(Icons.open_in_new_rounded, size: 17),
-                  label: Text(actionLabel),
-                  style: _outlinedButtonStyle(),
-                ),
+                if (actionLabel != null && onPressed != null) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: onPressed,
+                    icon: Icon(
+                      actionIcon ?? Icons.open_in_new_rounded,
+                      size: 17,
+                    ),
+                    label: Text(actionLabel!),
+                    style: _outlinedButtonStyle(),
+                  ),
+                ],
               ],
             ),
           ),

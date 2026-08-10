@@ -10,7 +10,7 @@ import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
-import '../../core/api/env.dart';
+import '../../core/app_access/app_access_links.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/cache/fulltech_cache_manager.dart';
@@ -7014,36 +7014,16 @@ class _CompanyAppsSidePanel extends StatelessWidget {
       title: 'Apps',
       subtitle: 'Accesos para trabajar desde distintos dispositivos.',
       children: [
-        _CompanySideActionTile(
-          icon: Icons.android_rounded,
-          title: 'App Android',
-          status: 'Preparada para móviles y tablets',
-          description:
-              'Permite entrar a la cuenta de la empresa desde Android para consultar ventas, clientes, inventario y operaciones autorizadas.',
-          actionLabel: 'Ver acceso',
-          onPressed: () => safeOpenUrl(context, Uri.parse(Env.appBaseUrl)),
-        ),
-        _CompanySideActionTile(
-          icon: Icons.language_rounded,
-          title: 'App web',
-          status: 'Acceso desde navegador',
-          description:
-              'Abre la versión web para trabajar desde cualquier computador autorizado usando las mismas credenciales de la empresa.',
-          actionLabel: 'Abrir web',
-          onPressed: () => safeOpenUrl(context, Uri.parse(Env.appBaseUrl)),
-        ),
-        _CompanySideActionTile(
-          icon: Icons.desktop_windows_rounded,
-          title: 'Windows POS',
-          status: 'Punto de venta instalado',
-          description:
-              'Aplicación de escritorio para caja, facturación, impresión y trabajo diario del punto de venta.',
-          actionLabel: 'Actualizaciones',
-          onPressed: () {
-            Navigator.of(context).maybePop();
-            context.go(Routes.actualizaciones);
-          },
-        ),
+        for (final channel in AppAccessLinks.visibleChannels())
+          _CompanySideActionTile(
+            icon: channel.icon,
+            title: channel.title,
+            status: channel.status,
+            description: channel.description,
+            actionLabel: channel.actionLabel,
+            actionIcon: channel.actionIcon,
+            onPressed: () => safeOpenUrl(context, channel.uri),
+          ),
       ],
     );
   }
@@ -7805,16 +7785,18 @@ class _CompanySideActionTile extends StatelessWidget {
     required this.title,
     required this.status,
     required this.description,
-    required this.actionLabel,
-    required this.onPressed,
+    this.actionLabel,
+    this.actionIcon,
+    this.onPressed,
   });
 
   final IconData icon;
   final String title;
   final String status;
   final String description;
-  final String actionLabel;
-  final VoidCallback onPressed;
+  final String? actionLabel;
+  final IconData? actionIcon;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -7833,23 +7815,28 @@ class _CompanySideActionTile extends StatelessWidget {
                 Text(status, style: _companySideStrongStyle()),
                 const SizedBox(height: 8),
                 Text(description, style: _companySideBodyStyle()),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: onPressed,
-                  icon: const Icon(Icons.open_in_new_rounded, size: 17),
-                  label: Text(actionLabel),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF1957E6),
-                    side: const BorderSide(color: Color(0xFF9DB9F8)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                if (actionLabel != null && onPressed != null) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: onPressed,
+                    icon: Icon(
+                      actionIcon ?? Icons.open_in_new_rounded,
+                      size: 17,
                     ),
-                    textStyle: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0,
+                    label: Text(actionLabel!),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF1957E6),
+                      side: const BorderSide(color: Color(0xFF9DB9F8)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      textStyle: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0,
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -7879,14 +7866,9 @@ class _CompanySideSurface extends StatelessWidget {
 }
 
 class _CompanySideIcon extends StatelessWidget {
-  const _CompanySideIcon({
-    required this.icon,
-    this.color = const Color(0xFF1957E6),
-    this.size = 34,
-  });
+  const _CompanySideIcon({required this.icon, this.size = 34});
 
   final IconData icon;
-  final Color color;
   final double size;
 
   @override
@@ -7899,7 +7881,7 @@ class _CompanySideIcon extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: const Color(0xFFDDEAFF)),
       ),
-      child: Icon(icon, size: size * 0.48, color: color),
+      child: Icon(icon, size: size * 0.48, color: const Color(0xFF1957E6)),
     );
   }
 }

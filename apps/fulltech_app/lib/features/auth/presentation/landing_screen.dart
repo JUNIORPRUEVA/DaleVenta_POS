@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/app_access/app_access_links.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/utils/safe_url_launcher.dart';
 import 'pwa_install_prompt.dart';
@@ -8,12 +9,8 @@ import 'pwa_install_prompt.dart';
 class LandingScreen extends StatelessWidget {
   const LandingScreen({super.key});
 
-  static Uri get _windowsDownloadUri => Uri.parse(
-    'https://github.com/JUNIORPRUEVA/DaleVenta_POS/releases/latest/download/fullpos-cloud-windows.exe',
-  );
-  static Uri get _androidDownloadUri => Uri.parse(
-    'https://github.com/JUNIORPRUEVA/DaleVenta_POS/releases/latest/download/fullpos-cloud-android.apk',
-  );
+  static Uri get _windowsDownloadUri => AppAccessLinks.windowsReleaseUri;
+  static Uri get _androidDownloadUri => AppAccessLinks.androidReleaseUri;
 
   @override
   Widget build(BuildContext context) {
