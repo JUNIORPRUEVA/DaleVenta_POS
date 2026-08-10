@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -211,37 +213,52 @@ class _CashMovementsHistoryScreenState
     extends ConsumerState<CashMovementsHistoryScreen> {
   final _searchController = TextEditingController();
   _MovementTypeFilter _type = _MovementTypeFilter.all;
-  _MovementDateFilter _date = _MovementDateFilter.today;
+  _MovementDateFilter _date = _MovementDateFilter.all;
   DateTime? _specificDate;
   String? _selectedMovementId;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(() => setState(() {}));
+    // Refresco automático: la página obtiene nuevos movimientos por sí sola,
+    // sin necesidad de pulsar "Actualizar" manualmente.
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 20),
+      (_) => _autoRefresh(),
+    );
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _autoRefresh() {
+    if (!mounted) return;
+    ref.invalidate(cashMovementHistoryProvider);
   }
 
   int get _activeMovementFilterCount {
     var count = 0;
     if (_type != _MovementTypeFilter.all) count++;
-    if (_date != _MovementDateFilter.today) count++;
+    if (_date != _MovementDateFilter.all) count++;
     return count;
   }
 
   String get _movementFilterSummary {
-    final parts = <String>[
-      _movementTypeLabel(_type),
-      _date == _MovementDateFilter.specific && _specificDate != null
-          ? DateFormat('dd/MM/yyyy', 'es_DO').format(_specificDate!)
-          : _movementDateLabel(_date),
-    ];
-    return parts.join(' · ');
+    final typeLabel = _movementTypeLabel(_type);
+    final dateLabel =
+        _date == _MovementDateFilter.specific && _specificDate != null
+        ? DateFormat('dd/MM/yyyy', 'es_DO').format(_specificDate!)
+        : _movementDateLabel(_date);
+    if (_type == _MovementTypeFilter.all && _date == _MovementDateFilter.all) {
+      return 'Todos';
+    }
+    return '$typeLabel · $dateLabel';
   }
 
   List<CashMovementModel> _filter(List<CashMovementModel> rows) {
@@ -553,7 +570,7 @@ class _CashMovementsHistoryScreenState
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.enter): () =>
-            ref.invalidate(cashMovementHistoryProvider),
+            ref.refresh(cashMovementHistoryProvider),
       },
       child: Focus(
         autofocus: true,
@@ -568,8 +585,7 @@ class _CashMovementsHistoryScreenState
                   actions: [
                     IconButton(
                       tooltip: 'Actualizar',
-                      onPressed: () =>
-                          ref.invalidate(cashMovementHistoryProvider),
+                      onPressed: () => ref.refresh(cashMovementHistoryProvider),
                       icon: const Icon(Icons.refresh_rounded),
                     ),
                   ],
@@ -580,8 +596,7 @@ class _CashMovementsHistoryScreenState
                   actions: [
                     IconButton.filledTonal(
                       tooltip: 'Actualizar',
-                      onPressed: () =>
-                          ref.invalidate(cashMovementHistoryProvider),
+                      onPressed: () => ref.refresh(cashMovementHistoryProvider),
                       icon: const Icon(Icons.refresh_rounded),
                     ),
                     const SizedBox(width: 10),
@@ -922,7 +937,7 @@ class _CashMovementsFilterDrawerState
                           onPressed: () => Navigator.of(context).pop(
                             const _CashMovementFilterDraft(
                               type: _MovementTypeFilter.all,
-                              date: _MovementDateFilter.today,
+                              date: _MovementDateFilter.all,
                             ),
                           ),
                           style: OutlinedButton.styleFrom(

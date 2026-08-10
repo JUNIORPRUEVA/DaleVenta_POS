@@ -34,44 +34,67 @@ class AppDrawer extends ConsumerStatefulWidget {
   ConsumerState<AppDrawer> createState() => _AppDrawerState();
 }
 
-class _DrawerSettingsMenuEntry extends StatelessWidget {
-  const _DrawerSettingsMenuEntry({
-    required this.icon,
-    required this.label,
-    this.color,
-  });
+class _DrawerCloudFooter extends StatelessWidget {
+  const _DrawerCloudFooter({required this.compact});
 
-  final IconData icon;
-  final String label;
-  final Color? color;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    final effectiveColor = color ?? AppColors.textPrimary;
-    return SizedBox(
-      height: 42,
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 10 : 12,
+        vertical: compact ? 10 : 12,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F7FB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFDDE7EE)),
+      ),
       child: Row(
         children: [
           Container(
-            width: 30,
-            height: 30,
+            width: compact ? 34 : 38,
+            height: compact ? 34 : 38,
             decoration: BoxDecoration(
-              color: effectiveColor.withValues(alpha: 0.09),
-              borderRadius: BorderRadius.circular(9),
+              color: AppColors.primary.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(11),
             ),
-            child: Icon(icon, size: 17, color: effectiveColor),
+            child: const Icon(
+              Icons.cloud_done_rounded,
+              size: 20,
+              color: AppColors.primary,
+            ),
           ),
           const SizedBox(width: 11),
           Expanded(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.body.copyWith(
-                color: effectiveColor,
-                fontWeight: FontWeight.w600,
-                fontSize: 14.2,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Sistema en la nube',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w800,
+                    fontSize: compact ? 12.5 : 13.5,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Datos sincronizados por empresa',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: compact ? 10.5 : 11.2,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -82,44 +105,6 @@ class _DrawerSettingsMenuEntry extends StatelessWidget {
 
 class _AppDrawerState extends ConsumerState<AppDrawer> {
   int? _openGroupIndex;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeDesktopDefaultGroup();
-    });
-  }
-
-  /// En escritorio abre por defecto el grupo que contiene la ruta activa
-  /// (o el primero si ninguno coincide), permitiendo luego colapsarlo con
-  /// un toque en el encabezado del grupo.
-  void _initializeDesktopDefaultGroup() {
-    if (!mounted) return;
-    if (MediaQuery.sizeOf(context).width < kDesktopShellBreakpoint) return;
-    final currentUser = widget.currentUser;
-    final role =
-        currentUser?.appRole ??
-        ref.read(authStateProvider).user?.appRole ??
-        AppRole.unknown;
-    final sections = buildAppNavigationSections(ref, currentUser);
-    final groups = _buildDrawerGroups(
-      sections,
-      mobileLayout: false,
-      role: role,
-    );
-    final location = safeCurrentLocation(context);
-    var defaultIndex = 0;
-    for (var i = 0; i < groups.length; i++) {
-      if (groups[i].containsActiveRoute(location)) {
-        defaultIndex = i;
-        break;
-      }
-    }
-    if (_openGroupIndex != defaultIndex) {
-      setState(() => _openGroupIndex = defaultIndex);
-    }
-  }
 
   void _openGroup(int index) {
     if (_openGroupIndex == index) return;
@@ -413,151 +398,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                       isCompactMobile ? 10 : 12,
                       12,
                     ),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _DrawerMenuItem(
-                                icon: Icons.badge_outlined,
-                                title: 'Perfil',
-                                compact: isCompactMobile,
-                                selected: isNavigationRouteActive(
-                                  location,
-                                  Routes.profile,
-                                ),
-                                onTap: () {
-                                  final routerContext = Navigator.of(
-                                    context,
-                                    rootNavigator: true,
-                                  ).context;
-                                  Navigator.pop(context);
-                                  if (routerContext.mounted) {
-                                    AppNavigator.go(
-                                      routerContext,
-                                      Routes.profile,
-                                    );
-                                  }
-                                },
-                              ),
-                            ),
-                            if (!isDesktop)
-                              PopupMenuButton<String>(
-                                tooltip: 'Configuración',
-                                constraints: const BoxConstraints(
-                                  minWidth: 230,
-                                  maxWidth: 270,
-                                ),
-                                elevation: 10,
-                                color: Colors.white,
-                                shadowColor: Colors.black26,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                  side: const BorderSide(
-                                    color: Color(0xFFE1E8F0),
-                                  ),
-                                ),
-                                onSelected: (route) {
-                                  final routerContext = Navigator.of(
-                                    context,
-                                    rootNavigator: true,
-                                  ).context;
-                                  Navigator.pop(context);
-                                  if (!routerContext.mounted) return;
-                                  if (route == 'delete-account') {
-                                    ScaffoldMessenger.of(
-                                      routerContext,
-                                    ).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Eliminar mi cuenta estará disponible en configuración.',
-                                        ),
-                                      ),
-                                    );
-                                    return;
-                                  }
-                                  AppNavigator.go(routerContext, route);
-                                },
-                                itemBuilder: (context) => [
-                                  const PopupMenuItem(
-                                    value: Routes.actualizaciones,
-                                    child: _DrawerSettingsMenuEntry(
-                                      icon: Icons.system_update_alt_rounded,
-                                      label: 'Actualizaciones',
-                                    ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: Routes.apps,
-                                    child: _DrawerSettingsMenuEntry(
-                                      icon: Icons.apps_rounded,
-                                      label: 'Apps',
-                                    ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: Routes.configuracion,
-                                    child: _DrawerSettingsMenuEntry(
-                                      icon: Icons.tune_rounded,
-                                      label: 'Otros ajustes',
-                                    ),
-                                  ),
-                                  const PopupMenuDivider(),
-                                  PopupMenuItem(
-                                    value: 'delete-account',
-                                    child: _DrawerSettingsMenuEntry(
-                                      icon: Icons.delete_outline_rounded,
-                                      label: 'Eliminar mi cuenta',
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.error,
-                                    ),
-                                  ),
-                                ],
-                                icon: const Icon(
-                                  Icons.settings_outlined,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            IconButton(
-                              tooltip: 'Cerrar sesion',
-                              onPressed: () async {
-                                Navigator.pop(context);
-                                await ref
-                                    .read(authStateProvider.notifier)
-                                    .logout();
-                              },
-                              icon: AppIcon(
-                                AppIcons.logout,
-                                size: AppIconSizes.button,
-                                color: AppColors.textSecondary,
-                                semanticLabel: 'Cerrar sesión',
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (hasPermission(role, AppPermission.manageUsers)) ...[
-                          const SizedBox(height: 4),
-                          _DrawerMenuItem(
-                            icon: Icons.manage_accounts_outlined,
-                            title: 'Usuario',
-                            compact: isCompactMobile,
-                            selected: isNavigationRouteActive(
-                              location,
-                              Routes.users,
-                            ),
-                            onTap: () {
-                              final routerContext = Navigator.of(
-                                context,
-                                rootNavigator: true,
-                              ).context;
-                              Navigator.pop(context);
-                              if (routerContext.mounted) {
-                                AppNavigator.go(routerContext, Routes.users);
-                              }
-                            },
-                          ),
-                        ],
-                      ],
-                    ),
+                    child: _DrawerCloudFooter(compact: isCompactMobile),
                   ),
                 ],
               ),

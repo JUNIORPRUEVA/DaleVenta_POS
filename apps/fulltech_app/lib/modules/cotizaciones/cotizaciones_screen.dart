@@ -6899,7 +6899,7 @@ class _CompanyAccountMenu extends ConsumerWidget {
             padding: EdgeInsets.zero,
             child: _CompanyMenuItem(
               icon: Icons.groups_2_outlined,
-              label: 'Equipos',
+              label: 'Usuarios',
               onTap: () => _activateMenuItem(
                 menuContext,
                 () => context.go(Routes.users),
@@ -6935,20 +6935,6 @@ class _CompanyAccountMenu extends ConsumerWidget {
               },
               helpText:
                   'Resume el estado de la empresa activa, el plan disponible y la preparación del sistema para trabajo multiempresa.',
-            ),
-          ),
-          PopupMenuItem(
-            enabled: false,
-            padding: EdgeInsets.zero,
-            child: _CompanyMenuItem(
-              icon: Icons.system_update_alt_rounded,
-              label: 'Actualizaciones',
-              onTap: () => _activateMenuItem(
-                menuContext,
-                () => context.go(Routes.actualizaciones),
-              ),
-              helpText:
-                  'Permite revisar la versión instalada, buscar nuevas versiones y confirmar si hay releases disponibles para este equipo.',
             ),
           ),
           PopupMenuItem(
@@ -13275,7 +13261,7 @@ class _AnimatedCalculatorFabState extends State<_AnimatedCalculatorFab>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulse = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1600),
+    duration: const Duration(milliseconds: 2800),
   )..repeat(reverse: true);
 
   @override
@@ -13294,8 +13280,8 @@ class _AnimatedCalculatorFabState extends State<_AnimatedCalculatorFab>
         animation: _pulse,
         builder: (context, child) {
           final t = _pulse.value;
-          final glow = 0.34 * (1 - t);
-          final halo = size * (1.0 + 0.16 * t);
+          final glow = 0.20 * (1 - t);
+          final halo = size * (1.0 + 0.03 * t);
           return SizedBox(
             width: halo + 12,
             height: halo + 12,
@@ -13321,8 +13307,8 @@ class _AnimatedCalculatorFabState extends State<_AnimatedCalculatorFab>
             onTap: widget.onTap,
             borderRadius: BorderRadius.circular(widget.compact ? 14 : 28),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOutCubic,
+              duration: const Duration(milliseconds: 340),
+              curve: Curves.easeInOutCubic,
               width: size,
               height: size,
               decoration: BoxDecoration(
@@ -13330,14 +13316,12 @@ class _AnimatedCalculatorFabState extends State<_AnimatedCalculatorFab>
                 shape: widget.compact ? BoxShape.rectangle : BoxShape.circle,
                 borderRadius: widget.compact ? BorderRadius.circular(14) : null,
                 border: Border.all(
-                  color: isPrimary
-                      ? const Color(0xFF1957E6)
-                      : const Color(0xFFD3E0E7),
-                  width: 1.2,
+                  color: const Color(0xFF1957E6),
+                  width: isPrimary ? 2 : 1.5,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF0F2742).withValues(alpha: 0.18),
+                    color: const Color(0xFF1957E6).withValues(alpha: 0.28),
                     blurRadius: 20,
                     offset: const Offset(0, 9),
                   ),

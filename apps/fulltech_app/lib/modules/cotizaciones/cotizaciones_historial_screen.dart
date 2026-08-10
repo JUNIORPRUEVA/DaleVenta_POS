@@ -2339,10 +2339,12 @@ class _QuotationDetailSidePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final primary = theme.colorScheme.primary;
     final customerPhone = (item.customerPhone ?? '').trim();
     final createdBy = (item.createdByUserName ?? '').trim();
     final note = item.note.trim();
+    final discount = item.globalDiscountAmount > 0
+        ? '-${money(item.globalDiscountAmount)}'
+        : null;
 
     return Container(
       color: theme.colorScheme.surface,
@@ -2350,142 +2352,42 @@ class _QuotationDetailSidePanel extends StatelessWidget {
         left: false,
         child: Column(
           children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-              decoration: BoxDecoration(
-                color: primary.withValues(alpha: 0.08),
-                border: Border(
-                  bottom: BorderSide(
-                    color: theme.colorScheme.outlineVariant.withValues(
-                      alpha: 0.55,
-                    ),
-                  ),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: primary.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(Icons.description_outlined, color: primary),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item.customerName.trim().isEmpty
-                                  ? 'Cliente sin nombre'
-                                  : item.customerName.trim(),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              DateFormat(
-                                'dd/MM/yyyy · h:mm a',
-                                'es_DO',
-                              ).format(item.createdAt),
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    money(item.total),
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      color: primary,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${item.items.length} lineas · ITBIS ${item.includeItbis ? 'aplicado' : 'no aplicado'}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
+            _QuoteDocHeader(
+              quoteNumber: _shortQuoteNumber(item.id),
+              createdAt: item.createdAt,
+              itemsCount: item.items.length,
+              includeItbis: item.includeItbis,
             ),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+                padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
                 children: [
-                  _DetailInfoRow(
-                    icon: Icons.person_outline,
-                    label: 'Cliente',
-                    value: item.customerName.trim().isEmpty
-                        ? 'Sin nombre'
-                        : item.customerName.trim(),
+                  _QuoteClientBlock(
+                    name: item.customerName.trim(),
+                    phone: customerPhone,
+                    createdBy: createdBy,
                   ),
-                  if (customerPhone.isNotEmpty)
-                    _DetailInfoRow(
-                      icon: Icons.call_outlined,
-                      label: 'Telefono',
-                      value: customerPhone,
-                    ),
-                  if (createdBy.isNotEmpty)
-                    _DetailInfoRow(
-                      icon: Icons.badge_outlined,
-                      label: 'Creada por',
-                      value: createdBy,
-                    ),
                   if (note.isNotEmpty) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     _DetailNote(note: note),
                   ],
-                  const SizedBox(height: 14),
-                  Text(
-                    'Productos',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 16),
+                  const _QuoteTableHeader(),
+                  const SizedBox(height: 2),
                   for (final line in item.items)
-                    _DetailProductLine(
+                    _QuoteTableRow(
                       title: line.nombre,
-                      subtitle: '${_qty(line.qty)} x ${money(line.unitPrice)}',
+                      qty: _qty(line.qty),
+                      unitPrice: money(line.unitPrice),
                       total: money(line.total),
                     ),
-                  const SizedBox(height: 12),
-                  _DetailTotalRow(
-                    label: 'Subtotal',
-                    value: money(item.subtotal),
-                  ),
-                  _DetailTotalRow(
-                    label: item.includeItbis ? 'ITBIS 18%' : 'ITBIS',
-                    value: money(item.itbisAmount),
-                  ),
-                  if (item.globalDiscountAmount > 0)
-                    _DetailTotalRow(
-                      label: 'Descuento',
-                      value: '-${money(item.globalDiscountAmount)}',
-                    ),
-                  const Divider(height: 20),
-                  _DetailTotalRow(
-                    label: 'Total',
-                    value: money(item.total),
-                    strong: true,
+                  const SizedBox(height: 14),
+                  _QuoteTotals(
+                    subtotal: money(item.subtotal),
+                    itbisLabel: item.includeItbis ? 'ITBIS 18%' : 'ITBIS',
+                    itbis: money(item.itbisAmount),
+                    discount: discount,
+                    total: money(item.total),
                   ),
                 ],
               ),
@@ -2547,116 +2449,80 @@ class _QuotationDetailSidePanel extends StatelessWidget {
       ),
     );
   }
-}
 
-class _DetailInfoRow extends StatelessWidget {
-  const _DetailInfoRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 18, color: theme.colorScheme.primary),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                Text(
-                  value,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+  String _shortQuoteNumber(String id) {
+    final compact = id.replaceAll(RegExp(r'[^0-9A-Za-z]'), '').toUpperCase();
+    if (compact.length >= 6) return compact.substring(compact.length - 6);
+    return compact.isEmpty ? 'COT' : compact;
   }
 }
 
-class _DetailNote extends StatelessWidget {
-  const _DetailNote({required this.note});
+class _QuoteDocHeader extends StatelessWidget {
+  const _QuoteDocHeader({
+    required this.quoteNumber,
+    required this.createdAt,
+    required this.itemsCount,
+    required this.includeItbis,
+  });
 
-  final String note;
+  final String quoteNumber;
+  final DateTime createdAt;
+  final int itemsCount;
+  final bool includeItbis;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final primary = theme.colorScheme.primary;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Text(note, style: theme.textTheme.bodyMedium),
-    );
-  }
-}
-
-class _DetailProductLine extends StatelessWidget {
-  const _DetailProductLine({
-    required this.title,
-    required this.subtitle,
-    required this.total,
-  });
-
-  final String title;
-  final String subtitle;
-  final String total;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.55),
+        color: primary.withValues(alpha: 0.06),
+        border: Border(
+          bottom: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.55),
+          ),
         ),
       ),
       child: Row(
         children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: primary,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.request_quote_rounded,
+              color: Colors.white,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
+                  'COTIZACIÓN',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: primary,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.2,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  subtitle,
+                  '#$quoteNumber',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$itemsCount línea${itemsCount == 1 ? '' : 's'} · ITBIS ${includeItbis ? 'aplicado' : 'no aplicado'}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -2664,15 +2530,298 @@ class _DetailProductLine extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                DateFormat('dd/MM/yyyy', 'es_DO').format(createdAt),
+                style: theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                DateFormat('h:mm a', 'es_DO').format(createdAt),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuoteClientBlock extends StatelessWidget {
+  const _QuoteClientBlock({
+    required this.name,
+    required this.phone,
+    required this.createdBy,
+  });
+
+  final String name;
+  final String phone;
+  final String createdBy;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.person_outline,
+                size: 16,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'CLIENTE',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: muted,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           Text(
-            total,
-            style: theme.textTheme.labelLarge?.copyWith(
+            name.isEmpty ? 'Cliente sin nombre' : name,
+            style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w900,
+            ),
+          ),
+          if (phone.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.call_outlined, size: 14, color: muted),
+                const SizedBox(width: 6),
+                Text(phone, style: theme.textTheme.bodySmall),
+              ],
+            ),
+          ],
+          if (createdBy.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.badge_outlined, size: 14, color: muted),
+                const SizedBox(width: 6),
+                Text('Creada por $createdBy', style: theme.textTheme.bodySmall),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _QuoteTableHeader extends StatelessWidget {
+  const _QuoteTableHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final style = theme.textTheme.labelSmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+      fontWeight: FontWeight.w900,
+      letterSpacing: 0.3,
+    );
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(flex: 5, child: Text('PRODUCTO', style: style)),
+            Expanded(
+              flex: 2,
+              child: Text('CANT.', style: style, textAlign: TextAlign.right),
+            ),
+            Expanded(
+              flex: 3,
+              child: Text('PRECIO', style: style, textAlign: TextAlign.right),
+            ),
+            Expanded(
+              flex: 3,
+              child: Text('TOTAL', style: style, textAlign: TextAlign.right),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Divider(height: 1, color: theme.colorScheme.outlineVariant),
+      ],
+    );
+  }
+}
+
+class _QuoteTableRow extends StatelessWidget {
+  const _QuoteTableRow({
+    required this.title,
+    required this.qty,
+    required this.unitPrice,
+    required this.total,
+  });
+
+  final String title;
+  final String qty;
+  final String unitPrice;
+  final String total;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
+          ),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 5,
+            child: Text(
+              title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              qty,
+              textAlign: TextAlign.right,
+              style: theme.textTheme.bodyMedium,
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(
+              unitPrice,
+              textAlign: TextAlign.right,
+              style: theme.textTheme.bodyMedium,
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(
+              total,
+              textAlign: TextAlign.right,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _QuoteTotals extends StatelessWidget {
+  const _QuoteTotals({
+    required this.subtotal,
+    required this.itbisLabel,
+    required this.itbis,
+    required this.discount,
+    required this.total,
+  });
+
+  final String subtotal;
+  final String itbisLabel;
+  final String itbis;
+  final String? discount;
+  final String total;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final labelStyle = theme.textTheme.bodyMedium?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+      fontWeight: FontWeight.w600,
+    );
+    Widget row(String label, String value) {
+      return Row(
+        children: [
+          const Spacer(),
+          Text(label, style: labelStyle),
+          const SizedBox(width: 24),
+          SizedBox(
+            width: 110,
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      children: [
+        row('Subtotal', subtotal),
+        const SizedBox(height: 6),
+        row(itbisLabel, itbis),
+        if (discount != null) ...[
+          const SizedBox(height: 6),
+          row('Descuento', discount!),
+        ],
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: [
+              Text(
+                'TOTAL',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.6,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                total,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -2712,6 +2861,27 @@ class _DetailTotalRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _DetailNote extends StatelessWidget {
+  const _DetailNote({required this.note});
+
+  final String note;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Text(note, style: theme.textTheme.bodyMedium),
     );
   }
 }

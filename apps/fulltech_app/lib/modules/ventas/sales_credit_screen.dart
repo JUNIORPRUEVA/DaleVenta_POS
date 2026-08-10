@@ -14,8 +14,6 @@ import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/errors/api_exception.dart';
-import '../../core/routing/app_navigator.dart';
-import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
@@ -23,6 +21,7 @@ import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/app_navigation.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/desktop_sales_style.dart';
+import '../../core/widgets/fulltech_page_header.dart';
 import '../../core/widgets/pdf_action_menu.dart';
 import '../../core/widgets/sync_status_banner.dart';
 import '../cash/cash_dialogs.dart';
@@ -147,8 +146,29 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
               child: const Icon(Icons.summarize_rounded),
             )
           : null,
-      appBar: !isDesktop
-          ? CustomAppBar(
+      appBar: isDesktop
+          ? FullTechPageHeader(
+              title: 'Créditos',
+              actions: [
+                _CreditsHeaderBadge(
+                  icon: Icons.credit_score_outlined,
+                  label: 'Créditos',
+                  value: '${_credits.length}',
+                ),
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  tooltip: _loading ? 'Actualizando...' : 'Actualizar',
+                  onPressed: _loading
+                      ? null
+                      : () => unawaited(_refreshCredits()),
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
+                const SizedBox(width: 8),
+                const CashTurnMenuButton(),
+                const SizedBox(width: 12),
+              ],
+            )
+          : CustomAppBar(
               title: 'Créditos',
               titleWidget: _searchOpen ? _buildAppBarSearchField() : null,
               actions: [
@@ -174,8 +194,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
               trailing: const SizedBox.shrink(),
               showLogo: false,
               showDepartmentLabel: false,
-            )
-          : null,
+            ),
       body: SafeArea(
         bottom: false,
         child: isDesktop
@@ -184,8 +203,12 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Expanded(
-                      child: DesktopSalesPanel(
-                        padding: EdgeInsets.zero,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        clipBehavior: Clip.antiAlias,
                         child: _buildCreditMainColumn(
                           rows: _credits,
                           isAdmin: isAdmin,
@@ -349,15 +372,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
         if (desktop)
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-            child: _CreditTopPanel(
-              searchController: _searchController,
-              refreshing: _loading,
-              onBack: () =>
-                  AppNavigator.goBack(context, fallbackRoute: Routes.home),
-              onRefresh: () {
-                if (!_loading) unawaited(_refreshCredits());
-              },
-            ),
+            child: _CreditTopPanel(searchController: _searchController),
           ),
         SyncStatusBanner(
           visible: _loading && _credits.isEmpty,
@@ -1398,110 +1413,82 @@ class _CreditInput extends StatelessWidget {
   }
 }
 
-class _CreditTopPanel extends StatelessWidget {
-  const _CreditTopPanel({
-    required this.searchController,
-    required this.refreshing,
-    required this.onBack,
-    required this.onRefresh,
+class _CreditsHeaderBadge extends StatelessWidget {
+  const _CreditsHeaderBadge({
+    required this.icon,
+    required this.label,
+    required this.value,
   });
 
-  final TextEditingController searchController;
-  final bool refreshing;
-  final VoidCallback onBack;
-  final VoidCallback onRefresh;
+  final IconData icon;
+  final String label;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: desktopSalesPanel,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: desktopSalesLine),
-          boxShadow: [
-            BoxShadow(
-              color: theme.colorScheme.shadow.withValues(alpha: 0.04),
-              blurRadius: 16,
-              offset: const Offset(0, 8),
+    return Container(
+      constraints: const BoxConstraints(minWidth: 116, minHeight: 46),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF1FF),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: const Color(0xFFCFE0FF)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1957E6).withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(7),
             ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                _CreditTopCircleButton(
-                  tooltip: 'Regresar',
-                  icon: Icons.arrow_back_rounded,
-                  onPressed: onBack,
+            child: Icon(icon, color: const Color(0xFF1957E6), size: 16),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w900,
+                  color: const Color(0xFF1957E6).withValues(alpha: 0.80),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Créditos',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                const CashTurnMenuButton(compact: true),
-                const SizedBox(width: 6),
-                _CreditTopCircleButton(
-                  tooltip: refreshing ? 'Actualizando...' : 'Actualizar',
-                  icon: Icons.refresh_rounded,
-                  onPressed: refreshing ? null : onRefresh,
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: searchController,
-              decoration: desktopSalesInputDecoration(
-                hintText: 'Buscar por cliente, teléfono o factura',
-                prefixIcon: const Icon(Icons.search_rounded, size: 20),
               ),
-            ),
-          ],
-        ),
+              const SizedBox(height: 1),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Color(0xFF111827),
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
-class _CreditTopCircleButton extends StatelessWidget {
-  const _CreditTopCircleButton({
-    required this.tooltip,
-    required this.icon,
-    this.onPressed,
-  });
+class _CreditTopPanel extends StatelessWidget {
+  const _CreditTopPanel({required this.searchController});
 
-  final String tooltip;
-  final IconData icon;
-  final VoidCallback? onPressed;
+  final TextEditingController searchController;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: desktopSalesAccentSoft,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onPressed,
-        child: Tooltip(
-          message: tooltip,
-          child: SizedBox(
-            width: 40,
-            height: 40,
-            child: Icon(icon, size: 20, color: desktopSalesAccent),
-          ),
-        ),
+    return TextField(
+      controller: searchController,
+      decoration: desktopSalesInputDecoration(
+        hintText: 'Buscar por cliente, teléfono o factura',
+        prefixIcon: const Icon(Icons.search_rounded, size: 20),
       ),
     );
   }
@@ -2488,6 +2475,94 @@ class _CreditFixedInfoColumn extends StatelessWidget {
   }
 }
 
+class _CreditDocHeader extends StatelessWidget {
+  const _CreditDocHeader({required this.number, required this.date});
+
+  final String number;
+  final String date;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 22),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            colorScheme.primary.withValues(alpha: 0.08),
+            colorScheme.surface,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colorScheme.primary.withValues(alpha: 0.16)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: colorScheme.primary,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.request_quote_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'NOTA DE CRÉDITO',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '#$number',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                'Fecha',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                date,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CreditDetailBody extends StatelessWidget {
   const _CreditDetailBody({
     required this.sale,
@@ -2527,6 +2602,7 @@ class _CreditDetailBody extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                _CreditDocHeader(number: 'CRE-$shortId', date: date),
                 Text(
                   sale.customerName ?? 'Cliente sin nombre',
                   style: theme.textTheme.headlineMedium?.copyWith(
@@ -2553,17 +2629,7 @@ class _CreditDetailBody extends StatelessWidget {
                     ],
                   ],
                 ),
-                const SizedBox(height: 28),
-                _CreditInfoLine(
-                  icon: Icons.receipt_long_outlined,
-                  label: 'Factura',
-                  value: 'CRE-$shortId',
-                ),
-                _CreditInfoLine(
-                  icon: Icons.event_outlined,
-                  label: 'Fecha',
-                  value: date,
-                ),
+                const SizedBox(height: 20),
                 _CreditInfoLine(
                   icon: Icons.person_outline_rounded,
                   label: 'Cajero',

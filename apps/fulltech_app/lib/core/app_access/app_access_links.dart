@@ -29,11 +29,11 @@ class AppAccessLinks {
   static final Uri pwaUri = Uri.parse('https://fullposcloud.fulltechrd.com/');
 
   static final Uri windowsReleaseUri = Uri.parse(
-    'https://github.com/JUNIORPRUEVA/DaleVenta_POS/releases/download/v1.0.1/FullTech-Setup-1.0.0-1.exe',
+    'https://fullposcloud.fulltechrd.com/downloads/fullpos-cloud-windows-v1.0.2.zip',
   );
 
   static final Uri androidReleaseUri = Uri.parse(
-    'https://fullposcloud.fulltechrd.com/downloads/fullpos-cloud-android.apk',
+    'https://fullposcloud.fulltechrd.com/downloads/fullpos-cloud-android-v1.0.2.apk',
   );
 
   static List<AppAccessChannel> visibleChannels() {

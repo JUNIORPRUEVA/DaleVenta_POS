@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_provider.dart';
 import '../../core/debug/debug_admin_action.dart';
-import '../../core/routing/app_navigator.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
@@ -15,6 +14,7 @@ import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/app_navigation.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/desktop_sales_style.dart';
+import '../../core/widgets/fulltech_page_header.dart';
 import '../../core/widgets/sync_status_banner.dart';
 
 import 'application/clientes_controller.dart';
@@ -53,14 +53,31 @@ class ClientesScreen extends ConsumerStatefulWidget {
 class _ClientesScreenState extends ConsumerState<ClientesScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   Timer? _debounce;
+  Timer? _refreshTimer;
   bool _purgingAllDebug = false;
   bool _searchOpen = false;
   String? _selectedClientId;
 
-  Future<void> _openFilters(ClientesState state) async {
-    final isDesktop = _shouldUseClientesDesktopLayout(
-      MediaQuery.sizeOf(context).width,
+  @override
+  void initState() {
+    super.initState();
+    // Refresco automático: la página obtiene los clientes por sí sola sin
+    // necesidad de pulsar "Actualizar" manualmente.
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 20),
+      (_) => _autoRefresh(),
     );
+  }
+
+  void _autoRefresh() {
+    if (!mounted) return;
+    final state = ref.read(clientesControllerProvider);
+    if (!state.refreshing) {
+      ref.read(clientesControllerProvider.notifier).refresh();
+    }
+  }
+
+  Future<void> _openFilters(ClientesState state) async {
     final initialState = _ClientesFilterState(
       order: state.order,
       correoFilter: state.correoFilter,
@@ -68,45 +85,35 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
       ownerFilter: state.ownerFilter,
     );
 
-    final _ClientesFilterState? next;
-    if (isDesktop) {
-      next = await showModalBottomSheet<_ClientesFilterState>(
-        context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        builder: (sheetContext) {
-          return _ClientesFiltersBottomSheet(initialState: initialState);
-        },
-      );
-    } else {
-      next = await showGeneralDialog<_ClientesFilterState>(
-        context: context,
-        barrierDismissible: true,
-        barrierLabel: 'Filtros de clientes',
-        barrierColor: Colors.black.withValues(alpha: 0.26),
-        transitionDuration: const Duration(milliseconds: 180),
-        pageBuilder: (dialogContext, animation, secondaryAnimation) {
-          return Align(
-            alignment: Alignment.centerRight,
-            child: _ClientesFiltersSheet(initialState: initialState),
-          );
-        },
-        transitionBuilder: (context, animation, secondaryAnimation, child) {
-          final curved = CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeOutCubic,
-            reverseCurve: Curves.easeInCubic,
-          );
-          return SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(1, 0),
-              end: Offset.zero,
-            ).animate(curved),
-            child: FadeTransition(opacity: curved, child: child),
-          );
-        },
-      );
-    }
+    // El filtro se abre como columna fija a la derecha a todo el alto
+    // (mismo patrón que el historial de movimientos).
+    final next = await showGeneralDialog<_ClientesFilterState>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Filtros de clientes',
+      barrierColor: Colors.black.withValues(alpha: 0.26),
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: _ClientesFiltersSheet(initialState: initialState),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
+        );
+      },
+    );
 
     if (next == null || !mounted) return;
 
@@ -122,6 +129,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
@@ -246,6 +254,35 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
     await ref.read(clientesControllerProvider.notifier).refresh();
   }
 
+  Future<void> _handleTopAction(_ClientesTopAction action) async {
+    switch (action) {
+      case _ClientesTopAction.newClient:
+        await _openCreateClientFlow();
+        break;
+      case _ClientesTopAction.refresh:
+        final state = ref.read(clientesControllerProvider);
+        if (!state.refreshing) {
+          await ref.read(clientesControllerProvider.notifier).refresh();
+        }
+        break;
+      case _ClientesTopAction.clearFilters:
+        await ref
+            .read(clientesControllerProvider.notifier)
+            .applyFilters(
+              order: ClientesOrder.az,
+              correoFilter: CorreoFilter.todos,
+              estadoFilter: EstadoFilter.todos,
+              ownerFilter: OwnerFilter.todos,
+            );
+        break;
+      case _ClientesTopAction.purgeDebug:
+        if (!_purgingAllDebug) {
+          await _purgeAllDebug();
+        }
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUser = ref.watch(authStateProvider).user;
@@ -258,7 +295,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
     final activeFilterCount = [
       state.order != ClientesOrder.az,
       state.correoFilter != CorreoFilter.todos,
-      state.estadoFilter != EstadoFilter.activos,
+      state.estadoFilter != EstadoFilter.todos,
       state.ownerFilter != OwnerFilter.todos,
     ].where((active) => active).length;
 
@@ -275,8 +312,79 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
             )
           : null,
 
-      appBar: !isDesktop
-          ? CustomAppBar(
+      appBar: isDesktop
+          ? FullTechPageHeader(
+              title: 'Clientes',
+              actions: [
+                _ClientsHeaderBadge(
+                  icon: Icons.people_alt_outlined,
+                  label: 'Clientes',
+                  value: '${state.items.length}',
+                ),
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  tooltip: state.refreshing ? 'Actualizando...' : 'Actualizar',
+                  onPressed: state.refreshing
+                      ? null
+                      : () => controller.refresh(),
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
+                const SizedBox(width: 6),
+                PopupMenuButton<_ClientesTopAction>(
+                  tooltip: 'Opciones',
+                  onSelected: _handleTopAction,
+                  itemBuilder: (context) => [
+                    _topMenuItem(
+                      context,
+                      value: _ClientesTopAction.newClient,
+                      icon: Icons.person_add_alt_1_rounded,
+                      label: 'Nuevo cliente',
+                    ),
+                    _topMenuItem(
+                      context,
+                      value: _ClientesTopAction.refresh,
+                      icon: Icons.refresh_rounded,
+                      label: state.refreshing
+                          ? 'Actualizando...'
+                          : 'Actualizar',
+                      enabled: !state.refreshing,
+                    ),
+                    if (activeFilterCount > 0)
+                      _topMenuItem(
+                        context,
+                        value: _ClientesTopAction.clearFilters,
+                        icon: Icons.filter_alt_off_rounded,
+                        label: 'Limpiar filtros',
+                      ),
+                    if (canUseDebugAdminAction(currentUser))
+                      _topMenuItem(
+                        context,
+                        value: _ClientesTopAction.purgeDebug,
+                        icon: Icons.delete_sweep_rounded,
+                        label: _purgingAllDebug
+                            ? 'Limpiando tabla...'
+                            : 'Limpiar tabla (debug)',
+                        enabled: !_purgingAllDebug,
+                      ),
+                  ],
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEAF1FF),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: const Color(0xFFCFE0FF)),
+                    ),
+                    child: const Icon(
+                      Icons.more_vert_rounded,
+                      color: Color(0xFF1957E6),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+            )
+          : CustomAppBar(
               title: 'Clientes',
               titleWidget: _searchOpen ? _buildAppBarSearchField() : null,
               actions: [
@@ -308,8 +416,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
               trailing: const SizedBox.shrink(),
               showLogo: false,
               showDepartmentLabel: false,
-            )
-          : null,
+            ),
       body: SafeArea(
         bottom: false,
         child: isDesktop
@@ -318,16 +425,17 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Expanded(
-                      child: DesktopSalesPanel(
-                        padding: EdgeInsets.zero,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        clipBehavior: Clip.antiAlias,
                         child: _buildClientesMainColumn(
                           state: state,
                           controller: controller,
                           theme: theme,
                           activeFilterCount: activeFilterCount,
-                          canShowDebugAction: canUseDebugAdminAction(
-                            currentUser,
-                          ),
                           desktopLayout: true,
                           selectedClient: selectedClient,
                         ),
@@ -365,7 +473,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                 controller: controller,
                 theme: theme,
                 activeFilterCount: activeFilterCount,
-                canShowDebugAction: canUseDebugAdminAction(currentUser),
                 desktopLayout: false,
                 selectedClient: selectedClient,
               ),
@@ -412,7 +519,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
     required ClientesController controller,
     required ThemeData theme,
     required int activeFilterCount,
-    required bool canShowDebugAction,
     required bool desktopLayout,
     required ClienteModel? selectedClient,
   }) {
@@ -423,41 +529,9 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
             child: _ClientesTopPanel(
               searchController: _searchCtrl,
-              refreshing: state.refreshing,
-              purgingAllDebug: _purgingAllDebug,
               activeFilterCount: activeFilterCount,
-              canShowDebugAction: canShowDebugAction,
-              onBack: () =>
-                  AppNavigator.goBack(context, fallbackRoute: Routes.home),
               onSearchChanged: _handleSearch,
-              onOpenMap: () => context.push(Routes.clientesMapa),
               onOpenFilters: () => _openFilters(state),
-              onMenuActionSelected: (action) async {
-                switch (action) {
-                  case _ClientesTopAction.newClient:
-                    await _openCreateClientFlow();
-                    break;
-                  case _ClientesTopAction.refresh:
-                    if (!state.refreshing) {
-                      await controller.refresh();
-                    }
-                    break;
-                  case _ClientesTopAction.clearFilters:
-                    await controller.applyFilters(
-                      order: ClientesOrder.az,
-                      correoFilter: CorreoFilter.todos,
-                      estadoFilter: EstadoFilter.activos,
-                      ownerFilter: OwnerFilter.todos,
-                    );
-                    break;
-                  case _ClientesTopAction.purgeDebug:
-                    if (!_purgingAllDebug) {
-                      await _purgeAllDebug();
-                    }
-                    break;
-                }
-              },
-              showClearFiltersAction: activeFilterCount > 0,
             ),
           ),
         SyncStatusBanner(
@@ -765,15 +839,7 @@ class _ClienteFixedInfoColumn extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: desktopSalesPanel,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: desktopSalesLine),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0B3550).withValues(alpha: 0.06),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1153,145 +1219,104 @@ class _ClientColumnAction extends StatelessWidget {
 
 enum _ClientesTopAction { newClient, refresh, clearFilters, purgeDebug }
 
-class _ClientesTopPanel extends StatelessWidget {
-  const _ClientesTopPanel({
-    required this.searchController,
-    required this.refreshing,
-    required this.purgingAllDebug,
-    required this.activeFilterCount,
-    required this.canShowDebugAction,
-    required this.onBack,
-    required this.onSearchChanged,
-    required this.onOpenMap,
-    required this.onOpenFilters,
-    required this.onMenuActionSelected,
-    required this.showClearFiltersAction,
+class _ClientsHeaderBadge extends StatelessWidget {
+  const _ClientsHeaderBadge({
+    required this.icon,
+    required this.label,
+    required this.value,
   });
 
-  final TextEditingController searchController;
-  final bool refreshing;
-  final bool purgingAllDebug;
-  final int activeFilterCount;
-  final bool canShowDebugAction;
-  final VoidCallback onBack;
-  final ValueChanged<String> onSearchChanged;
-  final VoidCallback onOpenMap;
-  final VoidCallback onOpenFilters;
-  final ValueChanged<_ClientesTopAction> onMenuActionSelected;
-  final bool showClearFiltersAction;
+  final IconData icon;
+  final String label;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: desktopSalesPanel,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: desktopSalesLine),
-          boxShadow: [
-            BoxShadow(
-              color: theme.colorScheme.shadow.withValues(alpha: 0.04),
-              blurRadius: 16,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                _TopCircleButton(
-                  tooltip: 'Regresar',
-                  icon: Icons.arrow_back_rounded,
-                  onPressed: onBack,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Clientes',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                _TopCircleButton(
-                  tooltip: 'Mapa',
-                  icon: Icons.map_outlined,
-                  onPressed: onOpenMap,
-                ),
-                const SizedBox(width: 6),
-                PopupMenuButton<_ClientesTopAction>(
-                  tooltip: 'Opciones',
-                  onSelected: onMenuActionSelected,
-                  itemBuilder: (context) => [
-                    _topMenuItem(
-                      context,
-                      value: _ClientesTopAction.newClient,
-                      icon: Icons.person_add_alt_1_rounded,
-                      label: 'Nuevo cliente',
-                    ),
-                    _topMenuItem(
-                      context,
-                      value: _ClientesTopAction.refresh,
-                      icon: Icons.refresh_rounded,
-                      label: refreshing ? 'Actualizando...' : 'Actualizar',
-                      enabled: !refreshing,
-                    ),
-                    if (showClearFiltersAction)
-                      _topMenuItem(
-                        context,
-                        value: _ClientesTopAction.clearFilters,
-                        icon: Icons.filter_alt_off_rounded,
-                        label: 'Limpiar filtros',
-                      ),
-                    if (canShowDebugAction)
-                      _topMenuItem(
-                        context,
-                        value: _ClientesTopAction.purgeDebug,
-                        icon: Icons.delete_sweep_rounded,
-                        label: purgingAllDebug
-                            ? 'Limpiando tabla...'
-                            : 'Limpiar tabla (debug)',
-                        enabled: !purgingAllDebug,
-                      ),
-                  ],
-                  child: const _TopCircleButton(
-                    tooltip: 'Opciones',
-                    icon: Icons.more_vert_rounded,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: searchController,
-                    onChanged: onSearchChanged,
-                    decoration: desktopSalesInputDecoration(
-                      hintText: 'Buscar clientes',
-                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                _SearchFilterButton(
-                  tooltip: 'Filtros',
-                  badgeCount: activeFilterCount,
-                  onPressed: onOpenFilters,
-                ),
-              ],
-            ),
-          ],
-        ),
+    return Container(
+      constraints: const BoxConstraints(minWidth: 116, minHeight: 46),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF1FF),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: const Color(0xFFCFE0FF)),
       ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1957E6).withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: Icon(icon, color: const Color(0xFF1957E6), size: 16),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w900,
+                  color: const Color(0xFF1957E6).withValues(alpha: 0.80),
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Color(0xFF111827),
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ClientesTopPanel extends StatelessWidget {
+  const _ClientesTopPanel({
+    required this.searchController,
+    required this.activeFilterCount,
+    required this.onSearchChanged,
+    required this.onOpenFilters,
+  });
+
+  final TextEditingController searchController;
+  final int activeFilterCount;
+  final ValueChanged<String> onSearchChanged;
+  final VoidCallback onOpenFilters;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: searchController,
+            onChanged: onSearchChanged,
+            decoration: desktopSalesInputDecoration(
+              hintText: 'Buscar clientes',
+              prefixIcon: const Icon(Icons.search_rounded, size: 20),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        _SearchFilterButton(
+          tooltip: 'Filtros',
+          badgeCount: activeFilterCount,
+          onPressed: onOpenFilters,
+        ),
+      ],
     );
   }
 }
@@ -1317,39 +1342,6 @@ PopupMenuItem<_ClientesTopAction> _topMenuItem(
   );
 }
 
-class _TopCircleButton extends StatelessWidget {
-  const _TopCircleButton({
-    required this.tooltip,
-    required this.icon,
-    this.onPressed,
-  });
-
-  final String tooltip;
-  final IconData icon;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Material(
-      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onPressed,
-        child: Tooltip(
-          message: tooltip,
-          child: SizedBox(
-            width: 40,
-            height: 40,
-            child: Icon(icon, size: 20, color: theme.colorScheme.onSurface),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 String _formatClientDate(DateTime value) {
   final local = value.toLocal();
   final month = local.month.toString().padLeft(2, '0');
@@ -1370,52 +1362,30 @@ class _SearchFilterButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Material(
-          color: theme.colorScheme.surfaceContainerHighest.withValues(
-            alpha: 0.45,
-          ),
-          borderRadius: BorderRadius.circular(18),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(18),
-            onTap: onPressed,
-            child: SizedBox(
-              width: 48,
-              height: 48,
-              child: Tooltip(
-                message: tooltip,
-                child: Icon(
-                  Icons.tune_rounded,
-                  size: 22,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-            ),
+    final hasFilters = badgeCount > 0;
+    return Tooltip(
+      message: tooltip,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Badge(
+          isLabelVisible: hasFilters,
+          label: Text('$badgeCount'),
+          child: const Icon(Icons.tune_rounded, size: 20),
+        ),
+        label: const Text('Filtro'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: hasFilters
+              ? AppColors.secondary
+              : AppColors.textPrimary,
+          backgroundColor: hasFilters ? const Color(0xFFEAF1FF) : Colors.white,
+          side: const BorderSide(color: AppColors.border),
+          minimumSize: const Size(0, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
         ),
-        if (badgeCount > 0)
-          Positioned(
-            right: -2,
-            top: -2,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                '$badgeCount',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onPrimary,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-          ),
-      ],
+      ),
     );
   }
 }
@@ -1444,123 +1414,6 @@ class _ClientesFilterState {
       correoFilter: correoFilter ?? this.correoFilter,
       estadoFilter: estadoFilter ?? this.estadoFilter,
       ownerFilter: ownerFilter ?? this.ownerFilter,
-    );
-  }
-}
-
-class _ClientesFiltersBottomSheet extends StatefulWidget {
-  const _ClientesFiltersBottomSheet({required this.initialState});
-
-  final _ClientesFilterState initialState;
-
-  @override
-  State<_ClientesFiltersBottomSheet> createState() =>
-      _ClientesFiltersBottomSheetState();
-}
-
-class _ClientesFiltersBottomSheetState
-    extends State<_ClientesFiltersBottomSheet> {
-  late _ClientesFilterState _draft = widget.initialState;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 8,
-          bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Filtros de clientes',
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Organiza la lista y el mapa con el mismo criterio de consulta.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 20),
-            _FilterSection<ClientesOrder>(
-              title: 'Orden',
-              value: _draft.order,
-              options: const [ClientesOrder.az, ClientesOrder.za],
-              labelBuilder: _clientesOrderLabel,
-              onSelected: (value) {
-                setState(() => _draft = _draft.copyWith(order: value));
-              },
-            ),
-            const SizedBox(height: 16),
-            _FilterSection<CorreoFilter>(
-              title: 'Correo',
-              value: _draft.correoFilter,
-              options: const [
-                CorreoFilter.todos,
-                CorreoFilter.conCorreo,
-                CorreoFilter.sinCorreo,
-              ],
-              labelBuilder: _correoFilterLabel,
-              onSelected: (value) {
-                setState(() => _draft = _draft.copyWith(correoFilter: value));
-              },
-            ),
-            const SizedBox(height: 16),
-            _FilterSection<EstadoFilter>(
-              title: 'Estado',
-              value: _draft.estadoFilter,
-              options: const [
-                EstadoFilter.activos,
-                EstadoFilter.eliminados,
-                EstadoFilter.todos,
-              ],
-              labelBuilder: _estadoFilterLabel,
-              onSelected: (value) {
-                setState(() => _draft = _draft.copyWith(estadoFilter: value));
-              },
-            ),
-            const SizedBox(height: 16),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop(
-                      const _ClientesFilterState(
-                        order: ClientesOrder.az,
-                        correoFilter: CorreoFilter.todos,
-                        estadoFilter: EstadoFilter.activos,
-                        ownerFilter: OwnerFilter.todos,
-                      ),
-                    );
-                  },
-                  child: const Text('Limpiar'),
-                ),
-                const Spacer(),
-                OutlinedButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancelar'),
-                ),
-                const SizedBox(width: 12),
-                FilledButton(
-                  onPressed: () => Navigator.of(context).pop(_draft),
-                  child: const Text('Aplicar'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -1718,7 +1571,7 @@ class _ClientesFiltersSheetState extends State<_ClientesFiltersSheet> {
                               const _ClientesFilterState(
                                 order: ClientesOrder.az,
                                 correoFilter: CorreoFilter.todos,
-                                estadoFilter: EstadoFilter.activos,
+                                estadoFilter: EstadoFilter.todos,
                                 ownerFilter: OwnerFilter.todos,
                               ),
                             );
