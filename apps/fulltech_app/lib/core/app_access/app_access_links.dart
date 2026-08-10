@@ -33,7 +33,7 @@ class AppAccessLinks {
   );
 
   static final Uri androidReleaseUri = Uri.parse(
-    'https://github.com/JUNIORPRUEVA/fullpos_clouds/releases/tag/v1.0.1',
+    'https://fullposcloud.fulltechrd.com/downloads/fullpos-cloud-android.apk',
   );
 
   static List<AppAccessChannel> visibleChannels() {
