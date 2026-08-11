@@ -1,9 +1,16 @@
+import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 
+import '../../core/printing/models/company_info.dart';
 import '../../core/printing/models/receipt_text_utils.dart';
+import '../../core/printing/models/ticket_layout_config.dart';
 import '../../core/printing/unified_ticket_printer.dart';
+import '../../features/settings/data/printer_settings_repository.dart';
 import 'cash_models.dart';
 
 final cashCloseTicketPrinterProvider = Provider<CashCloseTicketPrinter>((ref) {
@@ -40,17 +47,23 @@ class CashCloseTicketPrinter {
     CashCloseTicketSnapshot snapshot, {
     bool automatic = true,
   }) async {
+    final ticketNumber = _ticketNumber(snapshot);
+    final pdf = await _buildClosePdf(snapshot, ticketNumber: ticketNumber);
     // El cierre de turno siempre imprime el ticket (térmico o diálogo del
     // sistema como respaldo) para que salga de inmediato en móvil y PC.
     return _ref
         .read(unifiedTicketPrinterProvider)
-        .printCustomLines(
-          lines: buildLines(snapshot),
-          ticketNumber: _ticketNumber(snapshot),
+        .printPdfBytes(
+          bytes: pdf,
+          ticketNumber: ticketNumber,
+          documentName: 'Cierre de turno $ticketNumber',
+          fallbackLines: buildLines(snapshot),
         );
   }
 
-  Future<PrintTicketResult> printHistoryTicket(CashSessionHistoryModel row) {
+  Future<PrintTicketResult> printHistoryTicket(
+    CashSessionHistoryModel row,
+  ) async {
     final date = row.closedAt ?? row.openedAt;
     final ticketDate = row.businessDate.trim().isNotEmpty
         ? row.businessDate.trim().replaceAll(RegExp(r'[^0-9]'), '')
@@ -60,12 +73,50 @@ class CashCloseTicketPrinter {
       0,
       suffix.length < 6 ? suffix.length : 6,
     );
+    final ticketNumber = 'CIERRE-$ticketDate-$compactSuffix';
+    final pdf = await _buildHistoryPdf(row, ticketNumber: ticketNumber);
     return _ref
         .read(unifiedTicketPrinterProvider)
-        .printCustomLines(
-          lines: buildHistoryLines(row),
-          ticketNumber: 'CIERRE-$ticketDate-$compactSuffix',
+        .printPdfBytes(
+          bytes: pdf,
+          ticketNumber: ticketNumber,
+          documentName: 'Reimpresion cierre $ticketNumber',
+          fallbackLines: buildHistoryLines(row),
         );
+  }
+
+  Future<Uint8List> _buildClosePdf(
+    CashCloseTicketSnapshot snapshot, {
+    required String ticketNumber,
+  }) async {
+    final company = await _ref
+        .read(companyInfoRepositoryProvider)
+        .getCurrentCompanyInfo();
+    final settings = await _ref
+        .read(printerSettingsRepositoryProvider)
+        .getOrCreate();
+    final layout = TicketLayoutConfig.fromPrinterSettings(settings);
+    return _CashClosePdfBuilder(
+      company: company,
+      layout: layout,
+    ).buildClose(snapshot, ticketNumber: ticketNumber);
+  }
+
+  Future<Uint8List> _buildHistoryPdf(
+    CashSessionHistoryModel row, {
+    required String ticketNumber,
+  }) async {
+    final company = await _ref
+        .read(companyInfoRepositoryProvider)
+        .getCurrentCompanyInfo();
+    final settings = await _ref
+        .read(printerSettingsRepositoryProvider)
+        .getOrCreate();
+    final layout = TicketLayoutConfig.fromPrinterSettings(settings);
+    return _CashClosePdfBuilder(
+      company: company,
+      layout: layout,
+    ).buildHistory(row, ticketNumber: ticketNumber);
   }
 
   List<String> buildHistoryLines(CashSessionHistoryModel row) {
@@ -334,5 +385,416 @@ class CashCloseTicketPrinter {
       'transfer' => movement.isIn ? 'Entrada' : 'Transfer.',
       _ => movement.isIn ? 'Entrada' : 'Salida',
     };
+  }
+}
+
+class _CashClosePdfBuilder {
+  _CashClosePdfBuilder({required this.company, required this.layout});
+
+  final CompanyInfo company;
+  final TicketLayoutConfig layout;
+
+  late final NumberFormat _money = NumberFormat.currency(
+    locale: 'en_US',
+    symbol: 'RD\$ ',
+  );
+  late final DateFormat _date = DateFormat('dd/MM/yyyy hh:mm a');
+  late final _fonts = _loadFonts();
+
+  Future<Uint8List> buildClose(
+    CashCloseTicketSnapshot snapshot, {
+    required String ticketNumber,
+  }) async {
+    final rows = <pw.Widget>[
+      _header('CORTE DE TURNO', 'Comprobante de cierre de caja'),
+      _section('Datos del turno'),
+      _kv('No. cierre', ticketNumber, boldValue: true),
+      _kv('Fecha cierre', _date.format(snapshot.capturedAt.toLocal())),
+      if (snapshot.state.businessDate.trim().isNotEmpty)
+        _kv('Dia negocio', snapshot.state.businessDate.trim()),
+      if (snapshot.active != null) ...[
+        _kv('Cajero', snapshot.active!.userName),
+        _kv('Apertura', _date.format(snapshot.active!.openedAt.toLocal())),
+        _kv('Turno', snapshot.active!.shiftId),
+      ],
+      _divider(),
+      _section('Ventas y efectivo'),
+      _kv('Base inicial', _money.format(snapshot.summary.openingAmount)),
+      _kv('Total vendido', _money.format(snapshot.summary.totalSales)),
+      _kv('Ventas efectivo', _money.format(snapshot.summary.salesCashTotal)),
+      _kv('Transferencias', _money.format(snapshot.summary.salesTransferTotal)),
+      _kv('Entradas manuales', _money.format(snapshot.summary.cashInManual)),
+      _kv('Gastos', _money.format(snapshot.summary.totalExpenses)),
+      _kv('Salidas', _money.format(snapshot.summary.cashOutManual)),
+      _kv('Retiros', _money.format(snapshot.summary.totalWithdrawals)),
+      _kv('Devoluciones', _money.format(snapshot.summary.refundsCash)),
+      if (snapshot.summary.creditSalesTotal > 0) ...[
+        _divider(),
+        _section('Credito'),
+        _kv('Ventas credito', _money.format(snapshot.summary.creditSalesTotal)),
+        _kv(
+          'Inicial efectivo',
+          _money.format(snapshot.summary.creditInitialCash),
+        ),
+        _kv(
+          'Inicial transf.',
+          _money.format(snapshot.summary.creditInitialTransfer),
+        ),
+        _kv(
+          'Abonos efectivo',
+          _money.format(snapshot.summary.creditPaymentCash),
+        ),
+        _kv(
+          'Abonos transf.',
+          _money.format(snapshot.summary.creditPaymentTransfer),
+        ),
+        _kv(
+          'Balance credito',
+          _money.format(snapshot.summary.creditBalanceTotal),
+        ),
+      ],
+      if (snapshot.summary.categorySummary.isNotEmpty) ...[
+        _divider(),
+        _section('Resumen por categoria'),
+        for (final category in snapshot.summary.categorySummary.take(8))
+          _category(category),
+      ],
+      _divider(),
+      _section('Cuadre final'),
+      _kv('Efectivo esperado', _money.format(snapshot.summary.expectedCash)),
+      _kv('Efectivo contado', _money.format(snapshot.closingAmount)),
+      _highlightTotal('Diferencia', _money.format(snapshot.difference)),
+      _kv('Tickets', snapshot.summary.totalTickets.toString()),
+      _kv('Devoluciones', snapshot.summary.totalRefunds.toString()),
+      if ((snapshot.note ?? '').trim().isNotEmpty) ...[
+        _divider(),
+        _section('Nota interna'),
+        _paragraph(snapshot.note!.trim()),
+      ],
+      if (snapshot.movements.isNotEmpty) ...[
+        _divider(),
+        _section('Movimientos manuales'),
+        for (final movement in snapshot.movements.take(12)) _movement(movement),
+        if (snapshot.movements.length > 12)
+          _paragraph('+${snapshot.movements.length - 12} movimientos mas'),
+      ],
+      _signature(),
+      _footer(),
+    ];
+    return _document(ticketNumber, rows);
+  }
+
+  Future<Uint8List> buildHistory(
+    CashSessionHistoryModel row, {
+    required String ticketNumber,
+  }) async {
+    final rows = <pw.Widget>[
+      _header('REIMPRESION CIERRE', 'Comprobante historico de caja'),
+      _section('Datos del turno'),
+      _kv('No. cierre', ticketNumber, boldValue: true),
+      _kv('Dia negocio', row.businessDate),
+      _kv('Cajero', row.userName),
+      _kv('Apertura', _date.format(row.openedAt.toLocal())),
+      _kv(
+        'Cierre',
+        row.closedAt == null
+            ? 'Sin cierre'
+            : _date.format(row.closedAt!.toLocal()),
+      ),
+      _kv('Estado', row.status),
+      _divider(),
+      _section('Cuadre final'),
+      _kv('Base inicial', _money.format(row.initialAmount)),
+      _kv('Efectivo esperado', _money.format(row.expectedAmount)),
+      _kv('Efectivo contado', _money.format(row.closingAmount)),
+      _highlightTotal('Diferencia', _money.format(row.difference)),
+      _signature(),
+      _paragraph('ID: ${row.id}'),
+      _footer(),
+    ];
+    return _document(ticketNumber, rows);
+  }
+
+  Future<Uint8List> _document(String ticketNumber, List<pw.Widget> rows) async {
+    final doc = pw.Document(author: 'FullTech', title: ticketNumber);
+    final pageWidth = layout.printableWidthMm * PdfPageFormat.mm;
+    final marginLeft = layout.leftMargin.clamp(0, 4) * PdfPageFormat.mm;
+    final marginRight = layout.rightMargin.clamp(0, 4) * PdfPageFormat.mm;
+    final pageHeight = math
+        .max(145 * PdfPageFormat.mm, rows.length * 14.0 + 180)
+        .clamp(145 * PdfPageFormat.mm, 2000 * PdfPageFormat.mm)
+        .toDouble();
+
+    doc.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat(pageWidth, pageHeight),
+        margin: pw.EdgeInsets.only(
+          left: marginLeft,
+          right: marginRight,
+          top: 6,
+          bottom: 8,
+        ),
+        build: (_) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+          mainAxisSize: pw.MainAxisSize.min,
+          children: rows,
+        ),
+      ),
+    );
+    return doc.save();
+  }
+
+  ({pw.Font regular, pw.Font bold}) _loadFonts() {
+    return (regular: pw.Font.helvetica(), bold: pw.Font.helveticaBold());
+  }
+
+  pw.Widget _header(String title, String subtitle) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+      children: [
+        if (layout.showLogo && company.logoBytes != null)
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(bottom: 5),
+            child: pw.Center(
+              child: pw.Image(
+                pw.MemoryImage(company.logoBytes!),
+                width: layout.paperWidthMm == 58 ? 38 : 46,
+                height: layout.paperWidthMm == 58 ? 38 : 46,
+                fit: pw.BoxFit.contain,
+              ),
+            ),
+          ),
+        pw.Text(
+          company.name.toUpperCase(),
+          textAlign: pw.TextAlign.center,
+          style: pw.TextStyle(font: _fonts.bold, fontSize: _fontSize + 3.2),
+        ),
+        if (company.rnc.trim().isNotEmpty)
+          _centerSmall('RNC: ${company.rnc.trim()}'),
+        if (company.phone.trim().isNotEmpty)
+          _centerSmall('TEL: ${company.phone.trim()}'),
+        if (company.address.trim().isNotEmpty)
+          _centerSmall(company.address.trim()),
+        pw.Container(
+          margin: const pw.EdgeInsets.only(top: 7, bottom: 7),
+          padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 5),
+          decoration: const pw.BoxDecoration(color: PdfColors.grey900),
+          child: pw.Column(
+            children: [
+              pw.Text(
+                title,
+                textAlign: pw.TextAlign.center,
+                style: pw.TextStyle(
+                  font: _fonts.bold,
+                  fontSize: _fontSize + 2,
+                  color: PdfColors.white,
+                ),
+              ),
+              pw.SizedBox(height: 1.5),
+              pw.Text(
+                subtitle.toUpperCase(),
+                textAlign: pw.TextAlign.center,
+                style: pw.TextStyle(
+                  font: _fonts.regular,
+                  fontSize: _fontSize - 0.8,
+                  color: PdfColors.grey200,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  pw.Widget _centerSmall(String text) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(top: 1),
+      child: pw.Text(
+        text,
+        textAlign: pw.TextAlign.center,
+        style: pw.TextStyle(font: _fonts.regular, fontSize: _fontSize - 0.4),
+      ),
+    );
+  }
+
+  pw.Widget _section(String label) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(top: 4, bottom: 4),
+      child: pw.Text(
+        label.toUpperCase(),
+        style: pw.TextStyle(
+          font: _fonts.bold,
+          fontSize: _fontSize + 0.6,
+          color: PdfColors.grey900,
+        ),
+      ),
+    );
+  }
+
+  pw.Widget _kv(String label, String value, {bool boldValue = false}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 2.5),
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Expanded(
+            flex: 9,
+            child: pw.Text(
+              label,
+              style: pw.TextStyle(font: _fonts.regular, fontSize: _fontSize),
+            ),
+          ),
+          pw.SizedBox(width: 5),
+          pw.Expanded(
+            flex: 11,
+            child: pw.Text(
+              value,
+              textAlign: pw.TextAlign.right,
+              style: pw.TextStyle(
+                font: boldValue ? _fonts.bold : _fonts.regular,
+                fontSize: _fontSize,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget _highlightTotal(String label, String value) {
+    return pw.Container(
+      margin: const pw.EdgeInsets.only(top: 3, bottom: 5),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey900, width: 1),
+      ),
+      child: pw.Row(
+        children: [
+          pw.Expanded(
+            child: pw.Text(
+              label.toUpperCase(),
+              style: pw.TextStyle(font: _fonts.bold, fontSize: _fontSize + 0.6),
+            ),
+          ),
+          pw.Text(
+            value,
+            textAlign: pw.TextAlign.right,
+            style: pw.TextStyle(font: _fonts.bold, fontSize: _fontSize + 1.2),
+          ),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget _category(CashCategorySummaryModel category) {
+    return pw.Container(
+      margin: const pw.EdgeInsets.only(bottom: 4),
+      padding: const pw.EdgeInsets.only(bottom: 4),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(
+          bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.4),
+        ),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          pw.Text(
+            category.category,
+            style: pw.TextStyle(font: _fonts.bold, fontSize: _fontSize),
+          ),
+          _kv('Vendido', _money.format(category.totalSold)),
+          _kv('Ganancia', _money.format(category.totalProfit)),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget _movement(CashMovementModel movement) {
+    final label = switch (movement.movementType) {
+      'expense' => 'Gasto',
+      'owner_draw' => 'Retiro',
+      'transfer' => movement.isIn ? 'Entrada' : 'Transfer.',
+      _ => movement.isIn ? 'Entrada' : 'Salida',
+    };
+    final amount =
+        '${movement.isIn ? '+' : '-'}${_money.format(movement.amount)}';
+    return pw.Container(
+      margin: const pw.EdgeInsets.only(bottom: 4),
+      padding: const pw.EdgeInsets.only(bottom: 4),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(
+          bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.4),
+        ),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          _kv(label, amount, boldValue: true),
+          if (movement.reason.trim().isNotEmpty)
+            _paragraph(movement.reason.trim(), compact: true),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget _paragraph(String text, {bool compact = false}) {
+    return pw.Padding(
+      padding: pw.EdgeInsets.only(bottom: compact ? 2 : 5),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          font: _fonts.regular,
+          fontSize: compact ? _fontSize - 0.2 : _fontSize,
+          height: 1.15,
+        ),
+      ),
+    );
+  }
+
+  pw.Widget _signature() {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(top: 14, bottom: 5),
+      child: pw.Column(
+        children: [
+          pw.Container(width: 135, height: 0.8, color: PdfColors.grey900),
+          pw.SizedBox(height: 3),
+          pw.Text(
+            'FIRMA CAJERO',
+            textAlign: pw.TextAlign.center,
+            style: pw.TextStyle(font: _fonts.bold, fontSize: _fontSize - 0.2),
+          ),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget _footer() {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(top: 6),
+      child: pw.Text(
+        'Documento generado por FullPOS Cloud',
+        textAlign: pw.TextAlign.center,
+        style: pw.TextStyle(
+          font: _fonts.regular,
+          fontSize: _fontSize - 0.8,
+          color: PdfColors.grey700,
+        ),
+      ),
+    );
+  }
+
+  pw.Widget _divider() {
+    return pw.Container(
+      height: 0.8,
+      margin: const pw.EdgeInsets.symmetric(vertical: 5),
+      color: PdfColors.grey500,
+    );
+  }
+
+  double get _fontSize {
+    final base = layout.paperWidthMm == 58 ? 7.2 : 8.1;
+    final adjusted = base + ((layout.fontSizeLevel.clamp(1, 10) - 5) * 0.16);
+    return adjusted.clamp(6.4, 9.8).toDouble();
   }
 }

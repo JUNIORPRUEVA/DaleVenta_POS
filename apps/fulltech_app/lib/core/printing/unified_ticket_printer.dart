@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
@@ -141,6 +142,103 @@ class UnifiedTicketPrinter {
         success: false,
         message: 'No se pudo imprimir: $e',
         ticketNumber: data.ticketNumber,
+      );
+    } finally {
+      tracker.markPrintCompleted();
+    }
+  }
+
+  Future<PrintTicketResult> printPdfBytes({
+    required Uint8List bytes,
+    required String ticketNumber,
+    required String documentName,
+    List<String> fallbackLines = const <String>[],
+    int? overrideCopies,
+    bool showSystemDialogIfNoPrinter = true,
+  }) async {
+    final tracker = PrintActivityTracker.instance;
+    tracker.markPrintStarted();
+    try {
+      final company = await _ref
+          .read(companyInfoRepositoryProvider)
+          .getCurrentCompanyInfo();
+      final settings = await _ref
+          .read(printerSettingsRepositoryProvider)
+          .getOrCreate();
+      final layout = TicketLayoutConfig.fromPrinterSettings(settings);
+      final platform = _ref.read(printingPlatformResolverProvider);
+      if (platform.capabilities.isMobile) {
+        final mobileResult = await _ref
+            .read(mobilePrintServiceProvider)
+            .printRaw(
+              lines: fallbackLines,
+              pdfBytes: bytes,
+              documentName: documentName,
+              logoBytes: company.logoBytes,
+              printLogo: layout.showLogo,
+            );
+        if (mobileResult.success) {
+          return PrintTicketResult(
+            success: true,
+            message: mobileResult.message,
+            ticketNumber: ticketNumber,
+          );
+        }
+        if (showSystemDialogIfNoPrinter) {
+          await Printing.layoutPdf(
+            name: documentName,
+            onLayout: (_) async => bytes,
+          );
+          return PrintTicketResult(
+            success: true,
+            message:
+                '${mobileResult.message} Se abrio el dialogo del sistema como respaldo.',
+            ticketNumber: ticketNumber,
+          );
+        }
+        return PrintTicketResult(
+          success: false,
+          message: mobileResult.message,
+          ticketNumber: ticketNumber,
+        );
+      }
+
+      final result = await _thermal.printDocument(
+        bytes: bytes,
+        settings: settings,
+        copies: overrideCopies,
+        documentName: documentName,
+      );
+      if (result.success) {
+        return PrintTicketResult(
+          success: true,
+          message: result.message,
+          ticketNumber: ticketNumber,
+        );
+      }
+
+      if (showSystemDialogIfNoPrinter) {
+        await Printing.layoutPdf(
+          name: documentName,
+          onLayout: (_) async => bytes,
+        );
+        return PrintTicketResult(
+          success: true,
+          message:
+              '${result.message} Se abrio el dialogo del sistema como respaldo.',
+          ticketNumber: ticketNumber,
+        );
+      }
+      return PrintTicketResult(
+        success: false,
+        message: result.message,
+        ticketNumber: ticketNumber,
+      );
+    } catch (e) {
+      return PrintTicketResult(
+        success: false,
+        message: 'No se pudo imprimir: $e',
+        ticketNumber: ticketNumber,
       );
     } finally {
       tracker.markPrintCompleted();

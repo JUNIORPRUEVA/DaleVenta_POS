@@ -231,11 +231,11 @@ class TicketBuilder {
     return pw.Padding(
       padding: const pw.EdgeInsets.only(bottom: 7),
       child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
           pw.Text(
             rows.first,
-            textAlign: pw.TextAlign.left,
+            textAlign: pw.TextAlign.center,
             style: pw.TextStyle(
               font: fonts.bold,
               fontSize: layout.paperWidthMm == 58 ? fontSize + 3 : fontSize + 4,
@@ -255,7 +255,7 @@ class TicketBuilder {
                   padding: const pw.EdgeInsets.only(bottom: 1.2),
                   child: pw.Text(
                     row,
-                    textAlign: pw.TextAlign.left,
+                    textAlign: pw.TextAlign.center,
                     style: pw.TextStyle(
                       font: fonts.regular,
                       fontSize: fontSize,
@@ -285,18 +285,23 @@ class TicketBuilder {
       if (data.client != null && data.client!.document.trim().isNotEmpty)
         (label: 'DOC.', value: data.client!.document.trim()),
     ];
-    return pw.Padding(
-      padding: const pw.EdgeInsets.only(bottom: 3),
+    return pw.Container(
+      margin: const pw.EdgeInsets.only(bottom: 4),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey500, width: 0.6),
+      ),
       child: pw.Column(
         children: rows
-            .map(
-              (row) => _pair(
+            .map((row) {
+              final strong = row.label == 'FACTURA';
+              return _pair(
                 row.label,
                 row.value,
-                row.label == 'FACTURA' ? fonts.bold : fonts.regular,
-                row.label == 'FACTURA' ? fontSize + 0.4 : fontSize,
-              ),
-            )
+                strong ? fonts.bold : fonts.regular,
+                strong ? fontSize + 0.35 : fontSize,
+              );
+            })
             .toList(growable: false),
       ),
     );
@@ -394,23 +399,17 @@ class TicketBuilder {
             ),
         ],
         pw.Container(
-          height: 1.0,
           margin: const pw.EdgeInsets.only(top: 5, bottom: 4),
-          color: PdfColors.grey900,
-        ),
-        pw.Padding(
-          padding: const pw.EdgeInsets.symmetric(vertical: 2),
+          padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: PdfColors.grey900, width: 1.1),
+          ),
           child: _totalPair(
-            'TOTAL',
+            'TOTAL A PAGAR',
             ReceiptTextUtils.money(data.total),
             fonts.bold,
-            fontSize + 1.7,
+            fontSize + 1.5,
           ),
-        ),
-        pw.Container(
-          height: 0.7,
-          margin: const pw.EdgeInsets.only(top: 3),
-          color: PdfColors.grey700,
         ),
         if (layout.showPaymentMethod &&
             (data.paymentMethod ?? '').trim().isNotEmpty)

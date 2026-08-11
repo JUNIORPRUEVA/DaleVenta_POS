@@ -670,7 +670,7 @@ class _SettingsHubScaffold extends ConsumerWidget {
           : null,
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760),
+          constraints: BoxConstraints(maxWidth: mobile ? 760 : 620),
           child: Padding(
             padding: EdgeInsets.fromLTRB(
               mobile ? 20 : 22,
@@ -686,20 +686,15 @@ class _SettingsHubScaffold extends ConsumerWidget {
                     companyName: displayName,
                     configured: configuredName.isNotEmpty,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                 ],
                 Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final twoColumns = constraints.maxWidth >= 720;
-                      return GridView.count(
-                        crossAxisCount: twoColumns ? 2 : 1,
-                        childAspectRatio: twoColumns ? 5.15 : 4.0,
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 10,
-                        children: children,
-                      );
-                    },
+                  child: ListView.separated(
+                    itemCount: children.length,
+                    padding: EdgeInsets.only(bottom: mobile ? 24 : 18),
+                    separatorBuilder: (_, _) =>
+                        SizedBox(height: mobile ? 10 : 8),
+                    itemBuilder: (context, index) => children[index],
                   ),
                 ),
               ],
@@ -724,21 +719,21 @@ class _SettingsHeroPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFDDE7EE)),
       ),
       child: Row(
         children: [
-          _TileIcon(icon: Icons.settings_rounded, size: 38),
+          _TileIcon(icon: Icons.settings_rounded, size: 34),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Configuración de FullPOS Cloud', style: _titleStyle(18)),
+                Text('Configuración de FullPOS Cloud', style: _titleStyle(17)),
                 const SizedBox(height: 2),
                 Text(companyName, style: _strongBodyStyle()),
               ],
@@ -871,26 +866,27 @@ class _SettingsLaunchCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(8),
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         onTap: () => AppNavigator.go(context, route),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          constraints: const BoxConstraints(minHeight: 72),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: const Color(0xFFDDE7EE)),
           ),
           child: Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 34,
+                height: 34,
                 decoration: BoxDecoration(
                   color: AppColors.secondary.withValues(alpha: 0.09),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(icon, color: AppColors.secondary, size: 20),
+                child: Icon(icon, color: AppColors.secondary, size: 19),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -898,11 +894,11 @@ class _SettingsLaunchCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: _titleStyle(15)),
+                    Text(title, style: _titleStyle(15.5)),
                     const SizedBox(height: 2),
                     Text(
                       description,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: _bodyStyle(),
                     ),
@@ -942,26 +938,27 @@ class _SettingsActionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(8),
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          constraints: const BoxConstraints(minHeight: 72),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: accent.withValues(alpha: 0.35)),
           ),
           child: Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 34,
+                height: 34,
                 decoration: BoxDecoration(
                   color: accent.withValues(alpha: 0.09),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(icon, color: accent, size: 20),
+                child: Icon(icon, color: accent, size: 19),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -969,11 +966,14 @@ class _SettingsActionCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: _titleStyle(15).copyWith(color: accent)),
+                    Text(
+                      title,
+                      style: _titleStyle(15.5).copyWith(color: accent),
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       description,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: _bodyStyle(),
                     ),

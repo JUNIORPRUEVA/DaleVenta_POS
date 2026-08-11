@@ -35,6 +35,7 @@ class Env {
     if (kIsWeb) {
       final v = RuntimeEnv.get(key);
       if (v != null && v.trim().isNotEmpty) return v;
+      if (key == 'API_BASE_URL') return null;
     }
 
     // 3) Bundled .env assets (flutter_dotenv)
@@ -49,6 +50,9 @@ class Env {
     final raw = (_readEnv('API_BASE_URL') ?? '').trim();
 
     if (raw.isEmpty) {
+      if (kIsWeb) {
+        return '${Uri.base.origin}/api';
+      }
       debugPrint(
         'API_BASE_URL is missing. Define it in .env / EasyPanel env vars. Using fallback: $_defaultApiBaseUrl',
       );
