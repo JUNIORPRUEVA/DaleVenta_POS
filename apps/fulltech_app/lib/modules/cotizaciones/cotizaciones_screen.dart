@@ -4566,6 +4566,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             shortId: _saleShortId,
             onViewSale: _showRecentSaleDetails,
             onOpenPdf: _openRecentSalePdf,
+            onReprintTicket: _reprintRecentSaleTicket,
             onClose: () => Navigator.of(dialogContext).pop(),
             onOpenFullHistory: () {
               Navigator.of(dialogContext).pop();
@@ -4677,6 +4678,16 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         );
       },
     );
+  }
+
+  Future<void> _reprintRecentSaleTicket(SaleModel sale) async {
+    final result = await ref
+        .read(unifiedTicketPrinterProvider)
+        .reprintSale(sale: sale, items: sale.items);
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(result.message)));
   }
 
   void _showRecentSaleDetails(SaleModel sale) {
@@ -5952,6 +5963,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                             onEditLine: _openLineEditor,
                             onEditExternalItem: (index) =>
                                 _openExternalItemDialog(editIndex: index),
+                            isOutOfStock: (item) {
+                              if (item.isExternal) return false;
+                              final official = _findOfficialProduct(
+                                item.productId,
+                              );
+                              return official != null &&
+                                  (official.stock == null ||
+                                      official.stock! <= 0);
+                            },
                             onRemoveItem: (index) {
                               if (index < 0 || index >= _items.length) return;
                               _commitEditorChange(() => _items.removeAt(index));
@@ -8973,6 +8993,7 @@ class _RecentSalesPanel extends StatefulWidget {
     required this.shortId,
     required this.onViewSale,
     required this.onOpenPdf,
+    required this.onReprintTicket,
     required this.onClose,
     required this.onOpenFullHistory,
   });
@@ -8983,6 +9004,7 @@ class _RecentSalesPanel extends StatefulWidget {
   final String Function(SaleModel sale) shortId;
   final ValueChanged<SaleModel> onViewSale;
   final ValueChanged<SaleModel> onOpenPdf;
+  final ValueChanged<SaleModel> onReprintTicket;
   final VoidCallback onClose;
   final VoidCallback onOpenFullHistory;
 
@@ -9148,7 +9170,7 @@ class _RecentSalesPanelState extends State<_RecentSalesPanel> {
                                   style: TextStyle(fontWeight: FontWeight.w800),
                                 ),
                               ),
-                              SizedBox(width: 98),
+                              SizedBox(width: 126),
                             ],
                           ),
                         ),
@@ -9168,6 +9190,7 @@ class _RecentSalesPanelState extends State<_RecentSalesPanel> {
                                 shortId: widget.shortId,
                                 onViewSale: widget.onViewSale,
                                 onOpenPdf: widget.onOpenPdf,
+                                onReprintTicket: widget.onReprintTicket,
                                 onOpenFullHistory: widget.onOpenFullHistory,
                               );
                             },
@@ -9216,6 +9239,7 @@ class _RecentSalesRow extends StatelessWidget {
     required this.shortId,
     required this.onViewSale,
     required this.onOpenPdf,
+    required this.onReprintTicket,
     required this.onOpenFullHistory,
   });
 
@@ -9225,6 +9249,7 @@ class _RecentSalesRow extends StatelessWidget {
   final String Function(SaleModel sale) shortId;
   final ValueChanged<SaleModel> onViewSale;
   final ValueChanged<SaleModel> onOpenPdf;
+  final ValueChanged<SaleModel> onReprintTicket;
   final VoidCallback onOpenFullHistory;
 
   @override
@@ -9288,7 +9313,7 @@ class _RecentSalesRow extends StatelessWidget {
             ),
           ),
           SizedBox(
-            width: 98,
+            width: 126,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -9303,6 +9328,12 @@ class _RecentSalesRow extends StatelessWidget {
                   onPressed: () => onOpenPdf(sale),
                   icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
                   color: const Color(0xFFE11D48),
+                ),
+                IconButton(
+                  tooltip: 'Reimprimir ticket',
+                  onPressed: () => onReprintTicket(sale),
+                  icon: const Icon(Icons.print_outlined, size: 18),
+                  color: const Color(0xFF1957E6),
                 ),
               ],
             ),
@@ -10801,6 +10832,7 @@ class _DesktopQuotePanel extends StatelessWidget {
     required this.onChangePrice,
     required this.onEditLine,
     required this.onEditExternalItem,
+    required this.isOutOfStock,
     required this.onRemoveItem,
   });
 
@@ -10831,6 +10863,7 @@ class _DesktopQuotePanel extends StatelessWidget {
   final void Function(int index, double value) onChangePrice;
   final ValueChanged<int> onEditLine;
   final ValueChanged<int> onEditExternalItem;
+  final bool Function(CotizacionItem item) isOutOfStock;
   final ValueChanged<int> onRemoveItem;
 
   @override
@@ -11024,6 +11057,7 @@ class _DesktopQuotePanel extends StatelessWidget {
                         return _DesktopTicketItem(
                           item: item,
                           money: money,
+                          outOfStock: isOutOfStock(item),
                           onEditLine: () => onEditLine(index),
                           onMinus: () => onMinusQty(index),
                           onPlus: () => onPlusQty(index),
@@ -12890,6 +12924,7 @@ class _DesktopTicketItem extends StatefulWidget {
   const _DesktopTicketItem({
     required this.item,
     required this.money,
+    required this.outOfStock,
     required this.onEditLine,
     required this.onMinus,
     required this.onPlus,
@@ -12900,6 +12935,7 @@ class _DesktopTicketItem extends StatefulWidget {
 
   final CotizacionItem item;
   final String Function(double) money;
+  final bool outOfStock;
   final VoidCallback onEditLine;
   final VoidCallback onMinus;
   final VoidCallback onPlus;
@@ -12953,6 +12989,7 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
     final item = widget.item;
     final theme = Theme.of(context);
     final hasDiscount = item.hasDiscount;
+    final outOfStock = widget.outOfStock;
     final discountText = widget.money(item.discountAmount);
     final qtyText = item.qty % 1 == 0
         ? item.qty.toStringAsFixed(0)
@@ -13018,6 +13055,22 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (outOfStock)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 2),
+                        child: Text(
+                          'Sin stock',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Color(0xFFDC2626),
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w900,
+                            height: 1,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                      ),
                     InkWell(
                       onTap: _showFullProductName,
                       child: Text(

@@ -15,6 +15,12 @@ namespace {
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
+#ifndef DWMWA_CAPTION_COLOR
+#define DWMWA_CAPTION_COLOR 35
+#endif
+#ifndef DWMWA_TEXT_COLOR
+#define DWMWA_TEXT_COLOR 36
+#endif
 
 constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
 
@@ -273,6 +279,13 @@ void Win32Window::OnDestroy() {
 }
 
 void Win32Window::UpdateTheme(HWND const window) {
+  const COLORREF caption_color = RGB(25, 87, 230);
+  const COLORREF text_color = RGB(255, 255, 255);
+  DwmSetWindowAttribute(window, DWMWA_CAPTION_COLOR, &caption_color,
+                        sizeof(caption_color));
+  DwmSetWindowAttribute(window, DWMWA_TEXT_COLOR, &text_color,
+                        sizeof(text_color));
+
   DWORD light_mode;
   DWORD light_mode_size = sizeof(light_mode);
   LSTATUS result = RegGetValue(HKEY_CURRENT_USER, kGetPreferredBrightnessRegKey,

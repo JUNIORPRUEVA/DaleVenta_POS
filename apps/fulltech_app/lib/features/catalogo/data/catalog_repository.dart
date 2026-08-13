@@ -250,6 +250,48 @@ class CatalogRepository {
     }
   }
 
+  Future<String?> importImageFromUrl(
+    String rawUrl, {
+    String? productName,
+  }) async {
+    final url = rawUrl.trim();
+    if (url.isEmpty ||
+        !RegExp(r'^https?://', caseSensitive: false).hasMatch(url)) {
+      return null;
+    }
+    try {
+      final res = await _dio.post(
+        ApiRoutes.productsImportImageUrl,
+        data: {
+          'url': url,
+          if ((productName ?? '').trim().isNotEmpty)
+            'productName': productName!.trim(),
+        },
+        options: Options(
+          extra: const {'skipLoader': true},
+          receiveTimeout: const Duration(seconds: 45),
+          sendTimeout: const Duration(seconds: 20),
+        ),
+      );
+      final data = res.data;
+      if (data is Map && data['url'] is String) return data['url'] as String;
+      if (data is Map && data['path'] is String) return data['path'] as String;
+      if (data is Map && data['key'] is String) return data['key'] as String;
+      if (data is Map && data['objectKey'] is String) {
+        return data['objectKey'] as String;
+      }
+      return null;
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(
+          e.response?.data,
+          'No se pudo importar la imagen del producto',
+        ),
+        e.response?.statusCode,
+      );
+    }
+  }
+
   Future<ProductModel> createProduct({
     required String nombre,
     String? codigo,

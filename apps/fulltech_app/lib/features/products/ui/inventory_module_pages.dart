@@ -534,6 +534,16 @@ _CatalogImportBundle _parseCatalogRows(List<List<String>> rows) {
   final supplierIndex = hasHeader
       ? indexOf(['proveedor', 'suplidor', 'supplier', 'provider'], 3)
       : -1;
+  final photoIndex = hasHeader
+      ? indexOf([
+          'fotourl',
+          'foto url',
+          'foto',
+          'imagen',
+          'image',
+          'imageurl',
+        ], 8)
+      : -1;
 
   final dataRows = hasHeader ? rows.skip(1) : rows;
   final drafts = <CatalogImportDraft>[];
@@ -552,6 +562,7 @@ _CatalogImportBundle _parseCatalogRows(List<List<String>> rows) {
         ? 'Sin categoría'
         : cell(categoryIndex);
     final proveedor = cell(supplierIndex);
+    final fotoUrl = cell(photoIndex);
 
     if (categoria.trim().isNotEmpty) {
       categories.add(_normalizeCategoryName(categoria));
@@ -569,6 +580,7 @@ _CatalogImportBundle _parseCatalogRows(List<List<String>> rows) {
         costo: costo,
         stock: stock,
         categoria: categoria,
+        fotoUrl: fotoUrl.isEmpty ? null : fotoUrl,
       ),
     );
   }
@@ -1055,6 +1067,40 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     );
   }
 
+  Future<void> _changeProductsCategorySelection(
+    List<ProductModel> products,
+    String category,
+  ) async {
+    if (products.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecciona productos para cambiar categoría'),
+        ),
+      );
+      return;
+    }
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.editProducts,
+      reason: 'Cambiar categoría de productos',
+    );
+    if (!allowed || !mounted) return;
+    final controller = ref.read(catalogControllerProvider.notifier);
+    for (final product in products) {
+      await controller.update(
+        id: product.id,
+        nombre: product.nombre,
+        codigo: product.codigo,
+        precio: product.precio,
+        costo: product.costo,
+        stock: product.stock ?? 0,
+        categoria: category,
+        fotoUrl: product.fotoUrl ?? product.originalFotoUrl,
+      );
+    }
+  }
+
   Future<void> _importCatalog() async {
     final rootNavigator = Navigator.of(context, rootNavigator: true);
     final allowed = await ensureAdminAuthorization(
@@ -1417,6 +1463,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
         onExportSelection: _exportProductsSelection,
         onPdfSelection: _showProductsPdf,
         onBulkDelete: _deleteProductsSelection,
+        onBulkChangeCategory: _changeProductsCategorySelection,
         onEdit: (product) => _openProductEditor(product: product),
         onSetStock: _setProductStock,
         canEditProducts: canEditProducts,
@@ -1550,12 +1597,27 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                 title: desktopTitle,
                 actions: [
                   if (initialTabIndex == 0)
-                    FilledButton.icon(
+                    _CatalogHeaderActionButton(
+                      onPressed: canEditProducts ? _importCatalog : null,
+                      icon: const Icon(Icons.upload_file_rounded, size: 18),
+                      label: 'Importar',
+                    ),
+                  if (initialTabIndex == 0) const SizedBox(width: 10),
+                  if (initialTabIndex == 0)
+                    _CatalogHeaderActionButton(
+                      onPressed: _exportCatalog,
+                      icon: const Icon(Icons.download_rounded, size: 18),
+                      label: 'Exportar',
+                    ),
+                  if (initialTabIndex == 0) const SizedBox(width: 10),
+                  if (initialTabIndex == 0)
+                    _CatalogHeaderActionButton(
                       onPressed: canEditProducts
                           ? () => _openProductEditor()
                           : null,
                       icon: const Icon(Icons.add_rounded, size: 18),
-                      label: const Text('Nuevo producto'),
+                      label: 'Nuevo producto',
+                      filled: true,
                     ),
                   if (initialTabIndex == 3)
                     FilledButton.icon(
@@ -1645,6 +1707,67 @@ class ProductsSurface extends StatelessWidget {
         ],
       ),
       child: Padding(padding: padding, child: child),
+    );
+  }
+}
+
+class _CatalogHeaderActionButton extends StatelessWidget {
+  const _CatalogHeaderActionButton({
+    required this.onPressed,
+    required this.icon,
+    required this.label,
+    this.filled = false,
+  });
+
+  final VoidCallback? onPressed;
+  final Widget icon;
+  final String label;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(7),
+    );
+    const textStyle = TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 0,
+    );
+    final text = Text(label, maxLines: 1, overflow: TextOverflow.ellipsis);
+
+    if (filled) {
+      return FilledButton.icon(
+        onPressed: onPressed,
+        icon: icon,
+        label: text,
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(0, 38),
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: AppColors.border,
+          disabledForegroundColor: AppColors.textMuted,
+          shape: shape,
+          textStyle: textStyle,
+        ),
+      );
+    }
+
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: icon,
+      label: text,
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(0, 38),
+        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+        foregroundColor: AppColors.primary,
+        disabledForegroundColor: AppColors.textMuted,
+        backgroundColor: Colors.white,
+        shape: shape,
+        side: const BorderSide(color: AppColors.borderStrong),
+        textStyle: textStyle,
+      ),
     );
   }
 }
@@ -1820,19 +1943,17 @@ class _InventoryFilterShell extends StatelessWidget {
       left: false,
       child: Material(
         color: Colors.white,
-        borderRadius: const BorderRadius.horizontal(left: Radius.circular(22)),
+        shape: const RoundedRectangleBorder(
+          side: BorderSide(color: AppColors.border),
+        ),
         child: Column(
           children: [
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(18, 18, 12, 16),
               decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF1957E6), Color(0xFF47A3FF)],
-                ),
-                borderRadius: BorderRadius.only(topLeft: Radius.circular(22)),
+                color: AppColors.primary,
+                border: Border(bottom: BorderSide(color: Color(0xFF1649C7))),
               ),
               child: Row(
                 children: [
@@ -2224,6 +2345,7 @@ class CatalogTab extends StatefulWidget {
     required this.onExportSelection,
     required this.onPdfSelection,
     required this.onBulkDelete,
+    required this.onBulkChangeCategory,
     required this.onEdit,
     required this.onSetStock,
     required this.canEditProducts,
@@ -2241,6 +2363,8 @@ class CatalogTab extends StatefulWidget {
   final Future<void> Function(List<ProductModel> products) onExportSelection;
   final Future<void> Function(List<ProductModel> products) onPdfSelection;
   final Future<void> Function(List<ProductModel> products) onBulkDelete;
+  final Future<void> Function(List<ProductModel> products, String category)
+  onBulkChangeCategory;
   final ValueChanged<ProductModel> onEdit;
   final Future<void> Function(ProductModel product, double stock) onSetStock;
   final bool canEditProducts;
@@ -2354,6 +2478,41 @@ class _CatalogTabState extends State<CatalogTab> {
     });
   }
 
+  Future<void> _changeSelectedCategory() async {
+    final selected = _selectedProducts;
+    if (selected.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecciona productos para cambiar categoría'),
+        ),
+      );
+      return;
+    }
+    final category = await _showBulkCategoryPicker(context, _categories);
+    if (category == null || !mounted) return;
+    await widget.onBulkChangeCategory(selected, category);
+    if (!mounted) return;
+    setState(() => _selectedIds.clear());
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${selected.length} productos movidos a "$category"'),
+      ),
+    );
+  }
+
+  Future<void> _handleBulkAction(_CatalogBulkAction action) async {
+    switch (action) {
+      case _CatalogBulkAction.export:
+        await exportSelected();
+      case _CatalogBulkAction.pdf:
+        await showSelectedPdf();
+      case _CatalogBulkAction.category:
+        await _changeSelectedCategory();
+      case _CatalogBulkAction.delete:
+        await deleteSelected();
+    }
+  }
+
   void _openProductDetail(ProductModel product) {
     if (MediaQuery.sizeOf(context).width >= 640) return;
     Navigator.of(context).push(
@@ -2448,9 +2607,9 @@ class _CatalogTabState extends State<CatalogTab> {
                     _searchCtrl.clear();
                     _query = '';
                   }),
-                  onCreate: widget.canEditProducts ? widget.onCreate : null,
-                  onImport: widget.canEditProducts ? widget.onImport : null,
-                  onExport: widget.onExport,
+                  onOpenFilters: openMobileFilters,
+                  onBulkAction: _handleBulkAction,
+                  canEditProducts: widget.canEditProducts,
                 ),
                 const SizedBox(height: 12),
               ],
@@ -2513,9 +2672,9 @@ class _CatalogToolbar extends StatelessWidget {
     required this.onToggleLowStock,
     required this.onToggleOutStock,
     required this.onClearFilters,
-    required this.onCreate,
-    required this.onImport,
-    required this.onExport,
+    required this.onOpenFilters,
+    required this.onBulkAction,
+    required this.canEditProducts,
   });
 
   final TextEditingController controller;
@@ -2529,125 +2688,309 @@ class _CatalogToolbar extends StatelessWidget {
   final ValueChanged<bool> onToggleLowStock;
   final ValueChanged<bool> onToggleOutStock;
   final VoidCallback onClearFilters;
-  final VoidCallback? onCreate;
-  final Future<void> Function()? onImport;
-  final Future<void> Function() onExport;
+  final VoidCallback onOpenFilters;
+  final ValueChanged<_CatalogBulkAction> onBulkAction;
+  final bool canEditProducts;
 
   @override
   Widget build(BuildContext context) {
     final mobile = MediaQuery.sizeOf(context).width < 640;
-    final categoryOptions =
-        categories
-            .map((category) => category.trim())
-            .where((category) => category.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort();
-    final safeSelectedCategory =
-        selectedCategory != null && categoryOptions.contains(selectedCategory)
-        ? selectedCategory
-        : null;
+    final searchWidth = mobile
+        ? double.infinity
+        : (MediaQuery.sizeOf(context).width * 0.46).clamp(560.0, 760.0);
+    final hasFilters = selectedCategory != null || onlyLowStock || onlyOutStock;
     return ProductsSurface(
       padding: EdgeInsets.all(mobile ? 10 : 12),
       child: Wrap(
-        spacing: 10,
+        spacing: 8,
         runSpacing: 10,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           SizedBox(
-            width: mobile ? double.infinity : 360,
+            width: searchWidth,
             child: TextField(
               controller: controller,
               onChanged: onSearchChanged,
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search_rounded),
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search_rounded, size: 18),
                 hintText: 'Buscar por nombre, código o categoría',
                 filled: true,
                 fillColor: Colors.white,
-                border: OutlineInputBorder(),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: AppColors.borderStrong),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: AppColors.borderStrong),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(
+                    color: AppColors.primary,
+                    width: 1.2,
+                  ),
+                ),
                 isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
               ),
             ),
           ),
-          DropdownButtonHideUnderline(
-            child: SizedBox(
-              width: mobile ? double.infinity : null,
-              child: DropdownButton<String?>(
-                value: safeSelectedCategory,
-                isExpanded: mobile,
-                hint: const Text('Todas las categorías'),
-                items: [
-                  const DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text('Todas las categorías'),
-                  ),
-                  for (final category in categoryOptions)
-                    DropdownMenuItem(value: category, child: Text(category)),
-                ],
-                onChanged: onCategoryChanged,
-              ),
+          _CatalogToolbarButton(
+            onPressed: onOpenFilters,
+            icon: Badge(
+              isLabelVisible: hasFilters,
+              smallSize: 8,
+              child: const Icon(Icons.filter_alt_outlined, size: 17),
             ),
+            label: 'Filtro',
           ),
-          FilterChip(
-            label: const Text('Stock bajo'),
-            selected: onlyLowStock,
-            onSelected: onToggleLowStock,
-          ),
-          FilterChip(
-            label: const Text('Agotados'),
-            selected: onlyOutStock,
-            onSelected: onToggleOutStock,
-          ),
-          OutlinedButton.icon(
-            onPressed: onClearFilters,
-            icon: const Icon(Icons.cleaning_services_outlined, size: 17),
-            label: const Text('Limpiar'),
-          ),
-          if (mobile)
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onImport,
-                    icon: const Icon(Icons.upload_file_rounded, size: 17),
-                    label: const Text('Importar'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onExport,
-                    icon: const Icon(Icons.download_rounded, size: 17),
-                    label: const Text('Exportar'),
-                  ),
-                ),
-              ],
-            )
-          else ...[
-            OutlinedButton.icon(
-              onPressed: onImport,
-              icon: const Icon(Icons.upload_file_rounded, size: 17),
-              label: const Text('Importar'),
-            ),
-            OutlinedButton.icon(
-              onPressed: onExport,
-              icon: const Icon(Icons.download_rounded, size: 17),
-              label: const Text('Exportar'),
-            ),
-            FilledButton.icon(
-              onPressed: onCreate,
-              icon: const Icon(Icons.add_rounded, size: 17),
-              label: const Text('Nuevo producto'),
-            ),
-          ],
-          if (selectedCount > 0)
-            Chip(
-              backgroundColor: _lightBlueHover,
-              label: Text('$selectedCount seleccionados'),
+          if (selectedCount > 1)
+            _CatalogBulkActionsButton(
+              selectedCount: selectedCount,
+              canEditProducts: canEditProducts,
+              onSelected: onBulkAction,
             ),
         ],
       ),
     );
+  }
+}
+
+class _CatalogToolbarButton extends StatelessWidget {
+  const _CatalogToolbarButton({
+    required this.onPressed,
+    required this.icon,
+    required this.label,
+  });
+
+  final VoidCallback? onPressed;
+  final Widget icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(7),
+    );
+    final textStyle = const TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 0,
+    );
+    final text = Text(label, maxLines: 1, overflow: TextOverflow.ellipsis);
+
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: icon,
+      label: text,
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(0, 40),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        foregroundColor: AppColors.primary,
+        disabledForegroundColor: AppColors.textMuted,
+        backgroundColor: Colors.white,
+        shape: shape,
+        side: const BorderSide(color: AppColors.borderStrong),
+        textStyle: textStyle,
+      ),
+    );
+  }
+}
+
+enum _CatalogBulkAction { export, pdf, category, delete }
+
+class _CatalogBulkActionsButton extends StatelessWidget {
+  const _CatalogBulkActionsButton({
+    required this.selectedCount,
+    required this.canEditProducts,
+    required this.onSelected,
+  });
+
+  final int selectedCount;
+  final bool canEditProducts;
+  final ValueChanged<_CatalogBulkAction> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = selectedCount > 1;
+    return PopupMenuButton<_CatalogBulkAction>(
+      enabled: enabled,
+      tooltip: enabled
+          ? 'Acciones para $selectedCount seleccionados'
+          : 'Selecciona productos para usar acciones',
+      onSelected: onSelected,
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: _CatalogBulkAction.export,
+          child: _CatalogActionMenuRow(
+            icon: Icons.file_download_outlined,
+            label: 'Exportar selección',
+          ),
+        ),
+        const PopupMenuItem(
+          value: _CatalogBulkAction.pdf,
+          child: _CatalogActionMenuRow(
+            icon: Icons.picture_as_pdf_outlined,
+            label: 'PDF selección',
+          ),
+        ),
+        if (canEditProducts)
+          const PopupMenuItem(
+            value: _CatalogBulkAction.category,
+            child: _CatalogActionMenuRow(
+              icon: Icons.category_outlined,
+              label: 'Cambiar categoría',
+            ),
+          ),
+        if (canEditProducts) const PopupMenuDivider(),
+        if (canEditProducts)
+          const PopupMenuItem(
+            value: _CatalogBulkAction.delete,
+            child: _CatalogActionMenuRow(
+              icon: Icons.delete_outline_rounded,
+              label: 'Eliminar productos',
+              danger: true,
+            ),
+          ),
+      ],
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 40),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: enabled ? Colors.white : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(
+            color: enabled ? AppColors.borderStrong : AppColors.border,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.tune_rounded,
+              size: 17,
+              color: enabled ? AppColors.primary : AppColors.textMuted,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              enabled ? 'Acciones ($selectedCount)' : 'Acciones',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: enabled ? AppColors.textPrimary : AppColors.textMuted,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CatalogActionMenuRow extends StatelessWidget {
+  const _CatalogActionMenuRow({
+    required this.icon,
+    required this.label,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = danger ? const Color(0xFFDC2626) : AppColors.textPrimary;
+    return ListTile(
+      dense: true,
+      leading: Icon(icon, color: color),
+      title: Text(label, style: TextStyle(color: color)),
+      contentPadding: EdgeInsets.zero,
+    );
+  }
+}
+
+Future<String?> _showBulkCategoryPicker(
+  BuildContext context,
+  List<String> categories,
+) async {
+  final cleanCategories =
+      categories
+          .map((category) => category.trim())
+          .where((category) => category.isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
+  String? selected = cleanCategories.isEmpty ? null : cleanCategories.first;
+  final controller = TextEditingController(text: selected ?? '');
+  try {
+    return showDialog<String>(
+      context: context,
+      barrierColor: FullTechDialogTokens.overlayColor,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final canApply = controller.text.trim().isNotEmpty;
+          return AlertDialog(
+            title: const Text('Cambiar categoría'),
+            content: SizedBox(
+              width: 360,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: selected,
+                    isExpanded: true,
+                    decoration: _inventoryTextInputDecoration('Categoría'),
+                    items: [
+                      for (final category in cleanCategories)
+                        DropdownMenuItem(
+                          value: category,
+                          child: Text(category),
+                        ),
+                    ],
+                    onChanged: (value) => setDialogState(() {
+                      selected = value;
+                      controller.text = value ?? '';
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: controller,
+                    decoration: _inventoryTextInputDecoration(
+                      'O escribe una categoría nueva',
+                    ),
+                    onChanged: (_) => setDialogState(() {}),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: canApply
+                    ? () => Navigator.of(
+                        dialogContext,
+                      ).pop(controller.text.trim())
+                    : null,
+                child: const Text('Aplicar'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  } finally {
+    controller.dispose();
   }
 }
 

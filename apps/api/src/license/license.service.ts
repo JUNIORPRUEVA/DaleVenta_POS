@@ -247,6 +247,37 @@ export class LicenseService {
     return after;
   }
 
+  async permanentlyDeleteCompanyLicense(companyId: string, dto: LicenseUpdateInput) {
+    const before = await this.companySnapshot(companyId);
+    const receiptId = `license_purge_${Date.now()}_${randomUUID().slice(0, 8)}`;
+    await this.revokeCompanySessions(companyId, 'license_permanently_deleted');
+
+    await this.prisma.$transaction(async (tx) => {
+      await this.deleteCompanyOwnedRows(tx, companyId);
+      await tx.companyMember.deleteMany({ where: { companyId } });
+      await tx.user.updateMany({
+        where: { companyId },
+        data: { companyId: null, blocked: true },
+      });
+      await tx.company.delete({ where: { id: companyId } });
+    });
+
+    this.emitLicenseEvent(companyId, 'license.permanently_deleted', {
+      companyId,
+      companyName: before.name,
+      receiptId,
+    });
+
+    return {
+      ok: true,
+      deleted: true,
+      receiptId,
+      companyId,
+      companyName: before.name,
+      message: 'Empresa, licencia y datos asociados eliminados completamente.',
+    };
+  }
+
   async assertAdminSecret(rawSecret?: string | string[]) {
     const configured = (
       this.config.get<string>('LICENSE_ADMIN_SECRET') ??
@@ -612,6 +643,31 @@ export class LicenseService {
     });
     if (!company) throw new ForbiddenException('Empresa no encontrada');
     return company;
+  }
+
+  private async deleteCompanyOwnedRows(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+  ) {
+    const rows = await tx.$queryRaw<Array<{ table_name: string }>>(Prisma.sql`
+      SELECT table_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND column_name = 'company_id'
+        AND table_name NOT IN ('companies', 'company_members', 'users')
+      ORDER BY table_name ASC
+    `);
+
+    for (const row of rows) {
+      const tableName = row.table_name;
+      if (!/^[a-zA-Z0-9_]+$/.test(tableName)) {
+        throw new Error(`Unsafe table name discovered: ${tableName}`);
+      }
+      await tx.$executeRawUnsafe(
+        `DELETE FROM "${tableName}" WHERE company_id = $1`,
+        companyId,
+      );
+    }
   }
 
   private async writeAuditLog(

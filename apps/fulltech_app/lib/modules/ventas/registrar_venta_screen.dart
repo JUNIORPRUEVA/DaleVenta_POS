@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_provider.dart';
 import '../../core/cache/fulltech_cache_manager.dart';
+import '../../core/company/company_settings_repository.dart';
 
 import '../../core/models/product_model.dart';
 
@@ -52,6 +55,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   bool _loadingProducts = true;
   bool _saving = false;
   bool _remoteRefreshInFlight = false;
+  OverlayEntry? _noStockNoticeEntry;
   DateTime? _lastSuccessfulRemoteSyncAt;
   List<ProductModel> _products = const [];
   List<SaleDraftItem> _cart = [];
@@ -118,6 +122,93 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       _cart.fold(0, (sum, item) => sum + item.subtotalSold);
 
   double get _totalUnits => _cart.fold(0, (sum, item) => sum + item.qty);
+
+  bool _hasNoStock(SaleDraftItem item) {
+    if (item.isExternal) return false;
+    final stock = item.product?.stock;
+    return stock == null || stock <= 0;
+  }
+
+  bool _productHasNoStock(ProductModel product) {
+    final stock = product.stock;
+    return stock == null || stock <= 0;
+  }
+
+  void _showNoStockNotice() {
+    final overlay = Overlay.maybeOf(context);
+    if (overlay == null) return;
+    final isDesktop = MediaQuery.sizeOf(context).width >= 900;
+    _noStockNoticeEntry?.remove();
+    late final OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (context) => Positioned(
+        top: MediaQuery.paddingOf(context).top + (isDesktop ? 16 : 10),
+        left: isDesktop ? 28 : 14,
+        right: isDesktop ? 28 : 14,
+        child: IgnorePointer(
+          child: Material(
+            color: Colors.transparent,
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFECACA)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.12),
+                        blurRadius: 18,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.inventory_2_outlined,
+                          color: Color(0xFFB91C1C),
+                          size: 18,
+                        ),
+                        SizedBox(width: 9),
+                        Flexible(
+                          child: Text(
+                            'Este producto no tiene stock suficiente. Por favor agrega stock.',
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Color(0xFF7F1D1D),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              height: 1.25,
+                              letterSpacing: 0,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    _noStockNoticeEntry = entry;
+    overlay.insert(entry);
+    Future<void>.delayed(const Duration(seconds: 4), () {
+      if (_noStockNoticeEntry == entry) {
+        entry.remove();
+        _noStockNoticeEntry = null;
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -227,6 +318,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     }
     _stopLiveSync();
     _realtimeSubscription?.cancel();
+    _noStockNoticeEntry?.remove();
+    _noStockNoticeEntry = null;
     _searchCtrl.dispose();
     _searchFocus.dispose();
     _noteCtrl.dispose();
@@ -612,7 +705,9 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                   ),
                 ],
               ],
-        trailing: !isWide ? const SizedBox.shrink() : null,
+        trailing: isWide
+            ? const _SalesCompanyAccountMenu()
+            : const SizedBox.shrink(),
       ),
       drawer: buildAdaptiveDrawer(context, currentUser: user),
       body: SafeArea(
@@ -865,10 +960,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                       final qtyValue = item.qty % 1 == 0
                           ? item.qty.toInt().toString()
                           : item.qty.toStringAsFixed(2);
-                      final outOfStock =
-                          !item.isExternal &&
-                          (item.product?.stock == null ||
-                              item.product!.stock! <= 0);
+                      final outOfStock = _hasNoStock(item);
                       return ListTile(
                         dense: true,
                         minLeadingWidth: 26,
@@ -909,41 +1001,25 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                   ),
                           ),
                         ),
-                        title: Text(
-                          item.name.toUpperCase(),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                            height: 1.08,
-                          ),
+                        title: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (outOfStock) const _NoStockTinyLabel(),
+                            Text(
+                              item.name.toUpperCase(),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                height: 1.08,
+                              ),
+                            ),
+                          ],
                         ),
                         subtitle: Row(
                           children: [
-                            if (outOfStock) ...[
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                  vertical: 1,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFDC2626),
-                                  borderRadius: BorderRadius.circular(3),
-                                ),
-                                child: const Text(
-                                  'SIN STOCK',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 7,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.4,
-                                    height: 1,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 5),
-                            ],
                             Flexible(
                               child: Text(
                                 '$qtyValue x ${_money(item.priceSoldUnit)}',
@@ -1297,10 +1373,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                               final qtyValue = item.qty % 1 == 0
                                   ? item.qty.toInt().toString()
                                   : item.qty.toStringAsFixed(2);
-                              final outOfStock =
-                                  !item.isExternal &&
-                                  (item.product?.stock == null ||
-                                      item.product!.stock! <= 0);
+                              final outOfStock = _hasNoStock(item);
 
                               return Material(
                                 color: Colors.transparent,
@@ -1333,40 +1406,25 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                         ),
                                         const SizedBox(width: 6),
                                         Expanded(
-                                          child: Text(
-                                            item.name,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                            ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              if (outOfStock)
+                                                const _NoStockTinyLabel(),
+                                              Text(
+                                                item.name,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                        if (outOfStock) ...[
-                                          const SizedBox(width: 6),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 4,
-                                              vertical: 1,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFDC2626),
-                                              borderRadius:
-                                                  BorderRadius.circular(3),
-                                            ),
-                                            child: const Text(
-                                              'SIN STOCK',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 7,
-                                                fontWeight: FontWeight.w800,
-                                                letterSpacing: 0.4,
-                                                height: 1,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
                                         const SizedBox(width: 6),
                                         Text(
                                           _money(item.subtotalSold),
@@ -1830,6 +1888,9 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   }
 
   void _addProduct(ProductModel product) {
+    if (_productHasNoStock(product)) {
+      _showNoStockNotice();
+    }
     final idx = _cart.indexWhere((item) => item.product?.id == product.id);
     if (idx >= 0) {
       final current = _cart[idx];
@@ -2942,6 +3003,285 @@ class _CartNoteButton extends StatelessWidget {
       ),
     );
   }
+}
+
+class _NoStockTinyLabel extends StatelessWidget {
+  const _NoStockTinyLabel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: const Text(
+        'Sin stock',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: Color(0xFFDC2626),
+          fontSize: 7,
+          fontWeight: FontWeight.w900,
+          height: 1,
+          letterSpacing: 0,
+        ),
+      ),
+    );
+  }
+}
+
+class _SalesCompanyAccountMenu extends ConsumerWidget {
+  const _SalesCompanyAccountMenu();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final company = ref.watch(companySettingsProvider);
+    final companyName = company.maybeWhen(
+      data: (settings) => _compactSalesCompanyName(settings.companyName),
+      orElse: () => 'Empresa',
+    );
+    final logoBase64 = company.maybeWhen(
+      data: (settings) => settings.logoBase64?.trim(),
+      orElse: () => null,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 10, left: 4),
+      child: PopupMenuButton<String>(
+        tooltip: 'Cuenta y empresa',
+        offset: const Offset(0, 44),
+        elevation: 8,
+        color: Colors.white,
+        surfaceTintColor: Colors.white,
+        shadowColor: Colors.black.withValues(alpha: 0.10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: Color(0xFFDDE7EE)),
+        ),
+        constraints: const BoxConstraints(minWidth: 260),
+        itemBuilder: (menuContext) => [
+          PopupMenuItem(
+            value: 'profile',
+            child: const _SalesCompanyMenuRow(
+              icon: Icons.person_outline_rounded,
+              label: 'Perfil',
+            ),
+            onTap: () => _goAfterMenu(context, Routes.profile),
+          ),
+          PopupMenuItem(
+            value: 'users',
+            child: const _SalesCompanyMenuRow(
+              icon: Icons.groups_2_outlined,
+              label: 'Usuarios',
+            ),
+            onTap: () => _goAfterMenu(context, Routes.users),
+          ),
+          PopupMenuItem(
+            value: 'company',
+            child: const _SalesCompanyMenuRow(
+              icon: Icons.settings_outlined,
+              label: 'Configuracion empresa',
+            ),
+            onTap: () => _goAfterMenu(context, Routes.configuracionEmpresa),
+          ),
+          const PopupMenuDivider(height: 8),
+          PopupMenuItem(
+            value: 'logout',
+            child: const _SalesCompanyMenuRow(
+              icon: Icons.logout_rounded,
+              label: 'Cerrar sesion',
+              danger: true,
+            ),
+            onTap: () {
+              Future<void>.delayed(Duration.zero, () async {
+                await ref.read(authStateProvider.notifier).logout();
+                if (context.mounted) context.go(Routes.login);
+              });
+            },
+          ),
+        ],
+        child: _SalesCompanyButton(label: companyName, logoBase64: logoBase64),
+      ),
+    );
+  }
+
+  void _goAfterMenu(BuildContext context, String route) {
+    Future<void>.delayed(Duration.zero, () {
+      if (context.mounted) context.go(route);
+    });
+  }
+}
+
+class _SalesCompanyButton extends StatefulWidget {
+  const _SalesCompanyButton({required this.label, required this.logoBase64});
+
+  final String label;
+  final String? logoBase64;
+
+  @override
+  State<_SalesCompanyButton> createState() => _SalesCompanyButtonState();
+}
+
+class _SalesCompanyButtonState extends State<_SalesCompanyButton> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = _hovered || _pressed;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() {
+        _hovered = false;
+        _pressed = false;
+      }),
+      child: Listener(
+        onPointerDown: (_) => setState(() => _pressed = true),
+        onPointerCancel: (_) => setState(() => _pressed = false),
+        onPointerUp: (_) => setState(() => _pressed = false),
+        child: AnimatedScale(
+          scale: _pressed ? 0.97 : (_hovered ? 1.012 : 1),
+          duration: const Duration(milliseconds: 130),
+          curve: Curves.easeOutCubic,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            height: 40,
+            constraints: const BoxConstraints(minWidth: 132, maxWidth: 220),
+            padding: const EdgeInsets.fromLTRB(10, 5, 10, 5),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: active
+                    ? const [Color(0xFF2E6BFF), Color(0xFF164ED6)]
+                    : const [Color(0xFF1F62FF), Color(0xFF1957E6)],
+              ),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFF7DA2FF)),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF1957E6).withValues(alpha: 0.22),
+                  blurRadius: active ? 18 : 10,
+                  offset: Offset(0, active ? 7 : 3),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _SalesCompanyLogoBox(logoBase64: widget.logoBase64, size: 26),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12.5,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 5),
+                const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 18,
+                  color: Colors.white,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SalesCompanyLogoBox extends StatelessWidget {
+  const _SalesCompanyLogoBox({required this.logoBase64, this.size = 28});
+
+  final String? logoBase64;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final logoBytes = _decodeLogo(logoBase64);
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.white24),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: logoBytes == null
+          ? Icon(
+              Icons.storefront_rounded,
+              size: size * 0.58,
+              color: Colors.white,
+            )
+          : Image.memory(logoBytes, fit: BoxFit.cover),
+    );
+  }
+
+  Uint8List? _decodeLogo(String? value) {
+    final raw = value?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final payload = raw.contains(',') ? raw.split(',').last : raw;
+      return base64Decode(payload);
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+class _SalesCompanyMenuRow extends StatelessWidget {
+  const _SalesCompanyMenuRow({
+    required this.icon,
+    required this.label,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = danger ? const Color(0xFFDC2626) : const Color(0xFF183548);
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 18),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _compactSalesCompanyName(String value) {
+  final normalized = value.trim().replaceAll(RegExp(r'\s+'), ' ').toUpperCase();
+  if (normalized.isEmpty) return 'Empresa';
+  if (normalized.length <= 18) return normalized;
+  final firstSegment = normalized.split(' ').first.trim();
+  if (firstSegment.length >= 3) return firstSegment;
+  return normalized.substring(0, 18);
 }
 
 class _NumberField extends StatefulWidget {

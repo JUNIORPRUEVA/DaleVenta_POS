@@ -165,6 +165,7 @@ class ApiRoutes {
   static const catalogProducts = '/products';
   static const productsDebugPurge = '/products/debug/purge';
   static const productsUpload = '/products/upload';
+  static const productsImportImageUrl = '/products/import-image-url';
   static String productDetail(String id) => '/products/$id';
   static String updateProduct(String id) => '/products/$id';
   static String deleteProduct(String id) => '/products/$id';

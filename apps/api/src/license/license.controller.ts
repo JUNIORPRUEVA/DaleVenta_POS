@@ -94,6 +94,17 @@ export class LicenseController {
     return this.licenses.deleteCompanyLicense(companyId, this.withActor(dto ?? {}, actor));
   }
 
+  @Delete('admin/:companyId/permanent')
+  async permanentlyDeleteCompanyLicense(
+    @Param('companyId') companyId: string,
+    @Body() dto: Record<string, unknown>,
+    @Headers('x-license-admin-secret') secret?: string | string[],
+    @Headers('x-license-admin-actor') actor?: string | string[],
+  ) {
+    await this.licenses.assertAdminSecret(secret);
+    return this.licenses.permanentlyDeleteCompanyLicense(companyId, this.withActor(dto ?? {}, actor));
+  }
+
   private withActor(dto: Record<string, unknown>, actor?: string | string[]) {
     const actorEmail = Array.isArray(actor) ? actor[0] : actor;
     return { ...dto, actorEmail };

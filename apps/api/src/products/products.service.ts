@@ -804,8 +804,18 @@ export class ProductsService {
       try {
         const parsed = new URL(value);
         const uploadsPath = extractUploadsPath(parsed.pathname);
-        if (uploadsPath) return uploadsPath;
-        return null;
+        if (uploadsPath) {
+          if (!this.publicBaseUrl) return value;
+          try {
+            const publicHost = new URL(this.publicBaseUrl).host.toLowerCase();
+            const currentHost = parsed.host.toLowerCase();
+            if (currentHost === publicHost) return uploadsPath;
+          } catch {
+            return value;
+          }
+          return value;
+        }
+        return value;
       } catch {
         return null;
       }

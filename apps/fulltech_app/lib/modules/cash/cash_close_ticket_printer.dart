@@ -163,12 +163,6 @@ class CashCloseTicketPrinter {
         money.format(row.difference),
         width,
       ),
-      ReceiptTextUtils.separator(width, 'double'),
-      ReceiptTextUtils.center('FIRMA CAJERO', width),
-      '',
-      '____________________________',
-      '',
-      ...ReceiptTextUtils.wrap('ID: ${row.id}', width),
     ];
   }
 
@@ -357,10 +351,6 @@ class CashCloseTicketPrinter {
             ...ReceiptTextUtils.wrap('  ${movement.reason}', width),
         ],
       ],
-      ReceiptTextUtils.separator(width, 'double'),
-      ReceiptTextUtils.center('FIRMA CAJERO', width),
-      '',
-      ReceiptTextUtils.center('________________________', width),
     ];
   }
 
@@ -415,7 +405,6 @@ class _CashClosePdfBuilder {
       if (snapshot.active != null) ...[
         _kv('Cajero', snapshot.active!.userName),
         _kv('Apertura', _date.format(snapshot.active!.openedAt.toLocal())),
-        _kv('Turno', snapshot.active!.shiftId),
       ],
       _divider(),
       _section('Ventas y efectivo'),
@@ -478,7 +467,6 @@ class _CashClosePdfBuilder {
         if (snapshot.movements.length > 12)
           _paragraph('+${snapshot.movements.length - 12} movimientos mas'),
       ],
-      _signature(),
       _footer(),
     ];
     return _document(ticketNumber, rows);
@@ -508,8 +496,6 @@ class _CashClosePdfBuilder {
       _kv('Efectivo esperado', _money.format(row.expectedAmount)),
       _kv('Efectivo contado', _money.format(row.closingAmount)),
       _highlightTotal('Diferencia', _money.format(row.difference)),
-      _signature(),
-      _paragraph('ID: ${row.id}'),
       _footer(),
     ];
     return _document(ticketNumber, rows);
@@ -748,23 +734,6 @@ class _CashClosePdfBuilder {
           fontSize: compact ? _fontSize - 0.2 : _fontSize,
           height: 1.15,
         ),
-      ),
-    );
-  }
-
-  pw.Widget _signature() {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.only(top: 14, bottom: 5),
-      child: pw.Column(
-        children: [
-          pw.Container(width: 135, height: 0.8, color: PdfColors.grey900),
-          pw.SizedBox(height: 3),
-          pw.Text(
-            'FIRMA CAJERO',
-            textAlign: pw.TextAlign.center,
-            style: pw.TextStyle(font: _fonts.bold, fontSize: _fontSize - 0.2),
-          ),
-        ],
       ),
     );
   }

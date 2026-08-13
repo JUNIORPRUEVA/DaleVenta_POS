@@ -60,6 +60,7 @@ class CatalogImportDraft {
     required this.costo,
     required this.stock,
     required this.categoria,
+    this.fotoUrl,
   });
 
   final String nombre;
@@ -68,6 +69,7 @@ class CatalogImportDraft {
   final double costo;
   final double stock;
   final String categoria;
+  final String? fotoUrl;
 }
 
 class CatalogImportProgress {
@@ -163,6 +165,26 @@ class CatalogController extends StateNotifier<CatalogState> {
     if (error is! ApiException) return false;
     final code = error.code;
     return code == null || code >= 500;
+  }
+
+  Future<String?> _resolveImportImageUrl(
+    CatalogRepository repo,
+    CatalogImportDraft draft,
+  ) async {
+    final source = (draft.fotoUrl ?? '').trim();
+    if (source.isEmpty) return null;
+    if (!RegExp(r'^https?://', caseSensitive: false).hasMatch(source)) {
+      return source;
+    }
+    try {
+      final imported = await repo.importImageFromUrl(
+        source,
+        productName: draft.nombre,
+      );
+      return (imported ?? '').trim().isNotEmpty ? imported : source;
+    } catch (_) {
+      return source;
+    }
   }
 
   Future<void> _saveSnapshotSafely(
@@ -377,6 +399,7 @@ class CatalogController extends StateNotifier<CatalogState> {
             skippedExisting += 1;
             continue;
           }
+          final fotoUrl = await _resolveImportImageUrl(repo, draft);
           final updated = await repo.updateProduct(
             id: existing.id,
             nombre: draft.nombre,
@@ -385,6 +408,7 @@ class CatalogController extends StateNotifier<CatalogState> {
             costo: draft.costo,
             stock: draft.stock,
             categoria: draft.categoria,
+            fotoUrl: fotoUrl ?? existing.fotoUrl,
             operationId: _newProductOperationId(
               'import-update-${updatedCount + 1}',
               productId: existing.id,
@@ -411,6 +435,7 @@ class CatalogController extends StateNotifier<CatalogState> {
               updated;
           updatedCount += 1;
         } else {
+          final fotoUrl = await _resolveImportImageUrl(repo, draft);
           final created = await repo.createProduct(
             nombre: draft.nombre,
             codigo: draft.codigo,
@@ -418,6 +443,7 @@ class CatalogController extends StateNotifier<CatalogState> {
             costo: draft.costo,
             stock: draft.stock,
             categoria: draft.categoria,
+            fotoUrl: fotoUrl,
             operationId: _newProductOperationId('import-create-${index + 1}'),
           );
           final createdCode = _normalizeImportCode(created.codigo);
@@ -466,6 +492,7 @@ class CatalogController extends StateNotifier<CatalogState> {
     required double costo,
     required double stock,
     required String categoria,
+    String? fotoUrl,
     List<int>? newImageBytes,
     String? newFilename,
     String? operationId,
@@ -476,15 +503,15 @@ class CatalogController extends StateNotifier<CatalogState> {
         operationId ?? _newProductOperationId('update', productId: id);
     try {
       final repo = ref.read(catalogRepositoryProvider);
-      String? fotoUrl;
+      String? uploadedFotoUrl;
       if (newImageBytes != null && newFilename != null) {
         try {
-          fotoUrl = await repo.uploadImage(
+          uploadedFotoUrl = await repo.uploadImage(
             bytes: newImageBytes,
             filename: newFilename,
           );
           final cachedUrl = buildProductImageUrl(
-            imageUrl: fotoUrl,
+            imageUrl: uploadedFotoUrl,
             baseUrl: Env.apiBaseUrl,
           );
           unawaited(
@@ -505,7 +532,7 @@ class CatalogController extends StateNotifier<CatalogState> {
         precio: precio,
         costo: costo,
         stock: stock,
-        fotoUrl: fotoUrl,
+        fotoUrl: uploadedFotoUrl ?? fotoUrl,
         categoria: categoria,
         operationId: saveOperationId,
       );

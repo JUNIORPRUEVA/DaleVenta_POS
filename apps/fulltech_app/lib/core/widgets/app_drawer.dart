@@ -103,6 +103,46 @@ class _DrawerCloudFooter extends StatelessWidget {
   }
 }
 
+class _DrawerAppLogo extends StatelessWidget {
+  const _DrawerAppLogo({required this.width, required this.height});
+
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFCFE0FF)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1957E6).withValues(alpha: 0.10),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(6),
+      clipBehavior: Clip.antiAlias,
+      child: Image.asset(
+        'assets/image/logo.png',
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) {
+          return const Icon(
+            Icons.point_of_sale_rounded,
+            color: AppColors.primary,
+            size: 34,
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _AppDrawerState extends ConsumerState<AppDrawer> {
   int? _openGroupIndex;
 
@@ -288,20 +328,9 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                             ),
                             child: Row(
                               children: [
-                                SizedBox(
+                                _DrawerAppLogo(
                                   width: isCompactMobile ? 58 : 66,
                                   height: isCompactMobile ? 48 : 56,
-                                  child: Image.asset(
-                                    'assets/image/logo.png',
-                                    fit: BoxFit.contain,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Icon(
-                                        Icons.storefront_rounded,
-                                        color: AppColors.primary,
-                                        size: isCompactMobile ? 32 : 38,
-                                      );
-                                    },
-                                  ),
                                 ),
                                 SizedBox(width: isCompactMobile ? 8 : 10),
                                 Expanded(

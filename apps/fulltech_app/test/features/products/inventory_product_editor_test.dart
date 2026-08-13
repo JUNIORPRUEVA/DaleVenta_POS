@@ -242,6 +242,7 @@ void main() {
                       onExportSelection: (_) async {},
                       onPdfSelection: (_) async {},
                       onBulkDelete: (_) async {},
+                      onBulkChangeCategory: (_, _) async {},
                       onEdit: (_) {},
                       onSetStock: (_, _) async {},
                       canEditProducts: true,
@@ -257,16 +258,20 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byType(DropdownButton<String?>));
+    await tester.tap(find.text('Filtro'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<String?>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Smoke').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Aplicar filtros'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Vaciar categoría'));
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('Todas las categorías'), findsWidgets);
+    expect(find.text('Producto humo'), findsNothing);
   });
 
   testWidgets(

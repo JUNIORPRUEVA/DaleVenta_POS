@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../auth/token_storage.dart';
+import '../api/env.dart';
 import '../cache/fulltech_cache_manager.dart';
 import '../utils/is_flutter_test.dart';
 import '../utils/product_image_url.dart';
@@ -37,9 +38,10 @@ class ProductNetworkImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final url = imageUrl.trim();
     if (url.isEmpty) return fallback;
+    final shouldSendAuth = _shouldSendAuthHeader(url);
 
     return FutureBuilder<String?>(
-      future: isFlutterTest
+      future: isFlutterTest || !shouldSendAuth
           ? Future<String?>.value()
           : _tokenStorage.getAccessToken(),
       builder: (context, snapshot) {
@@ -74,5 +76,13 @@ class ProductNetworkImage extends StatelessWidget {
         );
       },
     );
+  }
+
+  bool _shouldSendAuthHeader(String url) {
+    final imageUri = Uri.tryParse(url);
+    if (imageUri == null || !imageUri.hasScheme) return true;
+    final apiUri = Uri.tryParse(Env.apiBaseUrl.trim());
+    if (apiUri == null || !apiUri.hasScheme) return false;
+    return imageUri.host.toLowerCase() == apiUri.host.toLowerCase();
   }
 }

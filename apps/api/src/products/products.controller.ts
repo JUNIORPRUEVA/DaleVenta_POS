@@ -10,6 +10,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { requireTenant, type TenantUser } from '../auth/tenant-context';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { ImportProductImageUrlDto } from './dto/import-product-image-url.dto';
 import { ProductCostInterceptor } from './product-cost.interceptor';
 import { ProductsService } from './products.service';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -183,8 +184,6 @@ export class ProductsController {
       throw new BadRequestException('No se pudo leer la imagen subida');
     }
 
-    const user = req.user as TenantUser;
-    const companyId = requireTenant(user);
     const original = sanitizeFileName(file.originalname ?? 'producto');
     const ext = extname(original).toLowerCase();
     const safeExt = ext && /\.(png|jpe?g|webp)$/.test(ext) ? ext : '.jpg';
@@ -195,13 +194,87 @@ export class ProductsController {
         : safeExt === '.webp'
           ? 'image/webp'
           : 'image/jpeg';
+    return this.saveProductImage(req.user as TenantUser, file.buffer, {
+      original,
+      safeExt,
+      contentType,
+      source: 'upload',
+    });
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN, Role.ASISTENTE)
+  @Post('import-image-url')
+  async importImageUrl(@Req() req: Request, @Body() dto: ImportProductImageUrlDto) {
+    if (this.products.isReadOnly()) {
+      throw new ConflictException('Productos en modo solo-lectura: no se permite subir imágenes aquí.');
+    }
+    const remoteUrl = dto.url.trim();
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(remoteUrl);
+    } catch {
+      throw new BadRequestException('URL de imagen inválida');
+    }
+    if (!/^https?:$/i.test(parsedUrl.protocol)) {
+      throw new BadRequestException('Solo se permiten URLs http o https');
+    }
+
+    const upstream = await fetch(parsedUrl.toString(), {
+      headers: { Accept: 'image/png,image/jpeg,image/webp,image/*;q=0.8,*/*;q=0.2' },
+      redirect: 'follow',
+    });
+    if (!upstream.ok) {
+      throw new BadRequestException(`No se pudo descargar la imagen remota (${upstream.status})`);
+    }
+
+    const contentType = (upstream.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
+    if (!/^image\/(png|jpe?g|webp)$/.test(contentType)) {
+      throw new BadRequestException('La URL no devuelve una imagen PNG/JPG/WEBP válida');
+    }
+    const body = Buffer.from(await upstream.arrayBuffer());
+    if (!body.length) {
+      throw new BadRequestException('La imagen remota está vacía');
+    }
+    if (body.length > 15 * 1024 * 1024) {
+      throw new BadRequestException('La imagen remota excede el límite permitido de 15 MB');
+    }
+
+    const extFromType = contentType.includes('png')
+      ? '.png'
+      : contentType.includes('webp')
+        ? '.webp'
+        : '.jpg';
+    const baseName = sanitizeFileName(dto.productName?.trim() || parsedUrl.pathname.split('/').pop() || 'producto');
+    const original = `${baseName.replace(/\.(png|jpe?g|webp)$/i, '')}${extFromType}`;
+
+    return this.saveProductImage(req.user as TenantUser, body, {
+      original,
+      safeExt: extFromType,
+      contentType,
+      source: 'import-url',
+    });
+  }
+
+  private async saveProductImage(
+    user: TenantUser,
+    buffer: Buffer,
+    options: {
+      original: string;
+      safeExt: string;
+      contentType: string;
+      source: string;
+    },
+  ) {
+    const companyId = requireTenant(user);
+    const original = sanitizeFileName(options.original || 'producto');
     const objectKey = buildTenantObjectKey({
       companyId,
       area: 'products',
       kind: 'images',
       ownerId: user.id,
       fileName: original,
-      extension: safeExt,
+      extension: options.safeExt,
     });
 
     const r2Key = `uploads/${objectKey}`;
@@ -209,12 +282,12 @@ export class ProductsController {
     try {
       await this.r2.putObject({
         objectKey: r2Key,
-        body: file.buffer,
-        contentType,
+        body: buffer,
+        contentType: options.contentType,
       });
       const url = this.buildMediaObjectUrl(r2Key);
       // eslint-disable-next-line no-console
-      console.log(`[products/upload] R2 upload successful bucket=daleventa-media companyId=${companyId} key=${r2Key}`);
+      console.log(`[products/${options.source}] R2 upload successful bucket=daleventa-media companyId=${companyId} key=${r2Key}`);
       // eslint-disable-next-line no-console
       console.log(`[R2] PutObject successful key=${r2Key}`);
       return {
@@ -225,24 +298,24 @@ export class ProductsController {
         objectKey: r2Key,
         path: url,
         url,
-        mimeType: contentType,
+        mimeType: options.contentType,
         companyId,
       };
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.warn('[products/upload] R2 upload failed fallback=local', error);
+      console.warn(`[products/${options.source}] R2 upload failed fallback=local`, error);
     }
 
     const absoluteFilePath = join(this.uploadDir, ...objectKey.split('/'));
     const absoluteDir = join(this.uploadDir, ...objectKey.split('/').slice(0, -1));
     fs.mkdirSync(absoluteDir, { recursive: true });
-    fs.writeFileSync(absoluteFilePath, file.buffer);
+    fs.writeFileSync(absoluteFilePath, buffer);
 
     const relativePath = `/${posix.join('uploads', objectKey)}`;
     const baseUrl = this.publicBaseUrl;
     const url = baseUrl ? `${baseUrl}${relativePath}` : relativePath;
     // eslint-disable-next-line no-console
-    console.warn(`[products/upload] legacy local fallback used file=${absoluteFilePath} path=${relativePath}`);
+    console.warn(`[products/${options.source}] legacy local fallback used file=${absoluteFilePath} path=${relativePath}`);
     return {
       filename: original,
       originalFileName: original,
@@ -250,7 +323,7 @@ export class ProductsController {
       objectKey: r2Key,
       path: relativePath,
       url,
-      mimeType: contentType,
+      mimeType: options.contentType,
       companyId,
     };
   }

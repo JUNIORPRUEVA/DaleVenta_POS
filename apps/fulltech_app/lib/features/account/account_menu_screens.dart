@@ -2054,6 +2054,7 @@ class _CompanyLogoUploader extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final mobile = constraints.maxWidth < 420;
+          final stackActions = constraints.maxWidth < 560;
           final image = Container(
             width: mobile ? 62 : 68,
             height: mobile ? 62 : 68,
@@ -2093,9 +2094,9 @@ class _CompanyLogoUploader extends StatelessWidget {
             style: _outlinedButtonStyle(),
           );
           final actions = Row(
-            mainAxisSize: mobile ? MainAxisSize.max : MainAxisSize.min,
+            mainAxisSize: stackActions ? MainAxisSize.max : MainAxisSize.min,
             children: [
-              if (mobile) Expanded(child: pickButton) else pickButton,
+              if (stackActions) Expanded(child: pickButton) else pickButton,
               if (onRemove != null) ...[
                 const SizedBox(width: 8),
                 IconButton(
@@ -2107,8 +2108,9 @@ class _CompanyLogoUploader extends StatelessWidget {
               ],
             ],
           );
-          if (mobile) {
+          if (stackActions) {
             return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(children: [image, const SizedBox(width: 12), text]),
                 const SizedBox(height: 10),
@@ -2122,7 +2124,7 @@ class _CompanyLogoUploader extends StatelessWidget {
               const SizedBox(width: 14),
               text,
               const SizedBox(width: 12),
-              SizedBox(width: 150, child: actions),
+              actions,
             ],
           );
         },
@@ -2152,14 +2154,22 @@ class _SettingsOptionGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 760;
+        final crossAxisCount = constraints.maxWidth < 430
+            ? 1
+            : constraints.maxWidth < 760
+            ? 2
+            : 4;
         return GridView.count(
-          crossAxisCount: compact ? 2 : 4,
+          crossAxisCount: crossAxisCount,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           crossAxisSpacing: 10,
           mainAxisSpacing: 10,
-          childAspectRatio: compact ? 1.55 : 2.25,
+          mainAxisExtent: crossAxisCount == 1
+              ? 92
+              : crossAxisCount == 2
+              ? 108
+              : 112,
           children: [
             for (final item in items)
               Container(

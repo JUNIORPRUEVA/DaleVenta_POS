@@ -33,21 +33,6 @@ bool _isAbsoluteUrl(String value) {
       (uri.scheme == 'http' || uri.scheme == 'https');
 }
 
-bool _hasDifferentHost(String value, String baseUrl) {
-  if (!_isAbsoluteUrl(value) || !_isAbsoluteUrl(baseUrl)) {
-    return false;
-  }
-
-  final valueUri = Uri.tryParse(value);
-  final baseUri = Uri.tryParse(baseUrl);
-  if (valueUri == null || baseUri == null) {
-    return false;
-  }
-
-  return valueUri.host.trim().toLowerCase() !=
-      baseUri.host.trim().toLowerCase();
-}
-
 String? _extractUploadsPath(String value) {
   final normalized = value.replaceAll('\\', '/').trim();
   const marker = '/uploads/';
@@ -62,6 +47,47 @@ String? _extractUploadsPath(String value) {
     return normalized.substring(1);
   }
   return null;
+}
+
+String? _extractR2ObjectKey(String value) {
+  final normalized = value.replaceAll('\\', '/').trim();
+
+  String? normalizeKey(String candidate) {
+    final key = candidate.trim().replaceFirst(RegExp(r'^/+'), '');
+    if (key.isEmpty || key.contains('..') || key.contains('\\')) return null;
+    return key.startsWith('uploads/companies/') ? key : null;
+  }
+
+  final direct = normalizeKey(normalized);
+  if (direct != null) return direct;
+
+  try {
+    final parsed = Uri.parse(normalized);
+    final queryKey = parsed.queryParameters['key'];
+    final fromQuery = normalizeKey(queryKey ?? '');
+    if (fromQuery != null) return fromQuery;
+
+    const marker = '/uploads/companies/';
+    final markerIndex = parsed.path.indexOf(marker);
+    if (markerIndex >= 0) {
+      return normalizeKey(parsed.path.substring(markerIndex + 1));
+    }
+  } catch (_) {
+    // Keep falling through to path-style checks.
+  }
+
+  const marker = '/uploads/companies/';
+  final markerIndex = normalized.indexOf(marker);
+  if (markerIndex >= 0) {
+    return normalizeKey(normalized.substring(markerIndex + 1));
+  }
+
+  return null;
+}
+
+String _buildMediaObjectUrl(String objectKey, String baseUrl) {
+  final path = '/media/object?key=${Uri.encodeQueryComponent(objectKey)}';
+  return _joinBaseAndPath(baseUrl, path);
 }
 
 String _stringifyUri(String value) {
@@ -101,18 +127,25 @@ String normalizeProductImageUrl({
 
   if (normalizedBase.isNotEmpty &&
       (raw == normalizedBase || raw.startsWith('$normalizedBase/'))) {
+    final objectKey = _extractR2ObjectKey(raw);
+    if (objectKey != null) {
+      return _buildMediaObjectUrl(objectKey, normalizedBase);
+    }
     return _stringifyUri(raw);
   }
 
   if (_isAbsoluteUrl(raw)) {
     final absolute = _stringifyUri(raw);
-    final uploadsPath = _extractUploadsPath(raw);
-    if (uploadsPath != null &&
-        normalizedBase.isNotEmpty &&
-        _hasDifferentHost(absolute, normalizedBase)) {
-      return _joinBaseAndPath(normalizedBase, uploadsPath);
+    final objectKey = _extractR2ObjectKey(raw);
+    if (objectKey != null && normalizedBase.isNotEmpty) {
+      return _buildMediaObjectUrl(objectKey, normalizedBase);
     }
     return absolute;
+  }
+
+  final objectKey = _extractR2ObjectKey(raw);
+  if (objectKey != null && normalizedBase.isNotEmpty) {
+    return _buildMediaObjectUrl(objectKey, normalizedBase);
   }
 
   final uploadsPath = _extractUploadsPath(raw);

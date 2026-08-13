@@ -90,6 +90,8 @@ class UnifiedTicketPrinter {
         if (showSystemDialogIfNoPrinter) {
           await Printing.layoutPdf(
             name: 'Ticket ${data.ticketNumber}',
+            format: _thermal.getPageFormat(settings),
+            dynamicLayout: false,
             onLayout: (_) async => pdf,
           );
           return PrintTicketResult(
@@ -123,6 +125,8 @@ class UnifiedTicketPrinter {
       if (showSystemDialogIfNoPrinter) {
         await Printing.layoutPdf(
           name: 'Ticket ${data.ticketNumber}',
+          format: _thermal.getPageFormat(settings),
+          dynamicLayout: false,
           onLayout: (_) async => pdf,
         );
         return PrintTicketResult(
@@ -187,6 +191,8 @@ class UnifiedTicketPrinter {
         if (showSystemDialogIfNoPrinter) {
           await Printing.layoutPdf(
             name: documentName,
+            format: _thermal.getPageFormat(settings),
+            dynamicLayout: false,
             onLayout: (_) async => bytes,
           );
           return PrintTicketResult(
@@ -220,6 +226,8 @@ class UnifiedTicketPrinter {
       if (showSystemDialogIfNoPrinter) {
         await Printing.layoutPdf(
           name: documentName,
+          format: _thermal.getPageFormat(settings),
+          dynamicLayout: false,
           onLayout: (_) async => bytes,
         );
         return PrintTicketResult(

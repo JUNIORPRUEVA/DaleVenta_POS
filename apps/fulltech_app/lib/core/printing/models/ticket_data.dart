@@ -94,7 +94,10 @@ class TicketData {
         0,
         (sum, item) => sum + item.subtotalSold,
       ),
-      client: ClientInfo(name: sale.customerName ?? 'Consumidor Final'),
+      client: ClientInfo(
+        name: sale.customerName ?? 'Consumidor Final',
+        phone: sale.customerPhone ?? '',
+      ),
       cashierName: cashierName.isEmpty ? 'Cajero' : cashierName,
       note: sale.note,
       type: sale.isDeleted ? TicketType.refund : TicketType.sale,

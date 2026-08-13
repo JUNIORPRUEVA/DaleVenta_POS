@@ -18,15 +18,19 @@ class _FakePrintingPlatformResolver extends PrintingPlatformResolver {
   PrintingPlatform get platform => _platform;
 }
 
-Future<GoRouter> _pumpSettingsRouter(WidgetTester tester) async {
+Future<GoRouter> _pumpSettingsRouter(
+  WidgetTester tester, {
+  String initialLocation = Routes.configuracion,
+  Size viewport = const Size(390, 844),
+}) async {
   SharedPreferences.setMockInitialValues({});
-  tester.view.physicalSize = const Size(390, 844);
+  tester.view.physicalSize = viewport;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
   final router = GoRouter(
-    initialLocation: Routes.configuracion,
+    initialLocation: initialLocation,
     routes: [
       GoRoute(
         path: Routes.configuracion,
@@ -47,6 +51,10 @@ Future<GoRouter> _pumpSettingsRouter(WidgetTester tester) async {
       GoRoute(
         path: Routes.configuracionBackup,
         builder: (_, __) => const AccountBackupSettingsScreen(),
+      ),
+      GoRoute(
+        path: Routes.configuracionParametros,
+        builder: (_, __) => const AccountParametersScreen(),
       ),
     ],
   );
@@ -122,4 +130,30 @@ void main() {
     expect(find.text('Documentos'), findsOneWidget);
     expect(find.text('Backup'), findsOneWidget);
   });
+
+  const desktopTargets = <String, String>{
+    Routes.configuracionEmpresa: 'Datos de empresa',
+    Routes.configuracionDocumentos: 'Datos para documentos',
+    Routes.configuracionImpresora: 'Impresión y tickets',
+    Routes.configuracionBackup: 'Backup y recuperación',
+    Routes.configuracionParametros: 'Parámetros importantes',
+  };
+
+  for (final size in [Size(1024, 768), Size(1366, 768), Size(1920, 1080)]) {
+    for (final entry in desktopTargets.entries) {
+      testWidgets(
+        'settings page ${entry.key} has no overflow at ${size.width.toInt()}x${size.height.toInt()}',
+        (tester) async {
+          await _pumpSettingsRouter(
+            tester,
+            initialLocation: entry.key,
+            viewport: size,
+          );
+
+          expect(tester.takeException(), isNull);
+          expect(find.text(entry.value), findsOneWidget);
+        },
+      );
+    }
+  }
 }

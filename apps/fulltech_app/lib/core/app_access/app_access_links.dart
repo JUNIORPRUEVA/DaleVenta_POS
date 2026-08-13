@@ -29,7 +29,7 @@ class AppAccessLinks {
   static final Uri pwaUri = Uri.parse('https://fullposcloud.fulltechrd.com/');
 
   static final Uri windowsReleaseUri = Uri.parse(
-    'https://fullposcloud.fulltechrd.com/downloads/FullPOS-Cloud-Setup-1.0.2-5.exe',
+    'https://fullposcloud.fulltechrd.com/downloads/FullPOS-Cloud-Setup-1.0.2-6.exe',
   );
 
   static final Uri androidReleaseUri = Uri.parse(

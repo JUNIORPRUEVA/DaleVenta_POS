@@ -29,6 +29,10 @@ class PrintResult {
 }
 
 class ThermalPrinterService {
+  static const double _paper80WidthMm = 80;
+  static const double _paper58WidthMm = 58;
+  static const double _thermalPageHeightMm = 2000;
+
   Printer? _cachedPrinter;
   String? _cachedName;
 
@@ -105,7 +109,9 @@ class ThermalPrinterService {
         await Printing.directPrintPdf(
           printer: status.printer!,
           name: '${documentName}_${DateTime.now().millisecondsSinceEpoch}',
-          usePrinterSettings: true,
+          format: getPageFormat(settings),
+          dynamicLayout: false,
+          usePrinterSettings: false,
           onLayout: (_) async => bytes,
         );
       }
@@ -121,18 +127,13 @@ class ThermalPrinterService {
   }
 
   PdfPageFormat getPageFormat(PrinterSettingsModel settings) {
-    final printableWidthMm = settings.paperWidthMm == 58 ? 48.0 : 72.0;
-    final horizontalMarginMm =
-        (settings.leftMargin + settings.rightMargin).clamp(0, 8) / 2;
-    final width = (printableWidthMm + horizontalMarginMm) * PdfPageFormat.mm;
-    final height = 2000 * PdfPageFormat.mm;
+    final widthMm = settings.paperWidthMm == 58
+        ? _paper58WidthMm
+        : _paper80WidthMm;
     return PdfPageFormat(
-      width,
-      height,
-      marginLeft: settings.leftMargin.clamp(0, 4) * PdfPageFormat.mm,
-      marginRight: settings.rightMargin.clamp(0, 4) * PdfPageFormat.mm,
-      marginTop: 2 * PdfPageFormat.mm,
-      marginBottom: 2 * PdfPageFormat.mm,
+      widthMm * PdfPageFormat.mm,
+      _thermalPageHeightMm * PdfPageFormat.mm,
+      marginAll: 0,
     );
   }
 }

@@ -245,7 +245,11 @@ class SaleModel {
       userName: userName,
       customerId: json['customerId']?.toString() ?? customerId,
       customerName: customerName,
-      customerPhone: customerPhone,
+      customerPhone:
+          json['customerPhone']?.toString() ??
+          json['customerTelefono']?.toString() ??
+          json['telefono']?.toString() ??
+          customerPhone,
       saleDate: json['saleDate'] != null
           ? DateTime.tryParse(json['saleDate'].toString())
           : null,
