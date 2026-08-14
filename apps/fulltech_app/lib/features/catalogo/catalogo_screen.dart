@@ -328,6 +328,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
     };
 
     final hasCategoryFilters = categories.length > 1;
+    final isWideLayout = MediaQuery.of(context).size.width >= 720;
 
     InputDecoration searchDecoration() {
       final colorScheme = Theme.of(context).colorScheme;
@@ -412,8 +413,6 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
       );
     }
 
-    final isWideLayout = MediaQuery.of(context).size.width >= 720;
-
     return Scaffold(
       backgroundColor: isWideLayout || isModal ? null : AppColors.background,
       appBar: isModal
@@ -423,30 +422,25 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
               showLogo: false,
               darkerTone: true,
               highContrast: true,
+              titleSpacing: isWideLayout ? null : 0,
               actions: [
-                DebugAdminActionButton(
-                  user: user,
-                  enabled: canManage,
-                  busy: _purgingAllDebug,
-                  tooltip: 'Limpiar tabla (debug)',
-                  onPressed: _purgeAllDebug,
-                ),
-                if (canManage)
+                if (isWideLayout)
+                  DebugAdminActionButton(
+                    user: user,
+                    enabled: canManage,
+                    busy: _purgingAllDebug,
+                    tooltip: 'Limpiar tabla (debug)',
+                    onPressed: _purgeAllDebug,
+                  ),
+                if (canManage && isWideLayout)
                   Padding(
                     padding: const EdgeInsets.only(right: 6),
-                    child: isWideLayout
-                        ? FilledButton.icon(
-                            onPressed: () =>
-                                _openProductForm(categories: categoryOptions),
-                            icon: const Icon(Icons.add_rounded, size: 18),
-                            label: const Text('Nuevo producto'),
-                          )
-                        : IconButton(
-                            tooltip: 'Nuevo producto',
-                            onPressed: () =>
-                                _openProductForm(categories: categoryOptions),
-                            icon: const Icon(Icons.add_rounded),
-                          ),
+                    child: FilledButton.icon(
+                      onPressed: () =>
+                          _openProductForm(categories: categoryOptions),
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: const Text('Nuevo producto'),
+                    ),
                   ),
                 if (canManage && isWideLayout)
                   Padding(
@@ -466,35 +460,8 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                       label: const Text('Exportar'),
                     ),
                   ),
-                if (canManage && !isWideLayout)
-                  PopupMenuButton<String>(
-                    tooltip: 'Mas opciones',
-                    onSelected: (value) {
-                      if (value == 'import') {
-                        _importProductsFromCsv();
-                      } else if (value == 'export') {
-                        _exportProductsToCsv();
-                      }
-                    },
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(
-                        value: 'import',
-                        child: ListTile(
-                          leading: Icon(Icons.upload_file_rounded),
-                          title: Text('Importar'),
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'export',
-                        child: ListTile(
-                          leading: Icon(Icons.download_rounded),
-                          title: Text('Exportar'),
-                        ),
-                      ),
-                    ],
-                  ),
                 Padding(
-                  padding: const EdgeInsets.only(right: 4),
+                  padding: EdgeInsets.only(right: isWideLayout ? 4 : 0),
                   child: Badge(
                     isLabelVisible: _hasActiveSearch,
                     smallSize: 8,
@@ -520,7 +487,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                 ),
                 if (hasCategoryFilters)
                   Padding(
-                    padding: const EdgeInsets.only(right: 10),
+                    padding: EdgeInsets.only(right: isWideLayout ? 10 : 0),
                     child: Badge(
                       isLabelVisible: _hasActiveFilter,
                       smallSize: 8,
@@ -532,8 +499,41 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                       ),
                     ),
                   ),
+                if (canManage && !isWideLayout)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: PopupMenuButton<String>(
+                      tooltip: 'Más opciones',
+                      icon: const Icon(Icons.more_vert_rounded, size: 21),
+                      onSelected: (value) {
+                        if (value == 'import') {
+                          _importProductsFromCsv();
+                        } else if (value == 'export') {
+                          _exportProductsToCsv();
+                        }
+                      },
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(
+                          value: 'import',
+                          child: ListTile(
+                            leading: Icon(Icons.upload_file_rounded),
+                            title: Text('Importar'),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'export',
+                          child: ListTile(
+                            leading: Icon(Icons.download_rounded),
+                            title: Text('Exportar'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
-              trailing: user == null
+              trailing: !isWideLayout
+                  ? const SizedBox.shrink()
+                  : user == null
                   ? null
                   : Padding(
                       padding: const EdgeInsets.only(right: 12),
@@ -557,11 +557,14 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                     ),
             ),
       drawer: isModal ? null : buildAdaptiveDrawer(context, currentUser: user),
-      floatingActionButton: canManage && !isModal
-          ? FloatingActionButton.extended(
+      floatingActionButton: canManage && !isModal && !isWideLayout
+          ? FloatingActionButton(
               onPressed: () => _openProductForm(categories: categoryOptions),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Producto'),
+              tooltip: 'Nuevo producto',
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: const Icon(Icons.add_rounded),
             )
           : null,
       body: Padding(
