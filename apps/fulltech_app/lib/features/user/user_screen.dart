@@ -50,8 +50,7 @@ class _UserScreenState extends ConsumerState<UserScreen> {
         title: const Text('Foto de perfil'),
         children: [
           SimpleDialogOption(
-            onPressed: () =>
-                Navigator.pop(context, _ProfilePhotoAction.upload),
+            onPressed: () => Navigator.pop(context, _ProfilePhotoAction.upload),
             child: Row(
               children: [
                 const Icon(Icons.upload_rounded),
@@ -118,9 +117,9 @@ class _UserScreenState extends ConsumerState<UserScreen> {
       ref.read(authStateProvider.notifier).setUser(updated);
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Foto de perfil eliminada')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Foto de perfil eliminada')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -162,7 +161,11 @@ class _UserScreenState extends ConsumerState<UserScreen> {
             persistSnapshot: false,
           );
 
-      await _uploadProcessedProfilePhoto(processedBytes, previewUrl, previousUser);
+      await _uploadProcessedProfilePhoto(
+        processedBytes,
+        previewUrl,
+        previousUser,
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -191,8 +194,8 @@ class _UserScreenState extends ConsumerState<UserScreen> {
 
       final updated = await repo.updateMe(fotoPersonalUrl: uploadedUrl);
 
-      currentPhoto =
-          (ref.read(authStateProvider).user?.fotoPersonalUrl ?? '').trim();
+      currentPhoto = (ref.read(authStateProvider).user?.fotoPersonalUrl ?? '')
+          .trim();
       if (currentPhoto == previewUrl) {
         await _evictProfilePhotoCaches(previousPhotoUrl);
         await _evictProfilePhotoCaches(uploadedUrl);
@@ -220,9 +223,9 @@ class _UserScreenState extends ConsumerState<UserScreen> {
             .setUser(previousUser, persistSnapshot: false);
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo subir la foto: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('No se pudo subir la foto: $e')));
     }
   }
 

@@ -183,6 +183,7 @@ class ApiRoutes {
   static const salesDebugPurge = '/sales/debug/purge';
   static const salesSummary = '/sales/summary';
   static const salesPdfShareLink = '/sales/pdf-share-link';
+  static const salesOpenTickets = '/sales/open-tickets';
   static const reportsSalesOverview = '/reports/sales-overview';
   static String saleDetail(String id) => '/sales/$id';
   static String saleReturn(String id) => '/sales/$id/return';

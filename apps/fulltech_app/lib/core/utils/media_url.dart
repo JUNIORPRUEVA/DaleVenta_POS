@@ -58,10 +58,9 @@ String resolvePublicMediaUrl(String? rawUrl) {
 }
 
 String? _normalizeProfileObjectKey(String? rawKey) {
-  final decoded = Uri.decodeComponent((rawKey ?? '').trim()).replaceAll(
-    '\\',
-    '/',
-  );
+  final decoded = Uri.decodeComponent(
+    (rawKey ?? '').trim(),
+  ).replaceAll('\\', '/');
   if (decoded.isEmpty || decoded.contains('..')) return null;
 
   final uploadsIndex = decoded.indexOf('uploads/companies/');

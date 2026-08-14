@@ -167,8 +167,7 @@ class ProfileScreen extends ConsumerWidget {
         title: const Text('Foto de perfil'),
         children: [
           SimpleDialogOption(
-            onPressed: () =>
-                Navigator.pop(context, _ProfilePhotoAction.upload),
+            onPressed: () => Navigator.pop(context, _ProfilePhotoAction.upload),
             child: Row(
               children: [
                 const Icon(Icons.upload_rounded),
@@ -235,9 +234,9 @@ class ProfileScreen extends ConsumerWidget {
       ref.read(authStateProvider.notifier).setUser(updated);
 
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Foto de perfil eliminada')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Foto de perfil eliminada')));
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -321,8 +320,8 @@ class ProfileScreen extends ConsumerWidget {
 
       final updated = await repo.updateMe(fotoPersonalUrl: uploadedUrl);
 
-      currentPhoto =
-          (ref.read(authStateProvider).user?.fotoPersonalUrl ?? '').trim();
+      currentPhoto = (ref.read(authStateProvider).user?.fotoPersonalUrl ?? '')
+          .trim();
       if (currentPhoto == previewUrl) {
         await _evictProfilePhotoCaches(previousPhotoUrl);
         await _evictProfilePhotoCaches(uploadedUrl);

@@ -61,6 +61,7 @@ import 'ai/presentation/widgets/ai_warning_banner.dart';
 import 'ai/presentation/widgets/quotation_rule_detail_sheet.dart';
 import 'cotizacion_models.dart';
 import 'data/cotizaciones_repository.dart';
+import 'data/open_sales_tickets_repository.dart';
 import 'utils/cotizacion_pdf_service.dart';
 
 enum _CheckoutPaymentMethod {
@@ -553,11 +554,20 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         'v': 2,
         'companyId': _activeCompanyId(),
         'activeId': _activeDesktopTicketId,
-        'tickets': ([..._desktopTickets]..sort(_compareDesktopTickets))
-            .map((t) => t.toMap())
-            .toList(),
+        'tickets': ([
+          ..._desktopTickets,
+        ]..sort(_compareDesktopTickets)).map((t) => t.toMap()).toList(),
       };
       await _editorDraftCache.writeMap(_editorDraftCacheKey(), map);
+      await ref
+          .read(openSalesTicketsRepositoryProvider)
+          .replace(
+            activeId: _activeDesktopTicketId,
+            tickets: (map['tickets'] as List)
+                .whereType<Map>()
+                .map((row) => row.cast<String, dynamic>())
+                .toList(growable: false),
+          );
     } catch (_) {
       // Best-effort.
     }
@@ -567,19 +577,23 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     if (!mounted) return;
     _restoringEditorDraft = true;
     try {
-      final cached = await _editorDraftCache.readMap(_editorDraftCacheKey());
+      final remote = await ref.read(openSalesTicketsRepositoryProvider).fetch();
+      final cached =
+          remote ?? await _editorDraftCache.readMap(_editorDraftCacheKey());
       if (!mounted) return;
       if (cached == null) return;
 
       final rawTickets = (cached['tickets'] as List?) ?? const [];
-      final tickets = rawTickets
-          .whereType<Map>()
-          .map(
-            (row) => _DesktopTicketDraft.fromMap(row.cast<String, dynamic>()),
-          )
-          .where(_belongsToActiveCompany)
-          .toList()
-        ..sort(_compareDesktopTickets);
+      final tickets =
+          rawTickets
+              .whereType<Map>()
+              .map(
+                (row) =>
+                    _DesktopTicketDraft.fromMap(row.cast<String, dynamic>()),
+              )
+              .where(_belongsToActiveCompany)
+              .toList()
+            ..sort(_compareDesktopTickets);
 
       if (tickets.isEmpty) return;
 
@@ -596,9 +610,36 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         _writeActiveDesktopDraft();
       });
       _applyClientPrefillFromRoute(force: true);
+      if (remote == null) {
+        _schedulePersistEditorDraft(immediate: true);
+      }
       unawaited(_syncQuotationAi(triggerAi: false));
     } catch (_) {
-      // Ignore invalid cache entries.
+      try {
+        final cached = await _editorDraftCache.readMap(_editorDraftCacheKey());
+        if (!mounted || cached == null) return;
+        final rawTickets = (cached['tickets'] as List?) ?? const [];
+        final tickets =
+            rawTickets
+                .whereType<Map>()
+                .map(
+                  (row) =>
+                      _DesktopTicketDraft.fromMap(row.cast<String, dynamic>()),
+                )
+                .where(_belongsToActiveCompany)
+                .toList()
+              ..sort(_compareDesktopTickets);
+        if (tickets.isEmpty) return;
+        final activeId = tickets.first.id;
+        setState(() {
+          _desktopTickets = tickets;
+          _activeDesktopTicketId = activeId;
+          _replaceEditorStateFromDraft(tickets.first);
+          _writeActiveDesktopDraft();
+        });
+      } catch (_) {
+        // Ignore invalid cache entries.
+      }
     } finally {
       _restoringEditorDraft = false;
     }

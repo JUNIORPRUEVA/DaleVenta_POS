@@ -642,6 +642,7 @@ model Company {
   payrollServiceCommissionRequests PayrollServiceCommissionRequest[]
   warrantyProductConfigs WarrantyProductConfig[]
   cotizaciones Cotizacion[]
+  openSalesTicketState OpenSalesTicketState?
   workScheduleProfiles WorkScheduleProfile[]
   workCoverageRules WorkCoverageRule[]
   workEmployeeConfigs WorkEmployeeConfig[]
@@ -655,6 +656,20 @@ model Company {
   @@index([licenseStatus])
   @@index([licenseExpiresAt])
   @@map("companies")
+}
+
+model OpenSalesTicketState {
+  companyId       String   @id @map("company_id") @db.Uuid
+  activeTicketId  String?  @map("active_ticket_id")
+  tickets         Json     @default("[]")
+  updatedByUserId String?  @map("updated_by_user_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([updatedAt])
+  @@map("open_sales_ticket_states")
 }
 
 model CompanyLicenseAuditLog {

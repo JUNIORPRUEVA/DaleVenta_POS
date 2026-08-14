@@ -136,7 +136,7 @@ export class UsersController {
     // /media/object, que exige autenticación.
     const mediaUrl =
       kind === 'profile'
-        ? this.buildPublicProfileUrl(req, r2ObjectKey)
+        ? this.buildPublicProfilePath(r2ObjectKey)
         : this.buildMediaObjectUrl(req, r2ObjectKey);
     try {
       await this.r2.putObject({
@@ -174,7 +174,7 @@ export class UsersController {
 
     const relativePath =
       kind === 'profile'
-        ? `/media/photo?key=${encodeURIComponent(r2ObjectKey)}`
+        ? this.buildPublicProfilePath(r2ObjectKey)
         : `/${posix.join('uploads', objectKey)}`;
     const url =
       kind === 'profile' ? mediaUrl : this.buildAbsoluteUrl(req, relativePath);
@@ -201,9 +201,8 @@ export class UsersController {
     return this.buildAbsoluteUrl(req, path);
   }
 
-  private buildPublicProfileUrl(req: Request, objectKey: string): string {
-    const path = `/media/photo?key=${encodeURIComponent(objectKey)}`;
-    return this.buildAbsoluteUrl(req, path);
+  private buildPublicProfilePath(objectKey: string): string {
+    return `/media/photo?key=${encodeURIComponent(objectKey)}`;
   }
 
   @Post()
