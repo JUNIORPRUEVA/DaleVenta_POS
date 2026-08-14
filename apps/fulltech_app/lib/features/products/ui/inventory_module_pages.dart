@@ -1542,28 +1542,25 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                       )
                     : null,
                 actions: [
-                  if (initialTabIndex == 3)
+                  if (!_mobileSearchOpen && initialTabIndex == 3)
                     _AnimatedInventoryAction(
                       tooltip: 'Nueva categoría',
                       icon: Icons.create_new_folder_outlined,
                       onPressed: canEditProducts ? _runCurrentMobileAdd : null,
                     ),
-                  if (initialTabIndex != 1)
+                  if (!_mobileSearchOpen && initialTabIndex != 1)
                     IconButton(
                       tooltip: _mobileSearchOpen ? 'Cerrar búsqueda' : 'Buscar',
                       onPressed: _toggleMobileSearch,
-                      icon: Icon(
-                        _mobileSearchOpen
-                            ? Icons.close_rounded
-                            : Icons.search_rounded,
-                      ),
+                      icon: const Icon(Icons.search_rounded),
                     ),
-                  IconButton(
-                    tooltip: 'Filtros',
-                    onPressed: _openCurrentMobileFilters,
-                    icon: const Icon(Icons.filter_alt_outlined),
-                  ),
-                  if (initialTabIndex == 0)
+                  if (!_mobileSearchOpen)
+                    IconButton(
+                      tooltip: 'Filtros',
+                      onPressed: _openCurrentMobileFilters,
+                      icon: const Icon(Icons.filter_alt_outlined),
+                    ),
+                  if (!_mobileSearchOpen && initialTabIndex == 0)
                     PopupMenuButton<String>(
                       tooltip: 'Más opciones',
                       icon: const Icon(Icons.more_vert_rounded),
@@ -1613,7 +1610,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                         ),
                       ],
                     ),
-                  const SizedBox(width: 4),
+                  if (!_mobileSearchOpen) const SizedBox(width: 4),
                 ],
               )
             : FullTechPageHeader(
@@ -1833,32 +1830,36 @@ class _InventoryMobileSearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 38,
-      child: TextField(
-        controller: controller,
-        autofocus: true,
-        onChanged: onChanged,
-        style: const TextStyle(
-          color: AppColors.textPrimary,
-          fontWeight: FontWeight.w700,
-          fontSize: 14,
-        ),
-        decoration: InputDecoration(
-          hintText: hintText,
-          hintStyle: const TextStyle(color: _textSecondary, fontSize: 13),
-          prefixIcon: const Icon(Icons.search_rounded, size: 19),
-          suffixIcon: IconButton(
-            tooltip: 'Cerrar',
-            onPressed: onClose,
-            icon: const Icon(Icons.close_rounded, size: 18),
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: SizedBox(
+        height: 38,
+        width: double.infinity,
+        child: TextField(
+          controller: controller,
+          autofocus: true,
+          onChanged: onChanged,
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
           ),
-          filled: true,
-          fillColor: Colors.white,
-          contentPadding: EdgeInsets.zero,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide.none,
+          decoration: InputDecoration(
+            hintText: hintText,
+            hintStyle: const TextStyle(color: _textSecondary, fontSize: 13),
+            prefixIcon: const Icon(Icons.search_rounded, size: 19),
+            suffixIcon: IconButton(
+              tooltip: 'Cerrar',
+              onPressed: onClose,
+              icon: const Icon(Icons.close_rounded, size: 18),
+            ),
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: BorderSide.none,
+            ),
           ),
         ),
       ),
@@ -2617,7 +2618,11 @@ class _CatalogTabState extends State<CatalogTab> {
         return RefreshIndicator(
           onRefresh: widget.onRefresh,
           child: ListView(
-            padding: productsResponsivePagePadding(constraints),
+            padding: productsResponsivePagePadding(
+              constraints,
+              top: mobile ? 10 : 14,
+              bottom: mobile ? 96 : 18,
+            ),
             children: [
               if (!mobile) ...[
                 _CatalogToolbar(
@@ -3173,7 +3178,8 @@ class _CompactCatalogList extends StatelessWidget {
   Widget build(BuildContext context) {
     final mobile = MediaQuery.sizeOf(context).width < 640;
     return ProductsSurface(
-      padding: EdgeInsets.all(mobile ? 8 : 16),
+      padding: EdgeInsets.all(mobile ? 5 : 16),
+      radius: mobile ? 10 : 14,
       child: Column(
         children: [
           for (final product in products)
