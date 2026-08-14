@@ -987,35 +987,38 @@ class _MobilePrinterSettingsViewState
                     final score = MobilePrintService.bluetoothPrinterScore(
                       printer,
                     );
-                    return ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      selected: selected,
-                      leading: Icon(
-                        selected ? Icons.check_circle : Icons.bluetooth,
-                        color: selected ? const Color(0xFF0B5CFF) : null,
+                    return Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        selected: selected,
+                        leading: Icon(
+                          selected ? Icons.check_circle : Icons.bluetooth,
+                          color: selected ? const Color(0xFF0B5CFF) : null,
+                        ),
+                        title: Text(
+                          printer.name.trim().isEmpty
+                              ? 'Impresora Bluetooth'
+                              : printer.name,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          '${printer.macAdress} · compatibilidad $score',
+                        ),
+                        trailing: selected
+                            ? const Text(
+                                'Lista',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              )
+                            : null,
+                        onTap: _busy
+                            ? null
+                            : () => _selectBluetoothPrinter(settings, printer),
                       ),
-                      title: Text(
-                        printer.name.trim().isEmpty
-                            ? 'Impresora Bluetooth'
-                            : printer.name,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        '${printer.macAdress} · compatibilidad $score',
-                      ),
-                      trailing: selected
-                          ? const Text(
-                              'Lista',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            )
-                          : null,
-                      onTap: _busy
-                          ? null
-                          : () => _selectBluetoothPrinter(settings, printer),
                     );
                   }),
                 if (!_showAllBluetoothDevices && hiddenBluetoothDevices > 0)
