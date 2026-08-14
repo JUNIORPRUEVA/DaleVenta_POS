@@ -3,6 +3,8 @@ import 'package:daleventa_pos/core/company/company_settings_repository.dart';
 import 'package:daleventa_pos/core/printing/printing_platform_resolver.dart';
 import 'package:daleventa_pos/core/routing/routes.dart';
 import 'package:daleventa_pos/features/account/account_menu_screens.dart';
+import 'package:daleventa_pos/features/settings/data/mobile_printer_settings_model.dart';
+import 'package:daleventa_pos/features/settings/data/mobile_printer_settings_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,6 +18,31 @@ class _FakePrintingPlatformResolver extends PrintingPlatformResolver {
 
   @override
   PrintingPlatform get platform => _platform;
+}
+
+class _FakeMobilePrinterSettingsRepository
+    extends MobilePrinterSettingsRepository {
+  _FakeMobilePrinterSettingsRepository()
+    : _settings = const MobilePrinterSettingsModel(
+        companyScope: 'test',
+        connectionType: MobilePrinterConnectionType.systemPrinter,
+      ),
+      super(companyScope: 'test');
+
+  MobilePrinterSettingsModel _settings;
+
+  @override
+  Future<MobilePrinterSettingsModel> getOrCreate() async => _settings;
+
+  @override
+  Future<void> update(MobilePrinterSettingsModel settings) async {
+    _settings = settings.copyWith(companyScope: companyScope);
+  }
+
+  @override
+  Future<void> reset() async {
+    _settings = const MobilePrinterSettingsModel(companyScope: 'test');
+  }
 }
 
 Future<GoRouter> _pumpSettingsRouter(
@@ -68,6 +95,9 @@ Future<GoRouter> _pumpSettingsRouter(
         ),
         printingPlatformResolverProvider.overrideWithValue(
           const _FakePrintingPlatformResolver(PrintingPlatform.android),
+        ),
+        mobilePrinterSettingsRepositoryProvider.overrideWithValue(
+          _FakeMobilePrinterSettingsRepository(),
         ),
       ],
       child: MaterialApp.router(routerConfig: router),

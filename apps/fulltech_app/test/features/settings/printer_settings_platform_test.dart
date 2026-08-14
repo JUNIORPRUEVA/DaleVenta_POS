@@ -1,9 +1,15 @@
 import 'package:daleventa_pos/core/printing/printing_platform_resolver.dart';
+import 'package:daleventa_pos/core/printing/models/models.dart';
+import 'package:daleventa_pos/core/printing/unified_ticket_printer.dart';
 import 'package:daleventa_pos/features/settings/data/mobile_printer_settings_model.dart';
+import 'package:daleventa_pos/features/settings/data/mobile_printer_settings_repository.dart';
+import 'package:daleventa_pos/features/settings/data/printer_settings_model.dart';
+import 'package:daleventa_pos/features/settings/data/printer_settings_repository.dart';
 import 'package:daleventa_pos/features/settings/ui/printer_settings_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakePrintingPlatformResolver extends PrintingPlatformResolver {
@@ -13,6 +19,57 @@ class _FakePrintingPlatformResolver extends PrintingPlatformResolver {
 
   @override
   PrintingPlatform get platform => _platform;
+}
+
+class _FakeMobilePrinterSettingsRepository
+    extends MobilePrinterSettingsRepository {
+  _FakeMobilePrinterSettingsRepository()
+    : _settings = const MobilePrinterSettingsModel(
+        companyScope: 'test',
+        connectionType: MobilePrinterConnectionType.systemPrinter,
+      ),
+      super(companyScope: 'test');
+
+  MobilePrinterSettingsModel _settings;
+
+  @override
+  Future<MobilePrinterSettingsModel> getOrCreate() async => _settings;
+
+  @override
+  Future<void> update(MobilePrinterSettingsModel settings) async {
+    _settings = settings.copyWith(companyScope: companyScope);
+  }
+
+  @override
+  Future<void> reset() async {
+    _settings = const MobilePrinterSettingsModel(companyScope: 'test');
+  }
+}
+
+class _FakePrinterSettingsRepository extends PrinterSettingsRepository {
+  PrinterSettingsModel _settings = const PrinterSettingsModel();
+
+  @override
+  Future<PrinterSettingsModel?> getSettings() async => _settings;
+
+  @override
+  Future<PrinterSettingsModel> getOrCreate() async => _settings;
+
+  @override
+  Future<void> updateSettings(PrinterSettingsModel settings) async {
+    _settings = settings;
+  }
+}
+
+class _FakeUnifiedTicketPrinter extends UnifiedTicketPrinter {
+  _FakeUnifiedTicketPrinter(super.ref);
+
+  @override
+  Future<List<Printer>> getAvailablePrinters() async => const <Printer>[];
+
+  @override
+  Future<String> generatePreviewText({TicketData? data}) async =>
+      'Ticket de prueba\nTOTAL RD\$ 0.00';
 }
 
 Future<void> _pump(
@@ -31,6 +88,13 @@ Future<void> _pump(
         printingPlatformResolverProvider.overrideWithValue(
           _FakePrintingPlatformResolver(platform),
         ),
+        mobilePrinterSettingsRepositoryProvider.overrideWithValue(
+          _FakeMobilePrinterSettingsRepository(),
+        ),
+        printerSettingsRepositoryProvider.overrideWithValue(
+          _FakePrinterSettingsRepository(),
+        ),
+        unifiedTicketPrinterProvider.overrideWith(_FakeUnifiedTicketPrinter.new),
       ],
       child: const MaterialApp(home: PrinterSettingsPage(embedded: true)),
     ),

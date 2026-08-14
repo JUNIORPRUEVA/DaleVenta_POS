@@ -459,13 +459,16 @@ class _WindowsPrinterSettingsViewState
             ),
           );
         }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: form),
-            const SizedBox(width: 24),
-            SizedBox(width: 360, child: preview),
-          ],
+        return SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: form),
+              const SizedBox(width: 24),
+              SizedBox(width: 360, child: preview),
+            ],
+          ),
         );
       },
     );
@@ -473,7 +476,9 @@ class _WindowsPrinterSettingsViewState
 
   @override
   Widget build(BuildContext context) {
-    if (widget.embedded) return _body();
+    if (widget.embedded) {
+      return Material(color: Colors.transparent, child: _body());
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Impresora y tickets')),
       body: Padding(padding: const EdgeInsets.all(16), child: _body()),
