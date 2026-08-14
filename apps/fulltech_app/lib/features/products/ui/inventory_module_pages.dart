@@ -1542,14 +1542,10 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                       )
                     : null,
                 actions: [
-                  if (initialTabIndex == 0 || initialTabIndex == 3)
+                  if (initialTabIndex == 3)
                     _AnimatedInventoryAction(
-                      tooltip: initialTabIndex == 3
-                          ? 'Nueva categoría'
-                          : 'Nuevo producto',
-                      icon: initialTabIndex == 3
-                          ? Icons.create_new_folder_outlined
-                          : Icons.add_rounded,
+                      tooltip: 'Nueva categoría',
+                      icon: Icons.create_new_folder_outlined,
                       onPressed: canEditProducts ? _runCurrentMobileAdd : null,
                     ),
                   if (initialTabIndex != 1)
@@ -1692,6 +1688,17 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
               ),
           ],
         ),
+        floatingActionButton:
+            isMobile && initialTabIndex == 0 && canEditProducts
+            ? FloatingActionButton(
+                tooltip: 'Nuevo producto',
+                onPressed: _runCurrentMobileAdd,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: const Icon(Icons.add_rounded),
+              )
+            : null,
       ),
     );
   }
@@ -5307,9 +5314,8 @@ class CompactProductCard extends StatelessWidget {
             child: mobile
                 ? Row(
                     children: [
-                      Container(width: 3, height: 66, color: statusColor),
                       Transform.scale(
-                        scale: 0.86,
+                        scale: 0.82,
                         child: Checkbox(
                           value: selected,
                           onChanged: (v) => onSelected(v ?? false),
