@@ -138,7 +138,7 @@ class _MobileDrawerAccountFooter extends StatelessWidget {
                 onTap: onProfileTap,
               ),
             ),
-            SizedBox(width: compact ? 8 : 10),
+            SizedBox(width: compact ? 6 : 8),
             _MobileDrawerFooterIconButton(
               compact: compact,
               icon: Icons.settings_outlined,
@@ -146,7 +146,7 @@ class _MobileDrawerAccountFooter extends StatelessWidget {
               selected: isNavigationRouteActive(location, Routes.configuracion),
               onTap: onSettingsTap,
             ),
-            SizedBox(width: compact ? 4 : 6),
+            SizedBox(width: compact ? 2 : 4),
             _MobileDrawerFooterIconButton(
               compact: compact,
               icon: Icons.logout_rounded,
@@ -157,7 +157,7 @@ class _MobileDrawerAccountFooter extends StatelessWidget {
           ],
         ),
         if (canManageUsers) ...[
-          SizedBox(height: compact ? 6 : 8),
+          SizedBox(height: compact ? 2 : 4),
           _MobileDrawerFooterButton(
             compact: compact,
             icon: Icons.manage_accounts_outlined,
@@ -192,21 +192,21 @@ class _MobileDrawerFooterButton extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: Container(
-          height: compact ? 48 : 54,
+          height: compact ? 42 : 46,
           padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12),
           decoration: BoxDecoration(
             color: selected
                 ? AppColors.primary.withValues(alpha: 0.08)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(13),
+            borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
             children: [
-              Icon(icon, color: foreground, size: compact ? 22 : 24),
-              SizedBox(width: compact ? 12 : 14),
+              Icon(icon, color: foreground, size: compact ? 19 : 20),
+              SizedBox(width: compact ? 10 : 11),
               Expanded(
                 child: Text(
                   label,
@@ -214,8 +214,8 @@ class _MobileDrawerFooterButton extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.body.copyWith(
                     color: foreground,
-                    fontSize: compact ? 19 : 21,
-                    fontWeight: FontWeight.w500,
+                    fontSize: compact ? 14.2 : 14.8,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -256,18 +256,18 @@ class _MobileDrawerFooterIconButton extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(13),
+          borderRadius: BorderRadius.circular(12),
           onTap: onTap,
           child: Container(
-            width: compact ? 42 : 48,
-            height: compact ? 48 : 54,
+            width: compact ? 38 : 42,
+            height: compact ? 42 : 46,
             decoration: BoxDecoration(
               color: selected
                   ? AppColors.primary.withValues(alpha: 0.08)
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(13),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: color, size: compact ? 23 : 25),
+            child: Icon(icon, color: color, size: compact ? 20 : 21),
           ),
         ),
       ),
