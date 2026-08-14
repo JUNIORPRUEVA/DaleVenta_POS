@@ -172,8 +172,12 @@ export class UsersController {
       throw new BadRequestException('No se pudo persistir el archivo en disco');
     }
 
-    const relativePath = `/${posix.join('uploads', objectKey)}`;
-    const url = this.buildAbsoluteUrl(req, relativePath);
+    const relativePath =
+      kind === 'profile'
+        ? `/media/photo?key=${encodeURIComponent(r2ObjectKey)}`
+        : `/${posix.join('uploads', objectKey)}`;
+    const url =
+      kind === 'profile' ? mediaUrl : this.buildAbsoluteUrl(req, relativePath);
 
     return {
       url,

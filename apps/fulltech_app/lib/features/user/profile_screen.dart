@@ -1,15 +1,19 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/auth/auth_provider.dart';
+import '../../core/auth/auth_repository.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/utils/media_url.dart';
 import '../../core/utils/string_utils.dart';
 import '../../core/models/user_model.dart';
 import '../user/data/users_repository.dart';
+import '../user/profile_photo_processor.dart';
 import '../../core/widgets/user_avatar.dart';
 
 enum _ProfilePhotoAction { upload, delete }
@@ -266,32 +270,88 @@ class ProfileScreen extends ConsumerWidget {
         return;
       }
 
-      final repo = ref.read(usersRepositoryProvider);
-      final previousPhotoUrl =
-          (ref.read(authStateProvider).user?.fotoPersonalUrl ?? '').trim();
-      final uploadedUrl = await repo.uploadUserDocument(
-        bytes: bytes,
-        fileName: picked.name,
-        kind: 'profile',
-      );
-      final updated = await repo.updateMe(fotoPersonalUrl: uploadedUrl);
+      final previousUser = ref.read(authStateProvider).user;
+      if (previousUser == null) return;
 
-      // Avoid stale avatar after replacing an image with the same URL.
-      await _evictProfilePhotoCaches(previousPhotoUrl);
-      await _evictProfilePhotoCaches(uploadedUrl);
-      final freshPhotoUrl = (updated.fotoPersonalUrl ?? '').trim();
-      await _evictProfilePhotoCaches(freshPhotoUrl);
-
-      ref.read(authStateProvider.notifier).setUser(updated);
+      final processedBytes = processProfilePhoto(Uint8List.fromList(bytes));
+      final previewUrl = profilePhotoDataUrl(processedBytes);
+      ref
+          .read(authStateProvider.notifier)
+          .setUser(
+            _copyUserWithPhoto(previousUser, previewUrl),
+            persistSnapshot: false,
+          );
 
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Foto de perfil actualizada')),
+      final messenger = ScaffoldMessenger.of(context);
+      await _uploadProcessedProfilePhoto(
+        messenger,
+        ref,
+        processedBytes,
+        previewUrl,
+        previousUser,
       );
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudo actualizar la foto: $e')),
+      );
+    }
+  }
+
+  Future<void> _uploadProcessedProfilePhoto(
+    ScaffoldMessengerState messenger,
+    WidgetRef ref,
+    Uint8List processedBytes,
+    String previewUrl,
+    UserModel previousUser,
+  ) async {
+    final repo = ref.read(usersRepositoryProvider);
+    final previousPhotoUrl = (previousUser.fotoPersonalUrl ?? '').trim();
+
+    try {
+      final uploadedUrl = await repo.uploadUserDocument(
+        bytes: processedBytes,
+        fileName: profilePhotoUploadName,
+        kind: 'profile',
+      );
+      var currentPhoto =
+          (ref.read(authStateProvider).user?.fotoPersonalUrl ?? '').trim();
+      if (currentPhoto != previewUrl) return;
+
+      final updated = await repo.updateMe(fotoPersonalUrl: uploadedUrl);
+
+      currentPhoto =
+          (ref.read(authStateProvider).user?.fotoPersonalUrl ?? '').trim();
+      if (currentPhoto == previewUrl) {
+        await _evictProfilePhotoCaches(previousPhotoUrl);
+        await _evictProfilePhotoCaches(uploadedUrl);
+        final freshPhotoUrl = (updated.fotoPersonalUrl ?? '').trim();
+        await _evictProfilePhotoCaches(freshPhotoUrl);
+        ref
+            .read(authStateProvider.notifier)
+            .setUser(
+              _copyUserWithPhoto(updated, previewUrl),
+              snapshotUser: updated,
+            );
+        await ref.read(tokenStorageProvider).saveUserSnapshot(updated);
+      }
+
+      if (!messenger.mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Foto de perfil actualizada')),
+      );
+    } catch (e) {
+      final currentPhoto =
+          (ref.read(authStateProvider).user?.fotoPersonalUrl ?? '').trim();
+      if (currentPhoto == previewUrl) {
+        ref
+            .read(authStateProvider.notifier)
+            .setUser(previousUser, persistSnapshot: false);
+      }
+      if (!messenger.mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('No se pudo subir la foto: $e')),
       );
     }
   }
@@ -304,6 +364,12 @@ class ProfileScreen extends ConsumerWidget {
     if (resolved.isNotEmpty && resolved != value) {
       await CachedNetworkImage.evictFromCache(resolved);
     }
+  }
+
+  UserModel _copyUserWithPhoto(UserModel user, String? photoUrl) {
+    final json = user.toJson();
+    json['fotoPersonalUrl'] = photoUrl;
+    return UserModel.fromJson(json);
   }
 
   Future<void> _showPasswordDialog(BuildContext context, WidgetRef ref) async {

@@ -347,8 +347,16 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
-  void setUser(UserModel user) {
-    unawaited(ref.read(tokenStorageProvider).saveUserSnapshot(user));
+  void setUser(
+    UserModel user, {
+    bool persistSnapshot = true,
+    UserModel? snapshotUser,
+  }) {
+    if (persistSnapshot) {
+      unawaited(
+        ref.read(tokenStorageProvider).saveUserSnapshot(snapshotUser ?? user),
+      );
+    }
     _markSessionHealthy();
     state = state.copyWith(
       user: user,

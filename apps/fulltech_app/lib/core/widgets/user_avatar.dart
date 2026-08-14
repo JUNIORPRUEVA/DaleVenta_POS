@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
@@ -27,6 +29,15 @@ class UserAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final localImage = _tryResolveLocalImage(imageUrl);
+    if (localImage != null) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: backgroundColor,
+        backgroundImage: localImage,
+      );
+    }
+
     final url = _resolveAvatarUrl(imageUrl);
 
     if (url.isEmpty) {
@@ -76,4 +87,16 @@ class UserAvatar extends StatelessWidget {
   }
 
   String _resolveAvatarUrl(String? rawUrl) => resolvePublicMediaUrl(rawUrl);
+
+  ImageProvider? _tryResolveLocalImage(String? rawUrl) {
+    final value = (rawUrl ?? '').trim();
+    if (!value.startsWith('data:image/')) return null;
+    final separator = value.indexOf(',');
+    if (separator < 0) return null;
+    try {
+      return MemoryImage(base64Decode(value.substring(separator + 1)));
+    } catch (_) {
+      return null;
+    }
+  }
 }

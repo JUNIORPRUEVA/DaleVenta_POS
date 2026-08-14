@@ -40,6 +40,7 @@ import '../../core/widgets/fulltech_page_header.dart';
 import '../../core/widgets/pdf_action_menu.dart';
 import '../../core/widgets/responsive_shell.dart';
 import '../../core/widgets/product_network_image.dart';
+import '../../core/widgets/user_avatar.dart';
 import '../../features/catalogo/application/catalog_controller.dart';
 import '../../features/catalogo/data/catalog_repository.dart';
 import '../../features/products/ui/inventory_module_pages.dart';
@@ -7127,6 +7128,7 @@ class _CompanyAccountMenu extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final company = ref.watch(companySettingsProvider);
+    final user = ref.watch(authStateProvider).user;
     final companyName = company.maybeWhen(
       data: (settings) => _compactCompanyDisplayName(settings.companyName),
       orElse: () => 'Empresa',
@@ -7154,15 +7156,12 @@ class _CompanyAccountMenu extends ConsumerWidget {
           PopupMenuItem(
             enabled: false,
             padding: EdgeInsets.zero,
-            child: _CompanyMenuItem(
-              icon: Icons.person_outline_rounded,
-              label: 'Perfil',
+            child: _CompanyUserMenuHeader(
+              user: user,
               onTap: () => _activateMenuItem(
                 menuContext,
                 () => context.go(Routes.profile),
               ),
-              helpText:
-                  'Muestra la información del usuario conectado, sus datos principales y el acceso para revisar su cuenta dentro de DaleVenta POS.',
             ),
           ),
           PopupMenuItem(
@@ -8223,6 +8222,140 @@ class _CompanyLogoBox extends StatelessWidget {
       return null;
     }
   }
+}
+
+class _CompanyUserMenuHeader extends StatefulWidget {
+  const _CompanyUserMenuHeader({required this.user, required this.onTap});
+
+  final UserModel? user;
+  final VoidCallback onTap;
+
+  @override
+  State<_CompanyUserMenuHeader> createState() => _CompanyUserMenuHeaderState();
+}
+
+class _CompanyUserMenuHeaderState extends State<_CompanyUserMenuHeader> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final user = widget.user;
+    final name = (user?.nombreCompleto ?? '').trim().isEmpty
+        ? 'Usuario'
+        : user!.nombreCompleto.trim();
+    final email = (user?.email ?? '').trim();
+    final role = user?.appRole.label ?? AppRole.unknown.label;
+    final details = email.isEmpty ? role : '$role · $email';
+    final photoUrl = (user?.fotoPersonalUrl ?? '').trim();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: widget.onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: _hovered
+                    ? const Color(0xFFF3F7FF)
+                    : const Color(0xFFF8FBFF),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _hovered
+                      ? const Color(0xFFBFD1FF)
+                      : const Color(0xFFDCE7F3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  UserAvatar(
+                    radius: 17,
+                    imageUrl: photoUrl,
+                    backgroundColor: const Color(0xFFEAF1FF),
+                    child: Text(
+                      _companyUserInitials(name),
+                      style: const TextStyle(
+                        color: Color(0xFF1957E6),
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF13243A),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
+                          details,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF5B708A),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: _hovered
+                          ? const Color(0xFFE8EFFF)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 12,
+                      color: Color(0xFF8AA0B8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _companyUserInitials(String name) {
+  final initials = name
+      .split(' ')
+      .map((part) => part.isEmpty ? '' : part[0].toUpperCase())
+      .join();
+  if (initials.isEmpty) return 'U';
+  return initials.length > 1 ? initials.substring(0, 2) : initials;
 }
 
 class _CompanyMenuItem extends StatefulWidget {

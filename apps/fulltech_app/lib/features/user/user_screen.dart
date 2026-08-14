@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../core/auth/auth_provider.dart';
+import '../../core/auth/auth_repository.dart';
 import '../../core/models/user_model.dart';
 import '../../core/routing/routes.dart';
 import '../../core/utils/media_url.dart';
@@ -13,6 +16,7 @@ import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../user/data/users_repository.dart';
+import '../user/profile_photo_processor.dart';
 
 enum _ProfilePhotoAction { upload, delete }
 
@@ -146,31 +150,78 @@ class _UserScreenState extends ConsumerState<UserScreen> {
         return;
       }
 
-      final repo = ref.read(usersRepositoryProvider);
-      final previousPhotoUrl =
-          (ref.read(authStateProvider).user?.fotoPersonalUrl ?? '').trim();
+      final previousUser = ref.read(authStateProvider).user;
+      if (previousUser == null) return;
+
+      final processedBytes = processProfilePhoto(Uint8List.fromList(bytes));
+      final previewUrl = profilePhotoDataUrl(processedBytes);
+      ref
+          .read(authStateProvider.notifier)
+          .setUser(
+            _copyUserWithPhoto(previousUser, previewUrl),
+            persistSnapshot: false,
+          );
+
+      await _uploadProcessedProfilePhoto(processedBytes, previewUrl, previousUser);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo actualizar la foto: $e')),
+      );
+    }
+  }
+
+  Future<void> _uploadProcessedProfilePhoto(
+    Uint8List processedBytes,
+    String previewUrl,
+    UserModel previousUser,
+  ) async {
+    final repo = ref.read(usersRepositoryProvider);
+    final previousPhotoUrl = (previousUser.fotoPersonalUrl ?? '').trim();
+
+    try {
       final uploadedUrl = await repo.uploadUserDocument(
-        bytes: bytes,
-        fileName: picked.name,
+        bytes: processedBytes,
+        fileName: profilePhotoUploadName,
         kind: 'profile',
       );
+      var currentPhoto =
+          (ref.read(authStateProvider).user?.fotoPersonalUrl ?? '').trim();
+      if (currentPhoto != previewUrl) return;
+
       final updated = await repo.updateMe(fotoPersonalUrl: uploadedUrl);
 
-      await _evictProfilePhotoCaches(previousPhotoUrl);
-      await _evictProfilePhotoCaches(uploadedUrl);
-      final freshPhotoUrl = (updated.fotoPersonalUrl ?? '').trim();
-      await _evictProfilePhotoCaches(freshPhotoUrl);
-
-      ref.read(authStateProvider.notifier).setUser(updated);
+      currentPhoto =
+          (ref.read(authStateProvider).user?.fotoPersonalUrl ?? '').trim();
+      if (currentPhoto == previewUrl) {
+        await _evictProfilePhotoCaches(previousPhotoUrl);
+        await _evictProfilePhotoCaches(uploadedUrl);
+        final freshPhotoUrl = (updated.fotoPersonalUrl ?? '').trim();
+        await _evictProfilePhotoCaches(freshPhotoUrl);
+        ref
+            .read(authStateProvider.notifier)
+            .setUser(
+              _copyUserWithPhoto(updated, previewUrl),
+              snapshotUser: updated,
+            );
+        await ref.read(tokenStorageProvider).saveUserSnapshot(updated);
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Foto de perfil actualizada')),
       );
     } catch (e) {
+      final currentPhoto =
+          (ref.read(authStateProvider).user?.fotoPersonalUrl ?? '').trim();
+      if (currentPhoto == previewUrl) {
+        ref
+            .read(authStateProvider.notifier)
+            .setUser(previousUser, persistSnapshot: false);
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo actualizar la foto: $e')),
+        SnackBar(content: Text('No se pudo subir la foto: $e')),
       );
     }
   }
@@ -183,6 +234,12 @@ class _UserScreenState extends ConsumerState<UserScreen> {
     if (resolved.isNotEmpty && resolved != value) {
       await CachedNetworkImage.evictFromCache(resolved);
     }
+  }
+
+  UserModel _copyUserWithPhoto(UserModel user, String? photoUrl) {
+    final json = user.toJson();
+    json['fotoPersonalUrl'] = photoUrl;
+    return UserModel.fromJson(json);
   }
 
   @override
