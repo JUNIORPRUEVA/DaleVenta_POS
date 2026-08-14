@@ -1857,7 +1857,7 @@ class _InventoryMobileSearchField extends StatelessWidget {
             fillColor: Colors.white,
             contentPadding: const EdgeInsets.symmetric(horizontal: 4),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(3),
               borderSide: BorderSide.none,
             ),
           ),
@@ -5342,10 +5342,8 @@ class CompactProductCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 3),
                           _CompactMiniValue(
-                            label: 'Valor',
-                            value: formatRdCurrencyAccounting(
-                              _stockOf(product) * product.precio,
-                            ),
+                            label: 'Costo',
+                            value: _costText(product),
                           ),
                         ],
                       ),
