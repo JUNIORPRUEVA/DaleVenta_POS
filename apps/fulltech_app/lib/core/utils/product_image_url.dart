@@ -196,6 +196,39 @@ String buildProductImageUrl({
   return uri.replace(query: query).toString();
 }
 
+String buildProductThumbnailUrl({
+  required String imageUrl,
+  required int width,
+  required int height,
+}) {
+  final cleanWidth = width.clamp(48, 512);
+  final cleanHeight = height.clamp(48, 512);
+  final uri = Uri.tryParse(imageUrl.trim());
+  if (uri == null) return imageUrl;
+
+  final isMediaEndpoint =
+      uri.path == '/media/object' || uri.path.startsWith('/media/products/');
+  if (!isMediaEndpoint) return imageUrl;
+
+  final queryParameters = <String, List<String>>{
+    for (final entry in uri.queryParametersAll.entries)
+      entry.key: List<String>.from(entry.value),
+  };
+  queryParameters['w'] = ['$cleanWidth'];
+  queryParameters['h'] = ['$cleanHeight'];
+
+  final query = queryParameters.entries
+      .expand(
+        (entry) => entry.value.map(
+          (value) =>
+              '${Uri.encodeQueryComponent(entry.key)}=${Uri.encodeQueryComponent(value)}',
+        ),
+      )
+      .join('&');
+
+  return uri.replace(query: query).toString();
+}
+
 void debugLogProductImageResolution({
   required String productId,
   required String productName,

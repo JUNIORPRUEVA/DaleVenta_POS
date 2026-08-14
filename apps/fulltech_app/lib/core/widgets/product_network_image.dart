@@ -19,6 +19,7 @@ class ProductNetworkImage extends StatelessWidget {
   final Widget? loading;
   final double? width;
   final double? height;
+  final int thumbnailSize;
 
   const ProductNetworkImage({
     super.key,
@@ -31,6 +32,7 @@ class ProductNetworkImage extends StatelessWidget {
     this.loading,
     this.width,
     this.height,
+    this.thumbnailSize = 320,
     int maxRetries = 0,
   });
 
@@ -38,6 +40,11 @@ class ProductNetworkImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final url = imageUrl.trim();
     if (url.isEmpty) return fallback;
+    final effectiveUrl = buildProductThumbnailUrl(
+      imageUrl: url,
+      width: thumbnailSize,
+      height: thumbnailSize,
+    );
     final shouldSendAuth = _shouldSendAuthHeader(url);
 
     return FutureBuilder<String?>(
@@ -51,14 +58,16 @@ class ProductNetworkImage extends StatelessWidget {
             : <String, String>{'Authorization': 'Bearer $token'};
 
         return CachedNetworkImage(
-          key: ValueKey('$url:${token?.isNotEmpty ?? false}'),
-          imageUrl: url,
+          key: ValueKey('$effectiveUrl:${token?.isNotEmpty ?? false}'),
+          imageUrl: effectiveUrl,
           httpHeaders: headers,
-          cacheKey: url,
+          cacheKey: effectiveUrl,
           cacheManager: FulltechImageCacheManager.instance,
           fit: fit,
           width: width,
           height: height,
+          memCacheWidth: thumbnailSize,
+          memCacheHeight: thumbnailSize,
           fadeInDuration: Duration.zero,
           fadeOutDuration: Duration.zero,
           useOldImageOnUrlChange: true,
@@ -68,7 +77,7 @@ class ProductNetworkImage extends StatelessWidget {
               productId: productId,
               productName: productName,
               originalUrl: originalUrl,
-              attemptedUrl: url,
+              attemptedUrl: effectiveUrl,
               error: error,
             );
             return fallback;

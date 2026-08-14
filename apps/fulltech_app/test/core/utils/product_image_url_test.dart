@@ -65,4 +65,52 @@ void main() {
       );
     });
   });
+
+  group('buildProductThumbnailUrl', () {
+    test('adds bounded thumbnail dimensions to media object URLs', () {
+      final result = buildProductThumbnailUrl(
+        imageUrl:
+            'https://api.example.com/media/object?key=uploads%2Fcompanies%2Fcompany-1%2Fproducts%2Fimages%2Fdemo.jpg&v=123',
+        width: 320,
+        height: 280,
+      );
+
+      final uri = Uri.parse(result);
+
+      expect(uri.path, '/media/object');
+      expect(uri.queryParameters['key'],
+          'uploads/companies/company-1/products/images/demo.jpg');
+      expect(uri.queryParameters['v'], '123');
+      expect(uri.queryParameters['w'], '320');
+      expect(uri.queryParameters['h'], '280');
+    });
+
+    test('clamps oversized thumbnail dimensions for product media URLs', () {
+      final result = buildProductThumbnailUrl(
+        imageUrl: 'https://api.example.com/media/products/product-1?v=123',
+        width: 2000,
+        height: 4,
+      );
+
+      final uri = Uri.parse(result);
+
+      expect(uri.path, '/media/products/product-1');
+      expect(uri.queryParameters['v'], '123');
+      expect(uri.queryParameters['w'], '512');
+      expect(uri.queryParameters['h'], '48');
+    });
+
+    test('does not rewrite external product image URLs', () {
+      const imageUrl =
+          'https://legacy.example.com/uploads/products/demo-image.jpg?v=123';
+
+      final result = buildProductThumbnailUrl(
+        imageUrl: imageUrl,
+        width: 320,
+        height: 320,
+      );
+
+      expect(result, imageUrl);
+    });
+  });
 }

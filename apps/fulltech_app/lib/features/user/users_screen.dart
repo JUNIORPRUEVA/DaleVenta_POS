@@ -811,6 +811,8 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
     Future<void> submitUser(BuildContext modalContext) async {
       final edad = int.tryParse(edadCtrl.text.trim()) ?? user?.edad ?? 0;
       final cedula = cedulaCtrl.text.trim();
+      final email = emailCtrl.text.trim();
+      final name = nameCtrl.text.trim();
       final phone = phoneCtrl.text.trim().isNotEmpty
           ? phoneCtrl.text.trim()
           : cedula;
@@ -818,10 +820,50 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
           ? numeroFlotaCtrl.text.trim()
           : cedula.replaceAll(RegExp(r'\D'), '');
 
+      if (name.isEmpty) {
+        showSnack(
+          const SnackBar(content: Text('El nombre completo es obligatorio')),
+        );
+        return;
+      }
+
+      if (email.isEmpty || !email.contains('@')) {
+        showSnack(
+          const SnackBar(content: Text('Ingresa un correo válido')),
+        );
+        return;
+      }
+
+      if (cedula.isEmpty) {
+        showSnack(const SnackBar(content: Text('La cédula es obligatoria')));
+        return;
+      }
+
+      if (securityCode.isEmpty) {
+        showSnack(
+          const SnackBar(
+            content: Text('El código de seguridad es obligatorio'),
+          ),
+        );
+        return;
+      }
+
+      if (phone.isEmpty) {
+        showSnack(const SnackBar(content: Text('El teléfono es obligatorio')));
+        return;
+      }
+
+      if (fechaIngreso == null) {
+        showSnack(
+          const SnackBar(content: Text('La fecha de ingreso es obligatoria')),
+        );
+        return;
+      }
+
       final payload = <String, dynamic>{
-        'email': emailCtrl.text.trim(),
+        'email': email,
         'password': passwordCtrl.text.isEmpty ? null : passwordCtrl.text,
-        'nombreCompleto': nameCtrl.text.trim(),
+        'nombreCompleto': name,
         'telefono': phone,
         'numeroFlota': securityCode,
         'telefonoFamiliar': familiarPhoneCtrl.text.trim(),
@@ -860,18 +902,6 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
           const SnackBar(
             content: Text('La contraseña es obligatoria al crear'),
           ),
-        );
-        return;
-      }
-
-      if (!payload.containsKey('cedula')) {
-        showSnack(const SnackBar(content: Text('La cédula es obligatoria')));
-        return;
-      }
-
-      if (fechaIngreso == null) {
-        showSnack(
-          const SnackBar(content: Text('La fecha de ingreso es obligatoria')),
         );
         return;
       }
@@ -2245,8 +2275,8 @@ class _UsersTable extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final tableWidth = constraints.maxWidth < 1040
-            ? 1040.0
+        final tableWidth = constraints.maxWidth < 1120
+            ? 1120.0
             : constraints.maxWidth;
         return ClipRRect(
           borderRadius: BorderRadius.circular(12),
@@ -2278,6 +2308,11 @@ class _UsersTable extends StatelessWidget {
                               user: user,
                               selected: user.id == selectedUserId,
                               onSelect: () => onSelectUser(user),
+                              onView: () => onViewUser(user),
+                              onEdit: () => onEditUser(user),
+                              onDelete: () => onDeleteUser(user),
+                              onToggleBlock: () => onToggleBlock(user),
+                              onOpenContract: () => onOpenContract(user),
                             );
                           },
                         ),
@@ -2318,6 +2353,7 @@ class _UsersTableHeader extends StatelessWidget {
           _UserTableHeaderCell('Cédula', flex: 15, style: style),
           _UserTableHeaderCell('Teléfono', flex: 14, style: style),
           _UserTableHeaderCell('Rol', flex: 12, style: style),
+          _UserTableHeaderCell('Detalle', flex: 10, style: style),
         ],
       ),
     );
@@ -2350,11 +2386,21 @@ class _UserRowCard extends StatefulWidget {
     required this.user,
     required this.selected,
     required this.onSelect,
+    required this.onView,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onToggleBlock,
+    required this.onOpenContract,
   });
 
   final UserModel user;
   final bool selected;
   final VoidCallback onSelect;
+  final VoidCallback onView;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onToggleBlock;
+  final VoidCallback onOpenContract;
 
   @override
   State<_UserRowCard> createState() => _UserRowCardState();
@@ -2448,6 +2494,59 @@ class _UserRowCardState extends State<_UserRowCard> {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: _UserRoleBadge(role: _managementRole(widget.user)),
+                  ),
+                ),
+                Expanded(
+                  flex: 10,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: PopupMenuButton<_UserMenuAction>(
+                      tooltip: 'Acciones',
+                      icon: const Icon(Icons.more_vert),
+                      onSelected: (action) {
+                        switch (action) {
+                          case _UserMenuAction.ver:
+                            widget.onView();
+                            break;
+                          case _UserMenuAction.editar:
+                            widget.onEdit();
+                            break;
+                          case _UserMenuAction.contrato:
+                            widget.onOpenContract();
+                            break;
+                          case _UserMenuAction.bloquear:
+                            widget.onToggleBlock();
+                            break;
+                          case _UserMenuAction.eliminar:
+                            widget.onDelete();
+                            break;
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: _UserMenuAction.ver,
+                          child: Text('Ver detalle'),
+                        ),
+                        const PopupMenuItem(
+                          value: _UserMenuAction.editar,
+                          child: Text('Editar'),
+                        ),
+                        const PopupMenuItem(
+                          value: _UserMenuAction.contrato,
+                          child: Text('Contrato'),
+                        ),
+                        PopupMenuItem(
+                          value: _UserMenuAction.bloquear,
+                          child: Text(
+                            widget.user.blocked ? 'Desbloquear' : 'Bloquear',
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: _UserMenuAction.eliminar,
+                          child: Text('Eliminar'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -2640,7 +2739,7 @@ class _DesktopUsersEmptyState extends StatelessWidget {
   }
 }
 
-enum _UserMenuAction { editar, bloquear, eliminar }
+enum _UserMenuAction { ver, editar, contrato, bloquear, eliminar }
 
 class _UserCard extends StatelessWidget {
   const _UserCard({
@@ -2691,8 +2790,14 @@ class _UserCard extends StatelessWidget {
           icon: const Icon(Icons.more_vert),
           onSelected: (action) {
             switch (action) {
+              case _UserMenuAction.ver:
+                onView();
+                break;
               case _UserMenuAction.editar:
                 onEdit();
+                break;
+              case _UserMenuAction.contrato:
+                onView();
                 break;
               case _UserMenuAction.bloquear:
                 onToggleBlock();

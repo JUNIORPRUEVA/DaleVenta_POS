@@ -7,7 +7,7 @@
     "display": "standalone",
     "display_override": ["standalone", "minimal-ui", "browser"],
     "background_color": "#EFF5F8",
-    "theme_color": "#1957E6",
+    "theme_color": "#EFF5F8",
     "description": "Aplicacion empresarial FULLTECH SRL.",
     "orientation": "portrait-primary",
     "lang": "es-DO",

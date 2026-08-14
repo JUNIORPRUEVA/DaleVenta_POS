@@ -279,8 +279,8 @@ void Win32Window::OnDestroy() {
 }
 
 void Win32Window::UpdateTheme(HWND const window) {
-  const COLORREF caption_color = RGB(25, 87, 230);
-  const COLORREF text_color = RGB(255, 255, 255);
+  const COLORREF caption_color = RGB(239, 245, 248);
+  const COLORREF text_color = RGB(16, 34, 53);
   DwmSetWindowAttribute(window, DWMWA_CAPTION_COLOR, &caption_color,
                         sizeof(caption_color));
   DwmSetWindowAttribute(window, DWMWA_TEXT_COLOR, &text_color,

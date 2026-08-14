@@ -244,8 +244,8 @@ class CatalogController extends StateNotifier<CatalogState> {
       final items = applyCatalogSyncVersion(merged, syncVersion);
       state = state.copyWith(items: items, loading: false, refreshing: false);
       unawaited(_saveSnapshotSafely(repo, items));
-      Future<void>.microtask(
-        () => FulltechImageCacheManager.warmImageUrls(
+      unawaited(
+        FulltechImageCacheManager.warmImageUrls(
           items.map((item) => item.displayFotoUrl),
         ),
       );

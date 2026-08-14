@@ -15,6 +15,7 @@ import type { Request, Response } from 'express';
 import * as fs from 'node:fs';
 import { createReadStream } from 'node:fs';
 import { join } from 'node:path';
+import sharp from 'sharp';
 import { requireTenant, type TenantUser } from '../auth/tenant-context';
 import { PrismaService } from '../prisma/prisma.service';
 import { R2Service } from './r2.service';
@@ -34,6 +35,8 @@ export class MediaController {
   @Get('products/:productId')
   async productImage(
     @Param('productId') productId: string,
+    @Query('w') rawWidth: string | undefined,
+    @Query('h') rawHeight: string | undefined,
     @Res() res: Response,
   ) {
     const product = await this.prisma.product.findFirst({ where: { id: productId } });
@@ -52,6 +55,7 @@ export class MediaController {
       companyId,
       res,
       legacyMimeType: productAny.imageMimeType,
+      resize: this.parseResize(rawWidth, rawHeight),
     });
     // eslint-disable-next-line no-console
     console.log(`[media] product image served companyId=${companyId} productId=${productId} key=${objectKey}`);
@@ -89,13 +93,20 @@ export class MediaController {
   async objectImage(
     @Req() req: Request,
     @Query('key') rawKey: string | undefined,
+    @Query('w') rawWidth: string | undefined,
+    @Query('h') rawHeight: string | undefined,
     @Res() res: Response,
   ) {
     const companyId = requireTenant(req.user as TenantUser);
     const objectKey = this.normalizeObjectKey(rawKey);
     if (!objectKey) throw new BadRequestException('key inválida');
 
-    await this.serveObjectKey({ objectKey, companyId, res });
+    await this.serveObjectKey({
+      objectKey,
+      companyId,
+      res,
+      resize: this.parseResize(rawWidth, rawHeight),
+    });
   }
 
   private async serveObjectKey(params: {
@@ -103,10 +114,23 @@ export class MediaController {
     companyId: string;
     res: Response;
     legacyMimeType?: string | null;
+    resize?: { width: number; height: number } | null;
   }) {
     this.assertTenantObjectKey(params.objectKey, params.companyId);
 
     try {
+      if (params.resize) {
+        const object = await this.r2.getObject(params.objectKey);
+        await this.serveResizedImage({
+          buffer: object.body,
+          contentType: object.contentType ?? params.legacyMimeType,
+          resize: params.resize,
+          res: params.res,
+          cacheControl: 'public, max-age=31536000, immutable',
+        });
+        return;
+      }
+
       const object = await this.r2.getObjectStream(params.objectKey);
       params.res.setHeader('Content-Type', object.contentType ?? params.legacyMimeType ?? 'application/octet-stream');
       if (object.contentLength != null) {
@@ -131,12 +155,65 @@ export class MediaController {
     }
 
     const stat = fs.statSync(localPath);
+    if (params.resize) {
+      await this.serveResizedImage({
+        buffer: fs.readFileSync(localPath),
+        contentType: params.legacyMimeType ?? this.guessMimeType(localPath),
+        resize: params.resize,
+        res: params.res,
+        cacheControl: 'public, max-age=3600',
+      });
+      return;
+    }
+
     params.res.setHeader('Content-Type', params.legacyMimeType ?? this.guessMimeType(localPath));
     params.res.setHeader('Content-Length', String(stat.size));
     params.res.setHeader('Cache-Control', 'public, max-age=3600');
     // eslint-disable-next-line no-console
     console.warn(`[media] legacy local fallback used key=${params.objectKey}`);
     createReadStream(localPath).pipe(params.res);
+  }
+
+  private parseResize(rawWidth?: string, rawHeight?: string): { width: number; height: number } | null {
+    const width = Number.parseInt((rawWidth ?? '').trim(), 10);
+    const height = Number.parseInt((rawHeight ?? '').trim(), 10);
+    if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
+    const safeWidth = Math.min(Math.max(width, 48), 512);
+    const safeHeight = Math.min(Math.max(height, 48), 512);
+    return { width: safeWidth, height: safeHeight };
+  }
+
+  private async serveResizedImage(params: {
+    buffer: Buffer;
+    contentType?: string | null;
+    resize: { width: number; height: number };
+    res: Response;
+    cacheControl: string;
+  }) {
+    const type = (params.contentType ?? '').toLowerCase();
+    if (!type.startsWith('image/')) {
+      params.res.setHeader('Content-Type', params.contentType ?? 'application/octet-stream');
+      params.res.setHeader('Content-Length', String(params.buffer.length));
+      params.res.setHeader('Cache-Control', params.cacheControl);
+      params.res.send(params.buffer);
+      return;
+    }
+
+    const output = await sharp(params.buffer, { failOn: 'none' })
+      .rotate()
+      .resize({
+        width: params.resize.width,
+        height: params.resize.height,
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .webp({ quality: 78, effort: 4 })
+      .toBuffer();
+
+    params.res.setHeader('Content-Type', 'image/webp');
+    params.res.setHeader('Content-Length', String(output.length));
+    params.res.setHeader('Cache-Control', params.cacheControl);
+    params.res.send(output);
   }
 
   private normalizeObjectKey(raw?: string | null): string | null {

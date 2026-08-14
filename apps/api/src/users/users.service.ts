@@ -364,6 +364,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
       email: row.email,
       nombreCompleto: row.nombreCompleto ?? '',
       telefono: row.telefono ?? '',
+      numeroFlota: row.numeroFlota ?? null,
       telefonoFamiliar: row.telefonoFamiliar ?? null,
       cedula: row.cedula ?? null,
       fotoCedulaUrl: row.fotoCedulaUrl ?? null,
@@ -399,13 +400,14 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     };
   }
 
-  private async findAllSafe() {
+  private async findAllSafe(companyId: string) {
     const rows = await this.prisma.$queryRaw<any[]>(Prisma.sql`
       SELECT
         id,
         email,
         COALESCE("nombreCompleto", '') AS "nombreCompleto",
         COALESCE(telefono, '') AS telefono,
+        "numeroFlota",
         "telefonoFamiliar",
         cedula,
         "fotoCedulaUrl",
@@ -439,6 +441,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
         "createdAt",
         "updatedAt"
       FROM users
+      WHERE company_id = ${companyId}::uuid
       ORDER BY "createdAt" DESC
     `);
 
@@ -452,6 +455,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
         email,
         COALESCE("nombreCompleto", '') AS "nombreCompleto",
         COALESCE(telefono, '') AS telefono,
+        "numeroFlota",
         "telefonoFamiliar",
         cedula,
         "fotoCedulaUrl",
@@ -506,6 +510,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
       email: row.email,
       nombreCompleto: '',
       telefono: '',
+      numeroFlota: null,
       telefonoFamiliar: null,
       cedula: null,
       fotoCedulaUrl: null,
@@ -633,9 +638,22 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     await this.licenses.assertCanCreateUser(companyId);
     const email = this.normalizeEmail(dto.email);
     const cedula = this.normalizeOptionalString(dto.cedula);
+    const numeroFlota =
+      this.normalizeOptionalString(dto.numeroFlota) ??
+      (cedula ? cedula.replace(/\D/g, '') : undefined);
+
+    if (!this.normalizeOptionalString(dto.nombreCompleto)) {
+      throw new BadRequestException('El nombre completo es obligatorio');
+    }
+    if (!this.normalizeOptionalString(dto.telefono)) {
+      throw new BadRequestException('El teléfono es obligatorio');
+    }
+    if (!numeroFlota) {
+      throw new BadRequestException('numeroFlota es obligatorio');
+    }
 
     const exists = await this.prisma.user.findUnique({ where: { email } });
-    if (exists) throw new BadRequestException('Email already in use');
+    if (exists) throw new BadRequestException('El correo ya está registrado');
 
     if (cedula) {
       const cedulaTaken = await this.prisma.user.findUnique({ where: { cedula } });
@@ -651,7 +669,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
           passwordHash,
           nombreCompleto: dto.nombreCompleto.trim(),
           telefono: dto.telefono.trim(),
-          numeroFlota: dto.numeroFlota.trim(),
+          numeroFlota,
           telefonoFamiliar: this.normalizeOptionalString(dto.telefonoFamiliar),
           cedula,
           fotoCedulaUrl: this.normalizeOptionalString(dto.fotoCedulaUrl),
@@ -792,7 +810,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
         console.error('[users.findAll] Prisma inconsistent query result; falling back to raw SQL', {
           message: error instanceof Error ? error.message : String(error)
         });
-        return this.findAllSafe();
+        return this.findAllSafe(companyId);
       }
 
       // eslint-disable-next-line no-console
@@ -807,6 +825,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
       >(Prisma.sql`
         SELECT id, email, role, "createdAt", "updatedAt"
         FROM users
+        WHERE company_id = ${companyId}::uuid
         ORDER BY "createdAt" DESC
       `);
       return rows.map((row) => this.mapMinimalUser(row));
@@ -1085,11 +1104,30 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     const existing = await this.prisma.user.findFirst({ where: this.targetUserTenantWhere(requestUser, id) });
     if (!existing) throw new NotFoundException('User not found');
     const companyId = requireTenant(requestUser);
-    await this.prisma.companyMember.deleteMany({ where: { userId: id, companyId } });
-    await this.prisma.user.update({
-      where: { id },
-      data: { blocked: true, companyId: null },
-      select: { id: true },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.companyMember.deleteMany({ where: { userId: id, companyId } });
+
+      const remainingMembership = await tx.companyMember.findFirst({
+        where: {
+          userId: id,
+          status: CompanyMemberStatus.ACTIVE,
+        },
+        select: { companyId: true },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      await tx.user.update({
+        where: { id },
+        data: remainingMembership
+          ? {
+              companyId:
+                existing.companyId === companyId
+                  ? remainingMembership.companyId
+                  : existing.companyId,
+            }
+          : { blocked: true, companyId: null },
+        select: { id: true },
+      });
     });
     return { ok: true };
   }

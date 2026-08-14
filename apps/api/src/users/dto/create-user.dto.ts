@@ -15,9 +15,10 @@ export class CreateUserDto {
   @IsString()
   telefono!: string;
 
+  @IsOptional()
   @IsString()
   @Matches(/^\d+$/, { message: 'numeroFlota debe ser numérico' })
-  numeroFlota!: string;
+  numeroFlota?: string;
 
   @IsOptional()
   @IsString()

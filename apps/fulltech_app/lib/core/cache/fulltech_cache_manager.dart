@@ -1,5 +1,4 @@
-import 'dart:typed_data';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 class FulltechImageCacheManager {
@@ -15,8 +14,12 @@ class FulltechImageCacheManager {
 
   static Future<void> warmImageUrls(
     Iterable<String?> urls, {
-    int maxUrls = 120,
+    int maxUrls = 24,
   }) async {
+    // En Flutter Web, especialmente iOS/Safari, precargar decenas de fotos de
+    // producto puede disparar presión de memoria antes de que el usuario las vea.
+    if (kIsWeb) return;
+
     final unique = <String>{};
     for (final raw in urls) {
       final url = (raw ?? '').trim();

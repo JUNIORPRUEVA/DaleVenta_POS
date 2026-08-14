@@ -63,6 +63,7 @@ Future<void> main() async {
       if (!kIsWeb) {
         MediaKit.ensureInitialized();
       }
+      _configureImageCacheForPlatform();
       _initializeSqlite();
 
       FlutterError.onError = (details) {
@@ -90,6 +91,16 @@ Future<void> main() async {
     (error, stack) {
       AppErrorReporter.instance.record(error, stack, context: 'Zone');
     },
+  );
+}
+
+void _configureImageCacheForPlatform() {
+  if (!kIsWeb) return;
+  final cache = PaintingBinding.instance.imageCache;
+  cache.maximumSize = 80;
+  cache.maximumSizeBytes = 32 * 1024 * 1024;
+  debugPrint(
+    'APP_BOOT imageCache platform=web maxEntries=${cache.maximumSize} maxBytes=${cache.maximumSizeBytes}',
   );
 }
 

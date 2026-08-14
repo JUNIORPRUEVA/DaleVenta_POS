@@ -372,24 +372,11 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   }
 
   void _prefetchProductImages(List<ProductModel> products) {
-    final urls = products
-        .map((p) => p.displayFotoUrl)
-        .whereType<String>()
-        .map((u) => u.trim())
-        .where((u) => u.isNotEmpty)
-        .take(80)
-        .toList();
-    if (urls.isEmpty) return;
-
-    Future.microtask(() async {
-      for (final url in urls) {
-        try {
-          await FulltechImageCacheManager.instance.downloadFile(url);
-        } catch (_) {
-          // Ignore individual image failures.
-        }
-      }
-    });
+    unawaited(
+      FulltechImageCacheManager.warmImageUrls(
+        products.map((p) => p.displayFotoUrl),
+      ),
+    );
   }
 
   Future<void> _clearAllProductCache() async {

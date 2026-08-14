@@ -17,6 +17,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import * as fs from 'node:fs';
 import { R2Service } from '../storage/r2.service';
 import { buildTenantObjectKey, sanitizeFileName } from '../storage/helpers/storage_helpers';
+import sharp from 'sharp';
 
 @UseInterceptors(ProductCostInterceptor)
 @Controller('products')
@@ -194,10 +195,11 @@ export class ProductsController {
         : safeExt === '.webp'
           ? 'image/webp'
           : 'image/jpeg';
-    return this.saveProductImage(req.user as TenantUser, file.buffer, {
+    const optimized = await this.prepareProductImageBuffer(file.buffer, contentType);
+    return this.saveProductImage(req.user as TenantUser, optimized.buffer, {
       original,
       safeExt,
-      contentType,
+      contentType: optimized.contentType,
       source: 'upload',
     });
   }
@@ -248,12 +250,49 @@ export class ProductsController {
     const baseName = sanitizeFileName(dto.productName?.trim() || parsedUrl.pathname.split('/').pop() || 'producto');
     const original = `${baseName.replace(/\.(png|jpe?g|webp)$/i, '')}${extFromType}`;
 
-    return this.saveProductImage(req.user as TenantUser, body, {
+    const optimized = await this.prepareProductImageBuffer(body, contentType);
+    return this.saveProductImage(req.user as TenantUser, optimized.buffer, {
       original,
       safeExt: extFromType,
-      contentType,
+      contentType: optimized.contentType,
       source: 'import-url',
     });
+  }
+
+  private async prepareProductImageBuffer(buffer: Buffer, contentType: string) {
+    try {
+      const normalizedType = contentType.toLowerCase();
+      const pipeline = sharp(buffer, { failOn: 'none' })
+        .rotate()
+        .resize({
+          width: 1600,
+          height: 1600,
+          fit: 'inside',
+          withoutEnlargement: true,
+        });
+
+      if (normalizedType == 'image/png') {
+        return {
+          buffer: await pipeline.png({ compressionLevel: 8 }).toBuffer(),
+          contentType: 'image/png',
+        };
+      }
+
+      if (normalizedType == 'image/webp') {
+        return {
+          buffer: await pipeline.webp({ quality: 84, effort: 4 }).toBuffer(),
+          contentType: 'image/webp',
+        };
+      }
+
+      return {
+        buffer: await pipeline.jpeg({ quality: 86, mozjpeg: true }).toBuffer(),
+        contentType: 'image/jpeg',
+      };
+    } catch (error) {
+      console.warn('[products/image] optimization failed; storing original image', error);
+      return { buffer, contentType };
+    }
   }
 
   private async saveProductImage(
