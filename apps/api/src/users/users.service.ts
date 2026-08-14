@@ -29,6 +29,16 @@ export class UsersService {
     return trimmed.length > 0 ? trimmed : undefined;
   }
 
+  private normalizePassword(value: unknown) {
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    if (trimmed.length === 0) return undefined;
+    if (trimmed.length < 8) {
+      throw new BadRequestException('La contraseña debe tener al menos 8 caracteres');
+    }
+    return trimmed;
+  }
+
   private hasValue<T>(value: T | null | undefined): value is T {
     return value !== undefined && value !== null;
   }
@@ -660,7 +670,9 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
       if (cedulaTaken) throw new BadRequestException('La cédula ya está registrada');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const password = this.normalizePassword(dto.password);
+    if (!password) throw new BadRequestException('La contraseña es obligatoria');
+    const passwordHash = await bcrypt.hash(password, 10);
     const created = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
@@ -892,7 +904,8 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
       if (cedulaTaken) throw new BadRequestException('La cédula ya está registrada');
     }
 
-    const passwordHash = this.hasValue(dto.password) ? await bcrypt.hash(dto.password, 10) : undefined;
+    const nextPassword = this.normalizePassword(dto.password);
+    const passwordHash = nextPassword ? await bcrypt.hash(nextPassword, 10) : undefined;
 
     const data: Prisma.UserUpdateInput = {};
     if (nextEmail !== undefined) data.email = nextEmail;
@@ -1058,7 +1071,8 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
       if (emailTaken) throw new BadRequestException('Email already in use');
     }
 
-    const passwordHash = this.hasValue(dto.password) ? await bcrypt.hash(dto.password, 10) : undefined;
+    const nextPassword = this.normalizePassword(dto.password);
+    const passwordHash = nextPassword ? await bcrypt.hash(nextPassword, 10) : undefined;
 
     const data: Prisma.UserUpdateInput = {};
     if (nextEmail !== undefined) data.email = nextEmail;

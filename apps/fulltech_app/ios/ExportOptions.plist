@@ -10,8 +10,8 @@
   <string>manual</string>
   <key>provisioningProfiles</key>
   <dict>
-    <key>com.fulltech.app</key>
-    <string>fulltech_profile</string>
+    <key>com.fulltechrd.fullposcloud</key>
+    <string>fullposcloud_app_store</string>
   </dict>
   <key>stripSwiftSymbols</key>
   <true/>

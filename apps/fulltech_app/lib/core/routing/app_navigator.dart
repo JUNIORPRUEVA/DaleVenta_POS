@@ -74,6 +74,14 @@ class AppNavigator {
         : (_routerLocation(router) ?? currentLocation(context));
     final fallback = fallbackRoute ?? effectiveFallbackRouteFor(location);
 
+    if (router != null &&
+        fallback != null &&
+        _mustPreferExplicitFallback(location)) {
+      _consumeBackFallback(location, fallback);
+      router.go(fallback);
+      return;
+    }
+
     // First try to pop the real navigation stack so screens opened with
     // push() go back to the exact previous screen.
     if (router?.canPop() ?? false) {
@@ -107,6 +115,14 @@ class AppNavigator {
         : (_routerLocation(router) ?? currentLocation(context));
     final shellFallback = effectiveFallbackRouteFor(location);
 
+    if (router != null &&
+        shellFallback != null &&
+        _mustPreferExplicitFallback(location)) {
+      _consumeBackFallback(location, shellFallback);
+      router.go(shellFallback);
+      return false;
+    }
+
     // First try to pop the real navigation stack so screens opened with
     // push() go back to the exact previous screen.
     if (router?.canPop() ?? false) {
@@ -139,6 +155,14 @@ class AppNavigator {
 
   static String? effectiveFallbackRouteFor(String location) {
     final normalized = _normalizeLocation(location);
+    final explicitFallback = fallbackRouteFor(normalized);
+
+    // User detail/permissions are module sub-screens. Their back action should
+    // return to the users list instead of replaying an intermediate history
+    // entry such as a detail page.
+    if (_mustPreferExplicitFallback(normalized) && explicitFallback != null) {
+      return explicitFallback;
+    }
 
     // Prefer the real previous screen the user came from over a
     // hardcoded module fallback (e.g. drawer navigation).
@@ -150,7 +174,6 @@ class AppNavigator {
       return previous;
     }
 
-    final explicitFallback = fallbackRouteFor(normalized);
     if (explicitFallback != null) return explicitFallback;
     return null;
   }
@@ -273,6 +296,11 @@ class AppNavigator {
     final normalizedFallback = _normalizeLocation(fallback);
     return _isShellLocation(normalized) &&
         _previousShellLocation == normalizedFallback;
+  }
+
+  static bool _mustPreferExplicitFallback(String location) {
+    final path = (Uri.tryParse(location)?.path ?? location).trim();
+    return path == Routes.userPermissions || path.startsWith('/users/');
   }
 
   static String? _shellHomeFallbackFor(String location) {

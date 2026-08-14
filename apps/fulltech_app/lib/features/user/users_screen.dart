@@ -11,6 +11,7 @@ import '../../core/auth/app_permissions.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
+import '../../core/errors/api_exception.dart';
 import '../../core/models/user_model.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
@@ -813,6 +814,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
       final cedula = cedulaCtrl.text.trim();
       final email = emailCtrl.text.trim();
       final name = nameCtrl.text.trim();
+      final password = passwordCtrl.text.trim();
       final phone = phoneCtrl.text.trim().isNotEmpty
           ? phoneCtrl.text.trim()
           : cedula;
@@ -860,9 +862,18 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
         return;
       }
 
+      if (password.isNotEmpty && password.length < 8) {
+        showSnack(
+          const SnackBar(
+            content: Text('La contraseña debe tener al menos 8 caracteres'),
+          ),
+        );
+        return;
+      }
+
       final payload = <String, dynamic>{
         'email': email,
-        'password': passwordCtrl.text.isEmpty ? null : passwordCtrl.text,
+        'password': password.isEmpty ? null : password,
         'nombreCompleto': name,
         'telefono': phone,
         'numeroFlota': securityCode,
@@ -922,7 +933,8 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
         Navigator.of(modalContext).pop();
       } catch (e) {
         if (!modalContext.mounted) return;
-        showSnack(SnackBar(content: Text('Error: $e')));
+        final message = e is ApiException ? e.message : e.toString();
+        showSnack(SnackBar(content: Text('No se pudo guardar: $message')));
       }
     }
 
@@ -1982,6 +1994,7 @@ class _UserPermissionsScreenState extends ConsumerState<UserPermissionsScreen> {
       appBar: CustomAppBar(
         title: 'Editar permisos',
         showLogo: false,
+        fallbackRoute: Routes.users,
         trailing: currentUser == null
             ? null
             : Padding(

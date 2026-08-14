@@ -87,6 +87,24 @@ void main() {
     );
   });
 
+  test('user permissions back always returns to the users list', () {
+    AppNavigator.recordShellLocation(Routes.users);
+    AppNavigator.recordShellLocation('/users/user-1/permissions');
+
+    expect(
+      AppNavigator.effectiveFallbackRouteFor('/users/user-1/permissions'),
+      Routes.users,
+    );
+
+    AppNavigator.recordShellLocation('/users/user-1');
+    AppNavigator.recordShellLocation('/users/user-1/permissions');
+
+    expect(
+      AppNavigator.effectiveFallbackRouteFor('/users/user-1/permissions'),
+      Routes.users,
+    );
+  });
+
   testWidgets('returns to the source shell route after opening inventory', (
     tester,
   ) async {

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http_parser/http_parser.dart';
 
 import '../../../core/api/api_routes.dart';
+import '../../../core/api/api_error_mapper.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/models/user_model.dart';
 
@@ -46,36 +47,76 @@ class UsersRepository {
   }
 
   Future<UserModel> createUser(Map<String, dynamic> payload) async {
-    final res = await _dio.post(ApiRoutes.users, data: payload);
-    return UserModel.fromJson(res.data as Map<String, dynamic>);
+    try {
+      final res = await _dio.post(ApiRoutes.users, data: payload);
+      return UserModel.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (error) {
+      throw ApiErrorMapper.fromDio(
+        error,
+        fallbackMessage: 'No se pudo crear el usuario',
+        dio: _dio,
+      );
+    }
   }
 
   Future<UserModel> updateUser(String id, Map<String, dynamic> payload) async {
-    final res = await _dio.patch(ApiRoutes.updateUser(id), data: payload);
-    return UserModel.fromJson(res.data as Map<String, dynamic>);
+    try {
+      final res = await _dio.patch(ApiRoutes.updateUser(id), data: payload);
+      return UserModel.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (error) {
+      throw ApiErrorMapper.fromDio(
+        error,
+        fallbackMessage: 'No se pudo actualizar el usuario',
+        dio: _dio,
+      );
+    }
   }
 
   Future<UserModel> updateUserPermissions(
     String id,
     Map<String, bool> permissions,
   ) async {
-    final res = await _dio.patch(
-      ApiRoutes.updateUserPermissions(id),
-      data: {'userPermissions': permissions},
-    );
-    return UserModel.fromJson(res.data as Map<String, dynamic>);
+    try {
+      final res = await _dio.patch(
+        ApiRoutes.updateUserPermissions(id),
+        data: {'userPermissions': permissions},
+      );
+      return UserModel.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (error) {
+      throw ApiErrorMapper.fromDio(
+        error,
+        fallbackMessage: 'No se pudieron actualizar los permisos',
+        dio: _dio,
+      );
+    }
   }
 
   Future<void> deleteUser(String id) async {
-    await _dio.delete(ApiRoutes.deleteUser(id));
+    try {
+      await _dio.delete(ApiRoutes.deleteUser(id));
+    } on DioException catch (error) {
+      throw ApiErrorMapper.fromDio(
+        error,
+        fallbackMessage: 'No se pudo eliminar el usuario',
+        dio: _dio,
+      );
+    }
   }
 
   Future<UserModel> setBlocked(String id, bool blocked) async {
-    final res = await _dio.patch(
-      ApiRoutes.blockUser(id),
-      data: {'blocked': blocked},
-    );
-    return UserModel.fromJson(res.data as Map<String, dynamic>);
+    try {
+      final res = await _dio.patch(
+        ApiRoutes.blockUser(id),
+        data: {'blocked': blocked},
+      );
+      return UserModel.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (error) {
+      throw ApiErrorMapper.fromDio(
+        error,
+        fallbackMessage: 'No se pudo cambiar el estado del usuario',
+        dio: _dio,
+      );
+    }
   }
 
   Future<UserModel> fetchMe() async {

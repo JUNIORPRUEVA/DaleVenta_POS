@@ -8,7 +8,7 @@ workflows:
       xcode: latest
       vars:
         APP_DIR: apps/fulltech_app
-        BUNDLE_ID: com.fulltech.app
+        BUNDLE_ID: com.fulltechrd.fullposcloud
     scripts:
       - name: Flutter clean
         script: |
@@ -70,10 +70,10 @@ workflows:
       xcode: latest
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.fulltech.app
+        bundle_identifier: com.fulltechrd.fullposcloud
       vars:
         APP_DIR: apps/fulltech_app
-        BUNDLE_ID: com.fulltech.app
+        BUNDLE_ID: com.fulltechrd.fullposcloud
         APPLE_TEAM_ID: M4WNZDXN2U
     scripts:
       - name: Create CI env file
@@ -111,11 +111,6 @@ workflows:
         script: |
           cd "$APP_DIR"
           flutter test
-      - name: Configure keychain
-        script: |
-          keychain initialize
-          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
-          keychain add-certificates
       - name: Apply Xcode signing settings
         script: |
           cd "$APP_DIR"
@@ -134,6 +129,7 @@ workflows:
           cp build/ios/ipa/*.ipa "$CM_BUILD_DIR/build/ios/ipa/"
     artifacts:
       - build/ios/ipa/*.ipa
+      - apps/fulltech_app/build/ios/archive/Runner.xcarchive
     publishing:
       app_store_connect:
         auth: integration
