@@ -2931,7 +2931,7 @@ Future<String?> _showBulkCategoryPicker(
   String? selected = cleanCategories.isEmpty ? null : cleanCategories.first;
   final controller = TextEditingController(text: selected ?? '');
   try {
-    return showDialog<String>(
+    return await showDialog<String>(
       context: context,
       barrierColor: FullTechDialogTokens.overlayColor,
       builder: (dialogContext) => StatefulBuilder(

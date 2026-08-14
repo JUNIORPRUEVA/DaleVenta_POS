@@ -413,7 +413,7 @@ class MobilePrintService {
 
       if (!forceSystemPrint &&
           settings.connectionType == MobilePrinterConnectionType.bluetooth) {
-        return _printBluetooth(
+        return await _printBluetooth(
           lines: lines,
           settings: settings,
           logoBytes: logoBytes,
@@ -423,7 +423,7 @@ class MobilePrintService {
 
       if (!forceSystemPrint &&
           settings.connectionType == MobilePrinterConnectionType.network) {
-        return _printNetwork(
+        return await _printNetwork(
           lines: lines,
           settings: settings,
           logoBytes: logoBytes,
@@ -578,7 +578,7 @@ class MobilePrintService {
             ignoredAddresses: {effectiveSettings.bluetoothAddress},
           );
           if (auto.success) {
-            return _printBluetooth(
+            return await _printBluetooth(
               lines: lines,
               settings: await _settingsRepository.getOrCreate(),
               logoBytes: logoBytes,
@@ -605,7 +605,7 @@ class MobilePrintService {
             ignoredAddresses: {effectiveSettings.bluetoothAddress},
           );
           if (auto.success) {
-            return _printBluetooth(
+            return await _printBluetooth(
               lines: lines,
               settings: await _settingsRepository.getOrCreate(),
               logoBytes: logoBytes,

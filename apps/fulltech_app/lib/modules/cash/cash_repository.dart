@@ -210,7 +210,7 @@ class CashRepository {
       final summary = CashSummaryModel.fromJson(
         (res.data as Map).cast<String, dynamic>(),
       );
-      return _mergePendingMovementsIntoSummary(summary);
+      return await _mergePendingMovementsIntoSummary(summary);
     } on DioException catch (e) {
       if (_shouldQueueNetworkFailure(e)) {
         final cached = e.response?.data;

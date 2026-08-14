@@ -536,12 +536,12 @@ class AuthRepository {
           return null;
         }
 
-        return _storage.getUserSnapshot();
+        return await _storage.getUserSnapshot();
       } on TimeoutException {
-        return _storage.getUserSnapshot();
+        return await _storage.getUserSnapshot();
       }
     } catch (_) {
-      return _storage.getUserSnapshot();
+      return await _storage.getUserSnapshot();
     }
   }
 

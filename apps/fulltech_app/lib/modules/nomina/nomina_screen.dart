@@ -42,6 +42,31 @@ class _PayrollBulkSendProgress {
   double get value => total <= 0 ? 0 : processed / total;
 }
 
+class _TopSizeTransition extends StatelessWidget {
+  const _TopSizeTransition({required this.sizeFactor, required this.child});
+
+  final Animation<double> sizeFactor;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: sizeFactor,
+      child: child,
+      builder: (context, child) {
+        final factor = sizeFactor.value < 0 ? 0.0 : sizeFactor.value;
+        return ClipRect(
+          child: Align(
+            alignment: AlignmentDirectional.topStart,
+            heightFactor: factor,
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+}
+
 class NominaScreen extends ConsumerStatefulWidget {
   const NominaScreen({super.key});
 
@@ -3393,17 +3418,15 @@ class _EmployeeCardState extends ConsumerState<_EmployeeCard>
 
           // ── Info panel ─────────────────────────────────────────────────
           if (widget.showDetail)
-            SizeTransition(
+            _TopSizeTransition(
               sizeFactor: _infoAnim,
-              axisAlignment: -1,
               child: _EmployeeInfoPanel(employee: employee, money: money),
             ),
 
           // ── Movements panel ────────────────────────────────────────────
           if (widget.showDetail)
-            SizeTransition(
+            _TopSizeTransition(
               sizeFactor: _movAnim,
-              axisAlignment: -1,
               child: _EmployeeMovementsPanel(
                 loading: _movLoading,
                 error: _movError,
@@ -6753,9 +6776,8 @@ class _PayrollPeriodEmployeeCardState extends State<_PayrollPeriodEmployeeCard>
           ),
 
           // ── Expandable detail ─────────────────────────────────────────
-          SizeTransition(
+          _TopSizeTransition(
             sizeFactor: _anim,
-            axisAlignment: -1,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

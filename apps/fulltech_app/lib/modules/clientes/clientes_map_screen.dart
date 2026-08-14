@@ -1649,12 +1649,12 @@ class _CachedMapTileImageProvider
   Future<Codec> _loadAsync(ImageDecoderCallback decode) async {
     try {
       final bytes = await _readAndValidateBytes();
-      return decode(await ImmutableBuffer.fromUint8List(bytes));
+      return await decode(await ImmutableBuffer.fromUint8List(bytes));
     } catch (_) {
       await FulltechMapTileCacheManager.removeFile(url);
       try {
         final bytes = await _readAndValidateBytes();
-        return decode(await ImmutableBuffer.fromUint8List(bytes));
+        return await decode(await ImmutableBuffer.fromUint8List(bytes));
       } catch (_) {
         return decode(
           await ImmutableBuffer.fromUint8List(_transparentTileBytes),
