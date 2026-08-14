@@ -103,6 +103,178 @@ class _DrawerCloudFooter extends StatelessWidget {
   }
 }
 
+class _MobileDrawerAccountFooter extends StatelessWidget {
+  const _MobileDrawerAccountFooter({
+    required this.compact,
+    required this.location,
+    required this.canManageUsers,
+    required this.onProfileTap,
+    required this.onUsersTap,
+    required this.onSettingsTap,
+    required this.onLogoutTap,
+  });
+
+  final bool compact;
+  final String location;
+  final bool canManageUsers;
+  final VoidCallback onProfileTap;
+  final VoidCallback onUsersTap;
+  final VoidCallback onSettingsTap;
+  final VoidCallback onLogoutTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _MobileDrawerFooterButton(
+                compact: compact,
+                icon: Icons.badge_outlined,
+                label: 'Perfil',
+                selected: isNavigationRouteActive(location, Routes.profile),
+                onTap: onProfileTap,
+              ),
+            ),
+            SizedBox(width: compact ? 8 : 10),
+            _MobileDrawerFooterIconButton(
+              compact: compact,
+              icon: Icons.settings_outlined,
+              tooltip: 'Configuración',
+              selected: isNavigationRouteActive(location, Routes.configuracion),
+              onTap: onSettingsTap,
+            ),
+            SizedBox(width: compact ? 4 : 6),
+            _MobileDrawerFooterIconButton(
+              compact: compact,
+              icon: Icons.logout_rounded,
+              tooltip: 'Cerrar sesión',
+              destructive: true,
+              onTap: onLogoutTap,
+            ),
+          ],
+        ),
+        if (canManageUsers) ...[
+          SizedBox(height: compact ? 6 : 8),
+          _MobileDrawerFooterButton(
+            compact: compact,
+            icon: Icons.manage_accounts_outlined,
+            label: 'Usuario',
+            selected: isNavigationRouteActive(location, Routes.users),
+            onTap: onUsersTap,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _MobileDrawerFooterButton extends StatelessWidget {
+  const _MobileDrawerFooterButton({
+    required this.compact,
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final bool compact;
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = selected ? AppColors.primary : AppColors.textSecondary;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(13),
+        onTap: onTap,
+        child: Container(
+          height: compact ? 48 : 54,
+          padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12),
+          decoration: BoxDecoration(
+            color: selected
+                ? AppColors.primary.withValues(alpha: 0.08)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(13),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: foreground, size: compact ? 22 : 24),
+              SizedBox(width: compact ? 12 : 14),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.body.copyWith(
+                    color: foreground,
+                    fontSize: compact ? 19 : 21,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MobileDrawerFooterIconButton extends StatelessWidget {
+  const _MobileDrawerFooterIconButton({
+    required this.compact,
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.selected = false,
+    this.destructive = false,
+  });
+
+  final bool compact;
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final bool selected;
+  final bool destructive;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = destructive
+        ? const Color(0xFFB91C1C)
+        : selected
+        ? AppColors.primary
+        : AppColors.textSecondary;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(13),
+          onTap: onTap,
+          child: Container(
+            width: compact ? 42 : 48,
+            height: compact ? 48 : 54,
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppColors.primary.withValues(alpha: 0.08)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: Icon(icon, color: color, size: compact ? 23 : 25),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _DrawerAppLogo extends StatelessWidget {
   const _DrawerAppLogo({required this.width, required this.height});
 
@@ -250,6 +422,12 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
     Navigator.pop(context);
     if (!routerContext.mounted) return;
     AppNavigator.go(routerContext, item.route);
+  }
+
+  Future<void> _handleLogout(BuildContext context) async {
+    final auth = ref.read(authStateProvider.notifier);
+    Navigator.pop(context);
+    await auth.logout();
   }
 
   @override
@@ -427,7 +605,41 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                       isCompactMobile ? 10 : 12,
                       12,
                     ),
-                    child: _DrawerCloudFooter(compact: isCompactMobile),
+                    child: isDesktop
+                        ? _DrawerCloudFooter(compact: isCompactMobile)
+                        : _MobileDrawerAccountFooter(
+                            compact: isCompactMobile,
+                            location: location,
+                            canManageUsers: hasPermission(
+                              role,
+                              AppPermission.manageUsers,
+                            ),
+                            onProfileTap: () => _handleItemTap(
+                              context,
+                              const AppNavigationItem(
+                                icon: Icons.badge_outlined,
+                                title: 'Perfil',
+                                route: Routes.profile,
+                              ),
+                            ),
+                            onUsersTap: () => _handleItemTap(
+                              context,
+                              const AppNavigationItem(
+                                icon: Icons.manage_accounts_outlined,
+                                title: 'Usuario',
+                                route: Routes.users,
+                              ),
+                            ),
+                            onSettingsTap: () => _handleItemTap(
+                              context,
+                              const AppNavigationItem(
+                                icon: Icons.settings_outlined,
+                                title: 'Configuración',
+                                route: Routes.configuracion,
+                              ),
+                            ),
+                            onLogoutTap: () => _handleLogout(context),
+                          ),
                   ),
                 ],
               ),
