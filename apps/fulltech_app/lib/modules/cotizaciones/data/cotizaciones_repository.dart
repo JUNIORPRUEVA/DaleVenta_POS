@@ -324,7 +324,10 @@ class CotizacionesRepository {
       await _local.upsert(remote);
       return false;
     } on ApiException catch (e) {
-      if (!_shouldQueueSync(e)) rethrow;
+      if (!_shouldQueueSync(e)) {
+        await _local.deleteById(localId);
+        rethrow;
+      }
       await _syncQueue.enqueue(
         id: '$_createSyncType:$localId',
         type: _createSyncType,

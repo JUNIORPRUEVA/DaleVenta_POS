@@ -317,6 +317,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       final role = auth.user?.appRole ?? AppRole.unknown;
       final loc = state.uri.toString();
       final path = state.uri.path;
+      ref
+          .read(adminAuthorizationProvider.notifier)
+          .clearIfInvalidForLocation(loc);
       final isAuthRoute =
           path == Routes.login ||
           path == Routes.register ||
@@ -347,7 +350,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (required != null && !hasUserPermission(auth.user, required)) {
         final adminOverride = ref
             .read(adminAuthorizationProvider.notifier)
-            .isAuthorized;
+            .isAuthorizedForRoute(loc);
         if (adminOverride) return null;
         final fallback = RouteAccess.defaultHomeForRole(role);
         if (path != fallback) {

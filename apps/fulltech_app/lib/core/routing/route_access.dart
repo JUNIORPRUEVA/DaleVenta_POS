@@ -75,13 +75,14 @@ class RouteAccess {
       case Routes.apps:
       case Routes.licencias:
       case Routes.actualizaciones:
+        return AppPermission.manageSettings;
       case Routes.configuracion:
       case Routes.configuracionEmpresa:
       case Routes.configuracionImpresora:
       case Routes.configuracionBackup:
       case Routes.configuracionParametros:
       case Routes.configuracionDocumentos:
-        return null;
+        return AppPermission.manageSettings;
       case Routes.whatsapp:
         return null;
       case Routes.publicidad:

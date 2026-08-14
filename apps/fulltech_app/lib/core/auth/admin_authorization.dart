@@ -14,19 +14,29 @@ Future<bool> ensureAdminAuthorization(
   WidgetRef ref, {
   AppPermission? permission,
   String reason = 'Autorizar acción administrativa',
+  String? routeLocation,
+  bool forceAdminAuthorization = false,
 }) async {
   final user = ref.read(authStateProvider).user;
   if (user == null) return false;
   if (user.appRole == AppRole.admin) return true;
-  if (permission != null && hasUserPermission(user, permission)) return true;
+  if (!forceAdminAuthorization) {
+    if (permission == null) return true;
+    if (hasUserPermission(user, permission)) return true;
+  }
 
   final controller = ref.read(adminAuthorizationProvider.notifier);
-  if (controller.isAuthorized) return true;
+  if (!forceAdminAuthorization &&
+      routeLocation != null &&
+      controller.isAuthorizedForRoute(routeLocation)) {
+    return true;
+  }
 
   final granted = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
-    builder: (dialogContext) => _AdminAuthorizationDialog(reason: reason),
+    builder: (dialogContext) =>
+        _AdminAuthorizationDialog(reason: reason, routeLocation: routeLocation),
   );
   return granted == true;
 }
@@ -39,13 +49,14 @@ bool hasPermissionOrAdminAuthorization(
   if (user == null) return false;
   if (user.appRole == AppRole.admin) return true;
   if (hasUserPermission(user, permission)) return true;
-  return ref.read(adminAuthorizationProvider.notifier).isAuthorized;
+  return false;
 }
 
 class _AdminAuthorizationDialog extends ConsumerStatefulWidget {
-  const _AdminAuthorizationDialog({required this.reason});
+  const _AdminAuthorizationDialog({required this.reason, this.routeLocation});
 
   final String reason;
+  final String? routeLocation;
 
   @override
   ConsumerState<_AdminAuthorizationDialog> createState() =>
@@ -78,9 +89,17 @@ class _AdminAuthorizationDialogState
       final duration = await ref
           .read(companySettingsRepositoryProvider)
           .verifyAdminAuthorizationPin(value);
-      ref
-          .read(adminAuthorizationProvider.notifier)
-          .authorizeFor(duration.duration, duration.token);
+      final controller = ref.read(adminAuthorizationProvider.notifier);
+      final routeLocation = widget.routeLocation;
+      if (routeLocation == null || routeLocation.trim().isEmpty) {
+        controller.authorizeAction(duration.duration, duration.token);
+      } else {
+        controller.authorizeRoute(
+          duration.duration,
+          duration.token,
+          routeLocation,
+        );
+      }
       if (mounted) Navigator.of(context).pop(true);
     } catch (error) {
       if (!mounted) return;

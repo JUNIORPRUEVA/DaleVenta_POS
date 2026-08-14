@@ -6,10 +6,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/app_drawer.dart';
+import '../../core/utils/media_url.dart';
 import '../../core/utils/string_utils.dart';
 import '../../core/models/user_model.dart';
 import '../user/data/users_repository.dart';
 import '../../core/widgets/user_avatar.dart';
+
+enum _ProfilePhotoAction { upload, delete }
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -27,7 +30,7 @@ class ProfileScreen extends ConsumerWidget {
           : _ProfileContent(
               user: user,
               onEdit: () => _showEditDialog(context, ref, user),
-              onPhotoTap: () => _pickAndUploadProfilePhoto(context, ref),
+              onPhotoTap: () => _showProfilePhotoActions(context, ref),
               onPassword: () => _showPasswordDialog(context, ref),
             ),
     );
@@ -147,6 +150,98 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
+  Future<void> _showProfilePhotoActions(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final currentPhoto =
+        (ref.read(authStateProvider).user?.fotoPersonalUrl ?? '').trim();
+    final hasPhoto = currentPhoto.isNotEmpty;
+    final action = await showDialog<_ProfilePhotoAction>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Foto de perfil'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () =>
+                Navigator.pop(context, _ProfilePhotoAction.upload),
+            child: Row(
+              children: [
+                const Icon(Icons.upload_rounded),
+                const SizedBox(width: 12),
+                Text(hasPhoto ? 'Cambiar foto' : 'Subir foto'),
+              ],
+            ),
+          ),
+          if (hasPhoto)
+            SimpleDialogOption(
+              onPressed: () =>
+                  Navigator.pop(context, _ProfilePhotoAction.delete),
+              child: const Row(
+                children: [
+                  Icon(Icons.delete_outline_rounded),
+                  SizedBox(width: 12),
+                  Text('Eliminar foto'),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+
+    if (!context.mounted || action == null) return;
+    switch (action) {
+      case _ProfilePhotoAction.upload:
+        await _pickAndUploadProfilePhoto(context, ref);
+        break;
+      case _ProfilePhotoAction.delete:
+        await _deleteProfilePhoto(context, ref);
+        break;
+    }
+  }
+
+  Future<void> _deleteProfilePhoto(BuildContext context, WidgetRef ref) async {
+    final previousPhotoUrl =
+        (ref.read(authStateProvider).user?.fotoPersonalUrl ?? '').trim();
+    if (previousPhotoUrl.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar foto'),
+        content: const Text('Se quitará la foto actual de tu perfil.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (!context.mounted || confirmed != true) return;
+
+    try {
+      final repo = ref.read(usersRepositoryProvider);
+      final updated = await repo.updateMe(fotoPersonalUrl: '');
+      await _evictProfilePhotoCaches(previousPhotoUrl);
+      ref.read(authStateProvider.notifier).setUser(updated);
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Foto de perfil eliminada')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo eliminar la foto: $e')),
+      );
+    }
+  }
+
   Future<void> _pickAndUploadProfilePhoto(
     BuildContext context,
     WidgetRef ref,
@@ -182,13 +277,10 @@ class ProfileScreen extends ConsumerWidget {
       final updated = await repo.updateMe(fotoPersonalUrl: uploadedUrl);
 
       // Avoid stale avatar after replacing an image with the same URL.
-      if (previousPhotoUrl.isNotEmpty) {
-        await CachedNetworkImage.evictFromCache(previousPhotoUrl);
-      }
+      await _evictProfilePhotoCaches(previousPhotoUrl);
+      await _evictProfilePhotoCaches(uploadedUrl);
       final freshPhotoUrl = (updated.fotoPersonalUrl ?? '').trim();
-      if (freshPhotoUrl.isNotEmpty && freshPhotoUrl != previousPhotoUrl) {
-        await CachedNetworkImage.evictFromCache(freshPhotoUrl);
-      }
+      await _evictProfilePhotoCaches(freshPhotoUrl);
 
       ref.read(authStateProvider.notifier).setUser(updated);
 
@@ -201,6 +293,16 @@ class ProfileScreen extends ConsumerWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudo actualizar la foto: $e')),
       );
+    }
+  }
+
+  Future<void> _evictProfilePhotoCaches(String? rawUrl) async {
+    final value = (rawUrl ?? '').trim();
+    if (value.isEmpty) return;
+    await CachedNetworkImage.evictFromCache(value);
+    final resolved = resolvePublicMediaUrl(value);
+    if (resolved.isNotEmpty && resolved != value) {
+      await CachedNetworkImage.evictFromCache(resolved);
     }
   }
 

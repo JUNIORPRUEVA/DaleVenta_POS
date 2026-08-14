@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/auth/auth_provider.dart';
+import '../../core/auth/app_role.dart';
 import '../../core/debug/app_error_reporter.dart';
+import '../../core/utils/media_url.dart';
 import '../../core/utils/money_formatters.dart';
 import 'cash_close_ticket_printer.dart';
 import 'cash_dialogs.dart';
@@ -160,6 +163,7 @@ class CashTurnMenuButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(activeCashSessionControllerProvider);
     final active = session.valueOrNull;
+    final user = ref.watch(authStateProvider).user;
 
     return PopupMenuButton<String>(
       tooltip: 'Turno actual',
@@ -167,12 +171,22 @@ class CashTurnMenuButton extends ConsumerWidget {
       color: Colors.white,
       elevation: 8,
       shadowColor: Colors.black.withValues(alpha: 0.10),
-      constraints: const BoxConstraints(minWidth: 258),
+      constraints: const BoxConstraints(minWidth: 292),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: const BorderSide(color: Color(0xFFDDE7EE)),
       ),
       itemBuilder: (menuContext) => [
+        PopupMenuItem(
+          enabled: false,
+          padding: EdgeInsets.zero,
+          child: _TurnMenuUserHeader(
+            name: (user?.nombreCompleto ?? '').trim(),
+            email: (user?.email ?? '').trim(),
+            roleLabel: user?.appRole.label ?? 'Usuario',
+            photoUrl: resolvePublicMediaUrl(user?.fotoPersonalUrl),
+          ),
+        ),
         if (active == null)
           PopupMenuItem(
             enabled: false,
@@ -361,6 +375,93 @@ class _TurnTopbarButtonState extends State<_TurnTopbarButton> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _TurnMenuUserHeader extends StatelessWidget {
+  const _TurnMenuUserHeader({
+    required this.name,
+    required this.email,
+    required this.roleLabel,
+    required this.photoUrl,
+  });
+
+  final String name;
+  final String email;
+  final String roleLabel;
+  final String photoUrl;
+
+  String get _safeName => name.isEmpty ? 'Usuario' : name;
+
+  @override
+  Widget build(BuildContext context) {
+    final subtitle = [
+      if (roleLabel.trim().isNotEmpty) roleLabel.trim(),
+      if (email.isNotEmpty) email,
+    ].join(' · ');
+    final hasPhoto = photoUrl.trim().isNotEmpty;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFCFF),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE4ECF3)),
+      ),
+      child: Row(
+        children: [
+          if (hasPhoto) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: 30,
+                height: 30,
+                child: Image.network(
+                  photoUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+            ),
+            const SizedBox(width: 9),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _safeName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF102235),
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12.5,
+                    letterSpacing: 0,
+                  ),
+                ),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 1),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF607187),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 10.5,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

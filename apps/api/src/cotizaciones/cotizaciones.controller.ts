@@ -13,7 +13,7 @@ import {
 import { AuthGuard } from "@nestjs/passport";
 import { Role } from "@prisma/client";
 import { Request } from "express";
-import { Roles } from "../auth/roles.decorator";
+import { Permissions, Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import { CotizacionesService } from "./cotizaciones.service";
 import { AnalyzeCotizacionAiDto } from "./dto/analyze-cotizacion-ai.dto";
@@ -30,8 +30,10 @@ export class CotizacionesController {
   constructor(private readonly cotizaciones: CotizacionesService) {}
 
   @Get()
+  @Permissions("viewQuotes")
   @Roles(
     Role.ADMIN,
+    Role.CAJERO,
     Role.ASISTENTE,
     Role.VENDEDOR,
     Role.TECNICO,
@@ -43,8 +45,10 @@ export class CotizacionesController {
   }
 
   @Get(":id")
+  @Permissions("viewQuotes")
   @Roles(
     Role.ADMIN,
+    Role.CAJERO,
     Role.ASISTENTE,
     Role.VENDEDOR,
     Role.TECNICO,
@@ -56,8 +60,10 @@ export class CotizacionesController {
   }
 
   @Post("ai/analyze")
+  @Permissions("viewQuotes")
   @Roles(
     Role.ADMIN,
+    Role.CAJERO,
     Role.ASISTENTE,
     Role.VENDEDOR,
     Role.TECNICO,
@@ -69,8 +75,10 @@ export class CotizacionesController {
   }
 
   @Post("ai/chat")
+  @Permissions("viewQuotes")
   @Roles(
     Role.ADMIN,
+    Role.CAJERO,
     Role.ASISTENTE,
     Role.VENDEDOR,
     Role.TECNICO,
@@ -82,8 +90,10 @@ export class CotizacionesController {
   }
 
   @Post()
+  @Permissions("viewQuotes")
   @Roles(
     Role.ADMIN,
+    Role.CAJERO,
     Role.ASISTENTE,
     Role.VENDEDOR,
     Role.TECNICO,
@@ -95,8 +105,10 @@ export class CotizacionesController {
   }
 
   @Patch(":id")
+  @Permissions("viewQuotes")
   @Roles(
     Role.ADMIN,
+    Role.CAJERO,
     Role.ASISTENTE,
     Role.VENDEDOR,
     Role.TECNICO,
@@ -112,8 +124,10 @@ export class CotizacionesController {
   }
 
   @Post("send-whatsapp")
+  @Permissions("viewQuotes")
   @Roles(
     Role.ADMIN,
+    Role.CAJERO,
     Role.ASISTENTE,
     Role.VENDEDOR,
     Role.TECNICO,
@@ -125,8 +139,10 @@ export class CotizacionesController {
   }
 
   @Post("pdf-share-link")
+  @Permissions("viewQuotes")
   @Roles(
     Role.ADMIN,
+    Role.CAJERO,
     Role.ASISTENTE,
     Role.VENDEDOR,
     Role.TECNICO,
@@ -154,8 +170,10 @@ export class CotizacionesController {
   }
 
   @Delete(":id")
+  @Permissions("viewQuotes")
   @Roles(
     Role.ADMIN,
+    Role.CAJERO,
     Role.ASISTENTE,
     Role.VENDEDOR,
     Role.TECNICO,

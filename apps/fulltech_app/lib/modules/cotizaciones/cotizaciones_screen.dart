@@ -11,6 +11,8 @@ import 'package:printing/printing.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 import '../../core/app_access/app_access_links.dart';
+import '../../core/auth/admin_authorization.dart';
+import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/cache/fulltech_cache_manager.dart';
@@ -26,6 +28,7 @@ import '../../core/models/product_model.dart';
 import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/realtime/catalog_realtime_service.dart';
 import '../../core/routing/app_route_observer.dart';
+import '../../core/routing/route_access.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
@@ -217,9 +220,13 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   @override
   void initState() {
     super.initState();
+    final user = ref.read(authStateProvider).user;
     final initialDraft = _DesktopTicketDraft.empty(
       id: _newId(),
       title: 'Ticket 1',
+      companyId: user?.companyId,
+      createdByUserId: user?.id,
+      createdByUserName: user?.nombreCompleto,
     );
     _desktopTickets = [initialDraft];
     _activeDesktopTicketId = initialDraft.id;
@@ -493,8 +500,33 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   String _editorDraftCacheKey() {
-    final ownerId = (ref.read(authStateProvider).user?.id ?? 'anon').trim();
-    return '$_editorDraftCachePrefix$ownerId';
+    final user = ref.read(authStateProvider).user;
+    final companyId = (user?.companyId ?? '').trim();
+    if (companyId.isNotEmpty) {
+      return '${_editorDraftCachePrefix}company:$companyId';
+    }
+    final ownerId = (user?.id ?? 'anon').trim();
+    return '${_editorDraftCachePrefix}user:$ownerId';
+  }
+
+  String _activeCompanyId() =>
+      (ref.read(authStateProvider).user?.companyId ?? '').trim();
+
+  bool _belongsToActiveCompany(_DesktopTicketDraft ticket) {
+    final companyId = _activeCompanyId();
+    final ticketCompanyId = (ticket.companyId ?? '').trim();
+    return companyId.isEmpty ||
+        ticketCompanyId.isEmpty ||
+        ticketCompanyId == companyId;
+  }
+
+  int _compareDesktopTickets(
+    _DesktopTicketDraft left,
+    _DesktopTicketDraft right,
+  ) {
+    final byDate = right.createdAt.compareTo(left.createdAt);
+    if (byDate != 0) return byDate;
+    return right.id.compareTo(left.id);
   }
 
   void _schedulePersistEditorDraft({bool immediate = false}) {
@@ -517,9 +549,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     if (!mounted) return;
     try {
       final map = <String, dynamic>{
-        'v': 1,
+        'v': 2,
+        'companyId': _activeCompanyId(),
         'activeId': _activeDesktopTicketId,
-        'tickets': _desktopTickets.map((t) => t.toMap()).toList(),
+        'tickets': ([..._desktopTickets]..sort(_compareDesktopTickets))
+            .map((t) => t.toMap())
+            .toList(),
       };
       await _editorDraftCache.writeMap(_editorDraftCacheKey(), map);
     } catch (_) {
@@ -541,7 +576,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           .map(
             (row) => _DesktopTicketDraft.fromMap(row.cast<String, dynamic>()),
           )
-          .toList();
+          .where(_belongsToActiveCompany)
+          .toList()
+        ..sort(_compareDesktopTickets);
 
       if (tickets.isEmpty) return;
 
@@ -797,10 +834,16 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   _DesktopTicketDraft _snapshotCurrentDesktopDraft({
     required String id,
     required String title,
+    _DesktopTicketDraft? base,
   }) {
+    final user = ref.read(authStateProvider).user;
     return _DesktopTicketDraft(
       id: id,
       title: title,
+      createdAt: base?.createdAt ?? DateTime.now(),
+      companyId: base?.companyId ?? user?.companyId,
+      createdByUserId: base?.createdByUserId ?? user?.id,
+      createdByUserName: base?.createdByUserName ?? user?.nombreCompleto,
       items: _items.map((item) => item.copyWith()).toList(),
       selectedClientId: _selectedClientId,
       selectedClientName: _selectedClientName,
@@ -837,6 +880,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _desktopTickets[index] = _snapshotCurrentDesktopDraft(
       id: current.id,
       title: current.title,
+      base: current,
     );
   }
 
@@ -963,12 +1007,43 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     }
   }
 
-  void _toggleMobileItbis() {
+  Future<bool> _ensurePosActionPermission(
+    AppPermission permission,
+    String reason,
+  ) {
+    return ensureAdminAuthorization(
+      context,
+      ref,
+      permission: permission,
+      reason: reason,
+    );
+  }
+
+  Future<bool> _ensureFiscalInvoicePermission() {
+    return _ensurePosActionPermission(
+      AppPermission.createFiscalInvoices,
+      'Activar factura fiscal e ITBIS',
+    );
+  }
+
+  Future<void> _toggleMobileItbis() async {
     if (_includeItbis) {
       _commitEditorChange(() => _setItbisEnabled(false));
       return;
     }
-    unawaited(_openMobileFiscalInvoicePanel());
+    final allowed = await _ensureFiscalInvoicePermission();
+    if (!allowed || !mounted) return;
+    await _openMobileFiscalInvoicePanel(authorized: true);
+  }
+
+  Future<void> _setItbisFromDesktop(bool value) async {
+    if (!value) {
+      _commitEditorChange(() => _setItbisEnabled(false));
+      return;
+    }
+    final allowed = await _ensureFiscalInvoicePermission();
+    if (!allowed || !mounted) return;
+    _commitEditorChange(() => _setItbisEnabled(true));
   }
 
   String _fiscalVoucherTypeLabel(String type) {
@@ -1092,11 +1167,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   void _createNewDesktopTicket() {
     setState(() {
       _writeActiveDesktopDraft();
+      final user = ref.read(authStateProvider).user;
       final ticket = _DesktopTicketDraft.empty(
         id: _newId(),
         title: _nextDesktopTicketTitle(),
+        companyId: user?.companyId,
+        createdByUserId: user?.id,
+        createdByUserName: user?.nombreCompleto,
       );
-      _desktopTickets = [..._desktopTickets, ticket];
+      _desktopTickets = [ticket, ..._desktopTickets];
       _activeDesktopTicketId = ticket.id;
       _showMobileTicketDropdown = false;
       _replaceEditorStateFromDraft(ticket);
@@ -1565,7 +1644,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
   }
 
-  Future<void> _openMobileFiscalInvoicePanel() async {
+  Future<void> _openMobileFiscalInvoicePanel({bool authorized = false}) async {
+    if (!_includeItbis && !authorized) {
+      final allowed = await _ensureFiscalInvoicePermission();
+      if (!allowed || !mounted) return;
+    }
     _commitEditorChange(() => _setItbisEnabled(true));
     await showGeneralDialog<void>(
       context: context,
@@ -1701,14 +1784,84 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         await _saveCurrentAsQuotation();
         return;
       case _MobileQuickAction.quoteHistory:
-        if (!mounted) return;
-        context.go(Routes.cotizacionesHistorial);
+        await _openQuotationHistory();
         return;
       case _MobileQuickAction.clear:
         if (!_hasEditorContent) return;
         await _confirmAndClearSale();
         return;
     }
+  }
+
+  bool _isPermissionDenied(Object error) {
+    return error is ApiException &&
+        (error.code == 403 || error.type == ApiErrorType.forbidden);
+  }
+
+  Future<bool> _ensureQuotePermission(String reason, {String? route}) {
+    return ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.viewQuotes,
+      reason: reason,
+      routeLocation: route,
+    );
+  }
+
+  Future<bool> _requestQuoteAdminOverride(String reason) async {
+    final shouldAuthorize = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('No tienes permiso'),
+        content: const Text(
+          'No tienes permiso para esta acción. Puedes pedir autorización administrativa para continuar.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            icon: const Icon(Icons.admin_panel_settings_outlined),
+            label: const Text('Autorizar'),
+          ),
+        ],
+      ),
+    );
+    if (shouldAuthorize != true || !mounted) return false;
+    return ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.viewQuotes,
+      reason: reason,
+      forceAdminAuthorization: true,
+    );
+  }
+
+  Future<T> _runQuoteApiAction<T>(
+    String reason,
+    Future<T> Function() action,
+  ) async {
+    try {
+      return await action();
+    } catch (error) {
+      if (!_isPermissionDenied(error) || !mounted) rethrow;
+      final authorized = await _requestQuoteAdminOverride(reason);
+      if (!authorized || !mounted) {
+        throw ApiException('No tienes permiso para esta acción.', 403);
+      }
+      return action();
+    }
+  }
+
+  Future<void> _openQuotationHistory() async {
+    final allowed = await _ensureQuotePermission(
+      'Entrar a lista de cotizaciones',
+      route: Routes.cotizacionesHistorial,
+    );
+    if (!allowed || !mounted) return;
+    context.go(Routes.cotizacionesHistorial);
   }
 
   Future<void> _saveCurrentAsQuotation() async {
@@ -1721,6 +1874,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       );
       return;
     }
+    final allowed = await _ensureQuotePermission('Guardar cotización');
+    if (!allowed || !mounted) return;
 
     final repository = ref.read(cotizacionesRepositoryProvider);
     final baseDraft = _buildDraftCotizacion();
@@ -1735,8 +1890,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     try {
       if (widget.returnSavedQuotation) {
         final savedQuotation = editingId.isNotEmpty && _isUuid(editingId)
-            ? await repository.update(editingId, draft)
-            : await repository.create(draft.copyWith(id: ''));
+            ? await _runQuoteApiAction(
+                'Guardar cotización',
+                () => repository.update(editingId, draft),
+              )
+            : await _runQuoteApiAction(
+                'Guardar cotización',
+                () => repository.create(draft.copyWith(id: '')),
+              );
 
         if (!mounted) return;
         Navigator.of(context).pop(savedQuotation);
@@ -1744,8 +1905,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       }
 
       final wasQueued = editingId.isNotEmpty && _isUuid(editingId)
-          ? await repository.updateOrQueue(editingId, draft)
-          : await repository.createOrQueue(draft.copyWith(id: ''));
+          ? await _runQuoteApiAction(
+              'Guardar cotización',
+              () => repository.updateOrQueue(editingId, draft),
+            )
+          : await _runQuoteApiAction(
+              'Guardar cotización',
+              () => repository.createOrQueue(draft.copyWith(id: '')),
+            );
 
       if (!mounted) return;
       _commitEditorChange(_resetEditorState);
@@ -3851,15 +4018,18 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     final fileName =
         'cotizacion_${dateFmt.format(cotizacion.createdAt)}_${cotizacion.id.substring(0, 6)}.pdf';
 
-    await ref
-        .read(cotizacionesRepositoryProvider)
-        .sendWhatsAppQuotation(
-          quotationId: cotizacion.id,
-          destinationType: 'admin',
-          pdfBytes: bytes,
-          fileName: fileName,
-          messageText: _buildAdminApprovalMessage(cotizacion),
-        );
+    await _runQuoteApiAction(
+      'Enviar PDF de cotización',
+      () => ref
+          .read(cotizacionesRepositoryProvider)
+          .sendWhatsAppQuotation(
+            quotationId: cotizacion.id,
+            destinationType: 'admin',
+            pdfBytes: bytes,
+            fileName: fileName,
+            messageText: _buildAdminApprovalMessage(cotizacion),
+          ),
+    );
   }
 
   Future<void> enviarPdfCotizacionACliente({
@@ -3874,13 +4044,16 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       );
     }
 
-    final pdfUrl = await ref
-        .read(cotizacionesRepositoryProvider)
-        .createPdfShareLink(
-          quotationId: cotizacion.id,
-          pdfBytes: pdfBytes,
-          fileName: buildCotizacionPdfFileName(cotizacion),
-        );
+    final pdfUrl = await _runQuoteApiAction(
+      'Crear enlace PDF de cotización',
+      () => ref
+          .read(cotizacionesRepositoryProvider)
+          .createPdfShareLink(
+            quotationId: cotizacion.id,
+            pdfBytes: pdfBytes,
+            fileName: buildCotizacionPdfFileName(cotizacion),
+          ),
+    );
 
     final uri = Uri.https('wa.me', '/$phone', {
       'text': _buildClientWhatsAppLinkMessage(cotizacion, pdfUrl),
@@ -4018,8 +4191,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
     final repository = ref.read(cotizacionesRepositoryProvider);
     final saved = _isUuid(_editingId)
-        ? await repository.update(_editingId!, draft)
-        : await repository.create(draft);
+        ? await _runQuoteApiAction(
+            'Preparar PDF de cotización',
+            () => repository.update(_editingId!, draft),
+          )
+        : await _runQuoteApiAction(
+            'Preparar PDF de cotización',
+            () => repository.create(draft),
+          );
 
     if (mounted) {
       _commitEditorChange(() {
@@ -4045,6 +4224,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       );
       return;
     }
+    final allowed = await _ensureQuotePermission('Ver PDF de cotización');
+    if (!allowed || !mounted) return;
 
     final cotizacion = _buildDraftCotizacion();
     final company = await _getCompanySettingsForPdf();
@@ -4349,11 +4530,28 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                       ),
                     Expanded(
                       child: ColoredBox(
-                        color: Colors.white,
-                        child: SfPdfViewer.memory(
-                          bytes,
-                          canShowScrollHead: true,
-                          canShowPaginationDialog: true,
+                        color: const Color(0xFFE8EEF5),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 960),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.10),
+                                    blurRadius: 18,
+                                    offset: const Offset(0, 8),
+                                  ),
+                                ],
+                              ),
+                              child: SfPdfViewer.memory(
+                                bytes,
+                                canShowScrollHead: true,
+                                canShowPaginationDialog: true,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -4378,6 +4576,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Future<void> _openInventoryCatalog() async {
+    final allowed = await _ensurePosActionPermission(
+      AppPermission.editProducts,
+      'Crear nuevo producto',
+    );
+    if (!allowed || !mounted) return;
     final result = await showInventoryProductEditor(
       context,
       categories: _inventoryCategories(),
@@ -4394,6 +4597,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Future<void> _openStockAdjustments() async {
+    final allowed = await _ensurePosActionPermission(
+      AppPermission.addStock,
+      'Agregar o ajustar stock',
+    );
+    if (!allowed || !mounted) return;
     if (_productos.isEmpty) {
       _showSalesNotice(
         title: 'Sin productos',
@@ -5943,9 +6151,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                               _selectedClientPhone = null;
                             }),
                             onOpenHistory: _openRecentSalesPanel,
-                            onToggleItbis: (value) => _commitEditorChange(
-                              () => _setItbisEnabled(value),
-                            ),
+                            onToggleItbis: (value) =>
+                                unawaited(_setItbisFromDesktop(value)),
                             hasNote: _note.trim().isNotEmpty,
                             onOpenNote: _openNoteDialog,
                             onClear: !_hasEditorContent
@@ -6838,6 +7045,50 @@ class _CompanyAccountMenu extends ConsumerWidget {
     _runAfterMenuCloses(action);
   }
 
+  void _activateProtectedRoute(
+    BuildContext context,
+    WidgetRef ref,
+    BuildContext menuContext, {
+    required String route,
+    required String label,
+  }) {
+    Navigator.of(menuContext).pop();
+    _runAfterMenuCloses(() async {
+      if (!context.mounted) return;
+      final allowed = await ensureAdminAuthorization(
+        context,
+        ref,
+        permission: RouteAccess.permissionForLocation(route),
+        reason: 'Entrar a $label',
+        routeLocation: route,
+      );
+      if (!allowed || !context.mounted) return;
+      context.go(route);
+    });
+  }
+
+  void _activateProtectedPanel(
+    BuildContext context,
+    WidgetRef ref,
+    BuildContext menuContext, {
+    required AppPermission permission,
+    required String label,
+    required Widget child,
+  }) {
+    Navigator.of(menuContext).pop();
+    _runAfterMenuCloses(() async {
+      if (!context.mounted) return;
+      final allowed = await ensureAdminAuthorization(
+        context,
+        ref,
+        permission: permission,
+        reason: 'Abrir $label',
+      );
+      if (!allowed || !context.mounted) return;
+      _openSidePanel(context, child);
+    });
+  }
+
   void _openSidePanel(BuildContext context, Widget child) {
     _runAfterMenuCloses(() {
       if (!context.mounted) return;
@@ -6920,9 +7171,12 @@ class _CompanyAccountMenu extends ConsumerWidget {
             child: _CompanyMenuItem(
               icon: Icons.groups_2_outlined,
               label: 'Usuarios',
-              onTap: () => _activateMenuItem(
+              onTap: () => _activateProtectedRoute(
+                context,
+                ref,
                 menuContext,
-                () => context.go(Routes.users),
+                route: Routes.users,
+                label: 'Usuarios',
               ),
               helpText:
                   'Administra los usuarios de la empresa, sus roles y permisos para controlar quién puede vender, configurar o consultar información.',
@@ -6935,10 +7189,14 @@ class _CompanyAccountMenu extends ConsumerWidget {
             child: _CompanyMenuItem(
               icon: Icons.apps_rounded,
               label: 'Apps',
-              onTap: () {
-                Navigator.of(menuContext).pop();
-                _openSidePanel(context, const _CompanyAppsSidePanel());
-              },
+              onTap: () => _activateProtectedPanel(
+                context,
+                ref,
+                menuContext,
+                permission: AppPermission.manageSettings,
+                label: 'Apps',
+                child: const _CompanyAppsSidePanel(),
+              ),
               helpText:
                   'Centraliza los accesos para usar la cuenta desde Android, web y escritorio, manteniendo la misma empresa y permisos del usuario.',
             ),
@@ -6949,10 +7207,14 @@ class _CompanyAccountMenu extends ConsumerWidget {
             child: _CompanyMenuItem(
               icon: Icons.verified_user_outlined,
               label: 'Licencias',
-              onTap: () {
-                Navigator.of(menuContext).pop();
-                _openSidePanel(context, const _CompanyLicensesSidePanel());
-              },
+              onTap: () => _activateProtectedPanel(
+                context,
+                ref,
+                menuContext,
+                permission: AppPermission.manageSettings,
+                label: 'Licencias',
+                child: const _CompanyLicensesSidePanel(),
+              ),
               helpText:
                   'Resume el estado de la empresa activa, el plan disponible y la preparación del sistema para trabajo multiempresa.',
             ),
@@ -6963,9 +7225,12 @@ class _CompanyAccountMenu extends ConsumerWidget {
             child: _CompanyMenuItem(
               icon: Icons.settings_outlined,
               label: 'Configuración',
-              onTap: () => _activateMenuItem(
+              onTap: () => _activateProtectedRoute(
+                context,
+                ref,
                 menuContext,
-                () => context.go(Routes.configuracion),
+                route: Routes.configuracion,
+                label: 'Configuración',
               ),
               helpText:
                   'Abre el centro de control de la empresa con datos comerciales, documentos, impresión, backend y parámetros operativos.',
@@ -9994,6 +10259,7 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
   final FocusNode _qtyFocus = FocusNode();
   final FocusNode _costFocus = FocusNode();
   final FocusNode _priceFocus = FocusNode();
+  String? _manualError;
 
   @override
   void initState() {
@@ -10055,14 +10321,33 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFF0F766E), width: 1.4),
+        borderSide: const BorderSide(color: Color(0xFF1957E6), width: 1.4),
       ),
     );
   }
 
   void _submit() {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty) {
+      setState(() => _manualError = 'Completa el nombre del producto.');
+      _nameFocus.requestFocus();
+      return;
+    }
+    if (_qty <= 0) {
+      setState(() => _manualError = 'La cantidad debe ser mayor que cero.');
+      _qtyFocus.requestFocus();
+      return;
+    }
+    if (_price <= 0) {
+      setState(
+        () => _manualError = 'El precio unitario debe ser mayor que cero.',
+      );
+      _priceFocus.requestFocus();
+      return;
+    }
+    setState(() => _manualError = null);
     widget.onSubmit(
-      name: _nameCtrl.text.trim(),
+      name: name,
       qty: _qty,
       unitPrice: _price,
       externalCost: _costCtrl.text.trim().isEmpty ? null : _cost,
@@ -10118,7 +10403,10 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
         controller: controller,
         keyboardType: keyboardType,
         textInputAction: textInputAction,
-        onChanged: onChanged,
+        onChanged: (value) {
+          if (_manualError != null) setState(() => _manualError = null);
+          onChanged?.call(value);
+        },
         onSubmitted: (_) => _submit(),
         decoration: decoration,
       ),
@@ -10270,6 +10558,17 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
                 ],
               ),
             ),
+            if (_manualError != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                _manualError!,
+                style: const TextStyle(
+                  color: Color(0xFFDC2626),
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                ),
+              ),
+            ],
             const Spacer(),
             Row(
               children: [
@@ -10291,7 +10590,7 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
                     onPressed: _submit,
                     style: FilledButton.styleFrom(
                       minimumSize: const Size.fromHeight(48),
-                      backgroundColor: const Color(0xFF0F766E),
+                      backgroundColor: const Color(0xFF1957E6),
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -10952,20 +11251,56 @@ class _DesktopQuotePanel extends StatelessWidget {
                                 if (showInlinePhone) {
                                   return Row(
                                     children: [
-                                      Flexible(
-                                        child: Text(
-                                          selectedClientName.trim(),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: nameStyle,
+                                      Expanded(
+                                        child: Row(
+                                          children: [
+                                            Text(
+                                              'Cliente',
+                                              style: theme.textTheme.labelSmall
+                                                  ?.copyWith(
+                                                    color: const Color(
+                                                      0xFF6B7F90,
+                                                    ),
+                                                    fontWeight: FontWeight.w800,
+                                                    letterSpacing: 0,
+                                                  ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Expanded(
+                                              child: Text(
+                                                selectedClientName.trim(),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: nameStyle,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                      const SizedBox(width: 10),
-                                      Text(
-                                        clientPhone,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: phoneStyle,
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 128,
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF6FAFF),
+                                          borderRadius: BorderRadius.circular(
+                                            999,
+                                          ),
+                                          border: Border.all(
+                                            color: const Color(0xFFDDEAFF),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          'Tel: $clientPhone',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: phoneStyle,
+                                        ),
                                       ),
                                     ],
                                   );
@@ -10976,6 +11311,17 @@ class _DesktopQuotePanel extends StatelessWidget {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Text(
+                                      'Cliente',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(
+                                            color: const Color(0xFF6B7F90),
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0,
+                                          ),
+                                    ),
+                                    Text(
                                       selectedClientName.trim(),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
@@ -10983,7 +11329,7 @@ class _DesktopQuotePanel extends StatelessWidget {
                                     ),
                                     if (clientPhone.isNotEmpty)
                                       Text(
-                                        clientPhone,
+                                        'Tel: $clientPhone',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: phoneStyle,
@@ -12458,10 +12804,31 @@ class _DesktopExternalProductCardState
                           showDialog<void>(
                             context: context,
                             builder: (dialogContext) => AlertDialog(
-                              title: const Text('Venta manual'),
-                              content: Text(helpText),
+                              insetPadding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 24,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              title: const Row(
+                                children: [
+                                  Icon(
+                                    Icons.add_shopping_cart_rounded,
+                                    color: Color(0xFF1957E6),
+                                  ),
+                                  SizedBox(width: 10),
+                                  Text('Venta manual'),
+                                ],
+                              ),
+                              content: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 520,
+                                ),
+                                child: Text(helpText),
+                              ),
                               actions: [
-                                TextButton(
+                                FilledButton(
                                   onPressed: () =>
                                       Navigator.of(dialogContext).pop(),
                                   child: const Text('Entendido'),
@@ -12509,9 +12876,9 @@ class _DesktopExternalProductCardState
                               size: 40,
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 12),
                           const Text(
-                            'Sin inventario',
+                            'Venta manual',
                             maxLines: 1,
                             textAlign: TextAlign.center,
                             overflow: TextOverflow.ellipsis,
@@ -12522,9 +12889,9 @@ class _DesktopExternalProductCardState
                               height: 1,
                             ),
                           ),
-                          const SizedBox(height: 7),
+                          const SizedBox(height: 6),
                           const Text(
-                            'Venta rápida fuera de catálogo',
+                            'Fuera de inventario',
                             maxLines: 1,
                             textAlign: TextAlign.center,
                             overflow: TextOverflow.ellipsis,
@@ -13188,7 +13555,7 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
               ),
               const SizedBox(width: 2),
               _DesktopTicketRemoveButton(
-                tooltip: 'Eliminar producto',
+                tooltip: 'Quitar de la venta',
                 onPressed: widget.onRemove,
               ),
             ],
@@ -13262,7 +13629,7 @@ class _DesktopTicketRemoveButton extends StatelessWidget {
             highlightColor: const Color(0xFFDDE7EE),
             shape: const CircleBorder(),
           ),
-          icon: const AppIcon(AppIcons.delete, size: 18, strokeWidth: 2.3),
+          icon: const Icon(Icons.remove_circle_outline_rounded, size: 19),
         ),
       ),
     );
@@ -13682,6 +14049,10 @@ class _DesktopTicketDraft {
   const _DesktopTicketDraft({
     required this.id,
     required this.title,
+    required this.createdAt,
+    required this.companyId,
+    required this.createdByUserId,
+    required this.createdByUserName,
     required this.items,
     required this.selectedClientId,
     required this.selectedClientName,
@@ -13703,10 +14074,18 @@ class _DesktopTicketDraft {
   factory _DesktopTicketDraft.empty({
     required String id,
     required String title,
+    DateTime? createdAt,
+    String? companyId,
+    String? createdByUserId,
+    String? createdByUserName,
   }) {
     return _DesktopTicketDraft(
       id: id,
       title: title,
+      createdAt: createdAt ?? DateTime.now(),
+      companyId: companyId,
+      createdByUserId: createdByUserId,
+      createdByUserName: createdByUserName,
       items: const [],
       selectedClientId: null,
       selectedClientName: 'Sin cliente',
@@ -13728,6 +14107,10 @@ class _DesktopTicketDraft {
 
   final String id;
   final String title;
+  final DateTime createdAt;
+  final String? companyId;
+  final String? createdByUserId;
+  final String? createdByUserName;
   final List<CotizacionItem> items;
   final String? selectedClientId;
   final String selectedClientName;
@@ -13748,6 +14131,10 @@ class _DesktopTicketDraft {
   _DesktopTicketDraft copyWith({
     String? id,
     String? title,
+    DateTime? createdAt,
+    String? companyId,
+    String? createdByUserId,
+    String? createdByUserName,
     List<CotizacionItem>? items,
     String? selectedClientId,
     String? selectedClientName,
@@ -13768,6 +14155,10 @@ class _DesktopTicketDraft {
     return _DesktopTicketDraft(
       id: id ?? this.id,
       title: title ?? this.title,
+      createdAt: createdAt ?? this.createdAt,
+      companyId: companyId ?? this.companyId,
+      createdByUserId: createdByUserId ?? this.createdByUserId,
+      createdByUserName: createdByUserName ?? this.createdByUserName,
       items: items ?? this.items,
       selectedClientId: selectedClientId ?? this.selectedClientId,
       selectedClientName: selectedClientName ?? this.selectedClientName,
@@ -13796,6 +14187,10 @@ class _DesktopTicketDraft {
   Map<String, dynamic> toMap() => {
     'id': id,
     'title': title,
+    'createdAt': createdAt.toIso8601String(),
+    'companyId': companyId,
+    'createdByUserId': createdByUserId,
+    'createdByUserName': createdByUserName,
     'items': items.map((item) => item.toMap()).toList(),
     'selectedClientId': selectedClientId,
     'selectedClientName': selectedClientName,
@@ -13829,6 +14224,12 @@ class _DesktopTicketDraft {
     return _DesktopTicketDraft(
       id: (map['id'] ?? '').toString(),
       title: (map['title'] ?? '').toString(),
+      createdAt:
+          DateTime.tryParse((map['createdAt'] ?? '').toString()) ??
+          DateTime.now(),
+      companyId: map['companyId']?.toString(),
+      createdByUserId: map['createdByUserId']?.toString(),
+      createdByUserName: map['createdByUserName']?.toString(),
       items: rawItems
           .whereType<Map>()
           .map((row) => CotizacionItem.fromMap(row.cast<String, dynamic>()))

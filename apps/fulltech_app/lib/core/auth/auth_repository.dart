@@ -65,11 +65,32 @@ final dioProvider = Provider<Dio>((ref) {
   api.dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (options, handler) {
-        final adminAuthorization = ref.read(adminAuthorizationProvider);
-        if (adminAuthorization.isAuthorized) {
-          options.headers['x-admin-authorization'] = adminAuthorization.token;
+        final controller = ref.read(adminAuthorizationProvider.notifier);
+        final token = controller.tokenForRequest(options.uri.toString());
+        if (token != null && token.isNotEmpty) {
+          options.headers['x-admin-authorization'] = token;
+          options.extra['__admin_authorization_single_use'] =
+              ref.read(adminAuthorizationProvider).singleUse;
         }
         handler.next(options);
+      },
+      onResponse: (response, handler) {
+        if (response.requestOptions.extra['__admin_authorization_single_use'] ==
+            true) {
+          ref
+              .read(adminAuthorizationProvider.notifier)
+              .consumeActionAuthorization();
+        }
+        handler.next(response);
+      },
+      onError: (error, handler) {
+        if (error.requestOptions.extra['__admin_authorization_single_use'] ==
+            true) {
+          ref
+              .read(adminAuthorizationProvider.notifier)
+              .consumeActionAuthorization();
+        }
+        handler.next(error);
       },
     ),
   );

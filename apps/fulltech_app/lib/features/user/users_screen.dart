@@ -1719,7 +1719,7 @@ const _userScreenPermissions = <_PermissionScreenItem>[
   _PermissionScreenItem(
     title: 'Facturación',
     icon: Icons.point_of_sale_outlined,
-    permission: AppPermission.viewSales,
+    permission: AppPermission.viewQuotes,
   ),
   _PermissionScreenItem(
     title: 'Clientes',
@@ -1756,6 +1756,11 @@ const _userScreenPermissions = <_PermissionScreenItem>[
     icon: Icons.manage_accounts_outlined,
     permission: AppPermission.manageUsers,
   ),
+  _PermissionScreenItem(
+    title: 'Configuración',
+    icon: Icons.settings_outlined,
+    permission: AppPermission.manageSettings,
+  ),
 ];
 
 class _PermissionActionItem {
@@ -1788,17 +1793,27 @@ const _permissionModules = <_PermissionModuleItem>[
   _PermissionModuleItem(
     title: 'Facturación',
     icon: Icons.point_of_sale_outlined,
-    viewPermission: AppPermission.viewSales,
+    viewPermission: AppPermission.viewQuotes,
     actions: [
       _PermissionActionItem(
-        title: 'Crear ventas y cotizaciones',
+        title: 'Crear cotizaciones',
         permission: AppPermission.viewQuotes,
-        description: 'Permite registrar ventas, cotizar y trabajar en el POS.',
+        description: 'Permite cotizar y guardar cotizaciones.',
+      ),
+      _PermissionActionItem(
+        title: 'Registrar ventas y caja',
+        permission: AppPermission.viewSales,
+        description: 'Permite vender y trabajar en el POS.',
       ),
       _PermissionActionItem(
         title: 'Reembolsar o devolver ventas',
         permission: AppPermission.refundSales,
         description: 'Autoriza acciones de devolución y reembolso.',
+      ),
+      _PermissionActionItem(
+        title: 'Factura fiscal e ITBIS',
+        permission: AppPermission.createFiscalInvoices,
+        description: 'Permite activar ITBIS y comprobantes con valor fiscal.',
       ),
       _PermissionActionItem(
         title: 'Ver reportes de ventas',
@@ -1813,9 +1828,9 @@ const _permissionModules = <_PermissionModuleItem>[
     viewPermission: AppPermission.viewClients,
     actions: [
       _PermissionActionItem(
-        title: 'Ver y trabajar clientes',
+        title: 'Crear y editar clientes',
         permission: AppPermission.viewClients,
-        description: 'Permite abrir la cartera de clientes y sus datos.',
+        description: 'Permite abrir la cartera, crear y editar clientes.',
       ),
     ],
   ),
@@ -1896,6 +1911,19 @@ const _permissionModules = <_PermissionModuleItem>[
         title: 'Crear y editar usuarios',
         permission: AppPermission.manageUsers,
         description: 'Control total sobre usuarios y permisos.',
+      ),
+    ],
+  ),
+  _PermissionModuleItem(
+    title: 'Configuración',
+    icon: Icons.settings_outlined,
+    viewPermission: AppPermission.manageSettings,
+    actions: [
+      _PermissionActionItem(
+        title: 'Administrar configuración',
+        permission: AppPermission.manageSettings,
+        description:
+            'Permite abrir configuración, apps, licencias y parámetros de empresa.',
       ),
     ],
   ),

@@ -407,6 +407,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
       ref,
       permission: permission,
       reason: 'Entrar a ${item.title}',
+      routeLocation: item.route,
     );
     if (!allowed || !context.mounted) return;
     if (item.route == Routes.cajaRegistrarIngreso) {

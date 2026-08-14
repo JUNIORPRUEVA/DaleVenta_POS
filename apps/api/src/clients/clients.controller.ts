@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, Unauthor
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@prisma/client';
 import { Request } from 'express';
-import { Roles } from '../auth/roles.decorator';
+import { Permissions, Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dto/create-client.dto';
@@ -26,6 +26,7 @@ export class ClientsController {
   }
 
   @Post()
+  @Permissions('viewClients')
   @Roles(Role.ADMIN, Role.ASISTENTE, Role.VENDEDOR, Role.TECNICO, Role.MARKETING)
   create(@Req() req: Request, @Body() dto: CreateClientDto) {
     return this.clients.create(this.userOrThrow(req), dto);
@@ -52,12 +53,14 @@ export class ClientsController {
   }
 
   @Patch(':id')
+  @Permissions('viewClients')
   @Roles(Role.ADMIN, Role.ASISTENTE, Role.VENDEDOR, Role.TECNICO, Role.MARKETING)
   update(@Req() req: Request, @Param('id') id: string, @Body() dto: UpdateClientDto) {
     return this.clients.update(this.userOrThrow(req), id, dto);
   }
 
   @Patch(':id/location')
+  @Permissions('viewClients')
   @Roles(Role.ADMIN, Role.ASISTENTE, Role.VENDEDOR, Role.TECNICO, Role.MARKETING)
   updateLocation(@Req() req: Request, @Param('id') id: string, @Body() dto: UpdateClientLocationDto) {
     return this.clients.updateLocation(this.userOrThrow(req), id, dto);

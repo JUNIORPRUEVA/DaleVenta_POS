@@ -52,7 +52,7 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Clientes',
             route: Routes.clientes,
           ),
-        if (canOrAuthorize(AppPermission.viewSales))
+        if (canOrAuthorize(AppPermission.viewQuotes))
           const AppNavigationItem(
             icon: Icons.point_of_sale_outlined,
             appIcon: AppIcons.sales,

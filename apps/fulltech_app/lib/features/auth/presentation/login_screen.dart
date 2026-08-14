@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -253,9 +256,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(24),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
+                    child: CallbackShortcuts(
+                      bindings: {
+                        const SingleActivator(LogicalKeyboardKey.enter): () {
+                          if (!loading) unawaited(_submit());
+                        },
+                        const SingleActivator(
+                          LogicalKeyboardKey.numpadEnter,
+                        ): () {
+                          if (!loading) unawaited(_submit());
+                        },
+                      },
+                      child: Focus(
+                        autofocus: true,
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -285,6 +301,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               prefixIcon: Icon(Icons.alternate_email),
                             ),
                             keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            onFieldSubmitted: (_) =>
+                                FocusScope.of(context).nextFocus(),
                             validator: (v) {
                               final value = v?.trim() ?? '';
                               if (value.isEmpty) return 'Ingresa tu email';
@@ -317,6 +336,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ),
                             ),
                             obscureText: _obscurePassword,
+                            textInputAction: TextInputAction.done,
+                            onFieldSubmitted: (_) {
+                              if (!loading) unawaited(_submit());
+                            },
                             validator: (v) => (v == null || v.isEmpty)
                                 ? 'Ingresa tu contrasena'
                                 : null,
@@ -385,6 +408,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             child: const Text('¿Olvidaste tu contraseña?'),
                           ),
                         ],
+                      ),
+                        ),
                       ),
                     ),
                   ),

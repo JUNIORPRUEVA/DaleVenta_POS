@@ -140,11 +140,14 @@ class UsersRepository {
     };
     payload.removeWhere((key, value) {
       if (value == null) return true;
+      if (key == 'fotoPersonalUrl') return false;
       if (value is String && value.trim().isEmpty) return true;
       return false;
     });
 
     final res = await _dio.patch(ApiRoutes.usersMe, data: payload);
+    _usersCache = null;
+    _usersCacheAt = null;
     return UserModel.fromJson(res.data as Map<String, dynamic>);
   }
 

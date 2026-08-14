@@ -7,8 +7,11 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
+import '../../core/auth/admin_authorization.dart';
+import '../../core/auth/app_permissions.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
+import '../../core/errors/api_exception.dart';
 import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/routing/routes.dart';
@@ -117,6 +120,67 @@ class _CotizacionesHistorialScreenState
 
     return createdByUserName == _normalizeText(user.nombreCompleto) ||
         createdByUserName == _normalizeText(user.email);
+  }
+
+  bool _isPermissionDenied(Object error) {
+    return error is ApiException &&
+        (error.code == 403 || error.type == ApiErrorType.forbidden);
+  }
+
+  Future<bool> _ensureQuoteActionPermission(String reason) {
+    return ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.viewQuotes,
+      reason: reason,
+    );
+  }
+
+  Future<bool> _requestQuoteAdminOverride(String reason) async {
+    final shouldAuthorize = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('No tienes permiso'),
+        content: const Text(
+          'No tienes permiso para esta acción. Puedes pedir autorización administrativa para continuar.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            icon: const Icon(Icons.admin_panel_settings_outlined),
+            label: const Text('Autorizar'),
+          ),
+        ],
+      ),
+    );
+    if (shouldAuthorize != true || !mounted) return false;
+    return ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.viewQuotes,
+      reason: reason,
+      forceAdminAuthorization: true,
+    );
+  }
+
+  Future<T> _runQuoteApiAction<T>(
+    String reason,
+    Future<T> Function() action,
+  ) async {
+    try {
+      return await action();
+    } catch (error) {
+      if (!_isPermissionDenied(error) || !mounted) rethrow;
+      final authorized = await _requestQuoteAdminOverride(reason);
+      if (!authorized || !mounted) {
+        throw ApiException('No tienes permiso para esta acción.', 403);
+      }
+      return action();
+    }
   }
 
   Future<void> _editQuotation(CotizacionModel item) async {
@@ -325,6 +389,8 @@ class _CotizacionesHistorialScreenState
 
   Future<void> _delete(CotizacionModel item) async {
     if (!_canEditOrDelete(item)) return;
+    final allowed = await _ensureQuoteActionPermission('Eliminar cotización');
+    if (!allowed || !mounted) return;
 
     final ok = await showDialog<bool>(
       context: context,
@@ -377,15 +443,18 @@ class _CotizacionesHistorialScreenState
   }
 
   Future<void> _sendPdfToAdmin(CotizacionModel item, Uint8List bytes) {
-    return ref
-        .read(cotizacionesRepositoryProvider)
-        .sendWhatsAppQuotation(
-          quotationId: item.id,
-          destinationType: 'admin',
-          pdfBytes: bytes,
-          fileName: buildCotizacionPdfFileName(item),
-          messageText: _buildAdminApprovalMessage(item),
-        );
+    return _runQuoteApiAction(
+      'Enviar PDF de cotización',
+      () => ref
+          .read(cotizacionesRepositoryProvider)
+          .sendWhatsAppQuotation(
+            quotationId: item.id,
+            destinationType: 'admin',
+            pdfBytes: bytes,
+            fileName: buildCotizacionPdfFileName(item),
+            messageText: _buildAdminApprovalMessage(item),
+          ),
+    );
   }
 
   Future<void> _sendPdfToClient(CotizacionModel item, Uint8List bytes) {
@@ -403,13 +472,16 @@ class _CotizacionesHistorialScreenState
       );
     }
 
-    final pdfUrl = await ref
-        .read(cotizacionesRepositoryProvider)
-        .createPdfShareLink(
-          quotationId: item.id,
-          pdfBytes: bytes,
-          fileName: buildCotizacionPdfFileName(item),
-        );
+    final pdfUrl = await _runQuoteApiAction(
+      'Crear enlace PDF de cotización',
+      () => ref
+          .read(cotizacionesRepositoryProvider)
+          .createPdfShareLink(
+            quotationId: item.id,
+            pdfBytes: bytes,
+            fileName: buildCotizacionPdfFileName(item),
+          ),
+    );
 
     final uri = Uri.https('wa.me', '/$phone', {
       'text': _buildClientWhatsAppLinkMessage(item, pdfUrl),
@@ -446,6 +518,8 @@ class _CotizacionesHistorialScreenState
   }
 
   Future<void> _openPdfPreview(CotizacionModel item) async {
+    final allowed = await _ensureQuoteActionPermission('Ver PDF de cotización');
+    if (!allowed || !mounted) return;
     final company = await _getCompanySettingsForPdf();
     final bytes = await buildCotizacionPdf(cotizacion: item, company: company);
     if (!mounted) return;

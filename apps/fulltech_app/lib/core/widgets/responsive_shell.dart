@@ -7,6 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../modules/cash/cash_dialogs.dart';
 import '../../modules/cash/cash_providers.dart';
+import '../auth/admin_authorization.dart';
+import '../auth/admin_authorization_session.dart';
 import '../auth/app_role.dart';
 import '../auth/auth_provider.dart';
 import '../design_system/icons/app_icon.dart';
@@ -16,6 +18,7 @@ import '../location/location_tracker_provider.dart';
 import '../license/license_repository.dart';
 import '../models/user_model.dart';
 import '../routing/app_navigator.dart';
+import '../routing/route_access.dart';
 import '../routing/routes.dart';
 import '../theme/role_branding.dart';
 import '../utils/date_time_formatters.dart';
@@ -78,6 +81,18 @@ class ResponsiveShell extends ConsumerStatefulWidget {
 
 class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
   final _shellScaffoldKey = GlobalKey<ScaffoldState>();
+  String? _lastAuthorizationCleanupLocation;
+
+  void _scheduleAuthorizationCleanup(String location) {
+    if (_lastAuthorizationCleanupLocation == location) return;
+    _lastAuthorizationCleanupLocation = location;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref
+          .read(adminAuthorizationProvider.notifier)
+          .clearIfInvalidForLocation(location);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -93,6 +108,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final sections = buildAppNavigationSections(ref, user);
     final location = safeCurrentLocation(context);
     AppNavigator.recordShellLocation(location);
+    _scheduleAuthorizationCleanup(location);
     final title = resolveNavigationTitle(location, sections);
     final showShellAppBar = desktopShellShouldShowOwnAppBar(location);
     final routeActions = ref.watch(desktopShellRouteActionsProvider);
@@ -781,6 +797,23 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
     unawaited(_persistSidebarPreference());
   }
 
+  Future<void> _navigateRoute(String route, String title) async {
+    final permission = RouteAccess.permissionForLocation(route);
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: permission,
+      reason: 'Entrar a $title',
+      routeLocation: route,
+    );
+    if (!allowed || !mounted) return;
+    widget.onNavigate(route);
+  }
+
+  Future<void> _navigateItem(AppNavigationItem item) {
+    return _navigateRoute(item.route, item.title);
+  }
+
   void _syncSubmenusWithRoute() {
     final path =
         Uri.tryParse(widget.currentLocation)?.path ?? widget.currentLocation;
@@ -1018,7 +1051,7 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                   borderColor: borderColor,
                   baseColor: baseColor,
                   scale: scale,
-                  onTap: () => widget.onNavigate(Routes.licencias),
+                  onTap: () => _navigateRoute(Routes.licencias, 'Licencias'),
                 ),
                 Expanded(
                   child: LayoutBuilder(
@@ -1090,8 +1123,7 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                                     hoverColor: hoverColor,
                                     baseColor: baseColor,
                                     scale: scale,
-                                    onTap: () =>
-                                        widget.onNavigate(facturacion.route),
+                                    onTap: () => _navigateItem(facturacion),
                                   ),
                                 if (listaVentas != null)
                                   _PremiumSidebarNavItem(
@@ -1104,8 +1136,7 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                                     hoverColor: hoverColor,
                                     baseColor: baseColor,
                                     scale: scale,
-                                    onTap: () =>
-                                        widget.onNavigate(listaVentas.route),
+                                    onTap: () => _navigateItem(listaVentas),
                                   ),
                               ],
                             ),
@@ -1208,9 +1239,8 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                                           hoverColor: hoverColor,
                                           baseColor: baseColor,
                                           scale: scale,
-                                          onTap: () => widget.onNavigate(
-                                            cashHistorial.route,
-                                          ),
+                                          onTap: () =>
+                                              _navigateItem(cashHistorial),
                                         ),
                                     ],
                                   ),
@@ -1268,8 +1298,7 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                                     hoverColor: hoverColor,
                                     baseColor: baseColor,
                                     scale: scale,
-                                    onTap: () =>
-                                        widget.onNavigate(clientes.route),
+                                    onTap: () => _navigateItem(clientes),
                                   ),
                                 if (cotizaciones != null)
                                   _PremiumSidebarNavItem(
@@ -1282,8 +1311,7 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                                     hoverColor: hoverColor,
                                     baseColor: baseColor,
                                     scale: scale,
-                                    onTap: () =>
-                                        widget.onNavigate(cotizaciones.route),
+                                    onTap: () => _navigateItem(cotizaciones),
                                   ),
                                 if (creditosVentas != null)
                                   _PremiumSidebarNavItem(
@@ -1296,8 +1324,7 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                                     hoverColor: hoverColor,
                                     baseColor: baseColor,
                                     scale: scale,
-                                    onTap: () =>
-                                        widget.onNavigate(creditosVentas.route),
+                                    onTap: () => _navigateItem(creditosVentas),
                                   ),
                               ],
                             ),
@@ -1312,7 +1339,7 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                               hoverColor: hoverColor,
                               baseColor: baseColor,
                               scale: scale,
-                              onTap: () => widget.onNavigate(inventario.route),
+                              onTap: () => _navigateItem(inventario),
                             ),
                           if (comprasTpv != null)
                             _PremiumSidebarNavItem(
@@ -1324,7 +1351,7 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                               hoverColor: hoverColor,
                               baseColor: baseColor,
                               scale: scale,
-                              onTap: () => widget.onNavigate(comprasTpv.route),
+                              onTap: () => _navigateItem(comprasTpv),
                             ),
                           if (reportes != null)
                             _PremiumSidebarNavItem(
@@ -1336,7 +1363,7 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                               hoverColor: hoverColor,
                               baseColor: baseColor,
                               scale: scale,
-                              onTap: () => widget.onNavigate(reportes.route),
+                              onTap: () => _navigateItem(reportes),
                             ),
                           _PremiumSidebarNavItem(
                             item: const AppNavigationItem(
@@ -1388,8 +1415,7 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                                   hoverColor: hoverColor,
                                   baseColor: baseColor,
                                   scale: scale,
-                                  onTap: () =>
-                                      widget.onNavigate(contabilidad.route),
+                                  onTap: () => _navigateItem(contabilidad),
                                 ),
                               if (nomina != null)
                                 _PremiumSidebarNavItem(
@@ -1402,7 +1428,7 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                                   hoverColor: hoverColor,
                                   baseColor: baseColor,
                                   scale: scale,
-                                  onTap: () => widget.onNavigate(nomina.route),
+                                  onTap: () => _navigateItem(nomina),
                                 ),
                               if (misPagos != null)
                                 _PremiumSidebarNavItem(
@@ -1415,8 +1441,7 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                                   hoverColor: hoverColor,
                                   baseColor: baseColor,
                                   scale: scale,
-                                  onTap: () =>
-                                      widget.onNavigate(misPagos.route),
+                                  onTap: () => _navigateItem(misPagos),
                                 ),
                             ],
                           ),
@@ -1445,7 +1470,7 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                             widget.currentLocation,
                             item.route,
                           ),
-                          onTap: () => widget.onNavigate(item.route),
+                          onTap: () => _navigateItem(item),
                         ),
                         const SizedBox(height: 4),
                       ],
@@ -1476,7 +1501,7 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                             widget.currentLocation,
                             usuario.route,
                           ),
-                          onTap: () => widget.onNavigate(usuario.route),
+                          onTap: () => _navigateItem(usuario),
                         ),
                       ],
                       const SizedBox(height: 4),
@@ -2252,7 +2277,7 @@ class _SubmenuBadge extends StatelessWidget {
   }
 }
 
-class _DesktopSidebarCollapsedGroupButton extends StatefulWidget {
+class _DesktopSidebarCollapsedGroupButton extends ConsumerStatefulWidget {
   const _DesktopSidebarCollapsedGroupButton({
     required this.title,
     required this.icon,
@@ -2272,12 +2297,12 @@ class _DesktopSidebarCollapsedGroupButton extends StatefulWidget {
   final bool showIndicator;
 
   @override
-  State<_DesktopSidebarCollapsedGroupButton> createState() =>
+  ConsumerState<_DesktopSidebarCollapsedGroupButton> createState() =>
       _DesktopSidebarCollapsedGroupButtonState();
 }
 
 class _DesktopSidebarCollapsedGroupButtonState
-    extends State<_DesktopSidebarCollapsedGroupButton> {
+    extends ConsumerState<_DesktopSidebarCollapsedGroupButton> {
   bool _hovered = false;
 
   Future<void> _openSubmenu() async {
@@ -2298,13 +2323,13 @@ class _DesktopSidebarCollapsedGroupButtonState
       overlay.size.height - topLeft.dy,
     );
 
-    final selectedRoute = await showMenu<String>(
+    final selectedItem = await showMenu<AppNavigationItem>(
       context: context,
       position: position,
       items: widget.items
           .map(
-            (item) => PopupMenuItem<String>(
-              value: item.route,
+            (item) => PopupMenuItem<AppNavigationItem>(
+              value: item,
               child: Row(
                 children: [
                   Icon(item.icon, size: 18),
@@ -2325,8 +2350,18 @@ class _DesktopSidebarCollapsedGroupButtonState
           .toList(),
     );
 
-    if (selectedRoute == null) return;
-    widget.onNavigate(selectedRoute);
+    if (selectedItem == null) return;
+    if (!mounted) return;
+    final permission = RouteAccess.permissionForLocation(selectedItem.route);
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: permission,
+      reason: 'Entrar a ${selectedItem.title}',
+      routeLocation: selectedItem.route,
+    );
+    if (!allowed || !mounted) return;
+    widget.onNavigate(selectedItem.route);
   }
 
   @override
