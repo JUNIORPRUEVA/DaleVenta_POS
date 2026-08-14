@@ -141,12 +141,14 @@ class _WindowsPrinterSettingsViewState
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    return SwitchListTile(
-      value: value,
-      onChanged: onChanged,
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      title: Text(title),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(child: Text(title)),
+          Switch(value: value, onChanged: onChanged),
+        ],
+      ),
     );
   }
 
@@ -768,12 +770,16 @@ class _MobilePrinterSettingsViewState
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    return SwitchListTile(
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      title: Text(title, style: const TextStyle(fontSize: 13)),
-      value: value,
-      onChanged: onChanged,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(title, style: const TextStyle(fontSize: 13)),
+          ),
+          Switch(value: value, onChanged: onChanged),
+        ],
+      ),
     );
   }
 
@@ -987,37 +993,59 @@ class _MobilePrinterSettingsViewState
                     final score = MobilePrintService.bluetoothPrinterScore(
                       printer,
                     );
-                    return Material(
-                      color: Colors.transparent,
-                      child: ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        selected: selected,
-                        leading: Icon(
-                          selected ? Icons.check_circle : Icons.bluetooth,
-                          color: selected ? const Color(0xFF0B5CFF) : null,
-                        ),
-                        title: Text(
-                          printer.name.trim().isEmpty
-                              ? 'Impresora Bluetooth'
-                              : printer.name,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: Text(
-                          '${printer.macAdress} · compatibilidad $score',
-                        ),
-                        trailing: selected
-                            ? const Text(
-                                'Lista',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              )
-                            : null,
+                    final name = printer.name.trim().isEmpty
+                        ? 'Impresora Bluetooth'
+                        : printer.name;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
                         onTap: _busy
                             ? null
                             : () => _selectBluetoothPrinter(settings, printer),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Row(
+                            children: [
+                              Icon(
+                                selected
+                                    ? Icons.check_circle
+                                    : Icons.bluetooth,
+                                color: selected
+                                    ? const Color(0xFF0B5CFF)
+                                    : null,
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(name, overflow: TextOverflow.ellipsis),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '${printer.macAdress} · compatibilidad $score',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF64748B),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (selected)
+                                const Padding(
+                                  padding: EdgeInsets.only(left: 8),
+                                  child: Text(
+                                    'Lista',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
                     );
                   }),
