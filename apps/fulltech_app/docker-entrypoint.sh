@@ -34,6 +34,10 @@ fi
 # This avoids stale config caused by PWA caching of assets.
 API_BASE_URL_ESC="$(js_escape "${API_BASE_URL:-}")"
 API_TIMEOUT_MS_ESC="$(js_escape "${API_TIMEOUT_MS:-}")"
+SUPPORT_EMAIL_ESC="$(js_escape "${SUPPORT_EMAIL:-ventas@fulltechrd.com}")"
+SUPPORT_PHONE_ESC="$(js_escape "${SUPPORT_PHONE:-829-534-4286}")"
+SUPPORT_WHATSAPP_ESC="$(js_escape "${SUPPORT_WHATSAPP:-18295344286}")"
+SUPPORT_HOURS_ESC="$(js_escape "${SUPPORT_HOURS:-Lunes a viernes de 9:00 a.m. a 6:00 p.m. AST}")"
 cat > "$WEB_ROOT/env.js" <<EOF
 // Generated at container start
 window.__ENV = window.__ENV || {};
@@ -52,6 +56,16 @@ window.__ENV.API_TIMEOUT_MS = function () { return window.__ENV.API_TIMEOUT_MS_V
 // Convenience aliases (string)
 window.__ENV.API_BASE_URL_STR = window.API_BASE_URL;
 window.__ENV.API_TIMEOUT_MS_STR = window.API_TIMEOUT_MS;
+EOF
+
+cat > "$WEB_ROOT/public-config.js" <<EOF
+// Generated at container start
+window.FULLPOS_PUBLIC_CONFIG = {
+  supportEmail: "${SUPPORT_EMAIL_ESC}",
+  supportPhone: "${SUPPORT_PHONE_ESC}",
+  supportWhatsapp: "${SUPPORT_WHATSAPP_ESC}",
+  supportHours: "${SUPPORT_HOURS_ESC}"
+};
 EOF
 
 # Optional: same-origin reverse proxy to avoid CORS/XHR issues in browsers.
@@ -74,6 +88,11 @@ server {
   listen 80;
   server_name _;
   client_max_body_size 64m;
+
+  add_header Strict-Transport-Security "max-age=31536000" always;
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header X-Frame-Options "SAMEORIGIN" always;
+  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
   gzip on;
   gzip_comp_level 6;
@@ -117,9 +136,17 @@ server {
     add_header Cache-Control "no-cache";
   }
 
+  location = /public-config.js {
+    add_header Cache-Control "no-cache";
+  }
+
   location ~* \.(js|wasm|css|ttf|png|jpg|jpeg|webp|svg)$ {
     add_header Cache-Control "public, max-age=31536000, immutable";
     try_files $uri =404;
+  }
+
+  location ~ ^/(support|privacy|terms|account-deletion|contact)$ {
+    try_files /$1/index.html =404;
   }
 
   # Reverse proxy: /api/* -> API_UPSTREAM_URL/*

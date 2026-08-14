@@ -69,6 +69,10 @@ Nota de configuración:
 Variables a definir en EasyPanel (Runtime Env):
 - `API_BASE_URL` (ej: `https://tu-api.tudominio.com`)
 - `API_TIMEOUT_MS` (opcional)
+- `SUPPORT_EMAIL` (opcional, usado por `/support`, `/privacy`, `/account-deletion` y `/contact`)
+- `SUPPORT_PHONE` (opcional)
+- `SUPPORT_WHATSAPP` (opcional, en formato internacional sin `+`, ej. `18295344286`)
+- `SUPPORT_HOURS` (opcional)
 
 ### Recomendado (PWA): Proxy same-origin (evita CORS/XHR)
 
