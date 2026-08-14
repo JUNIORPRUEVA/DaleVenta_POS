@@ -3381,7 +3381,10 @@ class _InventoryTabState extends State<InventoryTab> {
                           ],
                         ),
                       const SizedBox(height: 14),
-                      _InventoryBreakdown(products: active),
+                      _InventoryBreakdown(
+                        products: active,
+                        showCostMetrics: canShowCostMetrics,
+                      ),
                     ],
                   ),
                 ),
@@ -5810,9 +5813,13 @@ class ProductsEmptyState extends StatelessWidget {
 }
 
 class _InventoryBreakdown extends StatelessWidget {
-  const _InventoryBreakdown({required this.products});
+  const _InventoryBreakdown({
+    required this.products,
+    required this.showCostMetrics,
+  });
 
   final List<ProductModel> products;
+  final bool showCostMetrics;
 
   @override
   Widget build(BuildContext context) {
@@ -5822,18 +5829,25 @@ class _InventoryBreakdown extends StatelessWidget {
           byCategory[product.categoriaLabel] ?? (units: 0, value: 0);
       byCategory[product.categoriaLabel] = (
         units: current.units + _stockOf(product),
-        value: current.value + (_stockOf(product) * product.precio),
+        value:
+            current.value +
+            (_stockOf(product) * (showCostMetrics ? product.costo : 0)),
       );
     }
     final rows = byCategory.entries.toList()
-      ..sort((a, b) => b.value.value.compareTo(a.value.value));
+      ..sort((a, b) {
+        if (showCostMetrics) {
+          return b.value.value.compareTo(a.value.value);
+        }
+        return b.value.units.compareTo(a.value.units);
+      });
 
     return ProductsSurface(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Inventario por categoría',
+            'Inversión por categoría',
             style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
           ),
           const SizedBox(height: 10),
@@ -5844,7 +5858,9 @@ class _InventoryBreakdown extends StatelessWidget {
               title: Text(row.key),
               subtitle: Text('${_stockText(row.value.units)} unidades'),
               trailing: Text(
-                formatRdCurrencyAccounting(row.value.value),
+                showCostMetrics
+                    ? formatRdCurrencyAccounting(row.value.value)
+                    : 'No disponible',
                 style: const TextStyle(fontWeight: FontWeight.w900),
               ),
             ),
