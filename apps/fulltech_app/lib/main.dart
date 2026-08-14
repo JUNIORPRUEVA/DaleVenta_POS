@@ -24,6 +24,7 @@ import 'core/offline/offline_sync_handlers_bootstrap.dart';
 import 'core/realtime/catalog_realtime_service.dart';
 import 'core/realtime/operations_realtime_service.dart';
 import 'core/startup/app_startup_controller.dart';
+import 'core/startup/app_storage_scope_guard.dart';
 import 'core/startup/initial_release_check.dart';
 import 'core/app_update/update_guard_overlay.dart';
 import 'core/utils/safe_url_launcher.dart';
@@ -65,6 +66,7 @@ Future<void> main() async {
       }
       _configureImageCacheForPlatform();
       _initializeSqlite();
+      await AppStorageScopeGuard.ensureCurrentScope();
 
       FlutterError.onError = (details) {
         FlutterError.presentError(details);

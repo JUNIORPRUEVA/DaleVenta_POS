@@ -77,33 +77,7 @@ export class ClientsService {
 
   private async findAccessibleClientOrThrow(user: AuthUser, id: string) {
     const companyId = requireTenant(user);
-    const client = await this.findClientOrThrow(companyId, id);
-
-    if (this.isAdminLike(user)) {
-      return client;
-    }
-
-    if (user.role === Role.TECNICO) {
-      const relatedOrder = await this.prisma.serviceOrder.findFirst({
-        where: {
-          clientId: id,
-          ...this.buildTechnicianServiceOrderWhere(user),
-        },
-        select: { id: true },
-      });
-
-      if (!relatedOrder) {
-        throw new ForbiddenException('No tienes permiso para ver este cliente');
-      }
-
-      return client;
-    }
-
-    if (client.ownerId === user.id) {
-      return client;
-    }
-
-    throw new ForbiddenException('Not authorized to access this client');
+    return this.findClientOrThrow(companyId, id);
   }
 
   private assertAdmin(user: AuthUser, message: string) {

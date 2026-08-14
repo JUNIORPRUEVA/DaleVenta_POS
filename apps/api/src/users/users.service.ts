@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CompanyMemberRole, CompanyMemberStatus, Prisma } from '@prisma/client';
+import { CompanyMemberRole, CompanyMemberStatus, Prisma, Role } from '@prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
 import { SignWorkContractDto } from './dto/sign-work-contract.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -41,6 +41,23 @@ export class UsersService {
 
   private hasValue<T>(value: T | null | undefined): value is T {
     return value !== undefined && value !== null;
+  }
+
+  private memberRoleFromLegacyRole(role: Role): CompanyMemberRole {
+    switch (role) {
+      case Role.ADMIN:
+        return CompanyMemberRole.ADMIN;
+      case Role.CAJERO:
+        return CompanyMemberRole.CASHIER;
+      case Role.VENDEDOR:
+        return CompanyMemberRole.SELLER;
+      case Role.ASISTENTE:
+      case Role.MARKETING:
+      case Role.TECNICO:
+        return CompanyMemberRole.MANAGER;
+      default:
+        return CompanyMemberRole.VIEWER;
+    }
   }
 
   private async getOpenAiRuntimeConfig() {
@@ -719,7 +736,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
         data: {
           userId: user.id,
           companyId,
-          role: CompanyMemberRole.VIEWER,
+          role: this.memberRoleFromLegacyRole(dto.role),
           status: CompanyMemberStatus.ACTIVE,
           invitedBy: requestUser.id,
           joinedAt: new Date(),
@@ -957,10 +974,23 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
       throw new BadRequestException('numeroFlota es obligatorio');
     }
 
-    await this.prisma.user.update({
-      where: { id },
-      data,
-      select: { id: true }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id },
+        data,
+        select: { id: true }
+      });
+
+      if (this.hasValue(dto.role)) {
+        await tx.companyMember.updateMany({
+          where: {
+            userId: id,
+            companyId: requireTenant(requestUser),
+            status: CompanyMemberStatus.ACTIVE,
+          },
+          data: { role: this.memberRoleFromLegacyRole(dto.role) },
+        });
+      }
     });
 
     return this.findById(id);

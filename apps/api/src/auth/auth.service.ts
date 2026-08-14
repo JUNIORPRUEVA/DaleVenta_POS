@@ -651,6 +651,10 @@ export class AuthService {
     }
   }
 
+  private normalizeLegacyRole(role: Role | string): Role {
+    return Object.values(Role).includes(role as Role) ? (role as Role) : Role.CAJERO;
+  }
+
   private resolveCompanySession(user: {
     id: string;
     role: Role | string;
@@ -719,9 +723,7 @@ export class AuthService {
             companyId: activeMembership.company.id,
           }
         : null,
-      legacyRole: activeMembership
-        ? this.mapMemberRoleToLegacyRole(activeMembership.role)
-        : (user.role as Role),
+      legacyRole: this.normalizeLegacyRole(user.role),
     };
   }
 

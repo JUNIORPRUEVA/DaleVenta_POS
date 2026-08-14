@@ -31,6 +31,12 @@ String _formatStock(double? stock) {
   return isWhole ? stock.toStringAsFixed(0) : stock.toStringAsFixed(2);
 }
 
+String _formatAvailableCost(ProductModel product) {
+  return product.costAvailable
+      ? formatRdAccountingAmount(product.costo)
+      : 'No disponible';
+}
+
 double? _parseCatalogNumber(String raw) {
   var value = raw
       .trim()
@@ -283,10 +289,15 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
 
     final catalog = ref.watch(catalogControllerProvider);
 
-    final categories = <String>{
-      'Todas',
-      ...catalog.items.map((p) => p.categoriaLabel),
-    }.toList()..sort();
+    final categories =
+        catalog.items
+            .map((p) => p.categoriaLabel)
+            .where((c) => c.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    categories.remove('Todas');
+    categories.insert(0, 'Todas');
 
     final categoryOptions =
         catalog.items
@@ -490,12 +501,19 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                     child: IconButton(
                       tooltip: 'Buscar productos',
                       visualDensity: VisualDensity.compact,
-                      onPressed: () => _openCatalogSearch(
-                        products: catalog.items,
-                        showCost: isAdmin,
-                        canManage: canManage,
-                        categories: categoryOptions,
-                      ),
+                      onPressed: isWideLayout
+                          ? () => _openCatalogSearch(
+                              products: catalog.items,
+                              showCost: isAdmin,
+                              canManage: canManage,
+                              categories: categoryOptions,
+                            )
+                          : () => _openMobileCatalogSearch(
+                              products: catalog.items,
+                              showCost: isAdmin,
+                              canManage: canManage,
+                              categories: categoryOptions,
+                            ),
                       icon: const Icon(Icons.search_rounded, size: 21),
                     ),
                   ),
@@ -1137,6 +1155,57 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
     );
   }
 
+  Future<void> _openMobileCatalogSearch({
+    required List<ProductModel> products,
+    required bool showCost,
+    required bool canManage,
+    required List<String> categories,
+  }) async {
+    final result = await showModalBottomSheet<_CatalogSearchResult?>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.88,
+          minChildSize: 0.55,
+          maxChildSize: 0.96,
+          builder: (context, scrollController) {
+            return _MobileCatalogSearchSheet(
+              products: products,
+              initialQuery: _searchCtrl.text.trim(),
+              scrollController: scrollController,
+            );
+          },
+        );
+      },
+    );
+
+    if (!mounted || result == null) return;
+    final nextQuery = result.query.trim();
+    if (nextQuery != _searchCtrl.text.trim()) {
+      setState(() {
+        _searchCtrl.text = nextQuery;
+      });
+    }
+
+    final product = result.selectedProduct;
+    if (product == null) return;
+
+    await _showProductDetails(
+      product: product,
+      showCost: showCost,
+      canManage: canManage,
+      onEdit: () => _openProductForm(product: product, categories: categories),
+      onDelete: () => _confirmDelete(product),
+    );
+  }
+
   Future<void> _showProductDetails({
     required ProductModel product,
     required bool showCost,
@@ -1243,7 +1312,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                 if (showCost)
                   _ProductDetailLine(
                     label: 'Costo',
-                    value: formatRdAccountingAmount(product.costo),
+                    value: _formatAvailableCost(product),
                   ),
                 _ProductDetailLine(
                   label: 'Fecha',
@@ -1296,6 +1365,207 @@ class _CatalogSearchResult {
 
   final String query;
   final ProductModel? selectedProduct;
+}
+
+class _MobileCatalogSearchSheet extends StatefulWidget {
+  const _MobileCatalogSearchSheet({
+    required this.products,
+    required this.initialQuery,
+    required this.scrollController,
+  });
+
+  final List<ProductModel> products;
+  final String initialQuery;
+  final ScrollController scrollController;
+
+  @override
+  State<_MobileCatalogSearchSheet> createState() =>
+      _MobileCatalogSearchSheetState();
+}
+
+class _MobileCatalogSearchSheetState extends State<_MobileCatalogSearchSheet> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialQuery);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  List<ProductModel> get _filteredProducts {
+    final normalizedQuery = _controller.text.trim().toLowerCase();
+    final filtered = widget.products
+        .where((product) {
+          if (normalizedQuery.isEmpty) return true;
+          return product.nombre.toLowerCase().contains(normalizedQuery) ||
+              (product.codigo ?? '').toLowerCase().contains(normalizedQuery) ||
+              product.categoriaLabel.toLowerCase().contains(normalizedQuery);
+        })
+        .toList(growable: false);
+
+    filtered.sort(
+      (left, right) =>
+          left.nombre.toLowerCase().compareTo(right.nombre.toLowerCase()),
+    );
+    return filtered;
+  }
+
+  void _close({ProductModel? product}) {
+    Navigator.of(context).pop(
+      _CatalogSearchResult(
+        query: _controller.text.trim(),
+        selectedProduct: product,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final filtered = _filteredProducts;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        10,
+        16,
+        16 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 44,
+            height: 4,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.outlineVariant,
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  autofocus: true,
+                  textInputAction: TextInputAction.search,
+                  onChanged: (_) => setState(() {}),
+                  onSubmitted: (_) => _close(),
+                  decoration: InputDecoration(
+                    hintText: 'Buscar producto',
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    suffixIcon: _controller.text.trim().isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Limpiar búsqueda',
+                            onPressed: () {
+                              _controller.clear();
+                              setState(() {});
+                            },
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                    filled: true,
+                    fillColor: theme.colorScheme.surfaceContainerLowest,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.outlineVariant,
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.outlineVariant,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.primary,
+                        width: 1.4,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: 'Aplicar búsqueda',
+                onPressed: () => _close(),
+                icon: const Icon(Icons.check_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '${filtered.length} productos',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: filtered.isEmpty
+                ? Center(
+                    child: Text(
+                      'No se encontraron productos',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  )
+                : ListView.separated(
+                    controller: widget.scrollController,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final product = filtered[index];
+                      return ListTile(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        tileColor: theme.colorScheme.surfaceContainerLowest,
+                        leading: CircleAvatar(
+                          backgroundColor: theme.colorScheme.primary.withValues(
+                            alpha: 0.12,
+                          ),
+                          child: const Icon(Icons.inventory_2_rounded),
+                        ),
+                        title: Text(
+                          product.nombre,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          product.categoriaLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: Text(
+                          formatRdAccountingAmount(product.precio),
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        onTap: () => _close(product: product),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _CatalogSearchDelegate extends SearchDelegate<_CatalogSearchResult?> {
@@ -1612,7 +1882,7 @@ class _ProductCard extends StatelessWidget {
                   ),
                   if (showCost)
                     Text(
-                      'Costo ${formatRdAccountingAmount(product.costo)}',
+                      'Costo ${_formatAvailableCost(product)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -1737,7 +2007,7 @@ class _MobileProductListTile extends StatelessWidget {
                         if (showCost)
                           _CatalogMiniMetric(
                             label: 'Costo',
-                            value: formatRdAccountingAmount(product.costo),
+                            value: _formatAvailableCost(product),
                           ),
                       ],
                     ),
@@ -2352,7 +2622,7 @@ class _DesktopProductCard extends StatelessWidget {
                                             ),
                                       ),
                                       Text(
-                                        formatRdAccountingAmount(product.costo),
+                                        _formatAvailableCost(product),
                                         style: theme.textTheme.labelMedium
                                             ?.copyWith(
                                               color: Colors.white,
@@ -2558,7 +2828,7 @@ class _DesktopProductDetailContent extends StatelessWidget {
                 if (showCost)
                   _ProductDetailLine(
                     label: 'Costo',
-                    value: formatRdAccountingAmount(product.costo),
+                    value: _formatAvailableCost(product),
                   ),
                 _ProductDetailLine(
                   label: 'Disponible',

@@ -30,7 +30,7 @@ class CatalogRepository {
   static const String _createSyncType = 'catalog.products.create';
   static const String _updateSyncType = 'catalog.products.update';
   static const String _deleteSyncType = 'catalog.products.delete';
-  static const String _productsCacheKeyPrefix = 'catalog.products.snapshot';
+  static const String _productsCacheKeyPrefix = 'catalog.products.snapshot.v2';
   static const Duration _cacheTtl = Duration(days: 7);
 
   bool _handlersRegistered = false;
@@ -345,6 +345,7 @@ class CatalogRepository {
         codigo: codigo?.trim().isEmpty == true ? null : codigo?.trim(),
         precio: precio,
         costo: costo,
+        costAvailable: true,
         stock: stock,
         fotoUrl: fotoUrl?.trim().isEmpty == true ? null : fotoUrl?.trim(),
         originalFotoUrl: fotoUrl?.trim().isEmpty == true

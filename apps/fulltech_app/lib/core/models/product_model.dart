@@ -50,6 +50,7 @@ class ProductModel {
   final String? codigo;
   final double precio;
   final double costo;
+  final bool costAvailable;
   final double? stock;
   final String? fotoUrl;
   final String? originalFotoUrl;
@@ -66,6 +67,7 @@ class ProductModel {
     this.codigo,
     required this.precio,
     required this.costo,
+    this.costAvailable = true,
     this.stock,
     this.categoria,
     this.fotoUrl,
@@ -83,6 +85,7 @@ class ProductModel {
     String? codigo,
     double? precio,
     double? costo,
+    bool? costAvailable,
     double? stock,
     String? categoria,
     String? fotoUrl,
@@ -99,6 +102,7 @@ class ProductModel {
       codigo: codigo ?? this.codigo,
       precio: precio ?? this.precio,
       costo: costo ?? this.costo,
+      costAvailable: costAvailable ?? this.costAvailable,
       stock: stock ?? this.stock,
       categoria: categoria ?? this.categoria,
       fotoUrl: fotoUrl ?? this.fotoUrl,
@@ -113,6 +117,9 @@ class ProductModel {
   factory ProductModel.fromJson(Map<String, dynamic> json) {
     final rawStock =
         json['stock'] ?? json['cantidadDisponible'] ?? json['cantidad'];
+    final hasCost = json['costAvailable'] is bool
+        ? json['costAvailable'] == true
+        : json.containsKey('costo');
     final categoria = _asNullableString(
       json['categoria'] ?? json['categoriaNombre'],
     );
@@ -180,6 +187,7 @@ class ProductModel {
       codigo: codigo,
       precio: _asDouble(json['precio']),
       costo: _asDouble(json['costo']),
+      costAvailable: hasCost,
       stock: _asNullableDouble(rawStock),
       categoria: categoria,
       fotoUrl: normalizedFotoUrl.isEmpty ? null : normalizedFotoUrl,
@@ -201,7 +209,8 @@ class ProductModel {
       'sku': codigo,
       'barcode': codigo,
       'precio': precio,
-      'costo': costo,
+      if (costAvailable) 'costo': costo,
+      'costAvailable': costAvailable,
       'stock': stock,
       'categoria': categoria,
       'fotoUrl': fotoUrl,

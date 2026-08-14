@@ -14,6 +14,7 @@ import 'package:printing/printing.dart';
 import '../../../core/api/env.dart';
 import '../../../core/auth/admin_authorization.dart';
 import '../../../core/auth/app_permissions.dart';
+import '../../../core/auth/app_role.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/cache/fulltech_cache_manager.dart';
 import '../../../core/cache/local_json_cache.dart';
@@ -62,10 +63,29 @@ String _stockText(double? value) {
 }
 
 double _stockOf(ProductModel product) => product.stock ?? 0;
+bool _hasVisibleCost(ProductModel product) => product.costAvailable;
 double _profitOf(ProductModel product) => product.precio - product.costo;
 double _marginOf(ProductModel product) {
   if (product.costo <= 0) return 0;
   return (_profitOf(product) / product.costo) * 100;
+}
+
+String _costText(ProductModel product) {
+  return product.costAvailable
+      ? formatRdCurrencyAccounting(product.costo)
+      : 'No disponible';
+}
+
+String _profitText(ProductModel product) {
+  return product.costAvailable
+      ? formatRdCurrencyAccounting(_profitOf(product))
+      : 'No disponible';
+}
+
+String _marginText(ProductModel product) {
+  return product.costAvailable
+      ? '${_marginOf(product).toStringAsFixed(1)}%'
+      : '--';
 }
 
 bool _isOutOfStock(ProductModel product) => _stockOf(product) <= 0;
@@ -1421,6 +1441,8 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     final products = state.items;
     final canEditProducts = user != null;
     final canAddStock = user != null;
+    final canViewCosts =
+        user?.appRole == AppRole.admin || user?.appRole == AppRole.asistente;
     final isMobile = MediaQuery.sizeOf(context).width < 640;
     var tab = widget.initialMobileTab;
     if (tab == null) {
@@ -1479,7 +1501,12 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
           await ref.read(catalogControllerProvider.notifier).remove(product.id);
         },
       ),
-      InventoryTab(key: _inventoryKey, products: products, onRefresh: _refresh),
+      InventoryTab(
+        key: _inventoryKey,
+        products: products,
+        onRefresh: _refresh,
+        canViewCosts: canViewCosts,
+      ),
       StockAdjustmentsPage(
         key: _stockKey,
         products: products,
@@ -3068,11 +3095,11 @@ class _CatalogTable extends StatelessWidget {
                   ),
                   DataCell(_ProductNameCell(product: product)),
                   DataCell(Text(product.categoriaLabel)),
-                  DataCell(_MoneyText(product.costo)),
+                  DataCell(Text(_costText(product))),
                   DataCell(_MoneyText(product.precio)),
                   DataCell(_StockBadge(product: product)),
-                  DataCell(_MoneyText(_profitOf(product))),
-                  DataCell(Text('${_marginOf(product).toStringAsFixed(1)}%')),
+                  DataCell(Text(_profitText(product))),
+                  DataCell(Text(_marginText(product))),
                   DataCell(
                     Row(
                       mainAxisSize: MainAxisSize.min,
@@ -3169,10 +3196,12 @@ class InventoryTab extends StatefulWidget {
     super.key,
     required this.products,
     required this.onRefresh,
+    required this.canViewCosts,
   });
 
   final List<ProductModel> products;
   final Future<void> Function() onRefresh;
+  final bool canViewCosts;
 
   @override
   State<InventoryTab> createState() => _InventoryTabState();
@@ -3251,9 +3280,12 @@ class _InventoryTabState extends State<InventoryTab> {
       });
     }
     final active = _visibleProducts(categoryFilter);
+    final canShowCostMetrics =
+        widget.canViewCosts && active.every(_hasVisibleCost);
     final totalCost = active.fold<double>(
       0,
-      (sum, product) => sum + (_stockOf(product) * product.costo),
+      (sum, product) =>
+          sum + (_stockOf(product) * (canShowCostMetrics ? product.costo : 0)),
     );
     final totalRevenue = active.fold<double>(
       0,
@@ -3285,6 +3317,7 @@ class _InventoryTabState extends State<InventoryTab> {
                           totalRevenue: totalRevenue,
                           profit: profit,
                           margin: margin,
+                          showCostMetrics: canShowCostMetrics,
                           totalUnits: totalUnits,
                           activeCount: active.length,
                           lowStock: lowStock,
@@ -3297,7 +3330,9 @@ class _InventoryTabState extends State<InventoryTab> {
                           children: [
                             KpiCard(
                               title: 'Inversión Total',
-                              value: formatRdCurrencyAccounting(totalCost),
+                              value: canShowCostMetrics
+                                  ? formatRdCurrencyAccounting(totalCost)
+                                  : 'No disponible',
                               icon: Icons.account_balance_wallet_outlined,
                               color: _primaryBlue,
                             ),
@@ -3309,13 +3344,17 @@ class _InventoryTabState extends State<InventoryTab> {
                             ),
                             KpiCard(
                               title: 'Ganancia Potencial',
-                              value: formatRdCurrencyAccounting(profit),
+                              value: canShowCostMetrics
+                                  ? formatRdCurrencyAccounting(profit)
+                                  : 'No disponible',
                               icon: Icons.trending_up_rounded,
                               color: const Color(0xFF7C3AED),
                             ),
                             KpiCard(
                               title: 'Margen Promedio',
-                              value: '${margin.toStringAsFixed(1)}%',
+                              value: canShowCostMetrics
+                                  ? '${margin.toStringAsFixed(1)}%'
+                                  : 'No disponible',
                               icon: Icons.percent_rounded,
                               color: const Color(0xFF0F766E),
                             ),
@@ -3361,6 +3400,7 @@ class _InventoryMobileOverview extends StatelessWidget {
     required this.totalRevenue,
     required this.profit,
     required this.margin,
+    required this.showCostMetrics,
     required this.totalUnits,
     required this.activeCount,
     required this.lowStock,
@@ -3371,6 +3411,7 @@ class _InventoryMobileOverview extends StatelessWidget {
   final double totalRevenue;
   final double profit;
   final double margin;
+  final bool showCostMetrics;
   final double totalUnits;
   final int activeCount;
   final int lowStock;
@@ -3407,6 +3448,7 @@ class _InventoryMobileOverview extends StatelessWidget {
                 value: totalCost,
                 maxValue: maxMoney,
                 color: _primaryBlue,
+                available: showCostMetrics,
               ),
               _InventoryBar(
                 label: 'Venta',
@@ -3419,6 +3461,7 @@ class _InventoryMobileOverview extends StatelessWidget {
                 value: profit,
                 maxValue: maxMoney,
                 color: const Color(0xFF7C3AED),
+                available: showCostMetrics,
               ),
             ],
           ),
@@ -3449,7 +3492,7 @@ class _InventoryMobileOverview extends StatelessWidget {
             Expanded(
               child: _InventoryStatPill(
                 label: 'Margen',
-                value: '${margin.toStringAsFixed(1)}%',
+                value: showCostMetrics ? '${margin.toStringAsFixed(1)}%' : '--',
                 icon: Icons.percent_rounded,
               ),
             ),
@@ -3477,16 +3520,18 @@ class _InventoryBar extends StatelessWidget {
     required this.value,
     required this.maxValue,
     required this.color,
+    this.available = true,
   });
 
   final String label;
   final double value;
   final double maxValue;
   final Color color;
+  final bool available;
 
   @override
   Widget build(BuildContext context) {
-    final ratio = (value.abs() / maxValue).clamp(0.04, 1.0);
+    final ratio = available ? (value.abs() / maxValue).clamp(0.04, 1.0) : 0.04;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(
@@ -3505,7 +3550,7 @@ class _InventoryBar extends StatelessWidget {
                 ),
               ),
               Text(
-                formatRdCurrencyAccounting(value),
+                available ? formatRdCurrencyAccounting(value) : 'No disponible',
                 style: const TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 12,
@@ -5567,7 +5612,7 @@ class _ProductDetailPage extends StatelessWidget {
                 ),
                 ('Stock', _stockText(product.stock)),
                 ('Estado', _stockLevelLabel(level)),
-                ('Costo', formatRdCurrencyAccounting(product.costo)),
+                ('Costo', _costText(product)),
                 ('Precio', formatRdCurrencyAccounting(product.precio)),
                 (
                   'Valor inventario',

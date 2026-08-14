@@ -204,20 +204,16 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     try {
       final repo = ref.read(ventasRepositoryProvider);
       final range = _range;
-      final results = await Future.wait([
-        repo.reportsSalesOverview(
-          from: range.start,
-          to: range.end,
-          category: _selectedCategory,
-        ),
-        repo.listSales(from: range.start, to: range.end),
-      ]);
-      final report = results[0] as Map<String, dynamic>;
+      final report = await repo.reportsSalesOverview(
+        from: range.start,
+        to: range.end,
+        category: _selectedCategory,
+      );
       final sales = _projectSalesByCategory(
-        results[1] as List<SaleModel>,
+        await _loadReportSales(repo, range),
         _selectedCategory,
       );
-      final comparisons = await _loadComparisons(repo);
+      final comparisons = await _loadComparisonsSafely(repo);
 
       if (!mounted) return;
       setState(() {
@@ -239,6 +235,31 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
         _loading = false;
         _error = 'No se pudieron cargar los reportes';
       });
+    }
+  }
+
+  Future<List<SaleModel>> _loadReportSales(
+    VentasRepository repo,
+    DateTimeRange range,
+  ) async {
+    try {
+      return await repo.listInvoices(
+        from: range.start,
+        to: range.end,
+        includeDeleted: false,
+      );
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<List<_ComparisonRowData>> _loadComparisonsSafely(
+    VentasRepository repo,
+  ) async {
+    try {
+      return await _loadComparisons(repo);
+    } catch (_) {
+      return const [];
     }
   }
 

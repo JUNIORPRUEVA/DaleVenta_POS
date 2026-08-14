@@ -47,7 +47,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const membership = this.resolveActiveMembership(user, payload.companyId);
     const companyId = membership?.companyId ?? payload.companyId ?? sessionCompanyId ?? user.companyId ?? null;
     await this.licenses.assertCompanyCanUseApp(companyId);
-    const role = membership ? this.mapMemberRoleToLegacyRole(membership.role) : user.role;
+    const role = this.normalizeLegacyRole(user.role);
     return { id: user.id, email: user.email, role, memberRole: membership?.role ?? null, companyId };
   }
 
@@ -110,6 +110,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       default:
         return Role.CAJERO;
     }
+  }
+
+  private normalizeLegacyRole(role: Role | string): Role {
+    return Object.values(Role).includes(role as Role) ? (role as Role) : Role.CAJERO;
   }
 
   private resolveActiveMembership(
