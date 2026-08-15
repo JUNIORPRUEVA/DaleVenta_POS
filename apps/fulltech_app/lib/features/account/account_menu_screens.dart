@@ -239,12 +239,6 @@ class AccountSettingsScreen extends ConsumerWidget {
           route: Routes.configuracionEmpresa,
         ),
         const _SettingsLaunchCard(
-          icon: Icons.receipt_long_outlined,
-          title: 'Documentos',
-          description: 'Datos que aparecen en facturas, cotizaciones y PDFs.',
-          route: Routes.configuracionDocumentos,
-        ),
-        const _SettingsLaunchCard(
           icon: Icons.print_outlined,
           title: 'Impresora',
           description: 'Tickets, copias, papel, logo y formato de impresión.',
@@ -539,11 +533,6 @@ class AccountParametersScreen extends StatelessWidget {
                 value: 'Facturación, créditos y reportes operativos.',
               ),
               _SettingsOptionData(
-                icon: Icons.receipt_long_outlined,
-                title: 'Documentos',
-                value: 'Datos de empresa aplicados a PDFs y contratos.',
-              ),
-              _SettingsOptionData(
                 icon: Icons.lock_outline_rounded,
                 title: 'Seguridad',
                 value: 'Acceso controlado por roles y permisos.',
@@ -643,13 +632,12 @@ class _SettingsHubScaffold extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final mobile = MediaQuery.sizeOf(context).width < 900;
     final user = ref.watch(authStateProvider).user;
-    final configuredName = company.maybeWhen(
-      data: (settings) => settings.companyName.trim(),
-      orElse: () => '',
+    final backButton = IconButton(
+      tooltip: 'Volver',
+      onPressed: () =>
+          AppNavigator.goBack(context, fallbackRoute: Routes.cotizaciones),
+      icon: const Icon(Icons.arrow_back_rounded),
     );
-    final displayName = configuredName.isEmpty
-        ? 'FullPOS Cloud'
-        : configuredName;
     return Scaffold(
       backgroundColor: AppColors.background,
       drawer: buildAdaptiveDrawer(context, currentUser: user),
@@ -657,7 +645,7 @@ class _SettingsHubScaffold extends ConsumerWidget {
         title: 'Configuración',
         showLogo: false,
         showDepartmentLabel: false,
-        preferDrawerLeading: true,
+        leading: backButton,
         trailing: const SizedBox.shrink(),
         actions: mobile
             ? null
@@ -680,13 +668,6 @@ class _SettingsHubScaffold extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (!mobile) ...[
-                  _SettingsHeroPanel(
-                    companyName: displayName,
-                    configured: configuredName.isNotEmpty,
-                  ),
-                  const SizedBox(height: 12),
-                ],
                 Expanded(
                   child: ListView.separated(
                     itemCount: children.length,
@@ -700,46 +681,6 @@ class _SettingsHubScaffold extends ConsumerWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _SettingsHeroPanel extends StatelessWidget {
-  const _SettingsHeroPanel({
-    required this.companyName,
-    required this.configured,
-  });
-
-  final String companyName;
-  final bool configured;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFDDE7EE)),
-      ),
-      child: Row(
-        children: [
-          _TileIcon(icon: Icons.settings_rounded, size: 34),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Configuración de FullPOS Cloud', style: _titleStyle(17)),
-                const SizedBox(height: 2),
-                Text(companyName, style: _strongBodyStyle()),
-              ],
-            ),
-          ),
-          _StatusPill(label: configured ? 'Empresa configurada' : 'Pendiente'),
-        ],
       ),
     );
   }
@@ -1817,6 +1758,7 @@ class _CompanySettingsEditorState
   String? _logoBase64;
   Uint8List? _logoBytes;
   bool _saving = false;
+  bool _showAdvancedCompany = false;
 
   @override
   void initState() {
@@ -2106,19 +2048,8 @@ class _CompanySettingsEditorState
           onRemove: _logoBytes == null ? null : _removeLogo,
         ),
         const SizedBox(height: 12),
-        _ParagraphBlock(
-          title: 'Dirección fiscal y comercial',
-          text: widget.settings.address.trim().isEmpty
-              ? 'No hay dirección configurada para documentos.'
-              : widget.settings.address.trim(),
-        ),
-        const SizedBox(height: 14),
-        _ParagraphBlock(
-          title: 'Datos fiscales y comerciales',
-          text:
-              'Esta información se usa como identidad central de la empresa en documentos y pantallas.',
-        ),
-        const SizedBox(height: 10),
+        Text('Datos principales', style: _titleStyle(15)),
+        const SizedBox(height: 8),
         _FormWrap(
           children: [
             _field(_name, 'Nombre comercial', Icons.storefront_outlined),
@@ -2142,59 +2073,86 @@ class _CompanySettingsEditorState
               Icons.notes_outlined,
               maxLines: 2,
             ),
-            _field(_website, 'Sitio web', Icons.language_outlined),
-            _field(_instagram, 'Instagram', Icons.alternate_email_rounded),
-            _field(_facebook, 'Facebook', Icons.facebook_outlined),
-            _field(
-              _gpsLocation,
-              'Ubicación GPS / Google Maps',
-              Icons.map_outlined,
-            ),
           ],
-        ),
-        const SizedBox(height: 14),
-        _ParagraphBlock(
-          title: 'Representante legal',
-          text:
-              'Datos usados en contratos, cartas y documentos administrativos.',
         ),
         const SizedBox(height: 10),
-        _FormWrap(
-          children: [
-            _field(
-              _legalName,
-              'Representante legal',
-              Icons.person_outline_rounded,
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: () =>
+                setState(() => _showAdvancedCompany = !_showAdvancedCompany),
+            icon: Icon(
+              _showAdvancedCompany
+                  ? Icons.keyboard_arrow_up_rounded
+                  : Icons.keyboard_arrow_down_rounded,
             ),
-            _field(
-              _legalCedula,
-              'Cédula representante',
-              Icons.credit_card_outlined,
-            ),
-            _field(_legalRole, 'Cargo', Icons.work_outline_rounded),
-            _field(_legalNationality, 'Nacionalidad', Icons.flag_outlined),
-            _field(
-              _legalCivilStatus,
-              'Estado civil',
-              Icons.assignment_ind_outlined,
-            ),
-          ],
+            label: Text(_showAdvancedCompany ? 'Ver menos' : 'Ver más'),
+          ),
         ),
-        const SizedBox(height: 14),
-        _ParagraphBlock(
-          title: 'Cuenta bancaria principal',
-          text:
-              'Se usará como referencia para documentos, depósitos y comunicación con clientes.',
-        ),
-        const SizedBox(height: 10),
-        _FormWrap(
-          children: [
-            _field(_bankAlias, 'Alias de cuenta', Icons.label_outline_rounded),
-            _field(_bankType, 'Tipo de cuenta', Icons.account_balance_outlined),
-            _field(_bankNumber, 'Número de cuenta', Icons.credit_card_outlined),
-            _field(_bankName, 'Banco', Icons.account_balance_rounded),
-          ],
-        ),
+        if (_showAdvancedCompany) ...[
+          const Divider(height: 16, color: Color(0xFFDDE7EE)),
+          Text('Canales y ubicación', style: _titleStyle(15)),
+          const SizedBox(height: 8),
+          _FormWrap(
+            children: [
+              _field(_website, 'Sitio web', Icons.language_outlined),
+              _field(_instagram, 'Instagram', Icons.alternate_email_rounded),
+              _field(_facebook, 'Facebook', Icons.facebook_outlined),
+              _field(
+                _gpsLocation,
+                'Ubicación GPS / Google Maps',
+                Icons.map_outlined,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text('Representante legal', style: _titleStyle(15)),
+          const SizedBox(height: 8),
+          _FormWrap(
+            children: [
+              _field(
+                _legalName,
+                'Representante legal',
+                Icons.person_outline_rounded,
+              ),
+              _field(
+                _legalCedula,
+                'Cédula representante',
+                Icons.credit_card_outlined,
+              ),
+              _field(_legalRole, 'Cargo', Icons.work_outline_rounded),
+              _field(_legalNationality, 'Nacionalidad', Icons.flag_outlined),
+              _field(
+                _legalCivilStatus,
+                'Estado civil',
+                Icons.assignment_ind_outlined,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text('Cuenta bancaria principal', style: _titleStyle(15)),
+          const SizedBox(height: 8),
+          _FormWrap(
+            children: [
+              _field(
+                _bankAlias,
+                'Alias de cuenta',
+                Icons.label_outline_rounded,
+              ),
+              _field(
+                _bankType,
+                'Tipo de cuenta',
+                Icons.account_balance_outlined,
+              ),
+              _field(
+                _bankNumber,
+                'Número de cuenta',
+                Icons.credit_card_outlined,
+              ),
+              _field(_bankName, 'Banco', Icons.account_balance_rounded),
+            ],
+          ),
+        ],
         const SizedBox(height: 14),
         Align(
           alignment: Alignment.centerRight,
@@ -2429,6 +2387,20 @@ class _BackupSection extends ConsumerStatefulWidget {
 class _BackupSectionState extends ConsumerState<_BackupSection> {
   bool _running = false;
   CloudBackupResult? _result;
+  CloudBackupInspection? _inspection;
+  String? _lastZipPath;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadLastBackup());
+  }
+
+  Future<void> _loadLastBackup() async {
+    final path = await ref.read(cloudBackupServiceProvider).lastBackupZipPath();
+    if (!mounted) return;
+    setState(() => _lastZipPath = path);
+  }
 
   Future<void> _createBackup() async {
     setState(() => _running = true);
@@ -2447,6 +2419,7 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
           ),
         ),
       );
+      await _loadLastBackup();
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2457,15 +2430,52 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
     }
   }
 
+  Future<void> _inspectBackup() async {
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['zip'],
+      withData: false,
+    );
+    final path = picked?.files.single.path;
+    if (path == null) return;
+    try {
+      final inspection = await ref
+          .read(cloudBackupServiceProvider)
+          .inspectBackupZip(path);
+      if (!mounted) return;
+      setState(() => _inspection = inspection);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Backup validado correctamente.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo validar el backup: $error')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final result = _result;
+    final shownZipPath = result?.zipPath ?? _lastZipPath;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _DetailRow('Origen', 'Datos de nube y configuración local'),
-        const _DetailRow('Destino', 'Documentos / FullPOS Cloud / backups'),
-        const _DetailRow('Formato', 'Carpeta JSON + archivo ZIP'),
+        const _StatusBanner(
+          icon: Icons.security_update_good_outlined,
+          title: 'Respaldo local de la empresa',
+          message:
+              'Descarga un ZIP con la información sincronizada. En PC se crea automáticamente cada 2 días.',
+          accent: Color(0xFF2563EB),
+        ),
+        const SizedBox(height: 12),
+        const _DetailRow(
+          'Origen',
+          'Nube, empresa, impresora y módulos activos',
+        ),
+        const _DetailRow('Destino', 'Carpeta local FullPOS Cloud / backups'),
+        if (shownZipPath != null) _DetailRow('Último ZIP', shownZipPath),
         const SizedBox(height: 12),
         LayoutBuilder(
           builder: (context, constraints) {
@@ -2480,15 +2490,18 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
                     )
                   : const Icon(Icons.cloud_download_outlined),
               label: Text(
-                _running ? 'Descargando' : 'Crear backup',
+                _running ? 'Creando backup' : 'Descargar backup ahora',
                 overflow: TextOverflow.ellipsis,
               ),
               style: _filledButtonStyle(),
             );
             final restore = OutlinedButton.icon(
-              onPressed: null,
-              icon: const Icon(Icons.cloud_upload_outlined),
-              label: const Text('Restaurar', overflow: TextOverflow.ellipsis),
+              onPressed: _running ? null : _inspectBackup,
+              icon: const Icon(Icons.fact_check_outlined),
+              label: const Text(
+                'Validar backup',
+                overflow: TextOverflow.ellipsis,
+              ),
               style: _outlinedButtonStyle(),
             );
             if (stack) {
@@ -2526,6 +2539,16 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
             for (final entry in result.failedModules.entries)
               _DetailRow(entry.key, entry.value),
           ],
+        ],
+        if (_inspection != null) ...[
+          const SizedBox(height: 14),
+          _StatusBanner(
+            icon: Icons.fact_check_outlined,
+            title: 'Backup válido para recuperación',
+            message:
+                '${_inspection!.modules.length} módulos encontrados. Archivo: ${_inspection!.path}',
+            accent: const Color(0xFF178A5C),
+          ),
         ],
       ],
     );

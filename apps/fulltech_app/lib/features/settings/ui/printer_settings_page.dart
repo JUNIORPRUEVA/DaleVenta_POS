@@ -48,6 +48,7 @@ class _WindowsPrinterSettingsViewState
   bool _loading = true;
   bool _saving = false;
   bool _testing = false;
+  bool _showAdvanced = false;
   Timer? _saveDebounce;
 
   @override
@@ -258,32 +259,6 @@ class _WindowsPrinterSettingsViewState
             ),
             const SizedBox(height: 14),
             const Text(
-              'Logo y negocio',
-              style: TextStyle(fontWeight: FontWeight.w900),
-            ),
-            _switch(
-              title: 'Mostrar logo',
-              value: settings.showLogo,
-              onChanged: (value) => _save(settings.copyWith(showLogo: value)),
-            ),
-            SegmentedButton<int>(
-              segments: const [
-                ButtonSegment(value: 40, label: Text('Pequeño')),
-                ButtonSegment(value: 70, label: Text('Normal')),
-                ButtonSegment(value: 100, label: Text('Grande')),
-              ],
-              selected: {settings.logoSize},
-              onSelectionChanged: (value) =>
-                  _save(settings.copyWith(logoSize: value.first)),
-            ),
-            _switch(
-              title: 'Mostrar datos del negocio',
-              value: settings.showBusinessData,
-              onChanged: (value) =>
-                  _save(settings.copyWith(showBusinessData: value)),
-            ),
-            const SizedBox(height: 14),
-            const Text(
               'Tamaño del texto',
               style: TextStyle(fontWeight: FontWeight.w900),
             ),
@@ -333,7 +308,13 @@ class _WindowsPrinterSettingsViewState
               onChanged: (value) =>
                   _save(settings.copyWith(autoPrintOnPayment: value)),
             ),
-            const SizedBox(height: 8),
+            _switch(
+              title: 'Mostrar datos del negocio',
+              value: settings.showBusinessData,
+              onChanged: (value) =>
+                  _save(settings.copyWith(showBusinessData: value)),
+            ),
+            const SizedBox(height: 12),
             const Text(
               'Formato del ticket',
               style: TextStyle(fontWeight: FontWeight.w900),
@@ -369,57 +350,93 @@ class _WindowsPrinterSettingsViewState
                 );
               },
             ),
-            _switch(
-              title: 'Mostrar cliente',
-              value: settings.showClient,
-              onChanged: (value) => _save(settings.copyWith(showClient: value)),
-            ),
-            _switch(
-              title: 'Mostrar cajero',
-              value: settings.showCashier,
-              onChanged: (value) =>
-                  _save(settings.copyWith(showCashier: value)),
-            ),
-            _switch(
-              title: 'Mostrar metodo de pago',
-              value: settings.showPaymentMethod,
-              onChanged: (value) =>
-                  _save(settings.copyWith(showPaymentMethod: value)),
-            ),
-            const SizedBox(height: 10),
-            TextFormField(
-              initialValue: settings.headerExtra,
-              decoration: const InputDecoration(
-                labelText: 'Encabezado adicional',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 2,
-              onChanged: (value) =>
-                  _queueSave(settings.copyWith(headerExtra: value)),
-            ),
-            const SizedBox(height: 10),
-            TextFormField(
-              initialValue: settings.footerMessage,
-              decoration: const InputDecoration(
-                labelText: 'Mensaje final',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 2,
-              onChanged: (value) =>
-                  _queueSave(settings.copyWith(footerMessage: value)),
-            ),
-            const SizedBox(height: 10),
-            TextFormField(
-              initialValue: settings.warrantyPolicy,
-              decoration: const InputDecoration(
-                labelText: 'Política de garantía',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 4,
-              onChanged: (value) =>
-                  _queueSave(settings.copyWith(warrantyPolicy: value)),
-            ),
             const SizedBox(height: 14),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => setState(() => _showAdvanced = !_showAdvanced),
+                icon: Icon(
+                  _showAdvanced
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                ),
+                label: Text(_showAdvanced ? 'Ver menos' : 'Ver más'),
+              ),
+            ),
+            if (_showAdvanced) ...[
+              const Divider(height: 18),
+              const Text(
+                'Logo y detalle',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+              _switch(
+                title: 'Mostrar logo',
+                value: settings.showLogo,
+                onChanged: (value) => _save(settings.copyWith(showLogo: value)),
+              ),
+              SegmentedButton<int>(
+                segments: const [
+                  ButtonSegment(value: 40, label: Text('Pequeño')),
+                  ButtonSegment(value: 70, label: Text('Normal')),
+                  ButtonSegment(value: 100, label: Text('Grande')),
+                ],
+                selected: {settings.logoSize},
+                onSelectionChanged: (value) =>
+                    _save(settings.copyWith(logoSize: value.first)),
+              ),
+              _switch(
+                title: 'Mostrar cliente',
+                value: settings.showClient,
+                onChanged: (value) =>
+                    _save(settings.copyWith(showClient: value)),
+              ),
+              _switch(
+                title: 'Mostrar cajero',
+                value: settings.showCashier,
+                onChanged: (value) =>
+                    _save(settings.copyWith(showCashier: value)),
+              ),
+              _switch(
+                title: 'Mostrar método de pago',
+                value: settings.showPaymentMethod,
+                onChanged: (value) =>
+                    _save(settings.copyWith(showPaymentMethod: value)),
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                initialValue: settings.headerExtra,
+                decoration: const InputDecoration(
+                  labelText: 'Encabezado adicional',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 2,
+                onChanged: (value) =>
+                    _queueSave(settings.copyWith(headerExtra: value)),
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                initialValue: settings.footerMessage,
+                decoration: const InputDecoration(
+                  labelText: 'Mensaje final',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 2,
+                onChanged: (value) =>
+                    _queueSave(settings.copyWith(footerMessage: value)),
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                initialValue: settings.warrantyPolicy,
+                decoration: const InputDecoration(
+                  labelText: 'Política de garantía',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+                onChanged: (value) =>
+                    _queueSave(settings.copyWith(warrantyPolicy: value)),
+              ),
+              const SizedBox(height: 14),
+            ],
             Wrap(
               spacing: 10,
               runSpacing: 10,
@@ -435,11 +452,12 @@ class _WindowsPrinterSettingsViewState
                       : const Icon(Icons.print_outlined),
                   label: const Text('Ticket de prueba'),
                 ),
-                OutlinedButton.icon(
-                  onPressed: _testing ? null : _ruler,
-                  icon: const Icon(Icons.straighten_outlined),
-                  label: const Text('Regla de ancho'),
-                ),
+                if (_showAdvanced)
+                  OutlinedButton.icon(
+                    onPressed: _testing ? null : _ruler,
+                    icon: const Icon(Icons.straighten_outlined),
+                    label: const Text('Regla de ancho'),
+                  ),
               ],
             ),
             if (_saving) ...[
@@ -774,9 +792,7 @@ class _MobilePrinterSettingsViewState
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
-          Expanded(
-            child: Text(title, style: const TextStyle(fontSize: 13)),
-          ),
+          Expanded(child: Text(title, style: const TextStyle(fontSize: 13))),
           Switch(value: value, onChanged: onChanged),
         ],
       ),
@@ -1008,9 +1024,7 @@ class _MobilePrinterSettingsViewState
                           child: Row(
                             children: [
                               Icon(
-                                selected
-                                    ? Icons.check_circle
-                                    : Icons.bluetooth,
+                                selected ? Icons.check_circle : Icons.bluetooth,
                                 color: selected
                                     ? const Color(0xFF0B5CFF)
                                     : null,

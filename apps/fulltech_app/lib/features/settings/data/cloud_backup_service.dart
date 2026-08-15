@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
@@ -34,6 +35,18 @@ class CloudBackupResult {
   bool get hasFailures => failedModules.isNotEmpty;
 }
 
+class CloudBackupInspection {
+  const CloudBackupInspection({
+    required this.path,
+    required this.modules,
+    required this.createdAt,
+  });
+
+  final String path;
+  final List<String> modules;
+  final DateTime? createdAt;
+}
+
 class CloudBackupService {
   CloudBackupService(this._ref, this._dio);
 
@@ -41,6 +54,63 @@ class CloudBackupService {
   final Dio _dio;
 
   static const _timeout = Duration(seconds: 25);
+  static const _lastBackupAtKey = 'fullpos_cloud_last_backup_at';
+  static const _lastBackupZipKey = 'fullpos_cloud_last_backup_zip';
+
+  Future<CloudBackupResult?> createAutomaticBackupIfDue({
+    Duration interval = const Duration(days: 2),
+  }) async {
+    if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) {
+      return null;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final lastRaw = prefs.getString(_lastBackupAtKey);
+    final last = lastRaw == null ? null : DateTime.tryParse(lastRaw);
+    if (last != null && DateTime.now().difference(last) < interval) {
+      final zipPath = prefs.getString(_lastBackupZipKey);
+      if (zipPath != null && await File(zipPath).exists()) return null;
+    }
+    return createCloudBackup();
+  }
+
+  Future<String?> lastBackupZipPath() async {
+    final prefs = await SharedPreferences.getInstance();
+    final path = prefs.getString(_lastBackupZipKey);
+    if (path == null || path.trim().isEmpty) return null;
+    return File(path).existsSync() ? path : null;
+  }
+
+  Future<CloudBackupInspection> inspectBackupZip(String zipPath) async {
+    final file = File(zipPath);
+    if (!await file.exists()) {
+      throw const FormatException('El archivo seleccionado no existe.');
+    }
+    final archive = ZipDecoder().decodeBytes(await file.readAsBytes());
+    ArchiveFile? manifest;
+    for (final entry in archive.files) {
+      if (entry.name.endsWith('manifest.json')) {
+        manifest = entry;
+        break;
+      }
+    }
+    if (manifest == null) {
+      throw const FormatException('El backup no contiene manifiesto.');
+    }
+    final data =
+        jsonDecode(utf8.decode(manifest.content)) as Map<String, dynamic>;
+    final modulesRaw = data['modules'];
+    final modules = modulesRaw is List
+        ? modulesRaw.map((item) => '$item').toList()
+        : <String>[];
+    final createdAtRaw = data['createdAt'];
+    return CloudBackupInspection(
+      path: zipPath,
+      modules: modules,
+      createdAt: createdAtRaw is String
+          ? DateTime.tryParse(createdAtRaw)
+          : null,
+    );
+  }
 
   Future<CloudBackupResult> createCloudBackup() async {
     final now = DateTime.now();
@@ -116,13 +186,21 @@ class CloudBackupService {
     encoder.addDirectory(folder);
     encoder.close();
 
-    return CloudBackupResult(
+    final result = CloudBackupResult(
       folderPath: folder.path,
       zipPath: zipPath,
       modules: modules,
       failedModules: failures,
       createdAt: now,
     );
+    await _rememberBackup(result);
+    return result;
+  }
+
+  Future<void> _rememberBackup(CloudBackupResult result) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lastBackupAtKey, result.createdAt.toIso8601String());
+    await prefs.setString(_lastBackupZipKey, result.zipPath);
   }
 
   Future<Directory> _backupRoot() async {

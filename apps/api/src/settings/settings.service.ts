@@ -29,14 +29,24 @@ export class SettingsService {
     this.requireAdmin(user);
     const companyId = requireTenant(user);
     const data = this.settingsData(dto);
-    const config = await this.prisma.appConfig.upsert({
-      where: { companyId },
-      create: {
-        id: `company_${companyId}`,
-        companyId,
-        ...data,
-      },
-      update: data,
+    const config = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.appConfig.upsert({
+        where: { companyId },
+        create: {
+          id: `company_${companyId}`,
+          companyId,
+          ...data,
+        },
+        update: data,
+      });
+      const companyName = data.companyName?.trim();
+      if (companyName) {
+        await tx.company.update({
+          where: { id: companyId },
+          data: { name: companyName },
+        });
+      }
+      return updated;
     });
     return this.toPublicSettings(config);
   }

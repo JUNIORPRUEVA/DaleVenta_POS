@@ -272,6 +272,12 @@ bool desktopShellShouldShowOwnAppBar(String location) {
     Routes.ai,
     Routes.users,
     Routes.profile,
+    Routes.configuracion,
+    Routes.configuracionEmpresa,
+    Routes.configuracionImpresora,
+    Routes.configuracionBackup,
+    Routes.configuracionParametros,
+    Routes.configuracionDocumentos,
   ];
 
   for (final route in routesWithOwnAppBar) {

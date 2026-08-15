@@ -387,7 +387,7 @@ export class LicenseService {
 
     return {
       companyId: company.id,
-      companyName: company.name,
+      companyName: appConfig?.companyName || company.name,
       slug: company.slug,
       plan: company.plan,
       licenseType: this.licenseType(company.plan, effectiveStatus, effectiveLimits),
