@@ -219,19 +219,27 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   DateTime? _lastAutoSyncAt;
   Timer? _liveSyncTimer;
   StreamSubscription<CatalogRealtimeMessage>? _realtimeSubscription;
+  late final OpenSalesTicketsRepository _openTicketsRepository;
+  String _sessionCompanyId = '';
+  String? _sessionUserId;
+  String? _sessionUserName;
   static const Duration _liveSyncInterval = Duration(minutes: 2);
   static const Duration _silentRefreshMinInterval = Duration(seconds: 20);
 
   @override
   void initState() {
     super.initState();
+    _openTicketsRepository = ref.read(openSalesTicketsRepositoryProvider);
     final user = ref.read(authStateProvider).user;
+    _sessionCompanyId = (user?.companyId ?? '').trim();
+    _sessionUserId = user?.id;
+    _sessionUserName = user?.nombreCompleto;
     final initialDraft = _DesktopTicketDraft.empty(
       id: _newId(),
       title: 'Ticket 1',
-      companyId: user?.companyId,
-      createdByUserId: user?.id,
-      createdByUserName: user?.nombreCompleto,
+      companyId: _sessionCompanyId.isEmpty ? null : _sessionCompanyId,
+      createdByUserId: _sessionUserId,
+      createdByUserName: _sessionUserName,
     );
     _desktopTickets = [initialDraft];
     _activeDesktopTicketId = initialDraft.id;
@@ -401,6 +409,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
+      _writeActiveDesktopDraft();
+      _schedulePersistEditorDraft(immediate: true);
       _stopLiveSync();
     }
   }
@@ -487,8 +497,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           _writeActiveDesktopDraft();
         }
       });
-      _schedulePersistEditorDraft();
       _lastLoadedRouteQuotationId = routeQuotationKey;
+      _schedulePersistEditorDraft(immediate: true);
       unawaited(_syncQuotationAi(triggerAi: false));
     } catch (_) {
       _lastLoadedRouteQuotationId = routeQuotationKey;
@@ -537,6 +547,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _clearDesktopShellFooter();
     _persistEditorDraftTimer?.cancel();
     _persistEditorDraftTimer = null;
+    _writeActiveDesktopDraft();
     unawaited(_persistEditorDraft());
     WidgetsBinding.instance.removeObserver(this);
     if (_routeObserverSubscribed) {
@@ -551,17 +562,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   String _editorDraftCacheKey() {
-    final user = ref.read(authStateProvider).user;
-    final companyId = (user?.companyId ?? '').trim();
+    final companyId = _sessionCompanyId.trim();
     if (companyId.isNotEmpty) {
       return '${_editorDraftCachePrefix}company:$companyId';
     }
-    final ownerId = (user?.id ?? 'anon').trim();
+    final ownerId = (_sessionUserId ?? 'anon').trim();
     return '${_editorDraftCachePrefix}user:$ownerId';
   }
 
-  String _activeCompanyId() =>
-      (ref.read(authStateProvider).user?.companyId ?? '').trim();
+  String _activeCompanyId() => _sessionCompanyId.trim();
 
   bool _belongsToActiveCompany(_DesktopTicketDraft ticket) {
     final companyId = _activeCompanyId();
@@ -597,7 +606,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Future<void> _persistEditorDraft() async {
-    if (!mounted) return;
     try {
       final map = <String, dynamic>{
         'v': 2,
@@ -608,15 +616,13 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         ]..sort(_compareDesktopTickets)).map((t) => t.toMap()).toList(),
       };
       await _editorDraftCache.writeMap(_editorDraftCacheKey(), map);
-      await ref
-          .read(openSalesTicketsRepositoryProvider)
-          .replace(
-            activeId: _activeDesktopTicketId,
-            tickets: (map['tickets'] as List)
-                .whereType<Map>()
-                .map((row) => row.cast<String, dynamic>())
-                .toList(growable: false),
-          );
+      await _openTicketsRepository.replace(
+        activeId: _activeDesktopTicketId,
+        tickets: (map['tickets'] as List)
+            .whereType<Map>()
+            .map((row) => row.cast<String, dynamic>())
+            .toList(growable: false),
+      );
     } catch (_) {
       // Best-effort.
     }
@@ -929,14 +935,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     required String title,
     _DesktopTicketDraft? base,
   }) {
-    final user = ref.read(authStateProvider).user;
     return _DesktopTicketDraft(
       id: id,
       title: title,
       createdAt: base?.createdAt ?? DateTime.now(),
-      companyId: base?.companyId ?? user?.companyId,
-      createdByUserId: base?.createdByUserId ?? user?.id,
-      createdByUserName: base?.createdByUserName ?? user?.nombreCompleto,
+      companyId:
+          base?.companyId ??
+          (_sessionCompanyId.isEmpty ? null : _sessionCompanyId),
+      createdByUserId: base?.createdByUserId ?? _sessionUserId,
+      createdByUserName: base?.createdByUserName ?? _sessionUserName,
       items: _items.map((item) => item.copyWith()).toList(),
       selectedClientId: _selectedClientId,
       selectedClientName: _selectedClientName,
@@ -1296,7 +1303,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       _replaceEditorStateFromDraft(ticket);
       _writeActiveDesktopDraft();
     });
-    _schedulePersistEditorDraft();
+    _schedulePersistEditorDraft(immediate: true);
   }
 
   void _switchDesktopTicket(String id) {

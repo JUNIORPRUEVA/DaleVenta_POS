@@ -26,6 +26,7 @@ import '../clientes/data/clientes_repository.dart';
 import '../ventas/data/ventas_repository.dart';
 import 'cotizacion_models.dart';
 import 'data/cotizaciones_repository.dart';
+import 'data/open_sales_tickets_repository.dart';
 import 'utils/cotizacion_pdf_service.dart';
 
 enum _QuotePdfShareAction {
@@ -97,6 +98,7 @@ class _CotizacionesHistorialScreenState
   DateTime? _toDate;
   bool _ownOnly = false;
   String? _selectedQuotationId;
+  bool _creatingSalesTicket = false;
 
   String _money(double value) => formatRdCurrencyAccounting(value);
 
@@ -222,11 +224,7 @@ class _CotizacionesHistorialScreenState
       return;
     }
 
-    final quotationId = Uri.encodeQueryComponent(item.id);
-    final ticketSeed = DateTime.now().microsecondsSinceEpoch.toString();
-    context.go(
-      '${Routes.cotizaciones}?quotationId=$quotationId&newTicket=1&ticketSeed=$ticketSeed',
-    );
+    unawaited(_createCompanySalesTicketFromQuotation(item, duplicate: false));
   }
 
   void _duplicateQuotation(CotizacionModel item) {
@@ -238,11 +236,79 @@ class _CotizacionesHistorialScreenState
       return;
     }
 
-    final quotationId = Uri.encodeQueryComponent(item.id);
-    final ticketSeed = DateTime.now().microsecondsSinceEpoch.toString();
-    context.go(
-      '${Routes.cotizaciones}?quotationId=$quotationId&duplicate=1&newTicket=1&ticketSeed=$ticketSeed',
-    );
+    unawaited(_createCompanySalesTicketFromQuotation(item, duplicate: true));
+  }
+
+  Future<void> _createCompanySalesTicketFromQuotation(
+    CotizacionModel item, {
+    required bool duplicate,
+  }) async {
+    if (_creatingSalesTicket) return;
+    setState(() => _creatingSalesTicket = true);
+    try {
+      final user = ref.read(authStateProvider).user;
+      final companyId = (user?.companyId ?? '').trim();
+      final createdAt = DateTime.now();
+      final ticketId = createdAt.microsecondsSinceEpoch.toString();
+      final cleanCustomer = item.customerName.trim();
+      final title = cleanCustomer.isEmpty || cleanCustomer == 'Sin cliente'
+          ? 'Ticket cotización'
+          : cleanCustomer;
+      final newTicket = <String, dynamic>{
+        'id': ticketId,
+        'title': title,
+        'createdAt': createdAt.toIso8601String(),
+        'companyId': companyId.isEmpty ? null : companyId,
+        'createdByUserId': user?.id,
+        'createdByUserName': user?.nombreCompleto,
+        'items': item.items.map((row) => row.toMap()).toList(),
+        'selectedClientId': item.customerId,
+        'selectedClientName': cleanCustomer.isEmpty
+            ? 'Sin cliente'
+            : cleanCustomer,
+        'selectedClientPhone': item.customerPhone,
+        'note': item.note,
+        'includeItbis': item.includeItbis,
+        'fiscalVoucherType': 'B01',
+        'fiscalVoucherNumber': '',
+        'fiscalVoucherDueDate': null,
+        'fiscalCustomerTaxId': '',
+        'fiscalCustomerName': '',
+        'globalDiscountAmount': item.globalDiscountAmount,
+        'editingId': duplicate ? null : item.id,
+        'editingCreatedAt': duplicate ? null : item.createdAt.toIso8601String(),
+        'selectedCategory': null,
+        'selectedCategories': const <String>[],
+        'searchQuery': '',
+      };
+
+      final repository = ref.read(openSalesTicketsRepositoryProvider);
+      final remote = await repository.fetch();
+      final rawTickets = (remote?['tickets'] as List?) ?? const [];
+      final tickets = rawTickets
+          .whereType<Map>()
+          .map((row) => row.cast<String, dynamic>())
+          .where((row) => (row['id'] ?? '').toString() != ticketId)
+          .toList(growable: true);
+      tickets.insert(0, newTicket);
+
+      await repository.replace(activeId: ticketId, tickets: tickets);
+      if (!mounted) return;
+      context.go(Routes.cotizaciones);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error is ApiException
+                ? error.message
+                : 'No se pudo crear el ticket desde la cotización.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _creatingSalesTicket = false);
+    }
   }
 
   @override

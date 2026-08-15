@@ -278,7 +278,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               final pick = (state.uri.queryParameters['pick'] ?? '').trim();
               final quoteId = (state.uri.queryParameters['quoteId'] ?? '')
                   .trim();
-              final pickForEditor = pick != '0';
+              final pickForEditor = pick == '1';
               return CotizacionesHistorialScreen(
                 customerPhone: phone.isEmpty ? null : phone,
                 pickForEditor: pickForEditor,
