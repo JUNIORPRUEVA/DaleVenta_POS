@@ -223,7 +223,10 @@ class _CotizacionesHistorialScreenState
     }
 
     final quotationId = Uri.encodeQueryComponent(item.id);
-    context.go('${Routes.cotizaciones}?quotationId=$quotationId&newTicket=1');
+    final ticketSeed = DateTime.now().microsecondsSinceEpoch.toString();
+    context.go(
+      '${Routes.cotizaciones}?quotationId=$quotationId&newTicket=1&ticketSeed=$ticketSeed',
+    );
   }
 
   void _duplicateQuotation(CotizacionModel item) {
@@ -236,8 +239,9 @@ class _CotizacionesHistorialScreenState
     }
 
     final quotationId = Uri.encodeQueryComponent(item.id);
+    final ticketSeed = DateTime.now().microsecondsSinceEpoch.toString();
     context.go(
-      '${Routes.cotizaciones}?quotationId=$quotationId&duplicate=1&newTicket=1',
+      '${Routes.cotizaciones}?quotationId=$quotationId&duplicate=1&newTicket=1&ticketSeed=$ticketSeed',
     );
   }
 

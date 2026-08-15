@@ -209,7 +209,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   bool _showMobileTicketDropdown = false;
   bool _mobileSearchOpen = false;
 
-  bool _prefillFromRouteApplied = false;
+  String? _lastRoutePrefillUri;
   bool _routeObserverSubscribed = false;
   RouteObserver<ModalRoute<dynamic>>? _routeObserver;
   String? _lastLoadedRouteQuotationId;
@@ -260,8 +260,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       return;
     }
 
-    if (_prefillFromRouteApplied) return;
-    _prefillFromRouteApplied = true;
+    final routeUri = _safeRouteUri()?.toString() ?? '';
+    if (_lastRoutePrefillUri == routeUri) return;
+    _lastRoutePrefillUri = routeUri;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -447,9 +448,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     final quotationId = (qp['quotationId'] ?? '').trim();
     final duplicate = (qp['duplicate'] ?? '').trim() == '1';
     final openInNewTicket = (qp['newTicket'] ?? '').trim() == '1';
+    final ticketSeed = (qp['ticketSeed'] ?? '').trim();
     if (quotationId.isEmpty) return;
     final routeQuotationKey =
-        '$quotationId:${duplicate ? 'duplicate' : 'source'}:${openInNewTicket ? 'new' : 'current'}';
+        '$quotationId:${duplicate ? 'duplicate' : 'source'}:${openInNewTicket ? 'new' : 'current'}:$ticketSeed';
     if (!openInNewTicket &&
         !duplicate &&
         (_editingId ?? '').trim() == quotationId) {
@@ -657,6 +659,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         _writeActiveDesktopDraft();
       });
       _applyClientPrefillFromRoute(force: true);
+      unawaited(_applyQuotationPrefillFromRoute());
       if (remote == null) {
         _schedulePersistEditorDraft(immediate: true);
       }
@@ -684,6 +687,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           _replaceEditorStateFromDraft(tickets.first);
           _writeActiveDesktopDraft();
         });
+        unawaited(_applyQuotationPrefillFromRoute());
       } catch (_) {
         // Ignore invalid cache entries.
       }

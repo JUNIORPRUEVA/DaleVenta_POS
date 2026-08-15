@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Request } from 'express';
+import { RolesGuard } from '../auth/roles.guard';
 import { type TenantUser } from '../auth/tenant-context';
 import { LicenseService } from './license.service';
 
@@ -8,25 +9,25 @@ import { LicenseService } from './license.service';
 export class LicenseController {
   constructor(private readonly licenses: LicenseService) {}
 
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Get()
   getMyLicense(@Req() req: Request) {
     return this.licenses.getMyLicense(req.user as TenantUser);
   }
 
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Post('activate')
   activateMyLicense(@Req() req: Request, @Body() dto: Record<string, unknown>) {
     return this.licenses.activateMyLicense(req.user as TenantUser, dto);
   }
 
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Post('block')
   blockMyLicense(@Req() req: Request, @Body() dto: Record<string, unknown>) {
     return this.licenses.blockMyLicense(req.user as TenantUser, dto);
   }
 
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Patch('limits')
   updateMyLimits(@Req() req: Request, @Body() dto: Record<string, unknown>) {
     return this.licenses.updateMyLimits(req.user as TenantUser, dto);

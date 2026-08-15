@@ -10,6 +10,8 @@ import 'package:image/image.dart' as img;
 import '../../core/app_access/app_access_links.dart';
 import '../../core/app_update/app_update_controller.dart';
 import '../../core/app_update/app_update_models.dart';
+import '../../core/auth/admin_authorization.dart';
+import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
@@ -1871,6 +1873,15 @@ class _CompanySettingsEditorState
   }
 
   Future<void> _save() async {
+    final authorized = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.manageSettings,
+      reason: 'Guardar información de la empresa',
+      forceAdminAuthorization: true,
+    );
+    if (!authorized || !mounted) return;
+
     setState(() => _saving = true);
     try {
       final queued = await ref

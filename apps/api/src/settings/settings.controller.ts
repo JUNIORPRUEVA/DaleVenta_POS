@@ -1,10 +1,11 @@
 import { Body, Controller, Get, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Request } from 'express';
+import { RolesGuard } from '../auth/roles.guard';
 import { type TenantUser } from '../auth/tenant-context';
 import { SettingsService } from './settings.service';
 
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(AuthGuard('jwt'), RolesGuard)
 @Controller('settings')
 export class SettingsController {
   constructor(private readonly settings: SettingsService) {}
