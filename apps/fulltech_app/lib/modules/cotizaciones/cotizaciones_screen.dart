@@ -7346,7 +7346,6 @@ class _CompanyLicensesSidePanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final company = ref.watch(companySettingsProvider);
-    final user = ref.watch(authStateProvider).user;
     final licenseAsync = ref.watch(licenseStatusProvider);
     final companyName = company.maybeWhen(
       data: (settings) => settings.companyName.trim().isEmpty
@@ -7360,10 +7359,7 @@ class _CompanyLicensesSidePanel extends ConsumerWidget {
       title: 'Licencias',
       subtitle: 'Estado de uso, empresa activa y alcance contratado.',
       children: [
-        _LicenseAccountCard(
-          companyName: companyName,
-          userEmail: user?.email ?? 'Usuario conectado',
-        ),
+        _LicenseAccountCard(companyName: companyName),
         ...licenseAsync.when(
           loading: () => const [_LicenseLoadingTile()],
           error: (error, _) => [_LicenseErrorTile(message: '$error')],
@@ -7495,13 +7491,9 @@ class _LicenseErrorTile extends StatelessWidget {
 }
 
 class _LicenseAccountCard extends StatelessWidget {
-  const _LicenseAccountCard({
-    required this.companyName,
-    required this.userEmail,
-  });
+  const _LicenseAccountCard({required this.companyName});
 
   final String companyName;
-  final String userEmail;
 
   @override
   Widget build(BuildContext context) {
@@ -7529,43 +7521,27 @@ class _LicenseAccountCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          const _CompanySideDivider(),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _CompanySideIcon(icon: Icons.person_outline_rounded, size: 30),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Usuario actual', style: _companySideBodyStyle()),
-                    const SizedBox(height: 2),
-                    Text(
-                      userEmail,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: _companySideTitleStyle(15),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
         ],
       ),
     );
   }
 }
 
-class _LicenseDetailsCard extends StatelessWidget {
+class _LicenseDetailsCard extends StatefulWidget {
   const _LicenseDetailsCard({required this.license});
 
   final LicenseStatusModel license;
 
   @override
+  State<_LicenseDetailsCard> createState() => _LicenseDetailsCardState();
+}
+
+class _LicenseDetailsCardState extends State<_LicenseDetailsCard> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
+    final license = widget.license;
     final statusLabel = _licenseStatusLabel(license.status);
     final (fg, bg) = _licenseStatusColors(license.status);
     final hasKey =
@@ -7577,6 +7553,7 @@ class _LicenseDetailsCard extends StatelessWidget {
     final businessPhone = account?.businessPhone?.trim();
     final taxId = account?.taxId?.trim();
     final businessAddress = account?.businessAddress?.trim();
+    final legalRole = account?.legalRepresentativeRole?.trim();
     final usersExceeded =
         license.maxUsers > 0 && license.users > license.maxUsers;
     final productsExceeded =
@@ -7620,6 +7597,8 @@ class _LicenseDetailsCard extends StatelessWidget {
           ),
           if (responsible != null && responsible.isNotEmpty)
             _LicenseInfoRow(label: 'Responsable', value: responsible),
+          if (legalRole != null && legalRole.isNotEmpty)
+            _LicenseInfoRow(label: 'Cargo', value: legalRole),
           if (whatsapp != null && whatsapp.isNotEmpty)
             _LicenseInfoRow(label: 'WhatsApp', value: whatsapp),
           if (businessPhone != null &&
@@ -7628,27 +7607,28 @@ class _LicenseDetailsCard extends StatelessWidget {
             _LicenseInfoRow(label: 'Teléfono negocio', value: businessPhone),
           if (taxId != null && taxId.isNotEmpty)
             _LicenseInfoRow(label: 'RNC/Cédula', value: taxId),
-          if (businessAddress != null && businessAddress.isNotEmpty)
-            _LicenseInfoRow(label: 'Dirección', value: businessAddress),
           const SizedBox(height: 14),
           const _CompanySideDivider(),
           const SizedBox(height: 12),
           Text('VIGENCIA', style: _licenseSectionStyle()),
           const SizedBox(height: 6),
           _LicenseInfoRow(label: 'Tipo', value: license.typeLabel),
-          _LicenseInfoRow(
-            label: 'Inicio',
-            value: _licenseDateLabel(license.acquiredAt),
-          ),
-          _LicenseInfoRow(
-            label: 'Vence',
-            value: _licenseDateLabel(license.periodEndsAt),
-          ),
-          _LicenseInfoRow(
-            label: 'Tiempo restante',
-            value: _licenseRemainingLabel(license),
-            valueColor: _licenseRemainingColor(license),
-          ),
+          if (license.acquiredAt != null)
+            _LicenseInfoRow(
+              label: 'Inicio',
+              value: _licenseDateLabel(license.acquiredAt),
+            ),
+          if (license.periodEndsAt != null)
+            _LicenseInfoRow(
+              label: 'Vence',
+              value: _licenseDateLabel(license.periodEndsAt),
+            ),
+          if (license.daysRemaining != null)
+            _LicenseInfoRow(
+              label: 'Tiempo restante',
+              value: _licenseRemainingLabel(license),
+              valueColor: _licenseRemainingColor(license),
+            ),
           const SizedBox(height: 14),
           const _CompanySideDivider(),
           const SizedBox(height: 12),
@@ -7678,16 +7658,33 @@ class _LicenseDetailsCard extends StatelessWidget {
               ].join(' · '),
             ),
           ],
-          if (hasKey || hasNotes) ...[
-            const SizedBox(height: 14),
-            const _CompanySideDivider(),
-            const SizedBox(height: 12),
-            Text('CLAVE Y NOTAS', style: _licenseSectionStyle()),
-            const SizedBox(height: 6),
-            if (hasKey)
-              _LicenseInfoRow(label: 'Clave', value: license.licenseKey!),
-            if (hasNotes)
-              _LicenseInfoRow(label: 'Notas', value: license.notes!),
+          if ((businessAddress != null && businessAddress.isNotEmpty) ||
+              hasKey ||
+              hasNotes) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => setState(() => _expanded = !_expanded),
+                icon: Icon(
+                  _expanded
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                ),
+                label: Text(_expanded ? 'Ver menos' : 'Ver más'),
+              ),
+            ),
+            if (_expanded) ...[
+              const SizedBox(height: 6),
+              const _CompanySideDivider(),
+              const SizedBox(height: 12),
+              if (businessAddress != null && businessAddress.isNotEmpty)
+                _LicenseInfoRow(label: 'Dirección', value: businessAddress),
+              if (hasKey)
+                _LicenseInfoRow(label: 'Clave', value: license.licenseKey!),
+              if (hasNotes)
+                _LicenseInfoRow(label: 'Notas', value: license.notes!),
+            ],
           ],
         ],
       ),

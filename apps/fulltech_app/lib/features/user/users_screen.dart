@@ -421,10 +421,26 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
             onPressed: () => _showAdminPinDialog(context, ref),
             icon: const Icon(Icons.admin_panel_settings_outlined),
           ),
-          IconButton(
-            tooltip: 'Agregar empleado',
-            onPressed: () => _showUserDialog(context, ref),
-            icon: const Icon(Icons.person_add_alt_1_outlined),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF1957E6),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                textStyle: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                  letterSpacing: 0,
+                ),
+              ),
+              icon: const Icon(Icons.person_add_alt_1_outlined, size: 18),
+              label: const Text('Nuevo usuario'),
+              onPressed: () => _showUserDialog(context, ref),
+            ),
           ),
           IconButton(
             tooltip: 'Actualizar',
@@ -830,9 +846,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
       }
 
       if (email.isEmpty || !email.contains('@')) {
-        showSnack(
-          const SnackBar(content: Text('Ingresa un correo válido')),
-        );
+        showSnack(const SnackBar(content: Text('Ingresa un correo válido')));
         return;
       }
 

@@ -22,6 +22,7 @@ import '../../core/utils/local_file_bytes.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
+import '../../modules/cash/cash_turn_menu_button.dart';
 import '../settings/data/cloud_backup_service.dart';
 import '../settings/ui/printer_settings_page.dart';
 
@@ -63,17 +64,10 @@ class AccountLicensesScreen extends ConsumerWidget {
       title: 'Licencias',
       subtitle: 'Control de prueba, acceso y límites del sistema.',
       children: [
-        _InfoTile(
-          icon: Icons.person_outline_rounded,
-          title: 'Usuario actual',
-          value: user?.email ?? 'Usuario conectado',
-        ),
         license.when(
           data: (value) => _LicensePlanCard(
             license: value,
-            responsible: user?.nombreCompleto.trim().isNotEmpty == true
-                ? user!.nombreCompleto
-                : user?.email ?? 'Usuario conectado',
+            responsible: _licenseResponsible(value, user?.email),
           ),
           loading: () => const _SurfacePanel(
             child: Center(
@@ -659,15 +653,20 @@ class _SettingsHubScaffold extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       drawer: buildAdaptiveDrawer(context, currentUser: user),
-      appBar: mobile
-          ? const CustomAppBar(
-              title: 'Configuración',
-              showLogo: false,
-              showDepartmentLabel: false,
-              preferDrawerLeading: true,
-              trailing: SizedBox.shrink(),
-            )
-          : null,
+      appBar: CustomAppBar(
+        title: 'Configuración',
+        showLogo: false,
+        showDepartmentLabel: false,
+        preferDrawerLeading: true,
+        trailing: const SizedBox.shrink(),
+        actions: mobile
+            ? null
+            : const [
+                CashTurnMenuButton(),
+                SizedBox(width: 8),
+                _SettingsCompanyAccountMenu(),
+              ],
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: mobile ? 760 : 620),
@@ -746,7 +745,7 @@ class _SettingsHeroPanel extends StatelessWidget {
   }
 }
 
-class _SettingsDetailScaffold extends StatelessWidget {
+class _SettingsDetailScaffold extends ConsumerWidget {
   const _SettingsDetailScaffold({
     required this.title,
     required this.subtitle,
@@ -760,41 +759,15 @@ class _SettingsDetailScaffold extends StatelessWidget {
   final Widget? action;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final showInlineTitle = MediaQuery.sizeOf(context).width < 900;
     final compact = MediaQuery.sizeOf(context).width < 640;
-    final headerTitle = showInlineTitle
-        ? Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: _titleStyle(24)),
-              const SizedBox(height: 3),
-              Text(subtitle, style: _bodyStyle()),
-            ],
-          )
-        : Text(subtitle, style: _bodyStyle());
-    final backButton = SizedBox.square(
-      dimension: 48,
-      child: IconButton(
-        tooltip: 'Volver',
-        onPressed: () =>
-            AppNavigator.goBack(context, fallbackRoute: Routes.configuracion),
-        icon: const Icon(Icons.arrow_back_rounded),
-        iconSize: 22,
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints.tightFor(width: 48, height: 48),
-        style: IconButton.styleFrom(
-          minimumSize: const Size(48, 48),
-          fixedSize: const Size(48, 48),
-          tapTargetSize: MaterialTapTargetSize.padded,
-          backgroundColor: Colors.white,
-          foregroundColor: AppColors.secondary,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: Color(0xFFDDE7EE)),
-          ),
-        ),
-      ),
+    final user = ref.watch(authStateProvider).user;
+    final backButton = IconButton(
+      tooltip: 'Volver',
+      onPressed: () =>
+          AppNavigator.goBack(context, fallbackRoute: Routes.configuracion),
+      icon: const Icon(Icons.arrow_back_rounded),
     );
     final content = Center(
       child: ConstrainedBox(
@@ -807,33 +780,15 @@ class _SettingsDetailScaffold extends StatelessWidget {
             28,
           ),
           children: [
-            if (compact)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      backButton,
-                      const SizedBox(width: 10),
-                      Expanded(child: headerTitle),
-                    ],
-                  ),
-                  if (action != null) ...[
-                    const SizedBox(height: 12),
-                    Align(alignment: Alignment.centerRight, child: action!),
-                  ],
-                ],
-              )
-            else
-              Row(
-                children: [
-                  backButton,
-                  const SizedBox(width: 12),
-                  Expanded(child: headerTitle),
-                  if (action != null) action!,
-                ],
-              ),
+            Row(
+              crossAxisAlignment: compact
+                  ? CrossAxisAlignment.start
+                  : CrossAxisAlignment.center,
+              children: [
+                Expanded(child: Text(subtitle, style: _bodyStyle())),
+                if (action != null) ...[const SizedBox(width: 12), action!],
+              ],
+            ),
             const SizedBox(height: 20),
             child,
           ],
@@ -842,10 +797,255 @@ class _SettingsDetailScaffold extends StatelessWidget {
     );
     return Scaffold(
       backgroundColor: AppColors.background,
+      drawer: buildAdaptiveDrawer(context, currentUser: user),
+      appBar: CustomAppBar(
+        title: title,
+        showLogo: false,
+        showDepartmentLabel: false,
+        leading: backButton,
+        trailing: const SizedBox.shrink(),
+        actions: showInlineTitle
+            ? null
+            : const [
+                CashTurnMenuButton(),
+                SizedBox(width: 8),
+                _SettingsCompanyAccountMenu(),
+              ],
+      ),
       body: showInlineTitle
           ? SafeArea(left: false, right: false, bottom: false, child: content)
           : content,
     );
+  }
+}
+
+class _SettingsCompanyAccountMenu extends ConsumerWidget {
+  const _SettingsCompanyAccountMenu();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final company = ref.watch(companySettingsProvider);
+    final companyName = company.maybeWhen(
+      data: (settings) => _compactSettingsCompanyName(settings.companyName),
+      orElse: () => 'Empresa',
+    );
+    final logoBase64 = company.maybeWhen(
+      data: (settings) => settings.logoBase64?.trim(),
+      orElse: () => null,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 10),
+      child: PopupMenuButton<String>(
+        tooltip: 'Empresa',
+        offset: const Offset(0, 44),
+        elevation: 8,
+        color: Colors.white,
+        surfaceTintColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: Color(0xFFDDE7EE)),
+        ),
+        constraints: const BoxConstraints(minWidth: 260),
+        onSelected: (value) async {
+          switch (value) {
+            case 'profile':
+              context.go(Routes.profile);
+              break;
+            case 'users':
+              context.go(Routes.users);
+              break;
+            case 'licenses':
+              context.go(Routes.licencias);
+              break;
+            case 'settings':
+              context.go(Routes.configuracion);
+              break;
+            case 'logout':
+              await ref.read(authStateProvider.notifier).logout();
+              if (context.mounted) context.go(Routes.login);
+              break;
+          }
+        },
+        itemBuilder: (_) => const [
+          PopupMenuItem(
+            value: 'profile',
+            child: _SettingsCompanyMenuRow(
+              icon: Icons.person_outline_rounded,
+              label: 'Perfil',
+            ),
+          ),
+          PopupMenuItem(
+            value: 'users',
+            child: _SettingsCompanyMenuRow(
+              icon: Icons.groups_2_outlined,
+              label: 'Usuarios',
+            ),
+          ),
+          PopupMenuItem(
+            value: 'licenses',
+            child: _SettingsCompanyMenuRow(
+              icon: Icons.verified_user_outlined,
+              label: 'Licencias',
+            ),
+          ),
+          PopupMenuItem(
+            value: 'settings',
+            child: _SettingsCompanyMenuRow(
+              icon: Icons.settings_outlined,
+              label: 'Configuración',
+            ),
+          ),
+          PopupMenuDivider(height: 8),
+          PopupMenuItem(
+            value: 'logout',
+            child: _SettingsCompanyMenuRow(
+              icon: Icons.logout_rounded,
+              label: 'Cerrar sesión',
+              danger: true,
+            ),
+          ),
+        ],
+        child: _SettingsCompanyButton(
+          label: companyName,
+          logoBase64: logoBase64,
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsCompanyButton extends StatelessWidget {
+  const _SettingsCompanyButton({required this.label, required this.logoBase64});
+
+  final String label;
+  final String? logoBase64;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 40,
+      constraints: const BoxConstraints(minWidth: 132, maxWidth: 220),
+      padding: const EdgeInsets.fromLTRB(10, 5, 10, 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1957E6),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF7DA2FF)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1957E6).withValues(alpha: 0.16),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _SettingsCompanyLogo(logoBase64: logoBase64),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                fontSize: 12.5,
+                letterSpacing: 0,
+              ),
+            ),
+          ),
+          const SizedBox(width: 5),
+          const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            size: 18,
+            color: Colors.white,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsCompanyLogo extends StatelessWidget {
+  const _SettingsCompanyLogo({required this.logoBase64});
+
+  final String? logoBase64;
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = _decodeSettingsLogo(logoBase64);
+    return Container(
+      width: 26,
+      height: 26,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.white24),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: bytes == null
+          ? const Icon(Icons.storefront_rounded, size: 15, color: Colors.white)
+          : Image.memory(bytes, fit: BoxFit.cover),
+    );
+  }
+}
+
+class _SettingsCompanyMenuRow extends StatelessWidget {
+  const _SettingsCompanyMenuRow({
+    required this.icon,
+    required this.label,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = danger ? const Color(0xFFDC2626) : const Color(0xFF183548);
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 18),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _compactSettingsCompanyName(String value) {
+  final normalized = value.trim().replaceAll(RegExp(r'\s+'), ' ');
+  if (normalized.isEmpty) return 'Empresa';
+  if (normalized.length <= 18) return normalized;
+  final firstSegment = normalized.split(' ').first.trim();
+  if (firstSegment.length >= 3) return firstSegment;
+  return normalized.substring(0, 18);
+}
+
+Uint8List? _decodeSettingsLogo(String? value) {
+  final raw = value?.trim();
+  if (raw == null || raw.isEmpty) return null;
+  try {
+    final payload = raw.contains(',') ? raw.split(',').last : raw;
+    return base64Decode(payload);
+  } catch (_) {
+    return null;
   }
 }
 
@@ -1207,50 +1407,53 @@ class _AccessChannelTile extends StatelessWidget {
   }
 }
 
-class _InfoTile extends StatelessWidget {
-  const _InfoTile({
-    required this.icon,
-    required this.title,
-    required this.value,
-  });
-
-  final IconData icon;
-  final String title;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return _SurfacePanel(
-      child: Row(
-        children: [
-          _TileIcon(icon: icon),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: _bodyStyle()),
-                const SizedBox(height: 3),
-                Text(value, style: _titleStyle(15)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LicensePlanCard extends StatelessWidget {
+class _LicensePlanCard extends StatefulWidget {
   const _LicensePlanCard({required this.license, required this.responsible});
 
   final LicenseStatusModel license;
   final String responsible;
 
   @override
+  State<_LicensePlanCard> createState() => _LicensePlanCardState();
+}
+
+class _LicensePlanCardState extends State<_LicensePlanCard> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
+    final license = widget.license;
     final accent = _licenseAccent(license.status);
     final statusLabel = _licenseStatusLabel(license.status);
+    final account = license.account;
+    final businessName = _firstText([
+      account?.businessName,
+      license.companyName,
+    ]);
+    final rows = <_LicenseSummaryRow>[
+      _LicenseSummaryRow('Responsable', widget.responsible),
+      _LicenseSummaryRow('Plan', license.typeLabel),
+      if (license.acquiredAt != null)
+        _LicenseSummaryRow('Inicio', _dateLabel(license.acquiredAt)),
+      if (license.periodEndsAt != null)
+        _LicenseSummaryRow('Vence', _dateLabel(license.periodEndsAt)),
+      if (license.daysRemaining != null)
+        _LicenseSummaryRow('Tiempo restante', _licenseSubtitle(license)),
+    ];
+    final moreRows = <_LicenseSummaryRow>[
+      _LicenseSummaryRow('RNC/Cédula', account?.taxId),
+      _LicenseSummaryRow('Teléfono', account?.businessPhone),
+      _LicenseSummaryRow('WhatsApp', account?.responsibleWhatsapp),
+      _LicenseSummaryRow('Dirección', account?.businessAddress),
+      _LicenseSummaryRow('Clave', license.licenseKey),
+      _LicenseSummaryRow('Notas', license.notes),
+      if (license.licenseBlockedAt != null)
+        _LicenseSummaryRow(
+          'Bloqueada el',
+          _dateLabel(license.licenseBlockedAt),
+        ),
+    ].where((row) => row.value.trim().isNotEmpty).toList(growable: false);
+
     return _SurfacePanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1270,9 +1473,7 @@ class _LicensePlanCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          license.companyName.trim().isEmpty
-                              ? 'Empresa sin nombre'
-                              : license.companyName,
+                          businessName.isEmpty ? 'Empresa' : businessName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: _titleStyle(15),
@@ -1320,107 +1521,116 @@ class _LicensePlanCard extends StatelessWidget {
               accent: AppColors.warning,
             ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
+          _LicenseCompactRows(rows: rows),
+          const SizedBox(height: 12),
+          Row(
             children: [
-              _LicenseInfoTile(
-                icon: Icons.badge_outlined,
-                title: 'Responsable',
-                value: responsible,
+              Expanded(
+                child: _UsageMeter(
+                  icon: Icons.people_outline_rounded,
+                  title: 'Usuarios',
+                  used: license.users,
+                  max: license.maxUsers,
+                  accent: const Color(0xFF0F766E),
+                ),
               ),
-              _LicenseInfoTile(
-                icon: Icons.workspace_premium_outlined,
-                title: 'Plan contratado',
-                value: license.planLabel,
-              ),
-              _LicenseInfoTile(
-                icon: Icons.event_available_outlined,
-                title: 'Adquirida / iniciada',
-                value: _dateLabel(license.acquiredAt),
-              ),
-              _LicenseInfoTile(
-                icon: Icons.event_busy_outlined,
-                title: 'Vence',
-                value: _dateLabel(license.periodEndsAt),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _UsageMeter(
+                  icon: Icons.inventory_2_outlined,
+                  title: 'Productos',
+                  used: license.products,
+                  max: license.maxProducts,
+                  accent: const Color(0xFF1957E6),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          _UsageMeter(
-            icon: Icons.people_outline_rounded,
-            title: 'Usuarios',
-            used: license.users,
-            max: license.maxUsers,
-            accent: const Color(0xFF0F766E),
-          ),
-          const SizedBox(height: 10),
-          _UsageMeter(
-            icon: Icons.inventory_2_outlined,
-            title: 'Productos',
-            used: license.products,
-            max: license.maxProducts,
-            accent: const Color(0xFF7C3AED),
-          ),
-          const SizedBox(height: 12),
-          _DetailRow('Estado', statusLabel),
-          _DetailRow('Empresa', license.companyName),
-          _DetailRow('Clave', license.licenseKey ?? 'Sin llave permanente'),
-          _DetailRow('Notas', license.notes ?? 'Sin notas internas'),
-          if (license.licenseBlockedAt != null)
-            _DetailRow('Bloqueada el', _dateLabel(license.licenseBlockedAt)),
+          if (moreRows.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => setState(() => _expanded = !_expanded),
+                icon: Icon(
+                  _expanded
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                ),
+                label: Text(_expanded ? 'Ver menos' : 'Ver más'),
+              ),
+            ),
+            if (_expanded) ...[
+              const Divider(height: 14, color: Color(0xFFDDE7EE)),
+              _LicenseCompactRows(rows: moreRows),
+            ],
+          ],
         ],
       ),
     );
   }
 }
 
-class _LicenseInfoTile extends StatelessWidget {
-  const _LicenseInfoTile({
-    required this.icon,
-    required this.title,
-    required this.value,
-  });
+class _LicenseSummaryRow {
+  const _LicenseSummaryRow(this.label, String? value) : value = value ?? '';
 
-  final IconData icon;
-  final String title;
+  final String label;
   final String value;
+}
+
+class _LicenseCompactRows extends StatelessWidget {
+  const _LicenseCompactRows({required this.rows});
+
+  final List<_LicenseSummaryRow> rows;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 220,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFFDDE7EE)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 18, color: AppColors.primary),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: _mutedStyle(11)),
-                  const SizedBox(height: 3),
-                  Text(
-                    value,
+    final visibleRows = rows
+        .where((row) => row.value.trim().isNotEmpty)
+        .toList(growable: false);
+    if (visibleRows.isEmpty) return const SizedBox.shrink();
+    return Column(
+      children: [
+        for (final row in visibleRows)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: Text(row.label, style: _bodyStyle())),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Text(
+                    row.value.trim(),
+                    textAlign: TextAlign.end,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: _titleStyle(13),
+                    style: _strongBodyStyle(),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+      ],
     );
   }
+}
+
+String _licenseResponsible(LicenseStatusModel license, String? fallbackEmail) {
+  return _firstText([
+    license.account?.legalRepresentativeName,
+    license.account?.responsibleName,
+    license.account?.responsibleEmail,
+    fallbackEmail,
+  ]);
+}
+
+String _firstText(Iterable<String?> values) {
+  for (final value in values) {
+    final clean = value?.trim();
+    if (clean != null && clean.isNotEmpty) return clean;
+  }
+  return '';
 }
 
 class _UsageMeter extends StatelessWidget {
@@ -2531,16 +2741,6 @@ TextStyle _bodyStyle() {
     fontSize: 13,
     height: 1.3,
     fontWeight: FontWeight.w600,
-    letterSpacing: 0,
-  );
-}
-
-TextStyle _mutedStyle(double size) {
-  return TextStyle(
-    color: const Color(0xFF6B7D90),
-    fontSize: size,
-    height: 1.2,
-    fontWeight: FontWeight.w700,
     letterSpacing: 0,
   );
 }

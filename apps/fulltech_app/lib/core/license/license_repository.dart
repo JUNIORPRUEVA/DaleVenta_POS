@@ -257,6 +257,9 @@ class LicenseAccountInfo {
     this.responsibleEmail,
     this.responsibleWhatsapp,
     this.responsibleUserId,
+    this.legalRepresentativeName,
+    this.legalRepresentativeCedula,
+    this.legalRepresentativeRole,
   });
 
   final String? businessName;
@@ -268,6 +271,9 @@ class LicenseAccountInfo {
   final String? responsibleEmail;
   final String? responsibleWhatsapp;
   final String? responsibleUserId;
+  final String? legalRepresentativeName;
+  final String? legalRepresentativeCedula;
+  final String? legalRepresentativeRole;
 
   factory LicenseAccountInfo.fromJson(dynamic value) {
     if (value is! Map) return const LicenseAccountInfo();
@@ -286,6 +292,9 @@ class LicenseAccountInfo {
       responsibleEmail: read('responsibleEmail'),
       responsibleWhatsapp: read('responsibleWhatsapp'),
       responsibleUserId: read('responsibleUserId'),
+      legalRepresentativeName: read('legalRepresentativeName'),
+      legalRepresentativeCedula: read('legalRepresentativeCedula'),
+      legalRepresentativeRole: read('legalRepresentativeRole'),
     );
   }
 }

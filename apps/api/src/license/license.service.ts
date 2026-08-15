@@ -365,10 +365,14 @@ export class LicenseService {
           phone: true,
           address: true,
           description: true,
+          legalRepresentativeName: true,
+          legalRepresentativeCedula: true,
+          legalRepresentativeRole: true,
         },
       }),
     ]);
     const responsible = owner?.user ?? null;
+    const legalResponsibleName = appConfig?.legalRepresentativeName?.trim() || null;
 
     const effectiveLimits = this.effectiveLimits(company);
 
@@ -418,10 +422,13 @@ export class LicenseService {
         businessPhone: appConfig?.phone || null,
         businessAddress: appConfig?.address || null,
         businessType: appConfig?.description || null,
-        responsibleName: responsible?.nombreCompleto || null,
+        responsibleName: legalResponsibleName || responsible?.nombreCompleto || null,
         responsibleEmail: responsible?.email || null,
         responsibleWhatsapp: responsible?.telefono || null,
         responsibleUserId: responsible?.id || null,
+        legalRepresentativeName: legalResponsibleName,
+        legalRepresentativeCedula: appConfig?.legalRepresentativeCedula || null,
+        legalRepresentativeRole: appConfig?.legalRepresentativeRole || null,
       },
     };
   }
