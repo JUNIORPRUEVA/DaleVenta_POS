@@ -16,6 +16,7 @@ import 'core/loading/app_loading_overlay.dart';
 import 'core/auth/app_role.dart';
 import 'core/auth/auth_provider.dart';
 import 'core/auth/auth_session_events.dart';
+import 'core/company/company_settings_repository.dart';
 import 'core/debug/app_error_reporter.dart';
 import 'core/debug/app_error_overlay.dart';
 import 'core/license/license_repository.dart';
@@ -260,6 +261,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
   void _handleLicenseRealtimeMessage(LicenseRealtimeMessage message) {
     ref.invalidate(licenseStatusProvider);
+    if (message.type == 'license.company_name_updated' ||
+        message.license.containsKey('companyName')) {
+      ref.invalidate(companySettingsProvider);
+    }
     final status = (message.license['status'] ?? '').toString().toUpperCase();
     final blockedEvent =
         message.type == 'license.blocked' ||

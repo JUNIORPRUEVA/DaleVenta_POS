@@ -144,11 +144,17 @@ export class SettingsService {
   }
 
   private async ensureConfig(companyId: string) {
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { name: true },
+    });
+    const companyName = company?.name?.trim() ?? '';
     return this.prisma.appConfig.upsert({
       where: { companyId },
       create: {
         id: `company_${companyId}`,
         companyId,
+        companyName,
       },
       update: {},
     });

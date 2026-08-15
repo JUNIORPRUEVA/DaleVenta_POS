@@ -1820,6 +1820,11 @@ const _permissionModules = <_PermissionModuleItem>[
         description: 'Permite vender y trabajar en el POS.',
       ),
       _PermissionActionItem(
+        title: 'Aplicar descuentos',
+        permission: AppPermission.applyDiscounts,
+        description: 'Permite aplicar rebajas al detalle o al total.',
+      ),
+      _PermissionActionItem(
         title: 'Reembolsar o devolver ventas',
         permission: AppPermission.refundSales,
         description: 'Autoriza acciones de devolución y reembolso.',

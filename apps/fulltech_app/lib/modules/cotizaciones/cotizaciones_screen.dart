@@ -12,6 +12,7 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 import '../../core/app_access/app_access_links.dart';
 import '../../core/auth/admin_authorization.dart';
+import '../../core/auth/admin_authorization_session.dart';
 import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/auth/app_role.dart';
@@ -46,6 +47,7 @@ import '../../features/catalogo/data/catalog_repository.dart';
 import '../../features/account/delete_account_dialog.dart';
 import '../../features/products/ui/inventory_module_pages.dart';
 import '../cash/cash_repository.dart';
+import '../cash/cash_models.dart';
 import '../cash/cash_turn_menu_button.dart';
 import '../clientes/cliente_model.dart';
 import '../clientes/cliente_form_screen.dart';
@@ -1069,6 +1071,28 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
   }
 
+  Future<bool> _ensureDiscountPermission() async {
+    final user = ref.read(authStateProvider).user;
+    if (user == null) return false;
+    if (user.appRole == AppRole.admin ||
+        hasUserPermission(user, AppPermission.applyDiscounts)) {
+      return true;
+    }
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.applyDiscounts,
+      forceAdminAuthorization: true,
+      reason: 'Aplicar descuento a la venta',
+    );
+    if (allowed && mounted) {
+      ref
+          .read(adminAuthorizationProvider.notifier)
+          .consumeActionAuthorization();
+    }
+    return allowed;
+  }
+
   Future<void> _toggleMobileItbis() async {
     if (_includeItbis) {
       _commitEditorChange(() => _setItbisEnabled(false));
@@ -1837,8 +1861,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   bool _isPermissionDenied(Object error) {
-    return error is ApiException &&
-        (error.code == 403 || error.type == ApiErrorType.forbidden);
+    if (error is ApiException) {
+      return error.type == ApiErrorType.forbidden ||
+          error.code == 403 ||
+          error.message.toLowerCase().contains('no tienes permiso');
+    }
+    return error.toString().toLowerCase().contains('no tienes permiso');
   }
 
   Future<bool> _ensureQuotePermission(String reason, {String? route}) {
@@ -2146,6 +2174,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   Future<void> _applyGeneralDiscount() async {
     if (_items.isEmpty || _grossTotalBeforeGeneralDiscount <= 0) return;
+    final allowed = await _ensureDiscountPermission();
+    if (!allowed || !mounted) return;
     var type = _DiscountType.fixed;
     final amountCtrl = TextEditingController(
       text: _effectiveGeneralDiscountAmount > 0
@@ -2737,6 +2767,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       ),
     );
     if (result == null || !mounted) return;
+    if (result.discountValue > 0) {
+      final allowed = await _ensureDiscountPermission();
+      if (!allowed || !mounted) return;
+    }
     _commitEditorChange(() {
       if (index < 0 || index >= _items.length) return;
       final current = _items[index];
@@ -4982,7 +5016,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   Future<void> _openCheckoutDialog() async {
     if (!_validateCheckoutReady()) return;
 
-    final cashState = await ref.read(cashRepositoryProvider).state();
+    final cashState = await _cashStateWithAuthorizationFallback();
+    if (cashState == null) return;
     if (cashState.activeSession == null) {
       if (!mounted) return;
       _showSalesNotice(
@@ -5017,7 +5052,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         (_safeRouteUri()?.queryParameters['popOnSave'] ?? '').trim() == '1';
 
     if (checkout != null) {
-      final cashState = await ref.read(cashRepositoryProvider).state();
+      final cashState = await _cashStateWithAuthorizationFallback();
+      if (cashState == null) return;
       if (cashState.activeSession == null) {
         if (!mounted) return;
         _showSalesNotice(
@@ -5042,27 +5078,24 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     try {
       final saleItems = _buildCheckoutSaleItems();
 
-      final createdSale = await ref
-          .read(ventasRepositoryProvider)
-          .createSale(
-            customerId: _selectedClientId,
-            note: saleNote.isEmpty ? _note : saleNote,
-            paymentMethod: checkout == null
-                ? null
-                : switch (checkout.method) {
-                    _CheckoutPaymentMethod.cash => 'cash',
-                    _CheckoutPaymentMethod.transfer => 'transfer',
-                    _CheckoutPaymentMethod.mixed => 'mixed',
-                    _CheckoutPaymentMethod.credit => 'credit',
-                  },
-            paymentCashAmount: checkout?.cashAmount,
-            paymentTransferAmount: checkout?.transferAmount,
-            creditAmount: checkout?.creditAmount,
-            expectedTotalSold: _roundCurrency(_total),
-            items: saleItems,
-          );
+      final createdSale = await _createSaleWithAuthorizationFallback(
+        checkout: checkout,
+        saleNote: saleNote,
+        saleItems: saleItems,
+      );
+      if (createdSale == null) {
+        if (!mounted) return;
+        _showSalesNotice(
+          title: 'Cobro no autorizado',
+          message:
+              'La venta no se guardó porque falta autorización para cobrar.',
+          icon: Icons.admin_panel_settings_outlined,
+          accent: const Color(0xFFF59E0B),
+        );
+        return;
+      }
 
-      if (checkout != null && createdSale != null) {
+      if (checkout != null) {
         final saleToPrint = createdSale.items.isNotEmpty
             ? createdSale
             : await ref.read(ventasRepositoryProvider).getById(createdSale.id);
@@ -5111,6 +5144,90 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     if (popOnSave) {
       context.pop(true);
     }
+  }
+
+  Future<CashGateState?> _cashStateWithAuthorizationFallback() async {
+    try {
+      return await ref.read(cashRepositoryProvider).state();
+    } catch (error) {
+      if (!_isPermissionDenied(error) || !mounted) rethrow;
+      final allowed = await ensureAdminAuthorization(
+        context,
+        ref,
+        permission: AppPermission.viewSales,
+        forceAdminAuthorization: true,
+        reason: 'Autorizar caja para facturar',
+      );
+      if (!mounted || !allowed) return null;
+      try {
+        return await ref.read(cashRepositoryProvider).state();
+      } catch (retryError) {
+        if (!_isPermissionDenied(retryError) || !mounted) rethrow;
+        _showSalesNotice(
+          title: 'Autorización requerida',
+          message:
+              'No tienes permiso para esta acción. Verifica los permisos del usuario o autoriza nuevamente.',
+          icon: Icons.admin_panel_settings_outlined,
+          accent: const Color(0xFFF59E0B),
+        );
+        return null;
+      }
+    }
+  }
+
+  Future<SaleModel?> _createSaleWithAuthorizationFallback({
+    required _CheckoutResult? checkout,
+    required String saleNote,
+    required List<SaleDraftItem> saleItems,
+  }) async {
+    try {
+      return await _createSaleForCheckout(
+        checkout: checkout,
+        saleNote: saleNote,
+        saleItems: saleItems,
+      );
+    } catch (error) {
+      if (!_isPermissionDenied(error) || !mounted) rethrow;
+      final allowed = await ensureAdminAuthorization(
+        context,
+        ref,
+        permission: AppPermission.viewSales,
+        forceAdminAuthorization: true,
+        reason: 'Autorizar cobro de factura',
+      );
+      if (!mounted || !allowed) return null;
+      return _createSaleForCheckout(
+        checkout: checkout,
+        saleNote: saleNote,
+        saleItems: saleItems,
+      );
+    }
+  }
+
+  Future<SaleModel?> _createSaleForCheckout({
+    required _CheckoutResult? checkout,
+    required String saleNote,
+    required List<SaleDraftItem> saleItems,
+  }) {
+    return ref
+        .read(ventasRepositoryProvider)
+        .createSale(
+          customerId: _selectedClientId,
+          note: saleNote.isEmpty ? _note : saleNote,
+          paymentMethod: checkout == null
+              ? null
+              : switch (checkout.method) {
+                  _CheckoutPaymentMethod.cash => 'cash',
+                  _CheckoutPaymentMethod.transfer => 'transfer',
+                  _CheckoutPaymentMethod.mixed => 'mixed',
+                  _CheckoutPaymentMethod.credit => 'credit',
+                },
+          paymentCashAmount: checkout?.cashAmount,
+          paymentTransferAmount: checkout?.transferAmount,
+          creditAmount: checkout?.creditAmount,
+          expectedTotalSold: _roundCurrency(_total),
+          items: saleItems,
+        );
   }
 
   PreferredSizeWidget _buildDesktopAppBar(QuotationAiState aiState) {

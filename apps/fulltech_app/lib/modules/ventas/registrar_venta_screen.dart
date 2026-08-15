@@ -6,9 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/auth/admin_authorization.dart';
+import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/cache/fulltech_cache_manager.dart';
 import '../../core/company/company_settings_repository.dart';
+import '../../core/errors/api_exception.dart';
 
 import '../../core/models/product_model.dart';
 
@@ -2156,19 +2159,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
 
     setState(() => _saving = true);
     try {
-      final created = await ref
-          .read(ventasRepositoryProvider)
-          .createSale(
-            customerId: _selectedClient!.id,
-            customerName: _selectedClient!.nombre,
-            customerPhone: _selectedClient!.telefono,
-            note: _noteCtrl.text,
-            paymentMethod: payment.method,
-            paymentCashAmount: payment.cashAmount,
-            paymentTransferAmount: payment.transferAmount,
-            expectedTotalSold: _totalSold,
-            items: _cart,
-          );
+      final created = await _createSaleWithAuthorizationFallback(payment);
       if (created != null) {
         final printResult = await ref
             .read(unifiedTicketPrinterProvider)
@@ -2204,6 +2195,55 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<SaleModel?> _createSaleWithAuthorizationFallback(
+    _SalePaymentDraft payment,
+  ) async {
+    try {
+      return await _createSale(payment);
+    } catch (error) {
+      if (!_isPermissionDenied(error) || !mounted) rethrow;
+      setState(() => _saving = false);
+      final allowed = await ensureAdminAuthorization(
+        context,
+        ref,
+        permission: AppPermission.viewSales,
+        forceAdminAuthorization: true,
+        reason: 'Autorizar cobro de factura',
+      );
+      if (!mounted) return null;
+      if (!allowed) {
+        throw ApiException('No se autorizó el cobro de la factura.');
+      }
+      setState(() => _saving = true);
+      return _createSale(payment);
+    }
+  }
+
+  Future<SaleModel?> _createSale(_SalePaymentDraft payment) {
+    return ref
+        .read(ventasRepositoryProvider)
+        .createSale(
+          customerId: _selectedClient!.id,
+          customerName: _selectedClient!.nombre,
+          customerPhone: _selectedClient!.telefono,
+          note: _noteCtrl.text,
+          paymentMethod: payment.method,
+          paymentCashAmount: payment.cashAmount,
+          paymentTransferAmount: payment.transferAmount,
+          expectedTotalSold: _totalSold,
+          items: _cart,
+        );
+  }
+
+  bool _isPermissionDenied(Object error) {
+    if (error is ApiException) {
+      return error.type == ApiErrorType.forbidden ||
+          error.code == 403 ||
+          error.message.toLowerCase().contains('no tienes permiso');
+    }
+    return error.toString().toLowerCase().contains('no tienes permiso');
   }
 }
 

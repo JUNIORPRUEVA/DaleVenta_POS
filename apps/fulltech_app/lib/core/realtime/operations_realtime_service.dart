@@ -204,14 +204,22 @@ class OperationsRealtimeService {
 
       final licenseJson = payload['license'];
       final companyId = payload['companyId']?.toString().trim() ?? '';
-      if (companyId.isEmpty || licenseJson is! Map) return;
+      if (companyId.isEmpty) return;
+      final license = licenseJson is Map
+          ? Map<String, dynamic>.from(licenseJson)
+          : <String, dynamic>{
+              if ((payload['companyName']?.toString().trim() ?? '').isNotEmpty)
+                'companyName': payload['companyName'].toString().trim(),
+              if (payload['account'] is Map)
+                'account': Map<String, dynamic>.from(payload['account'] as Map),
+            };
 
       _licenseController.add(
         LicenseRealtimeMessage(
           eventId: eventId,
           type: payload['type']?.toString() ?? 'license.updated',
           companyId: companyId,
-          license: Map<String, dynamic>.from(licenseJson),
+          license: license,
         ),
       );
     });

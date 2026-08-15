@@ -19,6 +19,9 @@ type LicenseUpdateInput = {
   notes?: unknown;
   licenseKey?: unknown;
   plan?: unknown;
+  companyName?: unknown;
+  businessName?: unknown;
+  name?: unknown;
   actorEmail?: unknown;
 };
 
@@ -161,24 +164,31 @@ export class LicenseService {
   async activateCompany(companyId: string, dto: LicenseUpdateInput) {
     const before = await this.companySnapshot(companyId);
     const data = this.licenseData(dto);
+    const displayName = this.displayNameValue(dto);
     const shouldCreateFreshLicense =
       before.licenseStatus === LicenseStatus.BLOCKED ||
       before.licenseStatus === LicenseStatus.EXPIRED ||
       !before.licenseKey ||
       (before.licenseExpiresAt && before.licenseExpiresAt.getTime() < Date.now());
-    await this.prisma.company.update({
-      where: { id: companyId },
-      data: {
-        ...data,
-        status: 'ACTIVE',
-        licenseStatus: LicenseStatus.ACTIVE,
-        licenseActivatedAt: new Date(),
-        licenseBlockedAt: null,
-        licenseKey:
-          data.licenseKey ??
-          (shouldCreateFreshLicense ? this.generateLicenseKey() : before.licenseKey),
-      },
-      select: { id: true },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.company.update({
+        where: { id: companyId },
+        data: {
+          ...data,
+          ...(displayName ? { name: displayName } : {}),
+          status: 'ACTIVE',
+          licenseStatus: LicenseStatus.ACTIVE,
+          licenseActivatedAt: new Date(),
+          licenseBlockedAt: null,
+          licenseKey:
+            data.licenseKey ??
+            (shouldCreateFreshLicense ? this.generateLicenseKey() : before.licenseKey),
+        },
+        select: { id: true },
+      });
+      if (displayName) {
+        await this.syncAppConfigCompanyName(tx, companyId, displayName);
+      }
     });
     const after = await this.getCompanyLicenseStatus(companyId);
     await this.writeAuditLog(
@@ -214,10 +224,19 @@ export class LicenseService {
 
   async updateCompanyLicense(companyId: string, dto: LicenseUpdateInput) {
     const before = await this.companySnapshot(companyId);
-    await this.prisma.company.update({
-      where: { id: companyId },
-      data: this.licenseData(dto),
-      select: { id: true },
+    const displayName = this.displayNameValue(dto);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.company.update({
+        where: { id: companyId },
+        data: {
+          ...this.licenseData(dto),
+          ...(displayName ? { name: displayName } : {}),
+        },
+        select: { id: true },
+      });
+      if (displayName) {
+        await this.syncAppConfigCompanyName(tx, companyId, displayName);
+      }
     });
     const after = await this.getCompanyLicenseStatus(companyId);
     await this.writeAuditLog(companyId, 'license.update_limits', before, after, dto);
@@ -468,6 +487,30 @@ export class LicenseService {
       }
     }
     return data;
+  }
+
+  private displayNameValue(dto: LicenseUpdateInput) {
+    return (
+      this.stringValue(dto.companyName) ??
+      this.stringValue(dto.businessName) ??
+      this.stringValue(dto.name)
+    );
+  }
+
+  private async syncAppConfigCompanyName(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    companyName: string,
+  ) {
+    await tx.appConfig.upsert({
+      where: { companyId },
+      create: {
+        id: `company_${companyId}`,
+        companyId,
+        companyName,
+      },
+      update: { companyName },
+    });
   }
 
   private requireAdmin(user: TenantUser) {

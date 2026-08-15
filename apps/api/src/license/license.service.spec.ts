@@ -38,6 +38,18 @@ describe('LicenseService limits', () => {
     expect(limits).toEqual({ maxUsers: 5, maxProducts: 250 });
   });
 
+  it('accepts Appyra company name aliases for display-name sync', () => {
+    expect(service.displayNameValue({ companyName: 'FULLTECH, SRL' })).toBe(
+      'FULLTECH, SRL',
+    );
+    expect(service.displayNameValue({ businessName: 'Mi negocio' })).toBe(
+      'Mi negocio',
+    );
+    expect(service.displayNameValue({ name: 'Licencia Demo' })).toBe(
+      'Licencia Demo',
+    );
+  });
+
   it('returns a structured inactive-license error for blocked accounts', () => {
     const error = service.licenseInactiveException({
       status: LicenseStatus.BLOCKED,
