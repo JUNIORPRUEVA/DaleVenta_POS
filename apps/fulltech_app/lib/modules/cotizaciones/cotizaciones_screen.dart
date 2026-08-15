@@ -43,6 +43,7 @@ import '../../core/widgets/product_network_image.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../features/catalogo/application/catalog_controller.dart';
 import '../../features/catalogo/data/catalog_repository.dart';
+import '../../features/account/delete_account_dialog.dart';
 import '../../features/products/ui/inventory_module_pages.dart';
 import '../cash/cash_repository.dart';
 import '../cash/cash_turn_menu_button.dart';
@@ -3143,6 +3144,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     bool initialLoadQueued = false;
     bool openingClient = false;
     String? openingClientId;
+    ClienteModel? detailClient;
     String? error;
     var ownerFilter = _ClientOwnerFilter.all;
     var ageFilter = _ClientAgeFilter.all;
@@ -3580,7 +3582,23 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   ownerFilter != _ClientOwnerFilter.all ||
                   ageFilter != _ClientAgeFilter.all;
 
-              final content = Column(
+              final selectedDetailClient = detailClient;
+              final content = selectedDetailClient != null
+                  ? _QuoteClientInlineDetail(
+                      client: selectedDetailClient,
+                      onBack: () => setStateDialog(() {
+                        detailClient = null;
+                      }),
+                      onUse: () {
+                        _commitEditorChange(() {
+                          _selectedClientId = selectedDetailClient.id;
+                          _selectedClientName = selectedDetailClient.nombre;
+                          _selectedClientPhone = selectedDetailClient.telefono;
+                        });
+                        Navigator.pop(context);
+                      },
+                    )
+                  : Column(
                 mainAxisSize: isDesktop ? MainAxisSize.max : MainAxisSize.min,
                 children: [
                   Row(
@@ -3596,6 +3614,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                 ? IconButton(
                                     onPressed: () {
                                       searchCtrl.clear();
+                                      detailClient = null;
                                       scheduleLoadClients();
                                       setStateDialog(() {});
                                     },
@@ -3605,6 +3624,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                             isDense: true,
                           ),
                           onChanged: (_) {
+                            detailClient = null;
                             setStateDialog(() {});
                             scheduleLoadClients();
                           },
@@ -3721,11 +3741,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                           ),
                                         )
                                       : TextButton.icon(
-                                          onPressed: openingClient
-                                              ? null
-                                              : () => unawaited(
-                                                  openClientDetail(client),
-                                                ),
+                                          onPressed: () => setStateDialog(() {
+                                            detailClient = client;
+                                          }),
                                           icon: const Icon(
                                             Icons.open_in_new_rounded,
                                             size: 16,
@@ -3789,11 +3807,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                         )
                                       : IconButton(
                                           tooltip: 'Ver cliente',
-                                          onPressed: openingClient
-                                              ? null
-                                              : () => unawaited(
-                                                  openClientDetail(client),
-                                                ),
+                                          onPressed: () => setStateDialog(() {
+                                            detailClient = client;
+                                          }),
                                           icon: const Icon(
                                             Icons.open_in_new_rounded,
                                           ),
@@ -7192,7 +7208,7 @@ class _CompanyAccountMenu extends ConsumerWidget {
           borderRadius: BorderRadius.circular(8),
           side: const BorderSide(color: Color(0xFFDDE7EE)),
         ),
-        constraints: const BoxConstraints(minWidth: 302),
+        constraints: const BoxConstraints(minWidth: 340, maxWidth: 340),
         itemBuilder: (menuContext) => [
           PopupMenuItem(
             enabled: false,
@@ -7263,17 +7279,51 @@ class _CompanyAccountMenu extends ConsumerWidget {
             enabled: false,
             padding: EdgeInsets.zero,
             child: _CompanyMenuItem(
-              icon: Icons.settings_outlined,
-              label: 'Configuración',
+              icon: Icons.business_center_outlined,
+              label: 'Empresa',
               onTap: () => _activateProtectedRoute(
                 context,
                 ref,
                 menuContext,
-                route: Routes.configuracion,
-                label: 'Configuración',
+                route: Routes.configuracionEmpresa,
+                label: 'Empresa',
               ),
               helpText:
-                  'Abre el centro de control de la empresa con datos comerciales, documentos, impresión, backend y parámetros operativos.',
+                  'Configura el nombre comercial, RNC, teléfonos, dirección, logo y datos principales usados por la empresa.',
+            ),
+          ),
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: _CompanyMenuItem(
+              icon: Icons.print_outlined,
+              label: 'Impresora',
+              onTap: () => _activateProtectedRoute(
+                context,
+                ref,
+                menuContext,
+                route: Routes.configuracionImpresora,
+                label: 'Impresora',
+              ),
+              helpText:
+                  'Ajusta la impresora, copias, tamaño del papel, datos visibles y formato del ticket.',
+            ),
+          ),
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: _CompanyMenuItem(
+              icon: Icons.cloud_sync_outlined,
+              label: 'Backup',
+              onTap: () => _activateProtectedRoute(
+                context,
+                ref,
+                menuContext,
+                route: Routes.configuracionBackup,
+                label: 'Backup',
+              ),
+              helpText:
+                  'Descarga un respaldo local de la empresa y valida archivos ZIP para recuperación asistida.',
             ),
           ),
           const PopupMenuDivider(height: 8),
@@ -7290,6 +7340,23 @@ class _CompanyAccountMenu extends ConsumerWidget {
               },
               helpText:
                   'Cierra la sesión del usuario actual en este equipo y vuelve a la pantalla de inicio para proteger el acceso de la empresa.',
+            ),
+          ),
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: _CompanyMenuItem(
+              icon: Icons.delete_forever_outlined,
+              label: 'Eliminar mi cuenta',
+              danger: true,
+              onTap: () {
+                Navigator.of(menuContext).pop();
+                _runAfterMenuCloses(() {
+                  if (context.mounted) showDeleteAccountDialog(context, ref);
+                });
+              },
+              helpText:
+                  'Solicita contraseña y confirmación antes de eliminar una cuenta o empresa.',
             ),
           ),
         ],
@@ -8638,7 +8705,7 @@ class _InlineMenuHelp extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(42, 0, 4, 8),
+      margin: const EdgeInsets.fromLTRB(0, 0, 0, 8),
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
       decoration: BoxDecoration(
         color: const Color(0xFFF4F8FF),
@@ -8647,6 +8714,7 @@ class _InlineMenuHelp extends StatelessWidget {
       ),
       child: Text(
         text,
+        softWrap: true,
         style: const TextStyle(
           color: Color(0xFF52667C),
           fontSize: 11.6,

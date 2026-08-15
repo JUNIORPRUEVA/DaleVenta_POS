@@ -4,11 +4,13 @@ import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 
 import '../../core/auth/app_role.dart';
+import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
-import '../../core/auth/role_permissions.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
+import '../../core/widgets/desktop_sales_style.dart';
+import '../../core/widgets/fulltech_page_header.dart';
 import 'data/contabilidad_repository.dart';
 import 'models/payable_models.dart';
 import 'utils/payable_payment_pdf_service.dart';
@@ -868,7 +870,7 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).user;
-    final canUseModule = canAccessContabilidadByRole(user?.role);
+    final canUseModule = hasUserPermission(user, AppPermission.viewAccounting);
 
     if (!canUseModule) {
       return Scaffold(
@@ -896,55 +898,127 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
     }
 
     final isAdmin = user?.appRole.isAdmin == true;
-    final isMobile = MediaQuery.sizeOf(context).width < 900;
+    final width = MediaQuery.sizeOf(context).width;
+    final isDesktop = width >= 900;
+    final isMobile = !isDesktop;
+    final active = _activeServices;
+    final overdue = _overdueCount;
+    final dueSoon = _dueSoonCount;
 
     return Scaffold(
-      backgroundColor: isMobile ? AppColors.background : null,
-      appBar: CustomAppBar(
-        title: 'Pagos pendientes',
-        showLogo: false,
-        showDepartmentLabel: false,
-        actions: [
-          IconButton(
-            tooltip: 'Filtros y opciones',
-            onPressed: _openFilters,
-            icon: const Icon(Icons.filter_alt_outlined),
-          ),
-          IconButton(
-            tooltip: 'Actualizar',
-            onPressed: _loading ? null : _load,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-        trailing: const SizedBox.shrink(),
-      ),
+      backgroundColor: isDesktop ? desktopSalesSurface : AppColors.background,
+      appBar: isDesktop
+          ? FullTechPageHeader(
+              title: 'Pagos pendientes',
+              actions: [
+                _PaymentsHeaderBadge(
+                  icon: Icons.account_balance_wallet_outlined,
+                  label: 'Activos',
+                  value: '${active.length}',
+                ),
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  tooltip: 'Filtros y opciones',
+                  onPressed: _openFilters,
+                  icon: const Icon(Icons.filter_alt_outlined),
+                ),
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  tooltip: _loading ? 'Actualizando...' : 'Actualizar',
+                  onPressed: _loading ? null : _load,
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: _openCreateFixedDialog,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Agregar'),
+                ),
+                const SizedBox(width: 12),
+              ],
+            )
+          : CustomAppBar(
+              title: 'Pagos pendientes',
+              showLogo: false,
+              showDepartmentLabel: false,
+              actions: [
+                IconButton(
+                  tooltip: 'Filtros y opciones',
+                  onPressed: _openFilters,
+                  icon: const Icon(Icons.filter_alt_outlined),
+                ),
+                IconButton(
+                  tooltip: 'Actualizar',
+                  onPressed: _loading ? null : _load,
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
+              ],
+              trailing: const SizedBox.shrink(),
+            ),
       drawer: buildAdaptiveDrawer(context, currentUser: user),
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'payments_summary',
-        tooltip: 'Ver resumen',
-        backgroundColor: AppColors.secondary,
-        foregroundColor: Colors.white,
-        onPressed: _showSummary,
-        child: const Icon(Icons.summarize_rounded),
-      ),
+      floatingActionButton: isMobile
+          ? FloatingActionButton(
+              heroTag: 'payments_summary',
+              tooltip: 'Ver resumen',
+              backgroundColor: AppColors.secondary,
+              foregroundColor: Colors.white,
+              onPressed: _showSummary,
+              child: const Icon(Icons.summarize_rounded),
+            )
+          : null,
       body: RefreshIndicator(
         onRefresh: _load,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: _error != null
-                  ? _ErrorView(message: _error!, onRetry: _load)
-                  : _buildContent(context, isAdmin: isAdmin),
-            ),
-            if (_loading)
-              const Positioned(
-                left: 0,
-                right: 0,
-                top: 0,
-                child: LinearProgressIndicator(minHeight: 2),
+        child: isDesktop
+            ? DesktopSalesFrame(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: _PaymentsListPane(
+                          loading: _loading,
+                          child: _error != null
+                              ? _ErrorView(message: _error!, onRetry: _load)
+                              : _buildContent(context, isAdmin: isAdmin),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    SizedBox(
+                      width: (width * 0.30).clamp(360.0, 460.0),
+                      child: _PaymentsFixedInfoColumn(
+                        totalEstimated: _totalEstimated,
+                        activeCount: active.length,
+                        overdueCount: overdue,
+                        dueSoonCount: dueSoon,
+                        historyCount: _payments.length,
+                        money: _money,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : Stack(
+                children: [
+                  Positioned.fill(
+                    child: _error != null
+                        ? _ErrorView(message: _error!, onRetry: _load)
+                        : _buildContent(context, isAdmin: isAdmin),
+                  ),
+                  if (_loading)
+                    const Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      child: LinearProgressIndicator(minHeight: 2),
+                    ),
+                ],
               ),
-          ],
-        ),
       ),
     );
   }
@@ -1090,6 +1164,145 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
 }
 
 // ── Summary Panel ─────────────────────────────────────────────────────────────
+
+class _PaymentsListPane extends StatelessWidget {
+  const _PaymentsListPane({required this.loading, required this.child});
+
+  final bool loading;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned.fill(child: child),
+        if (loading)
+          const Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
+      ],
+    );
+  }
+}
+
+class _PaymentsHeaderBadge extends StatelessWidget {
+  const _PaymentsHeaderBadge({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF1FF),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFCFE0FF)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: desktopSalesAccent),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              color: desktopSalesMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              color: desktopSalesText,
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentsFixedInfoColumn extends StatelessWidget {
+  const _PaymentsFixedInfoColumn({
+    required this.totalEstimated,
+    required this.activeCount,
+    required this.overdueCount,
+    required this.dueSoonCount,
+    required this.historyCount,
+    required this.money,
+  });
+
+  final double totalEstimated;
+  final int activeCount;
+  final int overdueCount;
+  final int dueSoonCount;
+  final int historyCount;
+  final NumberFormat money;
+
+  @override
+  Widget build(BuildContext context) {
+    return DesktopSalesPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Resumen',
+            style: TextStyle(
+              color: desktopSalesText,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _PaymentSummaryStat(
+            label: 'Total estimado',
+            value: money.format(totalEstimated),
+            icon: Icons.account_balance_wallet_outlined,
+          ),
+          const SizedBox(height: 8),
+          _PaymentSummaryStat(
+            label: 'Servicios activos',
+            value: '$activeCount',
+            icon: Icons.list_alt_outlined,
+          ),
+          const SizedBox(height: 8),
+          _PaymentSummaryStat(
+            label: 'Vencidos',
+            value: '$overdueCount',
+            icon: Icons.warning_amber_rounded,
+          ),
+          const SizedBox(height: 8),
+          _PaymentSummaryStat(
+            label: 'Próximos 7 días',
+            value: '$dueSoonCount',
+            icon: Icons.schedule_rounded,
+          ),
+          const SizedBox(height: 8),
+          _PaymentSummaryStat(
+            label: 'Historial',
+            value: '$historyCount',
+            icon: Icons.history_outlined,
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _PaymentSummaryStat extends StatelessWidget {
   const _PaymentSummaryStat({

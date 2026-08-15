@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsNumber,
@@ -162,4 +163,42 @@ export class DepositOrdersQueryDto {
   @IsEnum(DepositOrderStatusDto)
   @IsOptional()
   status?: DepositOrderStatusDto;
+}
+
+export class CreateDepositBankDto {
+  @IsString()
+  name!: string;
+}
+
+export class UpdateDepositBankDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
+}
+
+export class CreateDepositBankAccountDto {
+  @IsString()
+  label!: string;
+
+  @IsOptional()
+  @IsString()
+  accountNumber?: string;
+}
+
+export class UpdateDepositBankAccountDto {
+  @IsOptional()
+  @IsString()
+  label?: string;
+
+  @IsOptional()
+  @IsString()
+  accountNumber?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
 }

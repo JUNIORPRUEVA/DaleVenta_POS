@@ -1,15 +1,19 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_provider.dart';
-import '../../core/debug/debug_admin_action.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
+import '../../core/utils/local_file_bytes.dart';
+import '../../core/utils/media_file_actions.dart';
+import '../../core/utils/simple_xlsx.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/app_navigation.dart';
 import '../../core/widgets/custom_app_bar.dart';
@@ -54,7 +58,8 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   Timer? _debounce;
   Timer? _refreshTimer;
-  bool _purgingAllDebug = false;
+  OverlayEntry? _noticeEntry;
+  bool _importingClients = false;
   bool _searchOpen = false;
   String? _selectedClientId;
 
@@ -129,6 +134,8 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
 
   @override
   void dispose() {
+    _noticeEntry?.remove();
+    _noticeEntry = null;
     _refreshTimer?.cancel();
     _debounce?.cancel();
     _searchCtrl.dispose();
@@ -151,35 +158,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
       }
     }
     return items.first;
-  }
-
-  Future<void> _purgeAllDebug() async {
-    final confirmed = await confirmDebugAdminPurge(
-      context,
-      moduleLabel: 'clientes',
-      impactLabel: 'todos los clientes y sus datos relacionados',
-    );
-    if (!confirmed || !mounted) return;
-
-    setState(() => _purgingAllDebug = true);
-    try {
-      final deleted = await ref
-          .read(clientesControllerProvider.notifier)
-          .purgeAllDebug();
-      if (!mounted) return;
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        SnackBar(content: Text('Se limpiaron $deleted clientes.')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.maybeOf(
-        context,
-      )?.showSnackBar(SnackBar(content: Text('$e')));
-    } finally {
-      if (mounted) {
-        setState(() => _purgingAllDebug = false);
-      }
-    }
   }
 
   Future<void> _showSummary(ClientesState state) async {
@@ -252,34 +230,273 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
       _selectedClientId = created.id;
     });
     await ref.read(clientesControllerProvider.notifier).refresh();
+    _showClientNotice('Cliente creado', created.nombre);
   }
 
-  Future<void> _handleTopAction(_ClientesTopAction action) async {
-    switch (action) {
-      case _ClientesTopAction.newClient:
-        await _openCreateClientFlow();
-        break;
-      case _ClientesTopAction.refresh:
-        final state = ref.read(clientesControllerProvider);
-        if (!state.refreshing) {
-          await ref.read(clientesControllerProvider.notifier).refresh();
+  Future<void> _openEditClientFlow(ClienteModel client) async {
+    final updated = await openClienteFormAdaptive(
+      context,
+      clienteId: client.id,
+    );
+    if (updated == null || !mounted) return;
+    setState(() => _selectedClientId = updated.id);
+    await ref.read(clientesControllerProvider.notifier).refresh();
+    _showClientNotice('Cliente actualizado', updated.nombre);
+  }
+
+  Future<void> _deleteClient(ClienteModel client) async {
+    final name = client.nombre.trim().isEmpty
+        ? 'este cliente'
+        : client.nombre.trim();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar cliente'),
+        content: Text(
+          '¿Seguro que deseas eliminar $name? El cliente se ocultará de la lista activa de esta empresa.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.delete_outline_rounded),
+            label: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ref.read(clientesControllerProvider.notifier).remove(client.id);
+      if (!mounted) return;
+      setState(() => _selectedClientId = null);
+      _showClientNotice('Cliente eliminado', name);
+    } catch (error) {
+      if (!mounted) return;
+      _showClientNotice('No se pudo eliminar', '$error', isError: true);
+    }
+  }
+
+  void _showClientNotice(String title, String message, {bool isError = false}) {
+    _noticeEntry?.remove();
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    if (overlay == null) {
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(SnackBar(content: Text('$title. $message')));
+      return;
+    }
+
+    _noticeEntry = OverlayEntry(
+      builder: (context) {
+        final top = MediaQuery.paddingOf(context).top + 18;
+        return Positioned(
+          top: top,
+          right: 18,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: 360,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isError
+                      ? const Color(0xFFFCA5A5)
+                      : const Color(0xFFCFE0FF),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 24,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: isError
+                          ? const Color(0xFFFEE2E2)
+                          : desktopSalesAccentSoft,
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Icon(
+                      isError
+                          ? Icons.error_outline_rounded
+                          : Icons.check_circle_outline_rounded,
+                      color: isError
+                          ? const Color(0xFFDC2626)
+                          : desktopSalesAccent,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          message,
+                          style: const TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 12.5,
+                            height: 1.25,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    final entry = _noticeEntry!;
+    overlay.insert(entry);
+    Future.delayed(const Duration(seconds: 4), () {
+      if (_noticeEntry == entry) {
+        _noticeEntry?.remove();
+        _noticeEntry = null;
+      }
+    });
+  }
+
+  Future<void> _exportClients() async {
+    final clients = ref
+        .read(clientesControllerProvider)
+        .items
+        .where((client) => !client.isDeleted)
+        .toList(growable: false);
+    if (clients.isEmpty) {
+      _showClientNotice(
+        'Sin clientes activos',
+        'No hay clientes disponibles para exportar.',
+      );
+      return;
+    }
+
+    try {
+      final bytes = buildSimpleXlsx([
+        SimpleXlsxSheet(
+          name: 'Clientes',
+          rows: [
+            const [
+              'Nombre',
+              'Teléfono',
+              'Correo',
+              'Dirección',
+              'Ubicación GPS',
+            ],
+            for (final client in clients)
+              [
+                client.nombre,
+                client.telefono,
+                client.correo ?? '',
+                client.direccion ?? '',
+                client.locationUrl ?? '',
+              ],
+          ],
+        ),
+      ]);
+      final saved = await saveMediaBytes(
+        bytes: bytes,
+        fileName: 'clientes_${_clientFileStamp()}.xlsx',
+        allowedExtensions: const ['xlsx'],
+        mimeType:
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      if (!mounted) return;
+      _showClientNotice(
+        saved ? 'Clientes exportados' : 'Exportación cancelada',
+        saved
+            ? 'Se preparó el archivo con ${clients.length} clientes activos.'
+            : 'No se guardó ningún archivo.',
+      );
+    } catch (error) {
+      if (!mounted) return;
+      _showClientNotice('No se pudo exportar', '$error', isError: true);
+    }
+  }
+
+  Future<void> _importClients() async {
+    if (_importingClients) return;
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['xlsx', 'csv', 'txt'],
+      withData: true,
+    );
+    final file = result?.files.single;
+    if (file == null || !mounted) return;
+
+    setState(() => _importingClients = true);
+    try {
+      final bytes = await _readPickedFileBytes(file);
+      if (bytes == null) {
+        throw Exception('No se pudo leer el archivo seleccionado.');
+      }
+      final drafts = _parseClientImportFile(bytes, file.name);
+      if (drafts.isEmpty) {
+        throw Exception(
+          'El archivo no tiene clientes válidos. Nombre y teléfono son obligatorios.',
+        );
+      }
+
+      var imported = 0;
+      var skipped = 0;
+      final controller = ref.read(clientesControllerProvider.notifier);
+      for (final draft in drafts) {
+        try {
+          await controller.saveCliente(
+            nombre: draft.nombre,
+            telefono: draft.telefono,
+            correo: draft.correo,
+            direccion: draft.direccion,
+            locationUrl: draft.locationUrl,
+          );
+          imported++;
+        } catch (_) {
+          skipped++;
         }
-        break;
-      case _ClientesTopAction.clearFilters:
-        await ref
-            .read(clientesControllerProvider.notifier)
-            .applyFilters(
-              order: ClientesOrder.az,
-              correoFilter: CorreoFilter.todos,
-              estadoFilter: EstadoFilter.todos,
-              ownerFilter: OwnerFilter.todos,
-            );
-        break;
-      case _ClientesTopAction.purgeDebug:
-        if (!_purgingAllDebug) {
-          await _purgeAllDebug();
-        }
-        break;
+      }
+      await controller.refresh();
+      if (!mounted) return;
+      _showClientNotice(
+        'Importación completada',
+        skipped == 0
+            ? 'Se importaron $imported clientes en esta empresa.'
+            : 'Se importaron $imported clientes y se omitieron $skipped registros.',
+      );
+    } catch (error) {
+      if (!mounted) return;
+      _showClientNotice('No se pudo importar', '$error', isError: true);
+    } finally {
+      if (mounted) setState(() => _importingClients = false);
     }
   }
 
@@ -295,7 +512,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
     final activeFilterCount = [
       state.order != ClientesOrder.az,
       state.correoFilter != CorreoFilter.todos,
-      state.estadoFilter != EstadoFilter.todos,
+      state.estadoFilter != EstadoFilter.activos,
       state.ownerFilter != OwnerFilter.todos,
     ].where((active) => active).length;
 
@@ -316,70 +533,29 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
           ? FullTechPageHeader(
               title: 'Clientes',
               actions: [
-                _ClientsHeaderBadge(
-                  icon: Icons.people_alt_outlined,
-                  label: 'Clientes',
-                  value: '${state.items.length}',
+                _ClientesHeaderActionButton(
+                  icon: Icons.person_add_alt_1_rounded,
+                  label: 'Nuevo cliente',
+                  onPressed: _openCreateClientFlow,
+                  prominent: true,
                 ),
                 const SizedBox(width: 8),
-                IconButton.filledTonal(
-                  tooltip: state.refreshing ? 'Actualizando...' : 'Actualizar',
-                  onPressed: state.refreshing
-                      ? null
-                      : () => controller.refresh(),
-                  icon: const Icon(Icons.refresh_rounded),
+                _ClientesHeaderActionButton(
+                  icon: Icons.download_rounded,
+                  label: 'Exportar',
+                  onPressed: _exportClients,
                 ),
-                const SizedBox(width: 6),
-                PopupMenuButton<_ClientesTopAction>(
-                  tooltip: 'Opciones',
-                  onSelected: _handleTopAction,
-                  itemBuilder: (context) => [
-                    _topMenuItem(
-                      context,
-                      value: _ClientesTopAction.newClient,
-                      icon: Icons.person_add_alt_1_rounded,
-                      label: 'Nuevo cliente',
-                    ),
-                    _topMenuItem(
-                      context,
-                      value: _ClientesTopAction.refresh,
-                      icon: Icons.refresh_rounded,
-                      label: state.refreshing
-                          ? 'Actualizando...'
-                          : 'Actualizar',
-                      enabled: !state.refreshing,
-                    ),
-                    if (activeFilterCount > 0)
-                      _topMenuItem(
-                        context,
-                        value: _ClientesTopAction.clearFilters,
-                        icon: Icons.filter_alt_off_rounded,
-                        label: 'Limpiar filtros',
-                      ),
-                    if (canUseDebugAdminAction(currentUser))
-                      _topMenuItem(
-                        context,
-                        value: _ClientesTopAction.purgeDebug,
-                        icon: Icons.delete_sweep_rounded,
-                        label: _purgingAllDebug
-                            ? 'Limpiando tabla...'
-                            : 'Limpiar tabla (debug)',
-                        enabled: !_purgingAllDebug,
-                      ),
-                  ],
-                  child: Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEAF1FF),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: const Color(0xFFCFE0FF)),
-                    ),
-                    child: const Icon(
-                      Icons.more_vert_rounded,
-                      color: Color(0xFF1957E6),
-                    ),
-                  ),
+                const SizedBox(width: 8),
+                _ClientesHeaderActionButton(
+                  icon: Icons.upload_file_rounded,
+                  label: _importingClients ? 'Importando' : 'Importar',
+                  onPressed: _importingClients ? null : _importClients,
+                ),
+                const SizedBox(width: 8),
+                _ClientesHeaderActionButton(
+                  icon: Icons.refresh_rounded,
+                  label: state.refreshing ? 'Actualizando' : 'Actualizar',
+                  onPressed: state.refreshing ? null : controller.refresh,
                 ),
                 const SizedBox(width: 12),
               ],
@@ -410,6 +586,21 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                       if (!state.refreshing) controller.refresh();
                     },
                     icon: const Icon(Icons.refresh_rounded),
+                  ),
+                  IconButton(
+                    tooltip: 'Nuevo cliente',
+                    onPressed: _openCreateClientFlow,
+                    icon: const Icon(Icons.person_add_alt_1_rounded),
+                  ),
+                  IconButton(
+                    tooltip: 'Exportar clientes',
+                    onPressed: _exportClients,
+                    icon: const Icon(Icons.download_rounded),
+                  ),
+                  IconButton(
+                    tooltip: 'Importar clientes',
+                    onPressed: _importingClients ? null : _importClients,
+                    icon: const Icon(Icons.upload_file_rounded),
                   ),
                 ],
               ],
@@ -461,6 +652,13 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                                   initialClientId: selectedClient.id,
                                 ),
                               ),
+                        onEditClient: selectedClient == null
+                            ? null
+                            : () => _openEditClientFlow(selectedClient),
+                        onDeleteClient:
+                            selectedClient == null || selectedClient.isDeleted
+                            ? null
+                            : () => _deleteClient(selectedClient),
                         onNewClient: _openCreateClientFlow,
                         onOpenMap: () => context.push(Routes.clientesMapa),
                       ),
@@ -818,6 +1016,8 @@ class _ClienteFixedInfoColumn extends StatelessWidget {
     required this.refreshing,
     required this.onOpenDetail,
     required this.onCreateService,
+    required this.onEditClient,
+    required this.onDeleteClient,
     required this.onNewClient,
     required this.onOpenMap,
   });
@@ -827,6 +1027,8 @@ class _ClienteFixedInfoColumn extends StatelessWidget {
   final bool refreshing;
   final VoidCallback? onOpenDetail;
   final VoidCallback? onCreateService;
+  final VoidCallback? onEditClient;
+  final VoidCallback? onDeleteClient;
   final VoidCallback onNewClient;
   final VoidCallback onOpenMap;
 
@@ -949,28 +1151,25 @@ class _ClienteFixedInfoColumn extends StatelessWidget {
                               ? 'Sin teléfono'
                               : selected.telefono.trim(),
                         ),
-                        _ClientInfoLine(
-                          icon: Icons.email_outlined,
-                          label: 'Correo',
-                          value: (selected.correo ?? '').trim().isEmpty
-                              ? 'Sin correo'
-                              : selected.correo!.trim(),
-                        ),
-                        _ClientInfoLine(
-                          icon: Icons.place_outlined,
-                          label: 'Dirección',
-                          value: (selected.direccion ?? '').trim().isEmpty
-                              ? 'Sin dirección registrada'
-                              : selected.direccion!.trim(),
-                          maxLines: 3,
-                        ),
-                        _ClientInfoLine(
-                          icon: Icons.map_outlined,
-                          label: 'Ubicación',
-                          value: (selected.locationUrl ?? '').trim().isEmpty
-                              ? 'Sin enlace GPS'
-                              : 'GPS disponible',
-                        ),
+                        if ((selected.correo ?? '').trim().isNotEmpty)
+                          _ClientInfoLine(
+                            icon: Icons.email_outlined,
+                            label: 'Correo',
+                            value: selected.correo!.trim(),
+                          ),
+                        if ((selected.direccion ?? '').trim().isNotEmpty)
+                          _ClientInfoLine(
+                            icon: Icons.place_outlined,
+                            label: 'Dirección',
+                            value: selected.direccion!.trim(),
+                            maxLines: 3,
+                          ),
+                        if ((selected.locationUrl ?? '').trim().isNotEmpty)
+                          const _ClientInfoLine(
+                            icon: Icons.map_outlined,
+                            label: 'Ubicación',
+                            value: 'GPS disponible',
+                          ),
                         _ClientInfoLine(
                           icon: Icons.calendar_today_outlined,
                           label: 'Creado',
@@ -999,6 +1198,27 @@ class _ClienteFixedInfoColumn extends StatelessWidget {
                   label: 'Abrir perfil completo',
                   onPressed: onOpenDetail,
                   prominent: true,
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _ClientColumnAction(
+                        icon: Icons.edit_outlined,
+                        label: 'Editar',
+                        onPressed: onEditClient,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _ClientColumnAction(
+                        icon: Icons.delete_outline_rounded,
+                        label: 'Eliminar',
+                        onPressed: onDeleteClient,
+                        danger: true,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -1183,12 +1403,14 @@ class _ClientColumnAction extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.prominent = false,
+    this.danger = false,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback? onPressed;
   final bool prominent;
+  final bool danger;
 
   @override
   Widget build(BuildContext context) {
@@ -1209,6 +1431,10 @@ class _ClientColumnAction extends StatelessWidget {
       onPressed: onPressed,
       style: OutlinedButton.styleFrom(
         minimumSize: const Size.fromHeight(44),
+        foregroundColor: danger ? Theme.of(context).colorScheme.error : null,
+        side: danger
+            ? BorderSide(color: Theme.of(context).colorScheme.error)
+            : null,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       ),
       icon: Icon(icon, size: 17),
@@ -1217,69 +1443,55 @@ class _ClientColumnAction extends StatelessWidget {
   }
 }
 
-enum _ClientesTopAction { newClient, refresh, clearFilters, purgeDebug }
-
-class _ClientsHeaderBadge extends StatelessWidget {
-  const _ClientsHeaderBadge({
+class _ClientesHeaderActionButton extends StatelessWidget {
+  const _ClientesHeaderActionButton({
     required this.icon,
     required this.label,
-    required this.value,
+    required this.onPressed,
+    this.prominent = false,
   });
 
   final IconData icon;
   final String label;
-  final String value;
+  final VoidCallback? onPressed;
+  final bool prominent;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 116, minHeight: 46),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEAF1FF),
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: const Color(0xFFCFE0FF)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 26,
-            height: 26,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1957E6).withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(7),
+    final style = prominent
+        ? FilledButton.styleFrom(
+            backgroundColor: desktopSalesAccent,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(0, 42),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: const Color(0xFF1957E6), size: 16),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w900,
-                  color: const Color(0xFF1957E6).withValues(alpha: 0.80),
-                ),
-              ),
-              const SizedBox(height: 1),
-              Text(
-                value,
-                style: const TextStyle(
-                  color: Color(0xFF111827),
-                  fontWeight: FontWeight.w900,
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+          )
+        : OutlinedButton.styleFrom(
+            foregroundColor: desktopSalesAccent,
+            backgroundColor: Colors.white,
+            side: const BorderSide(color: Color(0xFFCFE0FF)),
+            minimumSize: const Size(0, 42),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          );
+    final child = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 18),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+        ),
+      ],
     );
+    return prominent
+        ? FilledButton(onPressed: onPressed, style: style, child: child)
+        : OutlinedButton(onPressed: onPressed, style: style, child: child);
   }
 }
 
@@ -1319,27 +1531,6 @@ class _ClientesTopPanel extends StatelessWidget {
       ],
     );
   }
-}
-
-PopupMenuItem<_ClientesTopAction> _topMenuItem(
-  BuildContext context, {
-  required _ClientesTopAction value,
-  required IconData icon,
-  required String label,
-  bool enabled = true,
-}) {
-  final theme = Theme.of(context);
-  return PopupMenuItem<_ClientesTopAction>(
-    value: value,
-    enabled: enabled,
-    child: Row(
-      children: [
-        Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
-        const SizedBox(width: 10),
-        Expanded(child: Text(label)),
-      ],
-    ),
-  );
 }
 
 String _formatClientDate(DateTime value) {
@@ -1571,7 +1762,7 @@ class _ClientesFiltersSheetState extends State<_ClientesFiltersSheet> {
                               const _ClientesFilterState(
                                 order: ClientesOrder.az,
                                 correoFilter: CorreoFilter.todos,
-                                estadoFilter: EstadoFilter.todos,
+                                estadoFilter: EstadoFilter.activos,
                                 ownerFilter: OwnerFilter.todos,
                               ),
                             );
@@ -1721,6 +1912,185 @@ String _estadoFilterLabel(EstadoFilter filter) {
     case EstadoFilter.todos:
       return 'Todos';
   }
+}
+
+String _clientFileStamp() {
+  final now = DateTime.now();
+  String two(int value) => value.toString().padLeft(2, '0');
+  return '${now.year}${two(now.month)}${two(now.day)}_${two(now.hour)}${two(now.minute)}';
+}
+
+Future<Uint8List?> _readPickedFileBytes(PlatformFile file) async {
+  final memoryBytes = file.bytes;
+  if (memoryBytes != null) return Uint8List.fromList(memoryBytes);
+  final path = (file.path ?? '').trim();
+  if (path.isEmpty) return null;
+  return Uint8List.fromList(await readLocalFileBytes(path));
+}
+
+List<_ClientImportDraft> _parseClientImportFile(
+  Uint8List bytes,
+  String fileName,
+) {
+  final lowerName = fileName.toLowerCase().trim();
+  final rows = lowerName.endsWith('.xlsx')
+      ? _readFirstXlsxSheet(bytes)
+      : _parseClientCsv(utf8.decode(bytes, allowMalformed: true));
+  return _clientDraftsFromRows(rows);
+}
+
+List<List<String>> _readFirstXlsxSheet(Uint8List bytes) {
+  final sheets = readSimpleXlsx(bytes);
+  for (final rows in sheets.values) {
+    if (rows.isNotEmpty) return rows;
+  }
+  return const [];
+}
+
+List<List<String>> _parseClientCsv(String text) {
+  return const LineSplitter()
+      .convert(text)
+      .where((line) => line.trim().isNotEmpty)
+      .map(_splitCsvLine)
+      .toList(growable: false);
+}
+
+List<String> _splitCsvLine(String line) {
+  final result = <String>[];
+  final current = StringBuffer();
+  var quoted = false;
+  for (var i = 0; i < line.length; i++) {
+    final char = line[i];
+    if (char == '"') {
+      final escapedQuote = quoted && i + 1 < line.length && line[i + 1] == '"';
+      if (escapedQuote) {
+        current.write('"');
+        i++;
+      } else {
+        quoted = !quoted;
+      }
+      continue;
+    }
+    if (!quoted && (char == ',' || char == ';' || char == '\t')) {
+      result.add(current.toString().trim());
+      current.clear();
+      continue;
+    }
+    current.write(char);
+  }
+  result.add(current.toString().trim());
+  return result;
+}
+
+List<_ClientImportDraft> _clientDraftsFromRows(List<List<String>> rows) {
+  final cleanRows = rows
+      .where((row) => row.any((cell) => cell.trim().isNotEmpty))
+      .toList(growable: false);
+  if (cleanRows.isEmpty) return const [];
+
+  final first = cleanRows.first;
+  final hasHeader = _looksLikeClientHeader(first);
+  final header = hasHeader ? first : const <String>[];
+  final dataRows = hasHeader ? cleanRows.skip(1) : cleanRows;
+  final nameIndex = hasHeader
+      ? _headerIndex(header, const ['nombre', 'cliente', 'name', 'customer'])
+      : 0;
+  final phoneIndex = hasHeader
+      ? _headerIndex(header, const [
+          'telefono',
+          'teléfono',
+          'phone',
+          'celular',
+          'whatsapp',
+        ])
+      : 1;
+  final emailIndex = hasHeader
+      ? _headerIndex(header, const ['correo', 'email', 'mail'])
+      : 2;
+  final addressIndex = hasHeader
+      ? _headerIndex(header, const ['direccion', 'dirección', 'address'])
+      : 3;
+  final locationIndex = hasHeader
+      ? _headerIndex(header, const [
+          'ubicacion',
+          'ubicación',
+          'gps',
+          'location',
+          'mapa',
+        ])
+      : 4;
+
+  final drafts = <_ClientImportDraft>[];
+  for (final row in dataRows) {
+    final name = _rowCell(row, nameIndex);
+    final phone = _rowCell(row, phoneIndex);
+    if (name.isEmpty || phone.isEmpty) continue;
+    drafts.add(
+      _ClientImportDraft(
+        nombre: name,
+        telefono: phone,
+        correo: _emptyToNull(_rowCell(row, emailIndex)),
+        direccion: _emptyToNull(_rowCell(row, addressIndex)),
+        locationUrl: _emptyToNull(_rowCell(row, locationIndex)),
+      ),
+    );
+  }
+  return drafts;
+}
+
+bool _looksLikeClientHeader(List<String> row) {
+  return row
+      .map(_normalizeClientHeader)
+      .any(
+        (cell) => cell == 'nombre' || cell == 'cliente' || cell == 'telefono',
+      );
+}
+
+int _headerIndex(List<String> headers, List<String> aliases) {
+  final normalizedAliases = aliases.map(_normalizeClientHeader).toSet();
+  for (var i = 0; i < headers.length; i++) {
+    if (normalizedAliases.contains(_normalizeClientHeader(headers[i]))) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+String _normalizeClientHeader(String value) {
+  return value
+      .trim()
+      .toLowerCase()
+      .replaceAll('á', 'a')
+      .replaceAll('é', 'e')
+      .replaceAll('í', 'i')
+      .replaceAll('ó', 'o')
+      .replaceAll('ú', 'u')
+      .replaceAll('ñ', 'n')
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '');
+}
+
+String _rowCell(List<String> row, int index) {
+  if (index < 0 || index >= row.length) return '';
+  return row[index].trim();
+}
+
+String? _emptyToNull(String value) =>
+    value.trim().isEmpty ? null : value.trim();
+
+class _ClientImportDraft {
+  const _ClientImportDraft({
+    required this.nombre,
+    required this.telefono,
+    this.correo,
+    this.direccion,
+    this.locationUrl,
+  });
+
+  final String nombre;
+  final String telefono;
+  final String? correo;
+  final String? direccion;
+  final String? locationUrl;
 }
 
 class _ClientesSummaryDialog extends StatelessWidget {

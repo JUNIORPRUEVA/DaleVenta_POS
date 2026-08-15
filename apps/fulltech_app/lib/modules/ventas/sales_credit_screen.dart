@@ -93,6 +93,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
       if (mounted && cached.isNotEmpty) {
         setState(() {
           _credits = cached;
+          _selectedCreditId = _resolveCreditSelection(cached);
           _loading = false;
         });
       }
@@ -114,6 +115,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
       if (!mounted) return;
       setState(() {
         _credits = rows;
+        _selectedCreditId = _resolveCreditSelection(rows);
         _loading = false;
       });
     } catch (error) {
@@ -523,6 +525,15 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
       if (sale.id == id) return sale;
     }
     return null;
+  }
+
+  String? _resolveCreditSelection(List<SaleModel> rows) {
+    if (rows.isEmpty) return null;
+    final current = _selectedCreditId;
+    if (current != null && rows.any((sale) => sale.id == current)) {
+      return current;
+    }
+    return rows.first.id;
   }
 
   Future<void> _openPaymentDialog(SaleModel sale, {bool settle = false}) async {
@@ -1829,6 +1840,10 @@ class _CreditDetailPanel extends StatelessWidget {
         : DateFormat('dd/MM/yyyy HH:mm').format(sale.saleDate!.toLocal());
     final paid = sale.creditBalance <= 0.009;
     final cashier = (sale.userName ?? sale.userId).trim();
+    final hasRegisteredPayments =
+        sale.paymentCashAmount > 0.009 ||
+        sale.paymentTransferAmount > 0.009 ||
+        sale.creditPaidAmount > 0.009;
     final mobile = MediaQuery.sizeOf(context).width < 620;
     return Container(
       width: mobile ? double.infinity : 460,
@@ -1924,10 +1939,8 @@ class _CreditDetailPanel extends StatelessWidget {
                             : sale.customerPhone!,
                       ),
                       _DetailLine(label: 'Fecha', value: date),
-                      _DetailLine(
-                        label: 'Cajero',
-                        value: cashier.isEmpty ? 'Usuario' : cashier,
-                      ),
+                      if (cashier.isNotEmpty)
+                        _DetailLine(label: 'Cajero', value: cashier),
                       _StatusPill(paid: paid),
                     ],
                   ),
@@ -1957,30 +1970,37 @@ class _CreditDetailPanel extends StatelessWidget {
                   danger: !paid,
                 ),
                 const SizedBox(height: 14),
-                _PanelSection(
-                  title: 'Pagos registrados',
-                  child: Column(
-                    children: [
-                      _DetailLine(
-                        label: 'Efectivo',
-                        value: formatRdCurrencyAccounting(
-                          sale.paymentCashAmount,
-                        ),
-                      ),
-                      _DetailLine(
-                        label: 'Transferencia',
-                        value: formatRdCurrencyAccounting(
-                          sale.paymentTransferAmount,
-                        ),
-                      ),
-                      _DetailLine(
-                        label: 'Crédito inicial',
-                        value: formatRdCurrencyAccounting(sale.creditAmount),
-                      ),
-                    ],
+                if (hasRegisteredPayments) ...[
+                  _PanelSection(
+                    title: 'Pagos registrados',
+                    child: Column(
+                      children: [
+                        if (sale.paymentCashAmount > 0.009)
+                          _DetailLine(
+                            label: 'Efectivo',
+                            value: formatRdCurrencyAccounting(
+                              sale.paymentCashAmount,
+                            ),
+                          ),
+                        if (sale.paymentTransferAmount > 0.009)
+                          _DetailLine(
+                            label: 'Transferencia',
+                            value: formatRdCurrencyAccounting(
+                              sale.paymentTransferAmount,
+                            ),
+                          ),
+                        if (sale.creditPaidAmount > 0.009)
+                          _DetailLine(
+                            label: 'Total abonado',
+                            value: formatRdCurrencyAccounting(
+                              sale.creditPaidAmount,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 14),
+                  const SizedBox(height: 14),
+                ],
                 _PanelSection(
                   title: 'Productos',
                   child: Column(
@@ -2593,6 +2613,10 @@ class _CreditDetailBody extends StatelessWidget {
     final cashier = (sale.userName ?? sale.userId).trim();
     final shortId = sale.id.length <= 8 ? sale.id : sale.id.substring(0, 8);
     final phone = (sale.customerPhone ?? '').trim();
+    final hasRegisteredPayments =
+        sale.paymentCashAmount > 0.009 ||
+        sale.paymentTransferAmount > 0.009 ||
+        sale.creditPaidAmount > 0.009;
 
     return Column(
       children: [
@@ -2630,12 +2654,14 @@ class _CreditDetailBody extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 20),
-                _CreditInfoLine(
-                  icon: Icons.person_outline_rounded,
-                  label: 'Cajero',
-                  value: cashier.isEmpty ? 'Usuario' : cashier,
-                ),
-                const SizedBox(height: 10),
+                if (cashier.isNotEmpty) ...[
+                  _CreditInfoLine(
+                    icon: Icons.person_outline_rounded,
+                    label: 'Cajero',
+                    value: cashier,
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 _CreditInfoAmount(
                   label: 'Total factura',
                   value: sale.totalSold,
@@ -2652,30 +2678,37 @@ class _CreditDetailBody extends StatelessWidget {
                   danger: !paid,
                 ),
                 const SizedBox(height: 20),
-                _PanelSection(
-                  title: 'Pagos registrados',
-                  child: Column(
-                    children: [
-                      _DetailLine(
-                        label: 'Efectivo',
-                        value: formatRdCurrencyAccounting(
-                          sale.paymentCashAmount,
-                        ),
-                      ),
-                      _DetailLine(
-                        label: 'Transferencia',
-                        value: formatRdCurrencyAccounting(
-                          sale.paymentTransferAmount,
-                        ),
-                      ),
-                      _DetailLine(
-                        label: 'Crédito inicial',
-                        value: formatRdCurrencyAccounting(sale.creditAmount),
-                      ),
-                    ],
+                if (hasRegisteredPayments) ...[
+                  _PanelSection(
+                    title: 'Pagos registrados',
+                    child: Column(
+                      children: [
+                        if (sale.paymentCashAmount > 0.009)
+                          _DetailLine(
+                            label: 'Efectivo',
+                            value: formatRdCurrencyAccounting(
+                              sale.paymentCashAmount,
+                            ),
+                          ),
+                        if (sale.paymentTransferAmount > 0.009)
+                          _DetailLine(
+                            label: 'Transferencia',
+                            value: formatRdCurrencyAccounting(
+                              sale.paymentTransferAmount,
+                            ),
+                          ),
+                        if (sale.creditPaidAmount > 0.009)
+                          _DetailLine(
+                            label: 'Total abonado',
+                            value: formatRdCurrencyAccounting(
+                              sale.creditPaidAmount,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 14),
+                  const SizedBox(height: 14),
+                ],
                 _PanelSection(
                   title: 'Productos',
                   child: Column(

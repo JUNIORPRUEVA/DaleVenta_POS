@@ -631,6 +631,7 @@ model Company {
   cashMovements CashMovement[]
   closes Close[]
   depositOrders DepositOrder[]
+  depositBanks DepositBank[]
   fiscalInvoices FiscalInvoice[]
   payableServices PayableService[]
   payablePayments PayablePayment[]
@@ -2473,6 +2474,36 @@ model DepositOrder {
   @@index([createdById])
   @@index([correctionOfDepositOrderId])
   @@index([deletedById])
+}
+
+model DepositBank {
+  id        String               @id @default(uuid()) @db.Uuid
+  companyId String               @map("company_id") @db.Uuid
+  name      String
+  active    Boolean              @default(true)
+  createdAt DateTime             @default(now()) @map("created_at")
+  updatedAt DateTime             @updatedAt @map("updated_at")
+  company   Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  accounts  DepositBankAccount[]
+
+  @@unique([companyId, name])
+  @@index([companyId, active])
+  @@map("deposit_banks")
+}
+
+model DepositBankAccount {
+  id            String      @id @default(uuid()) @db.Uuid
+  bankId        String      @map("bank_id") @db.Uuid
+  label         String
+  accountNumber String?     @map("account_number")
+  active        Boolean     @default(true)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  bank          DepositBank @relation(fields: [bankId], references: [id], onDelete: Cascade)
+
+  @@unique([bankId, label])
+  @@index([bankId, active])
+  @@map("deposit_bank_accounts")
 }
 
 model FiscalInvoice {

@@ -23,6 +23,7 @@ import '../../core/widgets/custom_app_bar.dart';
 
 import '../../core/widgets/product_network_image.dart';
 import '../../core/widgets/fulltech_dialog.dart';
+import '../../features/account/delete_account_dialog.dart';
 import '../cash/cash_dialogs.dart';
 import '../clientes/cliente_model.dart';
 import 'application/ventas_controller.dart';
@@ -486,6 +487,48 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           _clearAllProductCache();
         },
       ),
+    );
+  }
+
+  Future<void> _openClientDetailPanel(ClienteModel client) async {
+    final width = MediaQuery.sizeOf(context).width;
+    final panelWidth = width >= 1024
+        ? (width * 0.29).clamp(420.0, 560.0)
+        : width;
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Detalle del cliente',
+      barrierColor: Colors.black.withValues(alpha: 0.28),
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: _SalesClientDetailPanel(
+            client: client,
+            width: panelWidth,
+            onClose: () => Navigator.of(dialogContext).pop(),
+            onSelect: () {
+              Navigator.of(dialogContext).pop();
+              setState(() => _selectedClient = client);
+            },
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
+        );
+      },
     );
   }
 
@@ -1325,22 +1368,11 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                 children: [
                   // ── Solo mostrar encabezado si hay cliente seleccionado ──
                   if (hasClient) ...[
-                    Text(
-                      _selectedClient!.nombre,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    _SelectedSaleClientHeader(
+                      client: _selectedClient!,
+                      onTap: _openClientPickerDialog,
+                      onClear: () => setState(() => _selectedClient = null),
                     ),
-                    if (_cart.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 1),
-                        child: Text(
-                          '${_cart.length} item(s)',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
                     SizedBox(height: compactVertical ? 4 : 6),
                   ] else
                     SizedBox(height: compactVertical ? 4 : 6),
@@ -1710,6 +1742,17 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                               dense: true,
                               title: Text(c.nombre),
                               subtitle: Text(c.telefono),
+                              trailing: TextButton.icon(
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                  unawaited(_openClientDetailPanel(c));
+                                },
+                                icon: const Icon(
+                                  Icons.open_in_new_rounded,
+                                  size: 16,
+                                ),
+                                label: const Text('Ver'),
+                              ),
                               onTap: () => Navigator.of(context).pop(c),
                             );
                           },
@@ -2935,6 +2978,385 @@ class _ActionDrawerTile extends StatelessWidget {
   }
 }
 
+class _SelectedSaleClientHeader extends StatelessWidget {
+  const _SelectedSaleClientHeader({
+    required this.client,
+    required this.onTap,
+    required this.onClear,
+  });
+
+  final ClienteModel client;
+  final VoidCallback onTap;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final name = client.nombre.trim().isEmpty
+        ? 'Sin nombre'
+        : client.nombre.trim();
+    final phone = client.telefono.trim();
+
+    return Material(
+      color: const Color(0xFFF8FAFC),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 48),
+          padding: const EdgeInsets.fromLTRB(10, 7, 6, 7),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFD8E5EC)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF1FF),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFCFE0FF)),
+                ),
+                child: const Icon(
+                  Icons.person_outline_rounded,
+                  color: Color(0xFF1957E6),
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: RichText(
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  text: TextSpan(
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: const Color(0xFF172033),
+                      fontWeight: FontWeight.w700,
+                      height: 1.1,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: 'Cliente ',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: const Color(0xFF64748B),
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      TextSpan(
+                        text: name,
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      if (phone.isNotEmpty)
+                        TextSpan(
+                          text: ' - $phone',
+                          style: const TextStyle(
+                            color: Color(0xFF52667C),
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Quitar cliente',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(
+                  width: 32,
+                  height: 32,
+                ),
+                onPressed: onClear,
+                icon: const Icon(
+                  Icons.close_rounded,
+                  color: Color(0xFF64748B),
+                  size: 18,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SalesClientDetailPanel extends StatelessWidget {
+  const _SalesClientDetailPanel({
+    required this.client,
+    required this.width,
+    required this.onClose,
+    required this.onSelect,
+  });
+
+  final ClienteModel client;
+  final double width;
+  final VoidCallback onClose;
+  final VoidCallback onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final name = client.nombre.trim().isEmpty
+        ? 'Cliente sin nombre'
+        : client.nombre.trim();
+    final phone = client.telefono.trim();
+    final email = (client.correo ?? '').trim();
+    final address = (client.direccion ?? '').trim();
+    final gps = (client.locationUrl ?? '').trim();
+
+    return Material(
+      color: Colors.white,
+      elevation: 18,
+      child: SizedBox(
+        width: width,
+        height: MediaQuery.sizeOf(context).height,
+        child: SafeArea(
+          left: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEAF1FF),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFCFE0FF)),
+                      ),
+                      child: const Icon(
+                        Icons.person_search_rounded,
+                        color: Color(0xFF1957E6),
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Detalle del cliente',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Información para esta venta',
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: const Color(0xFF64748B),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Cerrar',
+                      onPressed: onClose,
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1, color: Color(0xFFD8E5EC)),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFD8E5EC)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              color: const Color(0xFF172033),
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0,
+                              height: 1.05,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF059669),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 7),
+                              Text(
+                                'Cliente activo',
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                  color: const Color(0xFF059669),
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (phone.isNotEmpty)
+                      _SalesClientDetailLine(
+                        icon: Icons.call_outlined,
+                        label: 'Teléfono',
+                        value: phone,
+                      ),
+                    if (email.isNotEmpty)
+                      _SalesClientDetailLine(
+                        icon: Icons.email_outlined,
+                        label: 'Correo',
+                        value: email,
+                      ),
+                    if (address.isNotEmpty)
+                      _SalesClientDetailLine(
+                        icon: Icons.place_outlined,
+                        label: 'Dirección',
+                        value: address,
+                        maxLines: 3,
+                      ),
+                    if (gps.isNotEmpty)
+                      const _SalesClientDetailLine(
+                        icon: Icons.map_outlined,
+                        label: 'Ubicación',
+                        value: 'GPS disponible',
+                      ),
+                    if (client.createdAt != null)
+                      _SalesClientDetailLine(
+                        icon: Icons.calendar_today_outlined,
+                        label: 'Creado',
+                        value: _formatSaleClientDate(client.createdAt!),
+                      ),
+                    if (client.updatedAt != null)
+                      _SalesClientDetailLine(
+                        icon: Icons.update_rounded,
+                        label: 'Actualizado',
+                        value: _formatSaleClientDate(client.updatedAt!),
+                      ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF8FAFC),
+                  border: Border(top: BorderSide(color: Color(0xFFD8E5EC))),
+                ),
+                child: FilledButton.icon(
+                  onPressed: onSelect,
+                  icon: const Icon(Icons.check_rounded),
+                  label: const Text('Usar este cliente'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF1957E6),
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(46),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SalesClientDetailLine extends StatelessWidget {
+  const _SalesClientDetailLine({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.maxLines = 1,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final int maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEAF1FF),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFCFE0FF)),
+            ),
+            child: Icon(icon, size: 18, color: const Color(0xFF1957E6)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: const Color(0xFF64748B),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  maxLines: maxLines,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: const Color(0xFF172033),
+                    fontWeight: FontWeight.w800,
+                    height: 1.15,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _formatSaleClientDate(DateTime value) {
+  final local = value.toLocal();
+  final day = local.day.toString().padLeft(2, '0');
+  final month = local.month.toString().padLeft(2, '0');
+  return '$day/$month/${local.year}';
+}
+
 class _CartClientButton extends StatelessWidget {
   const _CartClientButton({
     required this.hasClient,
@@ -3062,12 +3484,28 @@ class _SalesCompanyAccountMenu extends ConsumerWidget {
             onTap: () => _goAfterMenu(context, Routes.users),
           ),
           PopupMenuItem(
-            value: 'company',
+            value: 'company_settings',
             child: const _SalesCompanyMenuRow(
-              icon: Icons.settings_outlined,
-              label: 'Configuracion empresa',
+              icon: Icons.business_center_outlined,
+              label: 'Empresa',
             ),
             onTap: () => _goAfterMenu(context, Routes.configuracionEmpresa),
+          ),
+          PopupMenuItem(
+            value: 'printer_settings',
+            child: const _SalesCompanyMenuRow(
+              icon: Icons.print_outlined,
+              label: 'Impresora',
+            ),
+            onTap: () => _goAfterMenu(context, Routes.configuracionImpresora),
+          ),
+          PopupMenuItem(
+            value: 'backup_settings',
+            child: const _SalesCompanyMenuRow(
+              icon: Icons.cloud_sync_outlined,
+              label: 'Backup',
+            ),
+            onTap: () => _goAfterMenu(context, Routes.configuracionBackup),
           ),
           const PopupMenuDivider(height: 8),
           PopupMenuItem(
@@ -3081,6 +3519,19 @@ class _SalesCompanyAccountMenu extends ConsumerWidget {
               Future<void>.delayed(Duration.zero, () async {
                 await ref.read(authStateProvider.notifier).logout();
                 if (context.mounted) context.go(Routes.login);
+              });
+            },
+          ),
+          PopupMenuItem(
+            value: 'delete_account',
+            child: const _SalesCompanyMenuRow(
+              icon: Icons.delete_forever_outlined,
+              label: 'Eliminar mi cuenta',
+              danger: true,
+            ),
+            onTap: () {
+              Future<void>.delayed(Duration.zero, () {
+                if (context.mounted) showDeleteAccountDialog(context, ref);
               });
             },
           ),

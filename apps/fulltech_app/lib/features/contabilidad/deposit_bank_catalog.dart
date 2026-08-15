@@ -1,13 +1,24 @@
 class DepositBankAccountOption {
   const DepositBankAccountOption({
     required this.id,
+    required this.bankId,
     required this.label,
     this.accountNumber,
   });
 
   final String id;
+  final String bankId;
   final String label;
   final String? accountNumber;
+
+  factory DepositBankAccountOption.fromJson(Map<String, dynamic> json) {
+    return DepositBankAccountOption(
+      id: (json['id'] ?? '').toString(),
+      bankId: (json['bankId'] ?? json['bank_id'] ?? '').toString(),
+      label: (json['label'] ?? '').toString(),
+      accountNumber: _nullableString(json['accountNumber']),
+    );
+  }
 }
 
 class DepositBankOption {
@@ -20,45 +31,28 @@ class DepositBankOption {
   final String id;
   final String label;
   final List<DepositBankAccountOption> accounts;
+
+  factory DepositBankOption.fromJson(Map<String, dynamic> json) {
+    final rawAccounts = json['accounts'] is List
+        ? json['accounts'] as List
+        : const [];
+    return DepositBankOption(
+      id: (json['id'] ?? '').toString(),
+      label: (json['name'] ?? json['label'] ?? '').toString(),
+      accounts: rawAccounts
+          .whereType<Map>()
+          .map(
+            (item) =>
+                DepositBankAccountOption.fromJson(item.cast<String, dynamic>()),
+          )
+          .toList(growable: false),
+    );
+  }
 }
 
-const depositBankCatalog = <DepositBankOption>[
-  DepositBankOption(
-    id: 'popular',
-    label: 'Banco Popular',
-    accounts: [
-      DepositBankAccountOption(
-        id: 'popular_yunior_0820297174',
-        label: 'Yunior Lopez de la Rosa · 0820297174',
-        accountNumber: '0820297174',
-      ),
-      DepositBankAccountOption(
-        id: 'popular_fulltech_0841088008',
-        label: 'FULLTECH SRL · 0841088008',
-        accountNumber: '0841088008',
-      ),
-    ],
-  ),
-  DepositBankOption(
-    id: 'banreservas',
-    label: 'Banreservas',
-    accounts: [
-      DepositBankAccountOption(
-        id: 'banreservas_yunior_9600921403',
-        label: 'Yunior Lopez de la Rosa · 9600921403',
-        accountNumber: '9600921403',
-      ),
-    ],
-  ),
-  DepositBankOption(
-    id: 'bhd',
-    label: 'BHD',
-    accounts: [
-      DepositBankAccountOption(
-        id: 'bhd_yunior_28726660019',
-        label: 'Yunior Lopez de la Rosa · 28726660019',
-        accountNumber: '28726660019',
-      ),
-    ],
-  ),
-];
+const depositBankCatalog = <DepositBankOption>[];
+
+String? _nullableString(dynamic value) {
+  final text = (value ?? '').toString().trim();
+  return text.isEmpty ? null : text;
+}

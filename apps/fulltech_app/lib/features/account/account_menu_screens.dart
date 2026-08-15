@@ -11,7 +11,6 @@ import '../../core/app_access/app_access_links.dart';
 import '../../core/app_update/app_update_controller.dart';
 import '../../core/app_update/app_update_models.dart';
 import '../../core/auth/auth_provider.dart';
-import '../../core/auth/auth_repository.dart';
 import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/license/license_repository.dart';
@@ -23,6 +22,7 @@ import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../modules/cash/cash_turn_menu_button.dart';
+import 'delete_account_dialog.dart';
 import '../settings/data/cloud_backup_service.dart';
 import '../settings/ui/printer_settings_page.dart';
 
@@ -222,37 +222,7 @@ class AccountSettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final company = ref.watch(companySettingsProvider);
-
-    return _SettingsHubScaffold(
-      company: company,
-      children: [
-        _SettingsLaunchCard(
-          icon: Icons.business_center_outlined,
-          title: 'Empresa',
-          description: company.maybeWhen(
-            data: (settings) => settings.companyName.trim().isEmpty
-                ? 'Datos fiscales, dirección y representante legal.'
-                : settings.companyName.trim(),
-            orElse: () => 'Datos fiscales, dirección y representante legal.',
-          ),
-          route: Routes.configuracionEmpresa,
-        ),
-        const _SettingsLaunchCard(
-          icon: Icons.print_outlined,
-          title: 'Impresora',
-          description: 'Tickets, copias, papel, logo y formato de impresión.',
-          route: Routes.configuracionImpresora,
-        ),
-        const _SettingsLaunchCard(
-          icon: Icons.cloud_sync_outlined,
-          title: 'Backup',
-          description: 'Descarga la información de la nube a respaldo local.',
-          route: Routes.configuracionBackup,
-        ),
-        const _DeleteAccountLaunchCard(),
-      ],
-    );
+    return const _SettingsHubScaffold(children: [_DeleteAccountLaunchCard()]);
   }
 }
 
@@ -266,179 +236,7 @@ class _DeleteAccountLaunchCard extends ConsumerWidget {
       title: 'Eliminar mi cuenta',
       description: 'Requiere contraseña y confirmación del servidor.',
       accent: AppColors.error,
-      onTap: () => _showDeleteAccountDialog(context, ref),
-    );
-  }
-
-  Future<void> _showDeleteAccountDialog(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
-    AccountDeletionPreview preview;
-    try {
-      preview = await ref
-          .read(authRepositoryProvider)
-          .getAccountDeletionPreview();
-    } catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo preparar la eliminación: $error')),
-      );
-      return;
-    }
-
-    if (!context.mounted) return;
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _DeleteAccountDialog(preview: preview),
-    );
-  }
-}
-
-class _DeleteAccountDialog extends ConsumerStatefulWidget {
-  const _DeleteAccountDialog({required this.preview});
-
-  final AccountDeletionPreview preview;
-
-  @override
-  ConsumerState<_DeleteAccountDialog> createState() =>
-      _DeleteAccountDialogState();
-}
-
-class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
-  final _password = TextEditingController();
-  final _phrase = TextEditingController();
-  bool _submitting = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    _password.dispose();
-    _phrase.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (_submitting) return;
-    setState(() {
-      _submitting = true;
-      _error = null;
-    });
-    try {
-      final result = await ref
-          .read(authStateProvider.notifier)
-          .deleteAccount(
-            password: _password.text,
-            confirmationPhrase: widget.preview.requiresCompanyConfirmationPhrase
-                ? _phrase.text
-                : null,
-          );
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            result.companyDeleted
-                ? 'Cuenta y empresa eliminadas. Recibo: ${result.deletionReceiptId}'
-                : 'Cuenta eliminada. Recibo: ${result.deletionReceiptId}',
-          ),
-        ),
-      );
-      context.go(Routes.login);
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _error = error.toString();
-        _submitting = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final preview = widget.preview;
-    final fullCompanyDeletion = preview.companyWillBeDeleted;
-    return AlertDialog(
-      title: Text(
-        fullCompanyDeletion ? 'Eliminar empresa y cuenta' : 'Eliminar cuenta',
-      ),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                fullCompanyDeletion
-                    ? 'Eres el único propietario activo. Esta acción intentará eliminar permanentemente la empresa activa y bloquear tu cuenta.'
-                    : 'Esta acción eliminará tu acceso, bloqueará el inicio de sesión y retirará tus membresías activas.',
-                style: _bodyStyle(),
-              ),
-              const SizedBox(height: 12),
-              _StatusBanner(
-                icon: Icons.warning_amber_rounded,
-                title: 'Acción permanente',
-                message:
-                    'La app solo cerrará la sesión después de que el backend confirme la eliminación.',
-                accent: AppColors.error,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _password,
-                obscureText: true,
-                enabled: !_submitting,
-                decoration: const InputDecoration(
-                  labelText: 'Contraseña actual',
-                  prefixIcon: Icon(Icons.lock_outline_rounded),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              if (preview.requiresCompanyConfirmationPhrase) ...[
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _phrase,
-                  enabled: !_submitting,
-                  decoration: const InputDecoration(
-                    labelText: 'Escribe DELETE MY COMPANY',
-                    prefixIcon: Icon(Icons.priority_high_rounded),
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(_error!, style: const TextStyle(color: AppColors.error)),
-              ],
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton.icon(
-          onPressed: _submitting ? null : _submit,
-          icon: _submitting
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.delete_forever_outlined),
-          label: Text(_submitting ? 'Eliminando' : 'Eliminar definitivamente'),
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColors.error,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
-      ],
+      onTap: () => showDeleteAccountDialog(context, ref),
     );
   }
 }
@@ -623,9 +421,8 @@ class AccountDocumentsSettingsScreen extends ConsumerWidget {
 }
 
 class _SettingsHubScaffold extends ConsumerWidget {
-  const _SettingsHubScaffold({required this.company, required this.children});
+  const _SettingsHubScaffold({required this.children});
 
-  final AsyncValue<CompanySettings> company;
   final List<Widget> children;
 
   @override
@@ -634,8 +431,7 @@ class _SettingsHubScaffold extends ConsumerWidget {
     final user = ref.watch(authStateProvider).user;
     final backButton = IconButton(
       tooltip: 'Volver',
-      onPressed: () =>
-          AppNavigator.goBack(context, fallbackRoute: Routes.cotizaciones),
+      onPressed: () => context.go(Routes.cotizaciones),
       icon: const Icon(Icons.arrow_back_rounded),
     );
     return Scaffold(
@@ -706,8 +502,7 @@ class _SettingsDetailScaffold extends ConsumerWidget {
     final user = ref.watch(authStateProvider).user;
     final backButton = IconButton(
       tooltip: 'Volver',
-      onPressed: () =>
-          AppNavigator.goBack(context, fallbackRoute: Routes.configuracion),
+      onPressed: () => context.go(Routes.cotizaciones),
       icon: const Icon(Icons.arrow_back_rounded),
     );
     final content = Center(
@@ -740,18 +535,12 @@ class _SettingsDetailScaffold extends ConsumerWidget {
       backgroundColor: AppColors.background,
       drawer: buildAdaptiveDrawer(context, currentUser: user),
       appBar: CustomAppBar(
-        title: title,
+        title: '',
         showLogo: false,
         showDepartmentLabel: false,
         leading: backButton,
         trailing: const SizedBox.shrink(),
-        actions: showInlineTitle
-            ? null
-            : const [
-                CashTurnMenuButton(),
-                SizedBox(width: 8),
-                _SettingsCompanyAccountMenu(),
-              ],
+        actions: null,
       ),
       body: showInlineTitle
           ? SafeArea(left: false, right: false, bottom: false, child: content)
@@ -762,6 +551,25 @@ class _SettingsDetailScaffold extends ConsumerWidget {
 
 class _SettingsCompanyAccountMenu extends ConsumerWidget {
   const _SettingsCompanyAccountMenu();
+
+  void _goAfterMenu(BuildContext context, String route) {
+    Future<void>.delayed(const Duration(milliseconds: 80), () {
+      if (context.mounted) context.go(route);
+    });
+  }
+
+  void _activate(BuildContext menuContext, BuildContext context, String route) {
+    Navigator.of(menuContext).pop();
+    _goAfterMenu(context, route);
+  }
+
+  void _logout(BuildContext menuContext, BuildContext context, WidgetRef ref) {
+    Navigator.of(menuContext).pop();
+    Future<void>.delayed(const Duration(milliseconds: 80), () async {
+      await ref.read(authStateProvider.notifier).logout();
+      if (context.mounted) context.go(Routes.login);
+    });
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -787,63 +595,108 @@ class _SettingsCompanyAccountMenu extends ConsumerWidget {
           borderRadius: BorderRadius.circular(8),
           side: const BorderSide(color: Color(0xFFDDE7EE)),
         ),
-        constraints: const BoxConstraints(minWidth: 260),
-        onSelected: (value) async {
-          switch (value) {
-            case 'profile':
-              context.go(Routes.profile);
-              break;
-            case 'users':
-              context.go(Routes.users);
-              break;
-            case 'licenses':
-              context.go(Routes.licencias);
-              break;
-            case 'settings':
-              context.go(Routes.configuracion);
-              break;
-            case 'logout':
-              await ref.read(authStateProvider.notifier).logout();
-              if (context.mounted) context.go(Routes.login);
-              break;
-          }
-        },
-        itemBuilder: (_) => const [
+        constraints: const BoxConstraints(minWidth: 340, maxWidth: 340),
+        itemBuilder: (menuContext) => [
           PopupMenuItem(
-            value: 'profile',
+            enabled: false,
+            padding: EdgeInsets.zero,
             child: _SettingsCompanyMenuRow(
               icon: Icons.person_outline_rounded,
               label: 'Perfil',
+              onTap: () => _activate(menuContext, context, Routes.profile),
+              helpText:
+                  'Revisa y actualiza los datos del usuario actual y su foto de perfil.',
             ),
           ),
           PopupMenuItem(
-            value: 'users',
+            enabled: false,
+            padding: EdgeInsets.zero,
             child: _SettingsCompanyMenuRow(
               icon: Icons.groups_2_outlined,
               label: 'Usuarios',
+              onTap: () => _activate(menuContext, context, Routes.users),
+              helpText:
+                  'Administra usuarios, roles, permisos y accesos de la empresa.',
             ),
           ),
           PopupMenuItem(
-            value: 'licenses',
+            enabled: false,
+            padding: EdgeInsets.zero,
             child: _SettingsCompanyMenuRow(
               icon: Icons.verified_user_outlined,
               label: 'Licencias',
+              onTap: () => _activate(menuContext, context, Routes.licencias),
+              helpText:
+                  'Consulta el plan, uso de usuarios/productos y vigencia de la licencia.',
             ),
           ),
           PopupMenuItem(
-            value: 'settings',
+            enabled: false,
+            padding: EdgeInsets.zero,
             child: _SettingsCompanyMenuRow(
-              icon: Icons.settings_outlined,
-              label: 'Configuración',
+              icon: Icons.business_center_outlined,
+              label: 'Empresa',
+              onTap: () =>
+                  _activate(menuContext, context, Routes.configuracionEmpresa),
+              helpText:
+                  'Configura datos fiscales, dirección, representante, logo y datos comerciales.',
             ),
           ),
-          PopupMenuDivider(height: 8),
           PopupMenuItem(
-            value: 'logout',
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: _SettingsCompanyMenuRow(
+              icon: Icons.print_outlined,
+              label: 'Impresora',
+              onTap: () => _activate(
+                menuContext,
+                context,
+                Routes.configuracionImpresora,
+              ),
+              helpText:
+                  'Ajusta impresora, copias, papel, formato y datos visibles del ticket.',
+            ),
+          ),
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: _SettingsCompanyMenuRow(
+              icon: Icons.cloud_sync_outlined,
+              label: 'Backup',
+              onTap: () =>
+                  _activate(menuContext, context, Routes.configuracionBackup),
+              helpText:
+                  'Descarga respaldo local y valida ZIPs de backup para recuperación asistida.',
+            ),
+          ),
+          const PopupMenuDivider(height: 8),
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
             child: _SettingsCompanyMenuRow(
               icon: Icons.logout_rounded,
               label: 'Cerrar sesión',
               danger: true,
+              onTap: () => _logout(menuContext, context, ref),
+              helpText:
+                  'Cierra la sesión actual en este equipo y vuelve al inicio.',
+            ),
+          ),
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: _SettingsCompanyMenuRow(
+              icon: Icons.delete_forever_outlined,
+              label: 'Eliminar mi cuenta',
+              danger: true,
+              onTap: () {
+                Navigator.of(menuContext).pop();
+                Future<void>.delayed(const Duration(milliseconds: 80), () {
+                  if (context.mounted) showDeleteAccountDialog(context, ref);
+                });
+              },
+              helpText:
+                  'Abre la configuración donde se solicita contraseña y confirmación antes de eliminar una cuenta.',
             ),
           ),
         ],
@@ -938,34 +791,170 @@ class _SettingsCompanyMenuRow extends StatelessWidget {
   const _SettingsCompanyMenuRow({
     required this.icon,
     required this.label,
+    required this.onTap,
+    required this.helpText,
     this.danger = false,
   });
 
   final IconData icon;
   final String label;
+  final VoidCallback onTap;
+  final String helpText;
   final bool danger;
 
   @override
   Widget build(BuildContext context) {
-    final color = danger ? const Color(0xFFDC2626) : const Color(0xFF183548);
-    return Row(
-      children: [
-        Icon(icon, color: color, size: 18),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: color,
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0,
-            ),
+    return _SettingsCompanyMenuAction(
+      icon: icon,
+      label: label,
+      onTap: onTap,
+      helpText: helpText,
+      danger: danger,
+    );
+  }
+}
+
+class _SettingsCompanyMenuAction extends StatefulWidget {
+  const _SettingsCompanyMenuAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    required this.helpText,
+    required this.danger,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final String helpText;
+  final bool danger;
+
+  @override
+  State<_SettingsCompanyMenuAction> createState() =>
+      _SettingsCompanyMenuActionState();
+}
+
+class _SettingsCompanyMenuActionState
+    extends State<_SettingsCompanyMenuAction> {
+  bool _showHelp = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = widget.danger
+        ? const Color(0xFFDC2626)
+        : const Color(0xFF1957E6);
+    final color = widget.danger
+        ? const Color(0xFFB91C1C)
+        : const Color(0xFF183548);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: widget.onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: 46,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: widget.danger
+                            ? const Color(0xFFFFF1F1)
+                            : const Color(0xFFF3F7FF),
+                        borderRadius: BorderRadius.circular(7),
+                        border: Border.all(
+                          color: widget.danger
+                              ? const Color(0xFFFECACA)
+                              : const Color(0xFFDDEAFF),
+                        ),
+                      ),
+                      child: Icon(widget.icon, color: accent, size: 17),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        widget.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: _showHelp ? 'Ocultar ayuda' : 'Ayuda',
+                      onPressed: () => setState(() => _showHelp = !_showHelp),
+                      icon: Icon(
+                        _showHelp
+                            ? Icons.help_rounded
+                            : Icons.help_outline_rounded,
+                      ),
+                      iconSize: 17,
+                      color: _showHelp
+                          ? const Color(0xFF1957E6)
+                          : const Color(0xFF7C8DA1),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 30,
+                        height: 30,
+                      ),
+                      splashRadius: 17,
+                    ),
+                    const SizedBox(width: 2),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 18,
+                      color: widget.danger
+                          ? const Color(0xFFF87171)
+                          : const Color(0xFF9AA8B6),
+                    ),
+                  ],
+                ),
+              ),
+              AnimatedCrossFade(
+                firstChild: const SizedBox.shrink(),
+                secondChild: Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.fromLTRB(0, 0, 0, 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF7FAFE),
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(color: const Color(0xFFDDE7EE)),
+                  ),
+                  child: Text(
+                    widget.helpText,
+                    softWrap: true,
+                    style: const TextStyle(
+                      color: Color(0xFF52667C),
+                      fontSize: 11.5,
+                      height: 1.25,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ),
+                crossFadeState: _showHelp
+                    ? CrossFadeState.showSecond
+                    : CrossFadeState.showFirst,
+                duration: const Duration(milliseconds: 150),
+                sizeCurve: Curves.easeOutCubic,
+              ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -987,76 +976,6 @@ Uint8List? _decodeSettingsLogo(String? value) {
     return base64Decode(payload);
   } catch (_) {
     return null;
-  }
-}
-
-class _SettingsLaunchCard extends StatelessWidget {
-  const _SettingsLaunchCard({
-    required this.icon,
-    required this.title,
-    required this.description,
-    required this.route,
-  });
-
-  final IconData icon;
-  final String title;
-  final String description;
-  final String route;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: () => AppNavigator.go(context, route),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 72),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFDDE7EE)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: AppColors.secondary.withValues(alpha: 0.09),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: AppColors.secondary, size: 19),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: _titleStyle(15.5)),
-                    const SizedBox(height: 2),
-                    Text(
-                      description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: _bodyStyle(),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: Color(0xFF60758A),
-                size: 20,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }
 

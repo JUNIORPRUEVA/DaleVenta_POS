@@ -66,6 +66,15 @@ class ApiRoutes {
       '/contabilidad/closes/financial-summary';
   static const contabilidadCloseVoucherUpload =
       '/contabilidad/closes/vouchers/upload';
+  static const contabilidadDepositBanks = '/contabilidad/deposit-banks';
+  static String contabilidadDepositBankDetail(String id) =>
+      '/contabilidad/deposit-banks/$id';
+  static String contabilidadDepositBankAccounts(String bankId) =>
+      '/contabilidad/deposit-banks/$bankId/accounts';
+  static String contabilidadDepositBankAccountDetail(
+    String bankId,
+    String accountId,
+  ) => '/contabilidad/deposit-banks/$bankId/accounts/$accountId';
   static const contabilidadDepositOrders = '/contabilidad/deposit-orders';
   static String contabilidadDepositOrderDetail(String id) =>
       '/contabilidad/deposit-orders/$id';

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
-import '../../core/auth/role_permissions.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -16,7 +16,7 @@ class ContabilidadScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authStateProvider).user;
-    final canUseModule = canAccessContabilidadByRole(user?.role);
+    final canUseModule = hasUserPermission(user, AppPermission.viewAccounting);
     final isDesktop = MediaQuery.sizeOf(context).width >= 900;
 
     if (!canUseModule) {
@@ -135,7 +135,7 @@ class _AccountingExecutivePage extends StatelessWidget {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Controla cierres, depósitos, comprobantes fiscales, pagos pendientes y nómina desde pantallas separadas.',
+                                'Controla depósitos, comprobantes fiscales, pagos pendientes y nómina desde pantallas separadas.',
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.bodyMedium?.copyWith(
@@ -147,9 +147,9 @@ class _AccountingExecutivePage extends StatelessWidget {
                         ),
                         FilledButton.icon(
                           onPressed: () =>
-                              context.go(Routes.contabilidadCierresDiarios),
-                          icon: const Icon(Icons.fact_check_outlined),
-                          label: const Text('Revisar cierres'),
+                              context.go(Routes.contabilidadDepositos),
+                          icon: const Icon(Icons.add_rounded),
+                          label: const Text('Agregar'),
                         ),
                       ],
                     ),
@@ -162,10 +162,6 @@ class _AccountingExecutivePage extends StatelessWidget {
                         width: 280,
                         child: _AccountingWorkflowPanel(
                           items: const [
-                            _AccountingWorkflowItem(
-                              label: 'Cerrar ventas del día',
-                              route: Routes.contabilidadCierresDiarios,
-                            ),
                             _AccountingWorkflowItem(
                               label: 'Preparar depósitos',
                               route: Routes.contabilidadDepositos,
@@ -195,14 +191,6 @@ class _AccountingExecutivePage extends StatelessWidget {
                           mainAxisSpacing: 14,
                           childAspectRatio: width >= 1180 ? 2.28 : 3.2,
                           children: const [
-                            _AccountingDesktopTile(
-                              title: 'Cierres diarios',
-                              subtitle:
-                                  'Revisión, cuadre y aprobación de cierres.',
-                              icon: Icons.fact_check_outlined,
-                              route: Routes.contabilidadCierresDiarios,
-                              accent: Color(0xFF2563EB),
-                            ),
                             _AccountingDesktopTile(
                               title: 'Depósitos bancarios',
                               subtitle:
@@ -414,7 +402,7 @@ class _AccountingMobileSummary extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Desde el menú lateral puedes acceder a Depósitos, Pagos y Nómina.',
+              'Desde el menú lateral puedes acceder a Depósitos, Factura fiscal, Pagos y Nómina.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: Colors.white.withValues(alpha: 0.9),
               ),

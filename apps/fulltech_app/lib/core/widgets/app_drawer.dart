@@ -796,12 +796,6 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
 
   void addAccountingGroup() {
     final items = <AppNavigationItem>[
-      if (hasPermission(role, AppPermission.viewAccounting))
-        const AppNavigationItem(
-          icon: Icons.fact_check_outlined,
-          title: 'Cierres diarios',
-          route: Routes.contabilidadCierresDiarios,
-        ),
       if (pick(Routes.contabilidadDepositos) case final item?) item,
       if (pick(Routes.contabilidadFacturaFiscal) case final item?) item,
       if (pick(Routes.contabilidadPagosPendientes) case final item?) item,

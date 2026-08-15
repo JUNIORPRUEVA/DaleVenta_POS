@@ -8,6 +8,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/debug/trace_log.dart';
@@ -17,6 +18,8 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/app_feedback.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
+import '../../core/widgets/desktop_sales_style.dart';
+import '../../core/widgets/fulltech_page_header.dart';
 import '../../features/user/data/users_repository.dart';
 import 'application/nomina_controller.dart';
 import 'data/nomina_repository.dart';
@@ -63,6 +66,55 @@ class _TopSizeTransition extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _NominaHeaderBadge extends StatelessWidget {
+  const _NominaHeaderBadge({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF1FF),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFCFE0FF)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: desktopSalesAccent),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              color: desktopSalesMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              color: desktopSalesText,
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -342,10 +394,13 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
 
     final auth = ref.watch(authStateProvider);
     final currentUser = auth.user;
-    final isAdmin = currentUser?.role == 'ADMIN';
-    final isDesktop = MediaQuery.sizeOf(context).width >= 1240;
+    final canManagePayroll = hasUserPermission(
+      currentUser,
+      AppPermission.managePayroll,
+    );
+    final isDesktop = MediaQuery.sizeOf(context).width >= 900;
 
-    if (!isAdmin) {
+    if (!canManagePayroll) {
       return Theme(
         data: nominaTheme,
         child: Scaffold(
@@ -385,28 +440,55 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
 
     final state = ref.watch(nominaHomeControllerProvider);
     final controller = ref.read(nominaHomeControllerProvider.notifier);
+    final activeEmployees = state.employees
+        .where((employee) => employee.activo)
+        .length;
 
     return Theme(
       data: nominaTheme,
       child: Scaffold(
-        backgroundColor: isDesktop ? null : AppColors.background,
-        appBar: CustomAppBar(
-          title: 'Nómina',
-          showLogo: false,
-          showDepartmentLabel: false,
-          actions: [
-            IconButton(
-              tooltip: 'Recargar',
-              onPressed: state.loading ? null : controller.load,
-              icon: const Icon(Icons.refresh),
-            ),
-            IconButton(
-              tooltip: 'Nueva quincena',
-              onPressed: () => _showCreatePeriodDialog(context, ref),
-              icon: const Icon(Icons.add),
-            ),
-          ],
-        ),
+        backgroundColor: isDesktop ? desktopSalesSurface : AppColors.background,
+        appBar: isDesktop
+            ? FullTechPageHeader(
+                title: 'Nómina',
+                actions: [
+                  _NominaHeaderBadge(
+                    icon: Icons.groups_outlined,
+                    label: 'Empleados',
+                    value: '$activeEmployees',
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(
+                    tooltip: state.loading ? 'Actualizando...' : 'Recargar',
+                    onPressed: state.loading ? null : controller.load,
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: () => _showEmployeeDialog(context, ref),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Agregar'),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+              )
+            : CustomAppBar(
+                title: 'Nómina',
+                showLogo: false,
+                showDepartmentLabel: false,
+                actions: [
+                  IconButton(
+                    tooltip: 'Recargar',
+                    onPressed: state.loading ? null : controller.load,
+                    icon: const Icon(Icons.refresh),
+                  ),
+                  IconButton(
+                    tooltip: 'Nueva quincena',
+                    onPressed: () => _showCreatePeriodDialog(context, ref),
+                    icon: const Icon(Icons.add),
+                  ),
+                ],
+              ),
         drawer: buildAdaptiveDrawer(context, currentUser: currentUser),
         floatingActionButton: null,
         body: isDesktop

@@ -22,7 +22,7 @@ import * as fs from 'node:fs';
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@prisma/client';
 import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
+import { Permissions, Roles } from '../auth/roles.decorator';
 import { R2Service } from '../storage/r2.service';
 import { buildTenantObjectKey, sanitizeFileName } from '../storage/helpers/storage_helpers';
 import { requireTenant } from '../auth/tenant-context';
@@ -38,9 +38,13 @@ import {
   UpdateCloseDto,
 } from './close.dto';
 import {
+  CreateDepositBankAccountDto,
+  CreateDepositBankDto,
   CreateDepositOrderDto,
   DepositOrdersQueryDto,
   ReviewDepositOrderDto,
+  UpdateDepositBankAccountDto,
+  UpdateDepositBankDto,
   UpdateDepositOrderDto,
 } from './deposit-order.dto';
 import {
@@ -306,8 +310,97 @@ export class ContabilidadController {
     };
   }
 
+  @Get('deposit-banks')
+  @Roles(...DEPOSIT_ROLES)
+  @Permissions('viewAccounting')
+  async listDepositBanks(@Req() req: Request) {
+    return this.contabilidadService.listDepositBanks(
+      (req.user ?? {}) as RequestActor,
+    );
+  }
+
+  @Post('deposit-banks')
+  @Roles(Role.ADMIN)
+  async createDepositBank(
+    @Body() dto: CreateDepositBankDto,
+    @Req() req: Request,
+  ) {
+    return this.contabilidadService.createDepositBank(
+      dto,
+      (req.user ?? {}) as RequestActor,
+    );
+  }
+
+  @Patch('deposit-banks/:bankId')
+  @Roles(Role.ADMIN)
+  async updateDepositBank(
+    @Param('bankId') bankId: string,
+    @Body() dto: UpdateDepositBankDto,
+    @Req() req: Request,
+  ) {
+    return this.contabilidadService.updateDepositBank(
+      bankId,
+      dto,
+      (req.user ?? {}) as RequestActor,
+    );
+  }
+
+  @Delete('deposit-banks/:bankId')
+  @Roles(Role.ADMIN)
+  async deleteDepositBank(@Param('bankId') bankId: string, @Req() req: Request) {
+    return this.contabilidadService.deleteDepositBank(
+      bankId,
+      (req.user ?? {}) as RequestActor,
+    );
+  }
+
+  @Post('deposit-banks/:bankId/accounts')
+  @Roles(Role.ADMIN)
+  async createDepositBankAccount(
+    @Param('bankId') bankId: string,
+    @Body() dto: CreateDepositBankAccountDto,
+    @Req() req: Request,
+  ) {
+    return this.contabilidadService.createDepositBankAccount(
+      bankId,
+      dto,
+      (req.user ?? {}) as RequestActor,
+    );
+  }
+
+  @Patch('deposit-banks/:bankId/accounts/:accountId')
+  @Roles(Role.ADMIN)
+  async updateDepositBankAccount(
+    @Param('bankId') bankId: string,
+    @Param('accountId') accountId: string,
+    @Body() dto: UpdateDepositBankAccountDto,
+    @Req() req: Request,
+  ) {
+    return this.contabilidadService.updateDepositBankAccount(
+      bankId,
+      accountId,
+      dto,
+      (req.user ?? {}) as RequestActor,
+    );
+  }
+
+  @Delete('deposit-banks/:bankId/accounts/:accountId')
+  @Roles(Role.ADMIN)
+  async deleteDepositBankAccount(
+    @Param('bankId') bankId: string,
+    @Param('accountId') accountId: string,
+    @Req() req: Request,
+  ) {
+    return this.contabilidadService.deleteDepositBankAccount(
+      bankId,
+      accountId,
+      (req.user ?? {}) as RequestActor,
+    );
+  }
+
   @Post('deposit-orders')
   @Roles(...DEPOSIT_ROLES)
+  @Permissions('viewAccounting')
   async createDepositOrder(
     @Body() dto: CreateDepositOrderDto,
     @Req() req: Request,
@@ -320,6 +413,7 @@ export class ContabilidadController {
 
   @Get('deposit-orders')
   @Roles(...DEPOSIT_ROLES)
+  @Permissions('viewAccounting')
   async getDepositOrders(@Query() query: DepositOrdersQueryDto, @Req() req: Request) {
     const actor = (req.user ?? {}) as RequestActor;
     // Temporary diagnostics for persistent 500 on deposit list.
@@ -365,6 +459,7 @@ export class ContabilidadController {
 
   @Get('deposit-orders/:id')
   @Roles(...DEPOSIT_ROLES)
+  @Permissions('viewAccounting')
   async getDepositOrderById(@Param('id') id: string, @Req() req: Request) {
     return this.contabilidadService.getDepositOrderById(
       id,
@@ -425,6 +520,7 @@ export class ContabilidadController {
 
   @Post('deposit-orders/:id/voucher')
   @Roles(...DEPOSIT_ROLES)
+  @Permissions('viewAccounting')
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -539,6 +635,7 @@ export class ContabilidadController {
 
   @Post('fiscal-invoices/upload')
   @Roles('ADMIN', 'ASISTENTE')
+  @Permissions('viewAccounting')
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -646,6 +743,7 @@ export class ContabilidadController {
 
   @Post('fiscal-invoices')
   @Roles('ADMIN', 'ASISTENTE')
+  @Permissions('viewAccounting')
   async createFiscalInvoice(
     @Body() dto: CreateFiscalInvoiceDto,
     @Req() req: Request,
@@ -658,12 +756,14 @@ export class ContabilidadController {
 
   @Get('fiscal-invoices')
   @Roles('ADMIN', 'ASISTENTE')
+  @Permissions('viewAccounting')
   async getFiscalInvoices(@Query() query: FiscalInvoicesQueryDto) {
     return this.contabilidadService.getFiscalInvoices(query);
   }
 
   @Put('fiscal-invoices/:id')
   @Roles('ADMIN', 'ASISTENTE')
+  @Permissions('viewAccounting')
   async updateFiscalInvoice(
     @Param('id') id: string,
     @Body() dto: UpdateFiscalInvoiceDto,
@@ -678,6 +778,7 @@ export class ContabilidadController {
 
   @Delete('fiscal-invoices/:id')
   @Roles('ADMIN', 'ASISTENTE')
+  @Permissions('viewAccounting')
   async deleteFiscalInvoice(@Param('id') id: string, @Req() req: Request) {
     return this.contabilidadService.deleteFiscalInvoice(
       id,
@@ -687,6 +788,7 @@ export class ContabilidadController {
 
   @Post('payables/services')
   @Roles('ADMIN', 'ASISTENTE')
+  @Permissions('viewAccounting')
   async createPayableService(
     @Body() dto: CreatePayableServiceDto,
     @Req() req: Request,
@@ -699,12 +801,14 @@ export class ContabilidadController {
 
   @Get('payables/services')
   @Roles('ADMIN', 'ASISTENTE')
+  @Permissions('viewAccounting')
   async getPayableServices(@Query() query: PayableServicesQueryDto) {
     return this.contabilidadService.getPayableServices(query);
   }
 
   @Put('payables/services/:id')
   @Roles('ADMIN', 'ASISTENTE')
+  @Permissions('viewAccounting')
   async updatePayableService(
     @Param('id') id: string,
     @Body() dto: UpdatePayableServiceDto,
@@ -719,6 +823,7 @@ export class ContabilidadController {
 
   @Post('payables/services/:id/payments')
   @Roles('ADMIN', 'ASISTENTE')
+  @Permissions('viewAccounting')
   async registerPayablePayment(
     @Param('id') id: string,
     @Body() dto: RegisterPayablePaymentDto,
@@ -733,6 +838,7 @@ export class ContabilidadController {
 
   @Get('payables/payments')
   @Roles('ADMIN', 'ASISTENTE')
+  @Permissions('viewAccounting')
   async getPayablePayments(@Query() query: PayablePaymentsQueryDto) {
     return this.contabilidadService.getPayablePayments(query);
   }

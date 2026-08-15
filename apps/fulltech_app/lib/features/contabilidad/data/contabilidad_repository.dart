@@ -9,6 +9,7 @@ import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/models/close_model.dart';
+import '../deposit_bank_catalog.dart';
 import '../models/close_financial_summary_model.dart';
 import '../models/deposit_order_model.dart';
 import '../models/fiscal_invoice_model.dart';
@@ -584,6 +585,127 @@ class ContabilidadRepository {
           e.response?.data,
           'No se pudo registrar la orden de depósito en nube',
         ),
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<List<DepositBankOption>> listDepositBanks() async {
+    try {
+      final res = await _dio.get(ApiRoutes.contabilidadDepositBanks);
+      final rows = res.data is List ? (res.data as List) : const [];
+      return rows
+          .whereType<Map>()
+          .map((row) => DepositBankOption.fromJson(row.cast<String, dynamic>()))
+          .where(
+            (bank) => bank.id.trim().isNotEmpty && bank.label.trim().isNotEmpty,
+          )
+          .toList(growable: false);
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(e.response?.data, 'No se pudieron cargar los bancos'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<void> createDepositBank(String name) async {
+    try {
+      await _dio.post(
+        ApiRoutes.contabilidadDepositBanks,
+        data: {'name': name.trim()},
+      );
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(e.response?.data, 'No se pudo crear el banco'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<void> updateDepositBank({
+    required String id,
+    required String name,
+  }) async {
+    try {
+      await _dio.patch(
+        ApiRoutes.contabilidadDepositBankDetail(id),
+        data: {'name': name.trim()},
+      );
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(e.response?.data, 'No se pudo actualizar el banco'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<void> deleteDepositBank(String id) async {
+    try {
+      await _dio.delete(ApiRoutes.contabilidadDepositBankDetail(id));
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(e.response?.data, 'No se pudo eliminar el banco'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<void> createDepositBankAccount({
+    required String bankId,
+    required String label,
+    String? accountNumber,
+  }) async {
+    try {
+      await _dio.post(
+        ApiRoutes.contabilidadDepositBankAccounts(bankId),
+        data: {
+          'label': label.trim(),
+          if (accountNumber != null && accountNumber.trim().isNotEmpty)
+            'accountNumber': accountNumber.trim(),
+        },
+      );
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(e.response?.data, 'No se pudo crear la cuenta'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<void> updateDepositBankAccount({
+    required String bankId,
+    required String accountId,
+    required String label,
+    String? accountNumber,
+  }) async {
+    try {
+      await _dio.patch(
+        ApiRoutes.contabilidadDepositBankAccountDetail(bankId, accountId),
+        data: {
+          'label': label.trim(),
+          'accountNumber': accountNumber?.trim() ?? '',
+        },
+      );
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(e.response?.data, 'No se pudo actualizar la cuenta'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<void> deleteDepositBankAccount({
+    required String bankId,
+    required String accountId,
+  }) async {
+    try {
+      await _dio.delete(
+        ApiRoutes.contabilidadDepositBankAccountDetail(bankId, accountId),
+      );
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(e.response?.data, 'No se pudo eliminar la cuenta'),
         e.response?.statusCode,
       );
     }

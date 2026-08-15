@@ -31,7 +31,7 @@ class ClientesState {
     this.search = '',
     this.order = ClientesOrder.az,
     this.correoFilter = CorreoFilter.todos,
-    this.estadoFilter = EstadoFilter.todos,
+    this.estadoFilter = EstadoFilter.activos,
     this.ownerFilter = OwnerFilter.todos,
   });
 

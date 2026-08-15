@@ -26,9 +26,13 @@ import {
 } from './close.dto';
 import type { CloseExpenseDetailDto } from './close.dto';
 import {
+  CreateDepositBankAccountDto,
+  CreateDepositBankDto,
   CreateDepositOrderDto,
   DepositOrdersQueryDto,
   DepositOrderStatusDto,
+  UpdateDepositBankAccountDto,
+  UpdateDepositBankDto,
   UpdateDepositOrderDto,
 } from './deposit-order.dto';
 import {
@@ -324,20 +328,26 @@ export class ContabilidadService {
     return (value ?? '').replace(/\D/g, '');
   }
 
-  private findAllowedDepositBank(bankName?: string | null) {
-    const normalized = this.normalizeDepositKey(bankName);
-    return this.allowedDepositBanks.find(
-      (item) => this.normalizeDepositKey(item.label) === normalized,
-    );
+  private async findDepositBankForCompany(
+    companyId: string,
+    bankName?: string | null,
+  ) {
+    const normalized = this.toNullableTrimmed(bankName);
+    if (!normalized) return null;
+    return this.prisma.depositBank.findFirst({
+      where: {
+        companyId,
+        active: true,
+        name: { equals: normalized, mode: 'insensitive' },
+      },
+      include: { accounts: { where: { active: true } } },
+    });
   }
 
   private isAllowedDepositAccount(
-    bank:
-      | (typeof this.allowedDepositBanks)[number]
-      | undefined,
+    bank: { accounts: Array<{ label: string; accountNumber?: string | null }> },
     account: string,
   ) {
-    if (!bank) return false;
     const normalized = this.normalizeDepositKey(account);
     const accountNumber = this.normalizeDepositAccountNumber(account);
     return bank.accounts.some(
@@ -413,12 +423,16 @@ export class ContabilidadService {
     return result;
   }
 
-  private async validateDepositCollaborator(collaboratorName?: string | null) {
+  private async validateDepositCollaborator(
+    companyId: string,
+    collaboratorName?: string | null,
+  ) {
     const cleaned = this.toNullableTrimmed(collaboratorName);
     if (!cleaned) return null;
 
     const collaborator = await this.prisma.user.findFirst({
       where: {
+        companyId,
         nombreCompleto: {
           equals: cleaned,
           mode: 'insensitive',
@@ -447,6 +461,7 @@ export class ContabilidadService {
     closesCountByType: unknown;
     depositByType: unknown;
     accountByType: unknown;
+    companyId: string;
   }) {
     const windowFrom = this.parseDepositDate(params.windowFrom, 'desde');
     const windowTo = this.parseDepositDate(params.windowTo, 'hasta');
@@ -460,9 +475,14 @@ export class ContabilidadService {
     if (!bankName) {
       throw new BadRequestException('Debes indicar el banco del depósito.');
     }
-    const bank = this.findAllowedDepositBank(bankName);
+    const bank = await this.findDepositBankForCompany(
+      params.companyId,
+      bankName,
+    );
     if (!bank) {
-      throw new BadRequestException('El banco seleccionado no es válido.');
+      throw new BadRequestException(
+        'El banco seleccionado no está configurado para esta empresa.',
+      );
     }
 
     const bankAccount = this.toNullableTrimmed(params.bankAccount);
@@ -476,6 +496,7 @@ export class ContabilidadService {
     }
 
     const collaboratorName = await this.validateDepositCollaborator(
+      params.companyId,
       params.collaboratorName,
     );
     const reserveAmount = this.roundMoney(this.decimal(params.reserveAmount));
@@ -2179,6 +2200,185 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     });
   }
 
+  async listDepositBanks(actor: Actor) {
+    this.normalizeRoleGuard(actor);
+    const companyId = requireTenant(actor as any);
+    return this.prisma.depositBank.findMany({
+      where: { companyId, active: true },
+      orderBy: { name: 'asc' },
+      include: {
+        accounts: {
+          where: { active: true },
+          orderBy: { label: 'asc' },
+        },
+      },
+    });
+  }
+
+  async createDepositBank(dto: CreateDepositBankDto, actor: Actor) {
+    this.ensureAdmin(actor);
+    const companyId = requireTenant(actor as any);
+    const name = this.toNullableTrimmed(dto.name);
+    if (!name) throw new BadRequestException('Debes indicar el banco.');
+
+    try {
+      return await this.prisma.depositBank.create({
+        data: { companyId, name },
+        include: {
+          accounts: { where: { active: true }, orderBy: { label: 'asc' } },
+        },
+      });
+    } catch (error: unknown) {
+      if ((error as { code?: unknown })?.code === 'P2002') {
+        throw new BadRequestException('Ese banco ya existe para esta empresa.');
+      }
+      throw error;
+    }
+  }
+
+  async updateDepositBank(
+    id: string,
+    dto: UpdateDepositBankDto,
+    actor: Actor,
+  ) {
+    this.ensureAdmin(actor);
+    const companyId = requireTenant(actor as any);
+    const existing = await this.prisma.depositBank.findFirst({
+      where: { id, companyId },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException('Banco no encontrado');
+
+    const data: Prisma.DepositBankUpdateInput = {};
+    if (dto.name != null) {
+      const name = this.toNullableTrimmed(dto.name);
+      if (!name) throw new BadRequestException('Debes indicar el banco.');
+      data.name = name;
+    }
+    if (dto.active != null) data.active = dto.active;
+
+    try {
+      return await this.prisma.depositBank.update({
+        where: { id: existing.id },
+        data,
+        include: {
+          accounts: { where: { active: true }, orderBy: { label: 'asc' } },
+        },
+      });
+    } catch (error: unknown) {
+      if ((error as { code?: unknown })?.code === 'P2002') {
+        throw new BadRequestException('Ese banco ya existe para esta empresa.');
+      }
+      throw error;
+    }
+  }
+
+  async deleteDepositBank(id: string, actor: Actor) {
+    this.ensureAdmin(actor);
+    const companyId = requireTenant(actor as any);
+    const existing = await this.prisma.depositBank.findFirst({
+      where: { id, companyId },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException('Banco no encontrado');
+    await this.prisma.depositBank.update({
+      where: { id: existing.id },
+      data: {
+        active: false,
+        accounts: { updateMany: { where: {}, data: { active: false } } },
+      },
+    });
+    return { message: 'Banco eliminado correctamente.' };
+  }
+
+  async createDepositBankAccount(
+    bankId: string,
+    dto: CreateDepositBankAccountDto,
+    actor: Actor,
+  ) {
+    this.ensureAdmin(actor);
+    const companyId = requireTenant(actor as any);
+    const bank = await this.prisma.depositBank.findFirst({
+      where: { id: bankId, companyId, active: true },
+      select: { id: true },
+    });
+    if (!bank) throw new NotFoundException('Banco no encontrado');
+    const label = this.toNullableTrimmed(dto.label);
+    if (!label) throw new BadRequestException('Debes indicar la cuenta.');
+
+    try {
+      return await this.prisma.depositBankAccount.create({
+        data: {
+          bankId: bank.id,
+          label,
+          accountNumber: this.toNullableTrimmed(dto.accountNumber),
+        },
+      });
+    } catch (error: unknown) {
+      if ((error as { code?: unknown })?.code === 'P2002') {
+        throw new BadRequestException('Esa cuenta ya existe para este banco.');
+      }
+      throw error;
+    }
+  }
+
+  async updateDepositBankAccount(
+    bankId: string,
+    accountId: string,
+    dto: UpdateDepositBankAccountDto,
+    actor: Actor,
+  ) {
+    this.ensureAdmin(actor);
+    const companyId = requireTenant(actor as any);
+    const account = await this.prisma.depositBankAccount.findFirst({
+      where: { id: accountId, bank: { id: bankId, companyId } },
+      select: { id: true },
+    });
+    if (!account) throw new NotFoundException('Cuenta no encontrada');
+
+    const data: Prisma.DepositBankAccountUpdateInput = {};
+    if (dto.label != null) {
+      const label = this.toNullableTrimmed(dto.label);
+      if (!label) throw new BadRequestException('Debes indicar la cuenta.');
+      data.label = label;
+    }
+    if (dto.accountNumber != null) {
+      data.accountNumber = this.toNullableTrimmed(dto.accountNumber);
+    }
+    if (dto.active != null) data.active = dto.active;
+
+    try {
+      return await this.prisma.depositBankAccount.update({
+        where: { id: account.id },
+        data,
+      });
+    } catch (error: unknown) {
+      if ((error as { code?: unknown })?.code === 'P2002') {
+        throw new BadRequestException('Esa cuenta ya existe para este banco.');
+      }
+      throw error;
+    }
+  }
+
+  async deleteDepositBankAccount(
+    bankId: string,
+    accountId: string,
+    actor: Actor,
+  ) {
+    this.ensureAdmin(actor);
+    const companyId = requireTenant(actor as any);
+    const account = await this.prisma.depositBankAccount.findFirst({
+      where: { id: accountId, bank: { id: bankId, companyId } },
+      select: { id: true },
+    });
+    if (!account) throw new NotFoundException('Cuenta no encontrada');
+    await this.prisma.depositBankAccount.update({
+      where: { id: account.id },
+      data: { active: false },
+    });
+    return { message: 'Cuenta eliminada correctamente.' };
+  }
+
   async createDepositOrder(dto: CreateDepositOrderDto, actor: Actor) {
     this.normalizeRoleGuard(actor);
     const companyId = requireTenant(actor as any);
@@ -2196,6 +2396,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
       closesCountByType: dto.closesCountByType,
       depositByType: dto.depositByType,
       accountByType: dto.accountByType,
+      companyId,
     });
     const correction = await this.resolveDepositCorrection(dto, actor);
 
@@ -2231,6 +2432,8 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
   async getDepositOrders(query: DepositOrdersQueryDto, actor: Actor) {
     const from = this.parseDate(query.from, 'from');
     const to = this.parseDate(query.to, 'to');
+    if (from) from.setHours(0, 0, 0, 0);
+    if (to) to.setHours(23, 59, 59, 999);
 
     // Temporary diagnostics for persistent 500 on deposit list.
     // eslint-disable-next-line no-console
@@ -2246,7 +2449,8 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
 
     try {
       this.normalizeRoleGuard(actor);
-      const where: Record<string, unknown> = {};
+      const companyId = requireTenant(actor as any);
+      const where: Record<string, unknown> = { companyId };
 
       if (!this.isReviewer(actor)) {
         // ASISTENTE: sees ALL open (non-executed) deposits across the company.
@@ -2321,8 +2525,9 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
 
   async getDepositOrderById(id: string, actor: Actor) {
     this.normalizeRoleGuard(actor);
-    const row = await this.prisma.depositOrder.findUnique({
-      where: { id },
+    const companyId = requireTenant(actor as any);
+    const row = await this.prisma.depositOrder.findFirst({
+      where: { id, companyId },
       select: this.depositOrderLegacySelect,
     });
     if (!row) throw new NotFoundException('Depósito bancario no encontrado');
@@ -2340,9 +2545,10 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     actor: Actor,
   ) {
     this.ensureAdmin(actor);
+    const companyId = requireTenant(actor as any);
 
-    const existing = await this.prisma.depositOrder.findUnique({
-      where: { id },
+    const existing = await this.prisma.depositOrder.findFirst({
+      where: { id, companyId },
       select: {
         id: true,
         status: true,
@@ -2394,10 +2600,11 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
       closesCountByType: dto.closesCountByType ?? existing.closesCountByType,
       depositByType: dto.depositByType ?? existing.depositByType,
       accountByType: dto.accountByType ?? existing.accountByType,
+      companyId,
     });
 
     const updated = await this.prisma.depositOrder.update({
-      where: { id },
+      where: { id: existing.id },
       data: payload,
       select: this.depositOrderLegacySelect,
     });
@@ -2406,13 +2613,13 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
 
   async approveDepositOrder(id: string, _reviewNote: string | undefined, actor: Actor) {
     this.ensureAdmin(actor);
+    const companyId = requireTenant(actor as any);
 
-    const existing = await this.prisma.depositOrder.findUnique({
-      where: { id },
+    const existing = await this.prisma.depositOrder.findFirst({
+      where: { id, companyId },
       select: {
         id: true,
         status: true,
-        voucherUrl: true,
       },
     });
     if (!existing) {
@@ -2426,19 +2633,13 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
         'No se puede aprobar un depósito anulado o rechazado.',
       );
     }
-    if (!this.toNullableTrimmed(existing.voucherUrl)) {
-      throw new BadRequestException(
-        'Debes adjuntar un voucher antes de ejecutar el depósito.',
-      );
-    }
-
     const executor = await this.prisma.user.findUnique({
       where: { id: actor.id! },
       select: { nombreCompleto: true },
     });
 
     const updated = await this.prisma.depositOrder.update({
-      where: { id },
+      where: { id: existing.id },
       data: {
         status: DepositOrderStatus.EXECUTED,
         executedAt: new Date(),
@@ -2452,9 +2653,10 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
 
   async cancelDepositOrder(id: string, reviewNote: string | undefined, actor: Actor) {
     this.ensureAdmin(actor);
+    const companyId = requireTenant(actor as any);
 
-    const existing = await this.prisma.depositOrder.findUnique({
-      where: { id },
+    const existing = await this.prisma.depositOrder.findFirst({
+      where: { id, companyId },
       select: {
         id: true,
         status: true,
@@ -2484,7 +2686,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
       .join('\n');
 
     const updated = await this.prisma.depositOrder.update({
-      where: { id },
+      where: { id: existing.id },
       data: {
         status: DepositOrderStatus.CANCELLED,
         note: this.toNullableTrimmed(mergedNote),
@@ -2504,9 +2706,10 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     actor: Actor,
   ) {
     this.normalizeRoleGuard(actor);
+    const companyId = requireTenant(actor as any);
 
-    const existing = await this.prisma.depositOrder.findUnique({
-      where: { id },
+    const existing = await this.prisma.depositOrder.findFirst({
+      where: { id, companyId },
       select: {
         id: true,
         status: true,
@@ -2532,7 +2735,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     }
 
     const updated = await this.prisma.depositOrder.update({
-      where: { id },
+      where: { id: existing.id },
       data: {
         voucherUrl: params.voucherUrl.trim(),
         voucherFileName: params.voucherFileName.trim(),

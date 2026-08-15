@@ -12,13 +12,15 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 
+import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
-import '../../core/auth/role_permissions.dart';
 import '../../core/evolution/evolution_api_repository.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
+import '../../core/widgets/desktop_sales_style.dart';
+import '../../core/widgets/fulltech_page_header.dart';
 import 'data/contabilidad_repository.dart';
 import 'models/fiscal_invoice_model.dart';
 import 'utils/fiscal_invoice_image_url.dart';
@@ -391,24 +393,70 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).user;
-    final canUseModule = canAccessContabilidadByRole(user?.role);
+    final canUseModule = hasUserPermission(user, AppPermission.viewAccounting);
+    final width = MediaQuery.sizeOf(context).width;
+    final isDesktop = width >= 900;
+    final fiscalContent = Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: isDesktop ? double.infinity : double.infinity,
+        ),
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(
+            isDesktop ? 16 : 4,
+            16,
+            isDesktop ? 16 : 4,
+            24,
+          ),
+          children: [
+            _buildFiscalConfigCard(context),
+            const SizedBox(height: 10),
+            _buildUploadCard(context),
+            const SizedBox(height: 10),
+            if (_error != null) _ErrorBox(message: _error!),
+          ],
+        ),
+      ),
+    );
 
     return Scaffold(
-      backgroundColor: MediaQuery.sizeOf(context).width < 900
-          ? AppColors.background
-          : null,
-      appBar: CustomAppBar(
-        title: 'Factura fiscal',
-        showLogo: false,
-        showDepartmentLabel: false,
-        actions: [
-          IconButton(
-            tooltip: 'Abrir historial',
-            onPressed: () => _openHistoryScreen(context),
-            icon: const Icon(Icons.history_outlined),
-          ),
-        ],
-      ),
+      backgroundColor: isDesktop ? desktopSalesSurface : AppColors.background,
+      appBar: isDesktop
+          ? FullTechPageHeader(
+              title: 'Factura fiscal',
+              actions: [
+                _FiscalHeaderBadge(
+                  icon: Icons.receipt_long_outlined,
+                  label: 'Archivos',
+                  value: '${_selectedFiles.length}',
+                ),
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  tooltip: 'Abrir historial',
+                  onPressed: () => _openHistoryScreen(context),
+                  icon: const Icon(Icons.history_outlined),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: _saving ? null : _pickInvoiceImage,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Agregar'),
+                ),
+                const SizedBox(width: 12),
+              ],
+            )
+          : CustomAppBar(
+              title: 'Factura fiscal',
+              showLogo: false,
+              showDepartmentLabel: false,
+              actions: [
+                IconButton(
+                  tooltip: 'Abrir historial',
+                  onPressed: () => _openHistoryScreen(context),
+                  icon: const Icon(Icons.history_outlined),
+                ),
+              ],
+            ),
       drawer: buildAdaptiveDrawer(context, currentUser: user),
       body: !canUseModule
           ? const Center(
@@ -416,30 +464,41 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
                 'Solo ADMIN y ASISTENTE tienen acceso completo a este módulo.',
               ),
             )
-          : Center(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: MediaQuery.sizeOf(context).width < 900
-                      ? double.infinity
-                      : 760,
-                ),
-                child: ListView(
-                  padding: EdgeInsets.fromLTRB(
-                    MediaQuery.sizeOf(context).width < 900 ? 4 : 16,
-                    16,
-                    MediaQuery.sizeOf(context).width < 900 ? 4 : 16,
-                    24,
+          : isDesktop
+          ? DesktopSalesFrame(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: fiscalContent,
+                    ),
                   ),
-                  children: [
-                    _buildFiscalConfigCard(context),
-                    const SizedBox(height: 10),
-                    _buildUploadCard(context),
-                    const SizedBox(height: 10),
-                    if (_error != null) _ErrorBox(message: _error!),
-                  ],
-                ),
+                  const SizedBox(width: 16),
+                  SizedBox(
+                    width: (width * 0.30).clamp(360.0, 460.0),
+                    child: _FiscalFixedInfoColumn(
+                      kindLabel: _kind.label,
+                      filesCount: _selectedFiles.length,
+                      invoiceDate: _invoiceDate,
+                      configLoaded: _configLoaded,
+                      saving: _saving,
+                      onAdd: _pickInvoiceImage,
+                      onSave: _selectedFiles.isEmpty || _saving
+                          ? null
+                          : _saveSelectedInvoice,
+                      onHistory: () => _openHistoryScreen(context),
+                    ),
+                  ),
+                ],
               ),
-            ),
+            )
+          : fiscalContent,
     );
   }
 
@@ -845,6 +904,211 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
             tooltip: 'Cambiar fecha',
             onPressed: _saving ? null : () => _pickInvoiceDate(context),
             icon: const Icon(Icons.event_outlined),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FiscalHeaderBadge extends StatelessWidget {
+  const _FiscalHeaderBadge({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF1FF),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFCFE0FF)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: desktopSalesAccent),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              color: desktopSalesMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              color: desktopSalesText,
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FiscalFixedInfoColumn extends StatelessWidget {
+  const _FiscalFixedInfoColumn({
+    required this.kindLabel,
+    required this.filesCount,
+    required this.invoiceDate,
+    required this.configLoaded,
+    required this.saving,
+    required this.onAdd,
+    required this.onSave,
+    required this.onHistory,
+  });
+
+  final String kindLabel;
+  final int filesCount;
+  final DateTime invoiceDate;
+  final bool configLoaded;
+  final bool saving;
+  final VoidCallback onAdd;
+  final VoidCallback? onSave;
+  final VoidCallback onHistory;
+
+  @override
+  Widget build(BuildContext context) {
+    final dateFmt = DateFormat('dd/MM/yyyy');
+    return DesktopSalesPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Resumen',
+            style: TextStyle(
+              color: desktopSalesText,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _FiscalSideStat(
+            icon: Icons.category_outlined,
+            label: 'Tipo',
+            value: kindLabel,
+          ),
+          const SizedBox(height: 8),
+          _FiscalSideStat(
+            icon: Icons.attach_file_outlined,
+            label: 'Archivos seleccionados',
+            value: '$filesCount',
+          ),
+          const SizedBox(height: 8),
+          _FiscalSideStat(
+            icon: Icons.event_outlined,
+            label: 'Fecha',
+            value: dateFmt.format(invoiceDate),
+          ),
+          const SizedBox(height: 8),
+          _FiscalSideStat(
+            icon: Icons.settings_outlined,
+            label: 'Configuración',
+            value: configLoaded ? 'Lista' : 'Cargando',
+          ),
+          const Spacer(),
+          OutlinedButton.icon(
+            onPressed: onHistory,
+            icon: const Icon(Icons.history_outlined),
+            label: const Text('Historial'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(44),
+            ),
+          ),
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: saving ? null : onAdd,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Agregar'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(46),
+            ),
+          ),
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: onSave,
+            icon: saving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.save_outlined),
+            label: Text(saving ? 'Guardando...' : 'Guardar'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(46),
+              backgroundColor: AppColors.secondary,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FiscalSideStat extends StatelessWidget {
+  const _FiscalSideStat({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: desktopSalesLine),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: desktopSalesAccent),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: desktopSalesMuted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: desktopSalesText,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

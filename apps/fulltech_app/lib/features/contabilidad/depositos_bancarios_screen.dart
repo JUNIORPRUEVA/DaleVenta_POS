@@ -7,13 +7,15 @@ import 'package:printing/printing.dart';
 
 import '../../core/api/env.dart';
 import '../../core/auth/app_role.dart';
+import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
-import '../../core/auth/role_permissions.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
+import '../../core/widgets/desktop_sales_style.dart';
+import '../../core/widgets/fulltech_page_header.dart';
 import '../user/data/users_repository.dart';
 import 'data/contabilidad_repository.dart';
 import 'deposit_bank_catalog.dart';
@@ -72,6 +74,7 @@ class _DepositosBancariosScreenState
   bool _loading = true;
   String? _error;
   List<DepositOrderModel> _orders = const [];
+  List<DepositBankOption> _banks = const [];
   List<String> _collaborators = const [];
   DateTimeRange? _dateRange;
   _DepositViewFilter _viewFilter = _DepositViewFilter.all;
@@ -108,6 +111,7 @@ class _DepositosBancariosScreenState
         _orders = rows;
         _loading = false;
       });
+      await _loadBanks();
       await _loadCollaborators(forceRefresh: true);
     } catch (e) {
       if (!mounted) return;
@@ -142,10 +146,32 @@ class _DepositosBancariosScreenState
     }
   }
 
+  Future<void> _loadBanks() async {
+    try {
+      final banks = await ref
+          .read(contabilidadRepositoryProvider)
+          .listDepositBanks();
+      if (!mounted) return;
+      setState(() => _banks = banks);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _banks = const [];
+        _error ??= e is ApiException
+            ? e.message
+            : 'No se pudieron cargar los bancos';
+      });
+    }
+  }
+
   bool get _isAdmin =>
       ref.read(authStateProvider).user?.appRole.isAdmin ?? false;
   bool get _isAssistant =>
       ref.read(authStateProvider).user?.appRole == AppRole.asistente;
+
+  double _depositInfoColumnWidth(double width) {
+    return (width * 0.30).clamp(360.0, 460.0);
+  }
 
   List<DepositOrderModel> _visibleOrders() {
     switch (_viewFilter) {
@@ -191,8 +217,7 @@ class _DepositosBancariosScreenState
       barrierColor: Colors.black.withValues(alpha: 0.26),
       transitionDuration: const Duration(milliseconds: 180),
       pageBuilder: (dialogContext, animation, secondaryAnimation) {
-        return Align(
-          alignment: Alignment.centerRight,
+        return Center(
           child: _DepositsFiltersSheet(
             initialFilter: _viewFilter,
             initialDateRange: _dateRange,
@@ -306,6 +331,9 @@ class _DepositosBancariosScreenState
   }) async {
     if (_collaborators.isEmpty) {
       await _loadCollaborators(forceRefresh: true);
+    }
+    if (_banks.isEmpty) {
+      await _loadBanks();
     }
     if (!mounted) return;
 
@@ -446,17 +474,18 @@ class _DepositosBancariosScreenState
               }
             }
 
+            final banks = _banks;
             final accounts =
                 selectedBank?.accounts ?? const <DepositBankAccountOption>[];
 
             final dialogChild = Material(
               color: Colors.transparent,
               child: Align(
-                alignment: isDesktop ? Alignment.centerRight : Alignment.center,
+                alignment: Alignment.center,
                 child: Container(
                   width: isDesktop ? 560 : double.infinity,
                   margin: EdgeInsets.fromLTRB(
-                    isDesktop ? 0 : 12,
+                    isDesktop ? 12 : 12,
                     isDesktop ? 24 : 12,
                     isDesktop ? 24 : 12,
                     isDesktop ? 24 : 12,
@@ -503,6 +532,22 @@ class _DepositosBancariosScreenState
                                 ?.copyWith(color: const Color(0xFF64748B)),
                           ),
                           const SizedBox(height: 14),
+                          if (banks.isEmpty) ...[
+                            _DepositConfigNotice(
+                              onConfigure: () async {
+                                await _openBankManager();
+                                if (!mounted) return;
+                                setDialogState(() {
+                                  selectedBank = _resolveBank(source?.bankName);
+                                  selectedAccount = _resolveAccount(
+                                    selectedBank,
+                                    source?.bankAccount,
+                                  );
+                                });
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                          ],
                           TextField(
                             controller: dateCtrl,
                             readOnly: true,
@@ -520,7 +565,7 @@ class _DepositosBancariosScreenState
                             decoration: const InputDecoration(
                               labelText: 'Banco',
                             ),
-                            items: depositBankCatalog
+                            items: banks
                                 .map(
                                   (item) => DropdownMenuItem(
                                     value: item,
@@ -541,7 +586,29 @@ class _DepositosBancariosScreenState
                               });
                             },
                           ),
-                          const SizedBox(height: 10),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(
+                              onPressed: saving
+                                  ? null
+                                  : () async {
+                                      await _openBankManager();
+                                      if (!mounted) return;
+                                      setDialogState(() {
+                                        selectedBank = _resolveBank(
+                                          selectedBank?.label,
+                                        );
+                                        selectedAccount = _resolveAccount(
+                                          selectedBank,
+                                          selectedAccount?.label,
+                                        );
+                                      });
+                                    },
+                              icon: const Icon(Icons.settings_outlined),
+                              label: const Text('Configurar bancos'),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
                           DropdownButtonFormField<DepositBankAccountOption>(
                             key: ValueKey(
                               'account-${selectedBank?.id ?? 'none'}-${selectedAccount?.id ?? 'none'}',
@@ -683,9 +750,7 @@ class _DepositosBancariosScreenState
           parent: animation,
           curve: Curves.easeOutCubic,
         );
-        final beginOffset = MediaQuery.sizeOf(context).width >= 900
-            ? const Offset(0.12, 0)
-            : const Offset(0, 0.06);
+        const beginOffset = Offset(0, 0.04);
         return FadeTransition(
           opacity: curved,
           child: SlideTransition(
@@ -718,10 +783,10 @@ class _DepositosBancariosScreenState
 
   DepositBankOption? _resolveBank(String? bankName) {
     final normalized = (bankName ?? '').trim().toLowerCase();
-    for (final item in depositBankCatalog) {
+    for (final item in _banks) {
       if (item.label.toLowerCase() == normalized) return item;
     }
-    return depositBankCatalog.isEmpty ? null : depositBankCatalog.first;
+    return _banks.isEmpty ? null : _banks.first;
   }
 
   DepositBankAccountOption? _resolveAccount(
@@ -734,6 +799,371 @@ class _DepositosBancariosScreenState
       if (item.label.toLowerCase() == normalized) return item;
     }
     return bank.accounts.isEmpty ? null : bank.accounts.first;
+  }
+
+  Future<String?> _promptText({
+    required String title,
+    required String label,
+    String? initial,
+  }) async {
+    final controller = TextEditingController(text: initial ?? '');
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(labelText: label),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result?.trim().isEmpty == true ? null : result?.trim();
+  }
+
+  Future<({String label, String? accountNumber})?> _promptAccount({
+    DepositBankAccountOption? initial,
+  }) async {
+    final labelCtrl = TextEditingController(text: initial?.label ?? '');
+    final numberCtrl = TextEditingController(
+      text: initial?.accountNumber ?? '',
+    );
+    final result = await showDialog<({String label, String? accountNumber})>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(initial == null ? 'Agregar cuenta' : 'Editar cuenta'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: labelCtrl,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Cuenta destino'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: numberCtrl,
+              decoration: const InputDecoration(labelText: 'Número de cuenta'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final label = labelCtrl.text.trim();
+              if (label.isEmpty) return;
+              Navigator.pop(context, (
+                label: label,
+                accountNumber: numberCtrl.text.trim().isEmpty
+                    ? null
+                    : numberCtrl.text.trim(),
+              ));
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+    labelCtrl.dispose();
+    numberCtrl.dispose();
+    return result;
+  }
+
+  Future<bool> _confirmSimple(String title, String message) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  Future<void> _openBankManager() async {
+    await _loadBanks();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> refresh() async {
+              await _loadBanks();
+              if (mounted && dialogContext.mounted) setDialogState(() {});
+            }
+
+            Future<void> run(Future<void> Function() action) async {
+              try {
+                await action();
+                await refresh();
+              } catch (e) {
+                if (!mounted) return;
+                await _showSnack(e is ApiException ? e.message : '$e');
+              }
+            }
+
+            return Dialog(
+              insetPadding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: 760,
+                  maxHeight: 720,
+                ),
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Bancos y cuentas',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          FilledButton.icon(
+                            onPressed: () async {
+                              final name = await _promptText(
+                                title: 'Agregar banco',
+                                label: 'Nombre del banco',
+                              );
+                              if (name == null) return;
+                              await run(
+                                () => ref
+                                    .read(contabilidadRepositoryProvider)
+                                    .createDepositBank(name),
+                              );
+                            },
+                            icon: const Icon(Icons.add_rounded),
+                            label: const Text('Banco'),
+                          ),
+                          IconButton(
+                            tooltip: 'Cerrar',
+                            onPressed: () => Navigator.pop(dialogContext),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: _banks.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'No hay bancos configurados para esta empresa.',
+                              ),
+                            )
+                          : ListView.separated(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _banks.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 12),
+                              itemBuilder: (context, index) {
+                                final bank = _banks[index];
+                                return Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: AppColors.border),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              bank.label,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w900,
+                                              ),
+                                            ),
+                                          ),
+                                          IconButton(
+                                            tooltip: 'Agregar cuenta',
+                                            onPressed: () async {
+                                              final account =
+                                                  await _promptAccount();
+                                              if (account == null) return;
+                                              await run(
+                                                () => ref
+                                                    .read(
+                                                      contabilidadRepositoryProvider,
+                                                    )
+                                                    .createDepositBankAccount(
+                                                      bankId: bank.id,
+                                                      label: account.label,
+                                                      accountNumber:
+                                                          account.accountNumber,
+                                                    ),
+                                              );
+                                            },
+                                            icon: const Icon(
+                                              Icons.add_card_outlined,
+                                            ),
+                                          ),
+                                          IconButton(
+                                            tooltip: 'Editar banco',
+                                            onPressed: () async {
+                                              final name = await _promptText(
+                                                title: 'Editar banco',
+                                                label: 'Nombre del banco',
+                                                initial: bank.label,
+                                              );
+                                              if (name == null) return;
+                                              await run(
+                                                () => ref
+                                                    .read(
+                                                      contabilidadRepositoryProvider,
+                                                    )
+                                                    .updateDepositBank(
+                                                      id: bank.id,
+                                                      name: name,
+                                                    ),
+                                              );
+                                            },
+                                            icon: const Icon(
+                                              Icons.edit_outlined,
+                                            ),
+                                          ),
+                                          IconButton(
+                                            tooltip: 'Eliminar banco',
+                                            onPressed: () async {
+                                              final ok = await _confirmSimple(
+                                                'Eliminar banco',
+                                                'El banco dejará de aparecer para nuevos depósitos.',
+                                              );
+                                              if (!ok) return;
+                                              await run(
+                                                () => ref
+                                                    .read(
+                                                      contabilidadRepositoryProvider,
+                                                    )
+                                                    .deleteDepositBank(bank.id),
+                                              );
+                                            },
+                                            icon: const Icon(
+                                              Icons.delete_outline,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      if (bank.accounts.isEmpty)
+                                        const Text('Sin cuentas destino.')
+                                      else
+                                        for (final account in bank.accounts)
+                                          ListTile(
+                                            dense: true,
+                                            contentPadding: EdgeInsets.zero,
+                                            title: Text(account.label),
+                                            subtitle:
+                                                (account.accountNumber ?? '')
+                                                    .trim()
+                                                    .isEmpty
+                                                ? null
+                                                : Text(account.accountNumber!),
+                                            trailing: Wrap(
+                                              spacing: 4,
+                                              children: [
+                                                IconButton(
+                                                  tooltip: 'Editar cuenta',
+                                                  onPressed: () async {
+                                                    final next =
+                                                        await _promptAccount(
+                                                          initial: account,
+                                                        );
+                                                    if (next == null) return;
+                                                    await run(
+                                                      () => ref
+                                                          .read(
+                                                            contabilidadRepositoryProvider,
+                                                          )
+                                                          .updateDepositBankAccount(
+                                                            bankId: bank.id,
+                                                            accountId:
+                                                                account.id,
+                                                            label: next.label,
+                                                            accountNumber: next
+                                                                .accountNumber,
+                                                          ),
+                                                    );
+                                                  },
+                                                  icon: const Icon(
+                                                    Icons.edit_outlined,
+                                                  ),
+                                                ),
+                                                IconButton(
+                                                  tooltip: 'Eliminar cuenta',
+                                                  onPressed: () async {
+                                                    final ok = await _confirmSimple(
+                                                      'Eliminar cuenta',
+                                                      'La cuenta dejará de aparecer para nuevos depósitos.',
+                                                    );
+                                                    if (!ok) return;
+                                                    await run(
+                                                      () => ref
+                                                          .read(
+                                                            contabilidadRepositoryProvider,
+                                                          )
+                                                          .deleteDepositBankAccount(
+                                                            bankId: bank.id,
+                                                            accountId:
+                                                                account.id,
+                                                          ),
+                                                    );
+                                                  },
+                                                  icon: const Icon(
+                                                    Icons.delete_outline,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _confirmDelete(DepositOrderModel item) async {
@@ -1538,21 +1968,24 @@ class _DepositosBancariosScreenState
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).user;
-    final canUseModule = canAccessContabilidadByRole(user?.role);
+    final canUseModule = hasUserPermission(user, AppPermission.viewAccounting);
     final visibleOrders = _visibleOrders();
-    final isCompact = MediaQuery.sizeOf(context).width < 760;
+    final width = MediaQuery.sizeOf(context).width;
+    final isDesktop = width >= 900;
 
     if (!canUseModule) {
       return Scaffold(
         key: _scaffoldKey,
-        backgroundColor: isCompact ? AppColors.background : null,
-        appBar: CustomAppBar(
-          title: 'Depósitos',
-          onMenuPressed: () => _scaffoldKey.currentState?.openDrawer(),
-          showLogo: false,
-          showDepartmentLabel: false,
-          trailing: const SizedBox.shrink(),
-        ),
+        backgroundColor: isDesktop ? desktopSalesSurface : AppColors.background,
+        appBar: isDesktop
+            ? const FullTechPageHeader(title: 'Depósitos')
+            : CustomAppBar(
+                title: 'Depósitos',
+                onMenuPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                showLogo: false,
+                showDepartmentLabel: false,
+                trailing: const SizedBox.shrink(),
+              ),
         drawer: buildAdaptiveDrawer(context, currentUser: user),
         body: const Center(
           child: Padding(
@@ -1568,125 +2001,379 @@ class _DepositosBancariosScreenState
 
     final hasActiveFilters =
         _viewFilter != _DepositViewFilter.all || _dateRange != null;
+    final total = _orders.length;
+    final pending = _orders.where((item) => item.isPending).length;
+    final executed = _orders.where((item) => item.isExecuted).length;
+    final cancelled = _orders.where((item) => item.isCancelled).length;
+    final corrections = _orders.where((item) => item.isCorrection).length;
+    final depositedTotal = _orders
+        .where((item) => item.isExecuted)
+        .fold<double>(0, (sum, item) => sum + item.depositTotal);
 
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: isCompact ? AppColors.background : null,
-      appBar: CustomAppBar(
-        title: 'Depósitos',
-        onMenuPressed: () => _scaffoldKey.currentState?.openDrawer(),
-        showLogo: false,
-        showDepartmentLabel: false,
-        actions: [
-          IconButton(
-            tooltip: hasActiveFilters ? 'Cambiar filtro' : 'Filtros',
-            onPressed: _openFilters,
-            icon: Badge(
-              isLabelVisible: hasActiveFilters,
-              smallSize: 8,
-              child: const Icon(Icons.filter_alt_outlined),
+      backgroundColor: isDesktop ? desktopSalesSurface : AppColors.background,
+      appBar: isDesktop
+          ? FullTechPageHeader(
+              title: 'Depósitos',
+              actions: [
+                _AccountingHeaderBadge(
+                  icon: Icons.account_balance_outlined,
+                  label: 'Depósitos',
+                  value: '$total',
+                ),
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  tooltip: hasActiveFilters ? 'Cambiar filtro' : 'Filtros',
+                  onPressed: _openFilters,
+                  icon: Badge(
+                    isLabelVisible: hasActiveFilters,
+                    smallSize: 8,
+                    child: const Icon(Icons.filter_alt_outlined),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  tooltip: _loading ? 'Actualizando...' : 'Actualizar',
+                  onPressed: _loading ? null : _load,
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: _openEditor,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Agregar'),
+                ),
+                const SizedBox(width: 12),
+              ],
+            )
+          : CustomAppBar(
+              title: 'Depósitos',
+              onMenuPressed: () => _scaffoldKey.currentState?.openDrawer(),
+              showLogo: false,
+              showDepartmentLabel: false,
+              actions: [
+                IconButton(
+                  tooltip: hasActiveFilters ? 'Cambiar filtro' : 'Filtros',
+                  onPressed: _openFilters,
+                  icon: Badge(
+                    isLabelVisible: hasActiveFilters,
+                    smallSize: 8,
+                    child: const Icon(Icons.filter_alt_outlined),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Actualizar',
+                  onPressed: _loading ? null : _load,
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
+                IconButton(
+                  tooltip: 'Nuevo depósito',
+                  onPressed: _openEditor,
+                  icon: const Icon(Icons.add_rounded),
+                ),
+              ],
+              trailing: const SizedBox.shrink(),
             ),
-          ),
-          IconButton(
-            tooltip: 'Actualizar',
-            onPressed: _loading ? null : _load,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-          IconButton(
-            tooltip: 'Nuevo depósito',
-            onPressed: _openEditor,
-            icon: const Icon(Icons.add_rounded),
-          ),
-        ],
-        trailing: const SizedBox.shrink(),
-      ),
       drawer: buildAdaptiveDrawer(context, currentUser: user),
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'deposits_summary',
-        tooltip: 'Ver resumen',
-        backgroundColor: AppColors.secondary,
-        foregroundColor: Colors.white,
-        onPressed: _showSummary,
-        child: const Icon(Icons.summarize_rounded),
-      ),
+      floatingActionButton: isDesktop
+          ? null
+          : FloatingActionButton(
+              heroTag: 'deposits_summary',
+              tooltip: 'Ver resumen',
+              backgroundColor: AppColors.secondary,
+              foregroundColor: Colors.white,
+              onPressed: _showSummary,
+              child: const Icon(Icons.summarize_rounded),
+            ),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
-                children: [
-                  if (_isAssistant) ...[
-                    const _AssistantNoticeCard(),
-                    const SizedBox(height: 12),
-                  ],
-                  if (_dateRange != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: InputChip(
-                          avatar: const Icon(
-                            Icons.date_range_outlined,
-                            size: 18,
-                          ),
-                          label: Text(
-                            '${_dateFmt.format(_dateRange!.start)} - ${_dateFmt.format(_dateRange!.end)}',
-                          ),
-                          onDeleted: _clearDateRange,
+        child: isDesktop
+            ? DesktopSalesFrame(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: _DepositsListPane(
+                          loading: _loading,
+                          child: _buildDepositsList(visibleOrders, isDesktop),
                         ),
                       ),
                     ),
-                  if (_error != null)
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Text(
-                        _error!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                    )
-                  else if (visibleOrders.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        _isAssistant
-                            ? 'No hay depósitos pendientes por ahora.'
-                            : 'No hay depósitos para el filtro seleccionado.',
-                      ),
-                    )
-                  else
-                    for (
-                      var index = 0;
-                      index < visibleOrders.length;
-                      index++
-                    ) ...[
-                      if (index > 0) const SizedBox(height: 10),
-                      _DepositCard(
-                        item: visibleOrders[index],
+                    const SizedBox(width: 16),
+                    SizedBox(
+                      width: _depositInfoColumnWidth(width),
+                      child: _DepositsFixedInfoColumn(
+                        total: total,
+                        pending: pending,
+                        executed: executed,
+                        cancelled: cancelled,
+                        corrections: corrections,
+                        depositedTotal: depositedTotal,
                         money: _money,
-                        statusColor: _statusColor(visibleOrders[index].status),
-                        isAdmin: _isAdmin,
-                        canUploadVoucher: _isAdmin || _isAssistant,
-                        onTap: () => _openDepositDetail(visibleOrders[index]),
-                        onSelectedAction: (action) =>
-                            _handleTileAction(visibleOrders[index], action),
                       ),
-                    ],
+                    ),
+                  ],
+                ),
+              )
+            : Stack(
+                children: [
+                  Positioned.fill(
+                    child: _buildDepositsList(visibleOrders, false),
+                  ),
+                  if (_loading)
+                    const Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      child: LinearProgressIndicator(minHeight: 2),
+                    ),
                 ],
               ),
-            ),
-            if (_loading)
-              const Positioned(
-                left: 0,
-                right: 0,
-                top: 0,
-                child: LinearProgressIndicator(minHeight: 2),
+      ),
+    );
+  }
+
+  Widget _buildDepositsList(
+    List<DepositOrderModel> visibleOrders,
+    bool desktop,
+  ) {
+    return ListView(
+      padding: EdgeInsets.fromLTRB(16, 16, 16, desktop ? 24 : 88),
+      children: [
+        if (_isAssistant) ...[
+          const _AssistantNoticeCard(),
+          const SizedBox(height: 12),
+        ],
+        if (_dateRange != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: InputChip(
+                avatar: const Icon(Icons.date_range_outlined, size: 18),
+                label: Text(
+                  '${_dateFmt.format(_dateRange!.start)} - ${_dateFmt.format(_dateRange!.end)}',
+                ),
+                onDeleted: _clearDateRange,
               ),
+            ),
+          ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          )
+        else if (visibleOrders.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              _isAssistant
+                  ? 'No hay depósitos pendientes por ahora.'
+                  : 'No hay depósitos para el filtro seleccionado.',
+            ),
+          )
+        else
+          for (var index = 0; index < visibleOrders.length; index++) ...[
+            if (index > 0) const SizedBox(height: 10),
+            _DepositCard(
+              item: visibleOrders[index],
+              money: _money,
+              statusColor: _statusColor(visibleOrders[index].status),
+              isAdmin: _isAdmin,
+              canUploadVoucher: _isAdmin || _isAssistant,
+              onTap: () => _openDepositDetail(visibleOrders[index]),
+              onSelectedAction: (action) =>
+                  _handleTileAction(visibleOrders[index], action),
+            ),
           ],
-        ),
+      ],
+    );
+  }
+}
+
+class _DepositsListPane extends StatelessWidget {
+  const _DepositsListPane({required this.loading, required this.child});
+
+  final bool loading;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned.fill(child: child),
+        if (loading)
+          const Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
+      ],
+    );
+  }
+}
+
+class _AccountingHeaderBadge extends StatelessWidget {
+  const _AccountingHeaderBadge({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF1FF),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFCFE0FF)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: desktopSalesAccent),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              color: desktopSalesMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              color: desktopSalesText,
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DepositsFixedInfoColumn extends StatelessWidget {
+  const _DepositsFixedInfoColumn({
+    required this.total,
+    required this.pending,
+    required this.executed,
+    required this.cancelled,
+    required this.corrections,
+    required this.depositedTotal,
+    required this.money,
+  });
+
+  final int total;
+  final int pending;
+  final int executed;
+  final int cancelled;
+  final int corrections;
+  final double depositedTotal;
+  final NumberFormat money;
+
+  @override
+  Widget build(BuildContext context) {
+    return DesktopSalesPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Resumen',
+                  style: TextStyle(
+                    color: desktopSalesText,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _DepositSummaryStat(
+            label: 'Depositado',
+            value: money.format(depositedTotal),
+            icon: Icons.savings_outlined,
+          ),
+          const SizedBox(height: 8),
+          _DepositSummaryStat(
+            label: 'Pendientes',
+            value: '$pending',
+            icon: Icons.schedule_rounded,
+          ),
+          const SizedBox(height: 8),
+          _DepositSummaryStat(
+            label: 'Ejecutados',
+            value: '$executed',
+            icon: Icons.check_circle_outline,
+          ),
+          const SizedBox(height: 8),
+          _DepositSummaryStat(
+            label: 'Anulados',
+            value: '$cancelled',
+            icon: Icons.cancel_outlined,
+          ),
+          const SizedBox(height: 8),
+          _DepositSummaryStat(
+            label: 'Correcciones',
+            value: '$corrections',
+            icon: Icons.edit_note_outlined,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DepositConfigNotice extends StatelessWidget {
+  const _DepositConfigNotice({required this.onConfigure});
+
+  final VoidCallback onConfigure;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFDE68A)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.account_balance_outlined, color: Color(0xFF92400E)),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Esta empresa no tiene bancos ni cuentas configuradas.',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          TextButton(onPressed: onConfigure, child: const Text('Configurar')),
+        ],
       ),
     );
   }
@@ -2330,13 +3017,118 @@ class _DepositsFiltersSheetState extends State<_DepositsFiltersSheet> {
     ).pop(_DepositFilterResult(filter: _filter, dateRange: _dateRange));
   }
 
-  Future<void> _pickDateRange() async {
+  DateTime _dateOnly(DateTime value) =>
+      DateTime(value.year, value.month, value.day);
+
+  void _setToday() {
     final now = DateTime.now();
-    final picked = await showDateRangePicker(
+    final today = _dateOnly(now);
+    setState(() => _dateRange = DateTimeRange(start: today, end: today));
+  }
+
+  void _setYesterday() {
+    final yesterday = _dateOnly(
+      DateTime.now(),
+    ).subtract(const Duration(days: 1));
+    setState(
+      () => _dateRange = DateTimeRange(start: yesterday, end: yesterday),
+    );
+  }
+
+  void _setThisWeek() {
+    final today = _dateOnly(DateTime.now());
+    final start = today.subtract(Duration(days: today.weekday - 1));
+    setState(() => _dateRange = DateTimeRange(start: start, end: today));
+  }
+
+  Future<void> _pickCustomDateRange() async {
+    var start = _dateRange?.start ?? _dateOnly(DateTime.now());
+    var end = _dateRange?.end ?? _dateOnly(DateTime.now());
+    final picked = await showDialog<DateTimeRange>(
       context: context,
-      initialDateRange: _dateRange,
-      firstDate: DateTime(now.year - 3),
-      lastDate: DateTime(now.year + 1, 12, 31),
+      builder: (context) {
+        final startCtrl = TextEditingController(text: _dateFmt.format(start));
+        final endCtrl = TextEditingController(text: _dateFmt.format(end));
+        return StatefulBuilder(
+          builder: (context, setLocalState) {
+            Future<void> pickStart() async {
+              final next = await showDatePicker(
+                context: context,
+                initialDate: start,
+                firstDate: DateTime(DateTime.now().year - 3),
+                lastDate: DateTime(DateTime.now().year + 1, 12, 31),
+              );
+              if (next == null) return;
+              setLocalState(() {
+                start = _dateOnly(next);
+                if (end.isBefore(start)) end = start;
+                startCtrl.text = _dateFmt.format(start);
+                endCtrl.text = _dateFmt.format(end);
+              });
+            }
+
+            Future<void> pickEnd() async {
+              final next = await showDatePicker(
+                context: context,
+                initialDate: end,
+                firstDate: DateTime(DateTime.now().year - 3),
+                lastDate: DateTime(DateTime.now().year + 1, 12, 31),
+              );
+              if (next == null) return;
+              setLocalState(() {
+                end = _dateOnly(next);
+                if (end.isBefore(start)) start = end;
+                startCtrl.text = _dateFmt.format(start);
+                endCtrl.text = _dateFmt.format(end);
+              });
+            }
+
+            return AlertDialog(
+              title: const Text('Rango personalizado'),
+              content: SizedBox(
+                width: 360,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: startCtrl,
+                      readOnly: true,
+                      onTap: pickStart,
+                      decoration: const InputDecoration(
+                        labelText: 'Desde',
+                        suffixIcon: Icon(Icons.calendar_month_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: endCtrl,
+                      readOnly: true,
+                      onTap: pickEnd,
+                      decoration: const InputDecoration(
+                        labelText: 'Hasta',
+                        suffixIcon: Icon(Icons.calendar_month_outlined),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(
+                    context,
+                    DateTimeRange(start: start, end: end),
+                  ),
+                  child: const Text('Aplicar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
     if (picked == null || !mounted) return;
     setState(() => _dateRange = picked);
@@ -2344,142 +3136,173 @@ class _DepositsFiltersSheetState extends State<_DepositsFiltersSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final media = MediaQuery.sizeOf(context);
-    final width = (media.width * 0.85).clamp(340.0, 540.0);
+    final width = (MediaQuery.sizeOf(context).width * 0.85).clamp(380.0, 560.0);
 
-    return Dismissible(
-      key: const ValueKey('deposits-filter-panel'),
-      direction: DismissDirection.endToStart,
-      onDismissed: (_) => Navigator.of(context).pop(),
-      child: Material(
-        color: Colors.white,
-        elevation: 18,
-        borderRadius: const BorderRadius.horizontal(left: Radius.circular(26)),
-        clipBehavior: Clip.antiAlias,
-        child: SizedBox(
-          width: width,
-          height: media.height,
-          child: SafeArea(
-            left: false,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEAF1FF),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.filter_alt_rounded,
-                          color: AppColors.secondary,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Filtros de depósitos',
-                              style: TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            SizedBox(height: 2),
-                            Text(
-                              'Estado y rango de fechas',
-                              style: TextStyle(
-                                color: AppColors.textMuted,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'Cerrar',
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                    ],
+    return Material(
+      color: Colors.white,
+      elevation: 18,
+      borderRadius: BorderRadius.circular(20),
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        width: width,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEAF1FF),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.filter_alt_rounded,
+                      color: AppColors.secondary,
+                    ),
                   ),
-                ),
-                const Divider(height: 1, color: AppColors.border),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-                    children: [
-                      _DepositFilterSection<_DepositViewFilter>(
-                        title: 'Estado',
-                        value: _filter,
-                        options: _DepositViewFilter.values,
-                        labelBuilder: (filter) => filter.label,
-                        onSelected: (value) {
-                          setState(() => _filter = value);
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      _DateRangeFilterSection(
-                        dateRange: _dateRange,
-                        dateFmt: _dateFmt,
-                        onPick: _pickDateRange,
-                        onClear: () => setState(() => _dateRange = null),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
-                  decoration: const BoxDecoration(
-                    color: AppColors.surfaceAlt,
-                    border: Border(top: BorderSide(color: AppColors.border)),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () {
-                            Navigator.of(context).pop(
-                              const _DepositFilterResult(
-                                filter: _DepositViewFilter.all,
-                                dateRange: null,
-                              ),
-                            );
-                          },
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(46),
-                          ),
-                          child: const Text('Limpiar'),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: _apply,
-                          icon: const Icon(Icons.check_rounded),
-                          label: const Text('Aplicar'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.secondary,
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size.fromHeight(46),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Filtros de depósitos',
+                          style: TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
                           ),
                         ),
-                      ),
-                    ],
+                        SizedBox(height: 2),
+                        Text(
+                          'Estado y rango de fechas',
+                          style: TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                  IconButton(
+                    tooltip: 'Cerrar',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
             ),
-          ),
+            const Divider(height: 1, color: AppColors.border),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _DepositFilterSection<_DepositViewFilter>(
+                      title: 'Estado',
+                      value: _filter,
+                      options: _DepositViewFilter.values,
+                      labelBuilder: (filter) => filter.label,
+                      onSelected: (value) {
+                        setState(() => _filter = value);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Fecha',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ActionChip(
+                          avatar: const Icon(Icons.today_outlined, size: 18),
+                          label: const Text('Hoy'),
+                          onPressed: _setToday,
+                        ),
+                        ActionChip(
+                          avatar: const Icon(Icons.history_rounded, size: 18),
+                          label: const Text('Ayer'),
+                          onPressed: _setYesterday,
+                        ),
+                        ActionChip(
+                          avatar: const Icon(
+                            Icons.date_range_outlined,
+                            size: 18,
+                          ),
+                          label: const Text('Esta semana'),
+                          onPressed: _setThisWeek,
+                        ),
+                        ActionChip(
+                          avatar: const Icon(Icons.tune_rounded, size: 18),
+                          label: const Text('Personalizado'),
+                          onPressed: _pickCustomDateRange,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _DateRangeFilterSection(
+                      dateRange: _dateRange,
+                      dateFmt: _dateFmt,
+                      onPick: _pickCustomDateRange,
+                      onClear: () => setState(() => _dateRange = null),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+              decoration: const BoxDecoration(
+                color: AppColors.surfaceAlt,
+                border: Border(top: BorderSide(color: AppColors.border)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.of(context).pop(
+                          const _DepositFilterResult(
+                            filter: _DepositViewFilter.all,
+                            dateRange: null,
+                          ),
+                        );
+                      },
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(46),
+                      ),
+                      child: const Text('Limpiar'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _apply,
+                      icon: const Icon(Icons.check_rounded),
+                      label: const Text('Aplicar'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.secondary,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size.fromHeight(46),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
