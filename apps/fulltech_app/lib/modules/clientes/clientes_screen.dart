@@ -24,8 +24,9 @@ import '../../core/widgets/sync_status_banner.dart';
 import 'application/clientes_controller.dart';
 import 'cliente_form_screen.dart';
 import 'cliente_model.dart';
+import 'cliente_profile_model.dart';
+import 'cliente_timeline_model.dart';
 import 'data/clientes_repository.dart';
-import '../service_orders/service_order_models.dart';
 import '../ventas/data/ventas_repository.dart';
 
 bool _shouldUseClientesDesktopLayout(double width) {
@@ -45,6 +46,26 @@ bool _shouldUseClientesDesktopLayout(double width) {
 
 double _clientesInfoColumnWidth(double width) {
   return (width * 0.33).clamp(420.0, 640.0);
+}
+
+final _clientActivityBundleProvider = FutureProvider.family
+    .autoDispose<_ClientActivityBundle, String>((ref, clientId) async {
+      final repo = ref.read(clientesRepositoryProvider);
+      final results = await Future.wait<Object>([
+        repo.getClientProfile(id: clientId),
+        repo.getClientTimeline(id: clientId, take: 8),
+      ]);
+      return _ClientActivityBundle(
+        profile: results[0] as ClienteProfileResponse,
+        timeline: results[1] as ClienteTimelineResponse,
+      );
+    });
+
+class _ClientActivityBundle {
+  const _ClientActivityBundle({required this.profile, required this.timeline});
+
+  final ClienteProfileResponse profile;
+  final ClienteTimelineResponse timeline;
 }
 
 class ClientesScreen extends ConsumerStatefulWidget {
@@ -231,58 +252,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
     });
     await ref.read(clientesControllerProvider.notifier).refresh();
     _showClientNotice('Cliente creado', created.nombre);
-  }
-
-  Future<void> _openEditClientFlow(ClienteModel client) async {
-    final updated = await openClienteFormAdaptive(
-      context,
-      clienteId: client.id,
-    );
-    if (updated == null || !mounted) return;
-    setState(() => _selectedClientId = updated.id);
-    await ref.read(clientesControllerProvider.notifier).refresh();
-    _showClientNotice('Cliente actualizado', updated.nombre);
-  }
-
-  Future<void> _deleteClient(ClienteModel client) async {
-    final name = client.nombre.trim().isEmpty
-        ? 'este cliente'
-        : client.nombre.trim();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Eliminar cliente'),
-        content: Text(
-          '¿Seguro que deseas eliminar $name? El cliente se ocultará de la lista activa de esta empresa.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Theme.of(context).colorScheme.onError,
-            ),
-            onPressed: () => Navigator.pop(context, true),
-            icon: const Icon(Icons.delete_outline_rounded),
-            label: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    try {
-      await ref.read(clientesControllerProvider.notifier).remove(client.id);
-      if (!mounted) return;
-      setState(() => _selectedClientId = null);
-      _showClientNotice('Cliente eliminado', name);
-    } catch (error) {
-      if (!mounted) return;
-      _showClientNotice('No se pudo eliminar', '$error', isError: true);
-    }
   }
 
   void _showClientNotice(String title, String message, {bool isError = false}) {
@@ -639,28 +608,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                         client: selectedClient,
                         totalClients: state.items.length,
                         refreshing: state.refreshing,
-                        onOpenDetail: selectedClient == null
-                            ? null
-                            : () => context.push(
-                                Routes.clienteDetail(selectedClient.id),
-                              ),
-                        onCreateService: selectedClient == null
-                            ? null
-                            : () => context.push(
-                                Routes.serviceOrderCreate,
-                                extra: ServiceOrderCreateArgs(
-                                  initialClientId: selectedClient.id,
-                                ),
-                              ),
-                        onEditClient: selectedClient == null
-                            ? null
-                            : () => _openEditClientFlow(selectedClient),
-                        onDeleteClient:
-                            selectedClient == null || selectedClient.isDeleted
-                            ? null
-                            : () => _deleteClient(selectedClient),
                         onNewClient: _openCreateClientFlow,
-                        onOpenMap: () => context.push(Routes.clientesMapa),
                       ),
                     ),
                   ],
@@ -1009,34 +957,27 @@ class _ClienteCard extends ConsumerWidget {
   }
 }
 
-class _ClienteFixedInfoColumn extends StatelessWidget {
+class _ClienteFixedInfoColumn extends ConsumerWidget {
   const _ClienteFixedInfoColumn({
     required this.client,
     required this.totalClients,
     required this.refreshing,
-    required this.onOpenDetail,
-    required this.onCreateService,
-    required this.onEditClient,
-    required this.onDeleteClient,
     required this.onNewClient,
-    required this.onOpenMap,
   });
 
   final ClienteModel? client;
   final int totalClients;
   final bool refreshing;
-  final VoidCallback? onOpenDetail;
-  final VoidCallback? onCreateService;
-  final VoidCallback? onEditClient;
-  final VoidCallback? onDeleteClient;
   final VoidCallback onNewClient;
-  final VoidCallback onOpenMap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final selected = client;
+    final activity = selected == null
+        ? null
+        : ref.watch(_clientActivityBundleProvider(selected.id));
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -1184,70 +1125,11 @@ class _ClienteFixedInfoColumn extends StatelessWidget {
                               ? 'Sin fecha'
                               : _formatClientDate(selected.updatedAt!),
                         ),
+                        const SizedBox(height: 4),
+                        _ClientActivitySection(activity: activity),
                       ],
                     ),
                   ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _ClientColumnAction(
-                  icon: Icons.open_in_new_rounded,
-                  label: 'Abrir perfil completo',
-                  onPressed: onOpenDetail,
-                  prominent: true,
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _ClientColumnAction(
-                        icon: Icons.edit_outlined,
-                        label: 'Editar',
-                        onPressed: onEditClient,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _ClientColumnAction(
-                        icon: Icons.delete_outline_rounded,
-                        label: 'Eliminar',
-                        onPressed: onDeleteClient,
-                        danger: true,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _ClientColumnAction(
-                        icon: Icons.add_business_rounded,
-                        label: 'Orden',
-                        onPressed: onCreateService,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _ClientColumnAction(
-                        icon: Icons.person_add_alt_1_rounded,
-                        label: 'Nuevo',
-                        onPressed: onNewClient,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                _ClientColumnAction(
-                  icon: Icons.map_rounded,
-                  label: 'Ver mapa de clientes',
-                  onPressed: onOpenMap,
-                ),
-              ],
-            ),
           ),
         ],
       ),
@@ -1301,6 +1183,359 @@ class _ClienteInfoEmptyState extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ClientActivitySection extends StatelessWidget {
+  const _ClientActivitySection({required this.activity});
+
+  final AsyncValue<_ClientActivityBundle>? activity;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = activity;
+    if (value == null) return const SizedBox.shrink();
+
+    return value.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.only(top: 10),
+        child: LinearProgressIndicator(minHeight: 2),
+      ),
+      error: (error, stackTrace) => _ClientActivityMessage(
+        icon: Icons.info_outline_rounded,
+        title: 'Actividad no disponible',
+        message: 'No se pudo cargar el resumen del cliente.',
+      ),
+      data: (bundle) {
+        final metrics = bundle.profile.metrics;
+        final timeline = bundle.timeline.items;
+        final creditCount = metrics.creditSalesCount;
+        final creditBalance = metrics.creditBalanceTotal ?? 0;
+        final lastItems = timeline.take(5).toList(growable: false);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _ClientSectionTitle(
+              icon: Icons.insights_rounded,
+              label: 'Resumen de actividad',
+            ),
+            const SizedBox(height: 10),
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+              childAspectRatio: 2.35,
+              children: [
+                _ClientMetricTile(
+                  label: 'Compras',
+                  value: '${metrics.salesCount}',
+                  helper: 'facturas',
+                  icon: Icons.receipt_long_outlined,
+                ),
+                _ClientMetricTile(
+                  label: 'Total comprado',
+                  value: formatRdCurrencyAccounting(
+                    (metrics.salesTotal ?? 0).toDouble(),
+                  ),
+                  helper: 'acumulado',
+                  icon: Icons.payments_outlined,
+                ),
+                _ClientMetricTile(
+                  label: 'Cotizaciones',
+                  value: '${metrics.cotizacionesCount}',
+                  helper: formatRdCurrencyAccounting(
+                    (metrics.cotizacionesTotal ?? 0).toDouble(),
+                  ),
+                  icon: Icons.request_quote_outlined,
+                ),
+                _ClientMetricTile(
+                  label: 'Créditos',
+                  value: '$creditCount',
+                  helper: creditBalance > 0
+                      ? '${formatRdCurrencyAccounting(creditBalance.toDouble())} pendiente'
+                      : 'sin saldo pendiente',
+                  icon: Icons.credit_score_outlined,
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            _ClientSectionTitle(
+              icon: Icons.history_rounded,
+              label: 'Últimos movimientos',
+            ),
+            const SizedBox(height: 10),
+            if (lastItems.isEmpty)
+              const _ClientActivityMessage(
+                icon: Icons.history_toggle_off_rounded,
+                title: 'Sin actividad registrada',
+                message:
+                    'Este cliente todavía no tiene facturas ni cotizaciones.',
+              )
+            else
+              for (final event in lastItems)
+                _ClientTimelineMiniRow(event: event),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ClientSectionTitle extends StatelessWidget {
+  const _ClientSectionTitle({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 17, color: desktopSalesAccent),
+        const SizedBox(width: 7),
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ClientMetricTile extends StatelessWidget {
+  const _ClientMetricTile({
+    required this.label,
+    required this.value,
+    required this.helper,
+    required this.icon,
+  });
+
+  final String label;
+  final String value;
+  final String helper;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: const Color(0xFFD8E5EC)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: desktopSalesAccent),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: desktopSalesMuted,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            helper,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: desktopSalesMuted,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ClientTimelineMiniRow extends StatelessWidget {
+  const _ClientTimelineMiniRow({required this.event});
+
+  final ClienteTimelineEvent event;
+
+  @override
+  Widget build(BuildContext context) {
+    final amount = event.amount;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFD8E5EC)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: desktopSalesAccentSoft,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              _clientEventIcon(event),
+              size: 17,
+              color: desktopSalesAccent,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _clientEventTitle(event),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  [
+                    _formatClientDate(event.at),
+                    if ((event.status ?? '').trim().isNotEmpty)
+                      event.status!.trim(),
+                  ].join(' · '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: desktopSalesMuted,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (amount != null)
+            Text(
+              formatRdCurrencyAccounting(amount.toDouble()),
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: desktopSalesAccent,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ClientActivityMessage extends StatelessWidget {
+  const _ClientActivityMessage({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFD8E5EC)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: desktopSalesMuted),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  message,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: desktopSalesMuted,
+                    height: 1.25,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+bool _clientEventLooksLikeCredit(ClienteTimelineEvent event) {
+  final haystack = '${event.eventType} ${event.title} ${event.status ?? ''}'
+      .toLowerCase();
+  return haystack.contains('credit') ||
+      haystack.contains('credito') ||
+      haystack.contains('crédito');
+}
+
+IconData _clientEventIcon(ClienteTimelineEvent event) {
+  final type = event.eventType.toLowerCase();
+  if (type.contains('cotizacion') || type.contains('quote')) {
+    return Icons.request_quote_outlined;
+  }
+  if (_clientEventLooksLikeCredit(event)) return Icons.credit_score_outlined;
+  if (type.contains('service')) return Icons.handyman_outlined;
+  return Icons.receipt_long_outlined;
+}
+
+String _clientEventTitle(ClienteTimelineEvent event) {
+  final title = event.title.trim();
+  if (title.isNotEmpty) return title;
+  final type = event.eventType.toLowerCase();
+  if (type.contains('cotizacion') || type.contains('quote')) {
+    return 'Cotización';
+  }
+  if (_clientEventLooksLikeCredit(event)) return 'Crédito';
+  if (type.contains('service')) return 'Servicio';
+  return 'Factura';
 }
 
 class _ClientInfoLine extends StatelessWidget {
@@ -1393,52 +1628,6 @@ class _ClientStatusDot extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _ClientColumnAction extends StatelessWidget {
-  const _ClientColumnAction({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-    this.prominent = false,
-    this.danger = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback? onPressed;
-  final bool prominent;
-  final bool danger;
-
-  @override
-  Widget build(BuildContext context) {
-    if (prominent) {
-      return FilledButton.icon(
-        onPressed: onPressed,
-        style: FilledButton.styleFrom(
-          minimumSize: const Size.fromHeight(48),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-        icon: Icon(icon, size: 18),
-        label: Text(label),
-      );
-    }
-    return OutlinedButton.icon(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size.fromHeight(44),
-        foregroundColor: danger ? Theme.of(context).colorScheme.error : null,
-        side: danger
-            ? BorderSide(color: Theme.of(context).colorScheme.error)
-            : null,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      ),
-      icon: Icon(icon, size: 17),
-      label: Text(label),
     );
   }
 }

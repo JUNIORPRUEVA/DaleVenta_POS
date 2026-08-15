@@ -27,7 +27,10 @@ export class ClientsService {
     private readonly realtime: CatalogRealtimeRelayService,
   ) {}
 
-  private static readonly adminLikeRoles = new Set<Role>([Role.ADMIN, Role.ASISTENTE]);
+  private static readonly adminLikeRoles = new Set<Role>([
+    Role.ADMIN,
+    Role.ASISTENTE,
+  ]);
 
   private static readonly uuidPattern =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -44,14 +47,20 @@ export class ClientsService {
     return ClientsService.adminLikeRoles.has(user.role);
   }
 
-  private buildTechnicianServiceOrderWhere(user: AuthUser): Prisma.ServiceOrderWhereInput {
+  private buildTechnicianServiceOrderWhere(
+    user: AuthUser,
+  ): Prisma.ServiceOrderWhereInput {
     return {
       OR: [{ assignedToId: user.id }, { createdById: user.id }],
     };
   }
 
-  private combineWhere(...parts: Array<Prisma.ClientWhereInput | null | undefined>): Prisma.ClientWhereInput {
-    const filters = parts.filter((part): part is Prisma.ClientWhereInput => part != null);
+  private combineWhere(
+    ...parts: Array<Prisma.ClientWhereInput | null | undefined>
+  ): Prisma.ClientWhereInput {
+    const filters = parts.filter(
+      (part): part is Prisma.ClientWhereInput => part != null,
+    );
     if (filters.length === 0) {
       return {};
     }
@@ -110,7 +119,9 @@ export class ClientsService {
     return latest;
   }
 
-  private normalizeLocationUrl(value: string | null | undefined): string | null {
+  private normalizeLocationUrl(
+    value: string | null | undefined,
+  ): string | null {
     const normalized = value?.trim();
     return normalized ? normalized : null;
   }
@@ -150,7 +161,10 @@ export class ClientsService {
     return null;
   }
 
-  private resolveLocationPayload(dto: ClientLocationFieldsDto, allowClear = false) {
+  private resolveLocationPayload(
+    dto: ClientLocationFieldsDto,
+    allowClear = false,
+  ) {
     const latitude = dto.latitude;
     const longitude = dto.longitude;
     const locationUrlInput = dto.location_url ?? dto.locationUrl;
@@ -188,7 +202,9 @@ export class ClientsService {
     }
 
     if ((normalizedLatitude == null) != (normalizedLongitude == null)) {
-      throw new BadRequestException('latitude y longitude deben enviarse juntos.');
+      throw new BadRequestException(
+        'latitude y longitude deben enviarse juntos.',
+      );
     }
 
     let resolvedLatitude = normalizedLatitude;
@@ -196,7 +212,9 @@ export class ClientsService {
 
     // If explicit coordinates are provided, use them and build URL if needed.
     if (resolvedLatitude != null && resolvedLongitude != null) {
-      const finalLocationUrl = locationUrl ?? this.buildGoogleMapsUrl(resolvedLatitude, resolvedLongitude);
+      const finalLocationUrl =
+        locationUrl ??
+        this.buildGoogleMapsUrl(resolvedLatitude, resolvedLongitude);
       return {
         latitude: new Prisma.Decimal(resolvedLatitude),
         longitude: new Prisma.Decimal(resolvedLongitude),
@@ -207,7 +225,9 @@ export class ClientsService {
     // Only URL provided: try to extract coordinates, but don't reject if it's a
     // short/redirect link (e.g. maps.app.goo.gl). Store the URL as-is in that case.
     if (!locationUrl) {
-      throw new BadRequestException('Debe enviar latitude/longitude o location_url.');
+      throw new BadRequestException(
+        'Debe enviar latitude/longitude o location_url.',
+      );
     }
 
     const extracted = this.extractCoordinatesFromLocationUrl(locationUrl);
@@ -249,9 +269,14 @@ export class ClientsService {
     return clients.map((client) => this.serializeClient(client));
   }
 
-  private emitClientEvent(type: string, client?: Client | null, clientId?: string) {
+  private emitClientEvent(
+    type: string,
+    client?: Client | null,
+    clientId?: string,
+  ) {
     const serialized = this.serializeClient(client ?? null);
-    const resolvedClientId = clientId?.trim() || serialized?.id?.toString().trim() || undefined;
+    const resolvedClientId =
+      clientId?.trim() || serialized?.id?.toString().trim() || undefined;
     this.realtime.emitOps('client.event', {
       eventId: crypto.randomUUID(),
       type,
@@ -288,7 +313,10 @@ export class ClientsService {
     const companyId = requireTenant(user);
     const phoneNormalized = normalizePhone(dto.telefono);
     const locationData = this.resolveLocationPayload(dto);
-    await this.assertNoActiveDuplicatePhoneNormalized(companyId, phoneNormalized);
+    await this.assertNoActiveDuplicatePhoneNormalized(
+      companyId,
+      phoneNormalized,
+    );
     try {
       const client = await this.prisma.client.create({
         data: {
@@ -307,7 +335,10 @@ export class ClientsService {
       this.emitClientEvent('client.created', client);
       return this.serializeClient(client);
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
         throw new ConflictException('Ya existe un cliente con ese teléfono');
       }
       throw error;
@@ -336,12 +367,21 @@ export class ClientsService {
     const or: Prisma.ClientWhereInput[] = [
       ...(search
         ? [
-            { nombre: { contains: search, mode: Prisma.QueryMode.insensitive } },
-            { telefono: { contains: search, mode: Prisma.QueryMode.insensitive } },
+            {
+              nombre: { contains: search, mode: Prisma.QueryMode.insensitive },
+            },
+            {
+              telefono: {
+                contains: search,
+                mode: Prisma.QueryMode.insensitive,
+              },
+            },
             { email: { contains: search, mode: Prisma.QueryMode.insensitive } },
           ]
         : []),
-      ...(phoneNormalizedSearch ? [{ phoneNormalized: { contains: phoneNormalizedSearch } }] : []),
+      ...(phoneNormalizedSearch
+        ? [{ phoneNormalized: { contains: phoneNormalizedSearch } }]
+        : []),
     ];
 
     const where = this.combineWhere(baseWhere, or.length ? { OR: or } : null);
@@ -372,11 +412,20 @@ export class ClientsService {
 
   async update(user: AuthUser, id: string, dto: UpdateClientDto) {
     await this.findAccessibleClientOrThrow(user, id);
-    const telefonoWasProvided = Object.prototype.hasOwnProperty.call(dto, 'telefono');
-    const phoneNormalized = telefonoWasProvided ? normalizePhone(dto.telefono) : undefined;
+    const telefonoWasProvided = Object.prototype.hasOwnProperty.call(
+      dto,
+      'telefono',
+    );
+    const phoneNormalized = telefonoWasProvided
+      ? normalizePhone(dto.telefono)
+      : undefined;
     const locationData = this.resolveLocationPayload(dto, true);
     if (telefonoWasProvided) {
-      await this.assertNoActiveDuplicatePhoneNormalized(requireTenant(user), phoneNormalized ?? '', id);
+      await this.assertNoActiveDuplicatePhoneNormalized(
+        requireTenant(user),
+        phoneNormalized ?? '',
+        id,
+      );
     }
 
     try {
@@ -388,34 +437,46 @@ export class ClientsService {
           email: dto.email,
           direccion: dto.direccion,
           notas: dto.notas,
-          ...(telefonoWasProvided ? { phoneNormalized: phoneNormalized ?? '' } : {}),
+          ...(telefonoWasProvided
+            ? { phoneNormalized: phoneNormalized ?? '' }
+            : {}),
           ...(locationData ?? {}),
         },
       });
       this.emitClientEvent('client.updated', client);
       return this.serializeClient(client);
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
         throw new ConflictException('Ya existe un cliente con ese teléfono');
       }
       throw error;
     }
   }
 
-  async updateLocation(user: AuthUser, id: string, dto: UpdateClientLocationDto) {
+  async updateLocation(
+    user: AuthUser,
+    id: string,
+    dto: UpdateClientLocationDto,
+  ) {
     const companyId = requireTenant(user);
     await this.findAccessibleClientOrThrow(user, id);
     const locationData = this.resolveLocationPayload(dto, true);
 
     if (!locationData) {
-      throw new BadRequestException('Debe enviar latitude/longitude o location_url.');
+      throw new BadRequestException(
+        'Debe enviar latitude/longitude o location_url.',
+      );
     }
 
     const result = await this.prisma.client.updateMany({
       where: { id, companyId },
       data: locationData,
     });
-    if (result.count !== 1) throw new NotFoundException('Cliente no encontrado');
+    if (result.count !== 1)
+      throw new NotFoundException('Cliente no encontrado');
     const client = await this.findAccessibleClientOrThrow(user, id);
 
     this.emitClientEvent('client.updated', client);
@@ -427,8 +488,12 @@ export class ClientsService {
     this.assertAdmin(user, 'Only admin can delete clients');
     const companyId = requireTenant(user);
     await this.findAccessibleClientOrThrow(user, id);
-    const result = await this.prisma.client.updateMany({ where: { id, companyId }, data: { isDeleted: true } });
-    if (result.count !== 1) throw new NotFoundException('Cliente no encontrado');
+    const result = await this.prisma.client.updateMany({
+      where: { id, companyId },
+      data: { isDeleted: true },
+    });
+    if (result.count !== 1)
+      throw new NotFoundException('Cliente no encontrado');
     const client = await this.findAccessibleClientOrThrow(user, id);
     this.emitClientEvent('client.deleted', client, id);
     return { ok: true };
@@ -462,19 +527,20 @@ export class ClientsService {
     const serviceOrderWhere: Prisma.ServiceOrderWhereInput =
       quotationIds.length > 0
         ? {
+            client: { companyId },
             OR: [
               { clientId: { in: clientIds } },
               { quotationId: { in: quotationIds } },
             ],
           }
-        : { clientId: { in: clientIds } };
+        : { clientId: { in: clientIds }, client: { companyId } };
 
     const result = await this.prisma.$transaction(async (tx) => {
       const deletedServiceOrders = await tx.serviceOrder.deleteMany({
         where: serviceOrderWhere,
       });
       const deletedLegacyServices = await tx.service.deleteMany({
-        where: { customerId: { in: clientIds } },
+        where: { customerId: { in: clientIds }, customer: { companyId } },
       });
       const deletedQuotations = await tx.cotizacion.deleteMany({
         where: { customerId: { in: clientIds }, companyId },
@@ -500,7 +566,16 @@ export class ClientsService {
     const client = await this.findAccessibleClientOrThrow(user, id);
     const companyId = requireTenant(user);
 
-    const [createdBy, salesAgg, serviceOrdersAgg, legacyServicesAgg, serviceEvidenceAgg, serviceReportsAgg, cotizacionesAgg] = await this.prisma.$transaction([
+    const [
+      createdBy,
+      salesAgg,
+      creditSalesAgg,
+      serviceOrdersAgg,
+      legacyServicesAgg,
+      serviceEvidenceAgg,
+      serviceReportsAgg,
+      cotizacionesAgg,
+    ] = await this.prisma.$transaction([
       this.prisma.user.findUnique({
         where: { id: client.ownerId },
         select: { id: true, nombreCompleto: true, email: true, role: true },
@@ -511,24 +586,39 @@ export class ClientsService {
         _sum: { totalSold: true },
         _max: { saleDate: true },
       }),
+      this.prisma.sale.aggregate({
+        where: {
+          customerId: id,
+          companyId,
+          isDeleted: false,
+          paymentMethod: 'credit',
+        },
+        _count: { _all: true },
+        _sum: {
+          creditAmount: true,
+          creditPaidAmount: true,
+          creditBalance: true,
+        },
+        _max: { saleDate: true },
+      }),
       this.prisma.serviceOrder.aggregate({
-        where: { clientId: id },
+        where: { clientId: id, client: { companyId } },
         _count: { _all: true },
         _max: { createdAt: true, updatedAt: true, finalizedAt: true },
       }),
       this.prisma.service.aggregate({
-        where: { customerId: id, isDeleted: false },
+        where: { customerId: id, customer: { companyId }, isDeleted: false },
         _count: { _all: true },
         _sum: { quotedAmount: true },
         _max: { createdAt: true, updatedAt: true, completedAt: true },
       }),
       this.prisma.serviceEvidence.aggregate({
-        where: { serviceOrder: { clientId: id } },
+        where: { serviceOrder: { clientId: id, client: { companyId } } },
         _count: { _all: true },
         _max: { createdAt: true },
       }),
       this.prisma.serviceReport.aggregate({
-        where: { serviceOrder: { clientId: id } },
+        where: { serviceOrder: { clientId: id, client: { companyId } } },
         _count: { _all: true },
         _max: { createdAt: true },
       }),
@@ -540,7 +630,8 @@ export class ClientsService {
       }),
     ]);
 
-    const servicesCount = serviceOrdersAgg._count._all + legacyServicesAgg._count._all;
+    const servicesCount =
+      serviceOrdersAgg._count._all + legacyServicesAgg._count._all;
     const serviceReferencesCount =
       serviceEvidenceAgg._count._all + serviceReportsAgg._count._all;
     const lastServiceAt = this.latestDate(
@@ -570,6 +661,11 @@ export class ClientsService {
         salesCount: salesAgg._count._all,
         salesTotal: salesAgg._sum.totalSold,
         lastSaleAt: salesAgg._max.saleDate,
+        creditSalesCount: creditSalesAgg._count._all,
+        creditAmountTotal: creditSalesAgg._sum.creditAmount,
+        creditPaidTotal: creditSalesAgg._sum.creditPaidAmount,
+        creditBalanceTotal: creditSalesAgg._sum.creditBalance,
+        lastCreditAt: creditSalesAgg._max.saleDate,
         servicesCount,
         serviceOrdersCount: serviceOrdersAgg._count._all,
         legacyServicesCount: legacyServicesAgg._count._all,
@@ -591,6 +687,7 @@ export class ClientsService {
     options: { take?: number; before?: string; types?: string },
   ) {
     await this.findAccessibleClientOrThrow(user, id);
+    const companyId = requireTenant(user);
 
     const take = Math.min(Math.max(options.take ?? 100, 1), 300);
     const before = options.before ? new Date(options.before) : new Date();
@@ -630,8 +727,35 @@ export class ClientsService {
         FROM "Sale" s
               JOIN "users" u ON u.id = s."userId"
         WHERE s."customerId" = ${id}::uuid
+          AND s."company_id" = ${companyId}::uuid
           AND s."isDeleted" = false
           AND s."saleDate" < ${before}
+
+        UNION ALL
+
+        SELECT
+          'credit_payment'::text AS "eventType",
+          p.id::text AS "eventId",
+          p."paidAt" AS "at",
+          'Abono a crédito'::text AS title,
+          p.amount AS amount,
+          s."creditStatus"::text AS status,
+          u.id::text AS "userId",
+          u."nombreCompleto"::text AS "userName",
+          jsonb_build_object(
+            'saleId', s.id,
+            'creditBalance', s."creditBalance",
+            'cashAmount', p."cashAmount",
+            'transferAmount', p."transferAmount"
+          ) AS meta
+        FROM "sale_credit_payments" p
+              JOIN "Sale" s ON s.id = p."saleId"
+              JOIN "users" u ON u.id = p."userId"
+        WHERE s."customerId" = ${id}::uuid
+          AND s."company_id" = ${companyId}::uuid
+          AND p."company_id" = ${companyId}::uuid
+          AND s."isDeleted" = false
+          AND p."paidAt" < ${before}
 
         UNION ALL
 
@@ -665,6 +789,7 @@ export class ClientsService {
                 GROUP BY so."quotation_id"
               ) qo ON qo."quotationId" = c.id
         WHERE c."customerId" = ${id}::uuid
+          AND c."company_id" = ${companyId}::uuid
           AND c."createdAt" < ${before}
 
         UNION ALL
@@ -691,10 +816,12 @@ export class ClientsService {
             'assignedToName', a."nombreCompleto"
           ) AS meta
         FROM service_orders s
+              JOIN "Client" cl_so ON cl_so.id = s."client_id"
               JOIN "users" u ON u.id = s."created_by"
               LEFT JOIN "users" a ON a.id = s."assigned_to"
               JOIN "Cotizacion" q ON q.id = s."quotation_id"
         WHERE s."client_id" = ${id}::uuid
+          AND cl_so."company_id" = ${companyId}::uuid
           AND s."created_at" < ${before}
 
         UNION ALL
@@ -723,9 +850,11 @@ export class ClientsService {
           ) AS meta
         FROM service_evidences e
               JOIN service_orders so ON so.id = e."service_order_id"
+              JOIN "Client" cl_ev ON cl_ev.id = so."client_id"
               JOIN "users" u ON u.id = e."created_by"
               LEFT JOIN "users" a ON a.id = so."assigned_to"
         WHERE so."client_id" = ${id}::uuid
+          AND cl_ev."company_id" = ${companyId}::uuid
           AND e."created_at" < ${before}
 
         UNION ALL
@@ -755,9 +884,11 @@ export class ClientsService {
           ) AS meta
         FROM service_reports r
               JOIN service_orders so ON so.id = r."service_order_id"
+              JOIN "Client" cl_rep ON cl_rep.id = so."client_id"
               JOIN "users" u ON u.id = r."created_by"
               LEFT JOIN "users" a ON a.id = so."assigned_to"
         WHERE so."client_id" = ${id}::uuid
+          AND cl_rep."company_id" = ${companyId}::uuid
           AND r."created_at" < ${before}
 
         UNION ALL
@@ -786,9 +917,11 @@ export class ClientsService {
             'technicianName', t."nombreCompleto"
           ) AS meta
         FROM "Service" s
+              JOIN "Client" cl_srv ON cl_srv.id = s."customerId"
               JOIN "users" u ON u.id = s."createdByUserId"
               LEFT JOIN "users" t ON t.id = s."technicianId"
         WHERE s."customerId" = ${id}::uuid
+          AND cl_srv."company_id" = ${companyId}::uuid
           AND s."isDeleted" = false
           AND s."createdAt" < ${before}
 

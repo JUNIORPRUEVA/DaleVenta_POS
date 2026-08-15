@@ -243,10 +243,13 @@ export class ContabilidadService {
 
     const value = error as { code?: unknown; message?: unknown };
     const code = typeof value.code === 'string' ? value.code : '';
-    const message = typeof value.message === 'string' ? value.message.toLowerCase() : '';
+    const message =
+      typeof value.message === 'string' ? value.message.toLowerCase() : '';
 
     if (code === 'P2021' || code === 'P2022') return true;
-    return message.includes('does not exist') || message.includes('unknown column');
+    return (
+      message.includes('does not exist') || message.includes('unknown column')
+    );
   }
 
   private async findManyDepositOrdersWithFallback(args: {
@@ -594,7 +597,9 @@ export class ContabilidadService {
       select: { id: true, createdById: true },
     });
     if (!original) {
-      throw new NotFoundException('El depósito original de la corrección no existe.');
+      throw new NotFoundException(
+        'El depósito original de la corrección no existe.',
+      );
     }
     if (!this.isReviewer(actor) && original.createdById !== actor.id) {
       throw new ForbiddenException(
@@ -634,7 +639,7 @@ export class ContabilidadService {
     const raw = (value ?? '').trim();
     if (!raw) return null;
 
-const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+    const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
       ? new Date(`${raw}T00:00:00`)
       : new Date(raw);
 
@@ -685,9 +690,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
           ? value.toNumber()
           : Number(value ?? 0);
     if (!Number.isFinite(n)) {
-      throw new BadRequestException(
-        'Monto inválido.',
-      );
+      throw new BadRequestException('Monto inválido.');
     }
     return Math.round(n * 100) / 100;
   }
@@ -821,9 +824,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
   }
 
   private async resolveCorrectionMetadata(dto: CreateCloseDto, actor: Actor) {
-    const correctionOfCloseId = this.toNullableTrimmed(
-      dto.correctionOfCloseId,
-    );
+    const correctionOfCloseId = this.toNullableTrimmed(dto.correctionOfCloseId);
     if (!correctionOfCloseId) {
       return { correctionOfCloseId: null, correctionReason: null };
     }
@@ -869,9 +870,10 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     // Usar el cashDelivered enviado por el frontend (fondo de caja inicial)
     // Si no se envía, se calcula considerando que si el efectivo no alcanza
     // para los gastos, se toma de otras fuentes (transferencias, tarjeta, otros ingresos)
-    const cashDelivered = dto.cashDelivered !== undefined
-      ? this.decimal(dto.cashDelivered)
-      : this.decimal(Math.max(cash - expenses, 0));
+    const cashDelivered =
+      dto.cashDelivered !== undefined
+        ? this.decimal(dto.cashDelivered)
+        : this.decimal(Math.max(cash - expenses, 0));
     const totals = this.calculateCloseTotals({
       cash,
       transfers,
@@ -884,7 +886,12 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     const correction = await this.resolveCorrectionMetadata(dto, actor);
     if (!correction.correctionOfCloseId) {
       const existing = await this.prisma.close.findFirst({
-        where: { companyId, type: dto.type, date, status: { not: CloseStatus.REJECTED } },
+        where: {
+          companyId,
+          type: dto.type,
+          date,
+          status: { not: CloseStatus.REJECTED },
+        },
         select: { id: true },
       });
       if (existing) {
@@ -915,7 +922,9 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
         evidenceFileName: this.toNullableTrimmed(dto.evidenceFileName),
         evidenceStorageKey: this.toNullableTrimmed(dto.evidenceStorageKey),
         evidenceMimeType: this.toNullableTrimmed(dto.evidenceMimeType),
-        expenseDetails: (this.normalizeExpenseDetails(dto.expenseDetails) ?? Prisma.JsonNull) as Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue,
+        expenseDetails: (this.normalizeExpenseDetails(dto.expenseDetails) ??
+          Prisma.JsonNull) as
+          Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue,
         correctionOfCloseId: correction.correctionOfCloseId,
         correctionReason: correction.correctionReason,
         createdById: actor.id!,
@@ -937,7 +946,8 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
   }
 
   async getCloses(query: GetClosesQuery, actor?: Actor) {
-    const where: Record<string, unknown> = {};
+    const companyId = requireTenant(actor as any);
+    const where: Prisma.CloseWhereInput = { companyId };
     if (!this.canReadAllCloses(actor ?? {})) {
       this.normalizeRoleGuard(actor ?? {});
       where.createdById = actor!.id;
@@ -985,6 +995,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     actor: Actor,
   ) {
     this.ensureAdmin(actor);
+    const companyId = requireTenant(actor as any);
 
     const parseDate = (value?: string | null) => {
       return this.parseDate(value, 'rango de fechas');
@@ -1015,6 +1026,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     const businessType = query.businessType ?? null;
 
     const where: Prisma.CloseWhereInput = {
+      companyId,
       date: { gte: start, lte: end },
       ...(businessType != null ? { type: businessType } : {}),
     };
@@ -1043,7 +1055,10 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
       if (!normalized) return 'Sin banco especificado';
       if (normalized.includes('POPULAR')) return 'Banco Popular';
       if (normalized.includes('BHD')) return 'Banco BHD';
-      if (normalized.includes('BANRESERVAS') || normalized.includes('RESERVAS')) {
+      if (
+        normalized.includes('BANRESERVAS') ||
+        normalized.includes('RESERVAS')
+      ) {
         return 'Banreservas';
       }
       return 'Otros bancos';
@@ -1070,12 +1085,16 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
 
       for (const transfer of close.transfers) {
         const key = classifyBank(transfer.bankName);
-        bankTotals.set(key, (bankTotals.get(key) ?? 0) + toNumber(transfer.amount));
+        bankTotals.set(
+          key,
+          (bankTotals.get(key) ?? 0) + toNumber(transfer.amount),
+        );
       }
     }
 
     const deposits = await this.prisma.depositOrder.findMany({
       where: {
+        companyId,
         status: DepositOrderStatus.EXECUTED,
         windowFrom: { lte: end },
         windowTo: { gte: start },
@@ -1146,7 +1165,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
         fromDate: start.toISOString().slice(0, 10),
         toDate: end.toISOString().slice(0, 10),
         businessType,
-        companyId: this.toNullableTrimmed(query.companyId),
+        companyId,
       },
       count: closes.length,
       totals: {
@@ -1196,7 +1215,9 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     this.ensureAdmin(actor);
     const companyId = requireTenant(actor as any);
 
-    const close = await this.prisma.close.findFirst({ where: { id, companyId } });
+    const close = await this.prisma.close.findFirst({
+      where: { id, companyId },
+    });
     if (!close) throw new NotFoundException('Cierre no encontrado');
     if (!this.isReviewer(actor) && close.createdById !== actor.id) {
       throw new ForbiddenException('No puedes editar cierres de otro usuario.');
@@ -1225,9 +1246,10 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     // Usar el cashDelivered enviado por el frontend (fondo de caja inicial)
     // Si no se envía, se calcula considerando que si el efectivo no alcanza
     // para los gastos, se toma de otras fuentes (transferencias, tarjeta, otros ingresos)
-    const cashDelivered = dto.cashDelivered !== undefined
-      ? this.decimal(dto.cashDelivered)
-      : this.decimal(Math.max(cash - expenses, 0));
+    const cashDelivered =
+      dto.cashDelivered !== undefined
+        ? this.decimal(dto.cashDelivered)
+        : this.decimal(Math.max(cash - expenses, 0));
     const totals = this.calculateCloseTotals({
       cash,
       transfers,
@@ -1272,7 +1294,9 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
         expenseDetails:
           dto.expenseDetails === undefined
             ? undefined
-            : ((this.normalizeExpenseDetails(dto.expenseDetails) ?? Prisma.JsonNull) as Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue),
+            : ((this.normalizeExpenseDetails(dto.expenseDetails) ??
+                Prisma.JsonNull) as
+                Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue),
         transferBank:
           dto.transfers === undefined
             ? undefined
@@ -1302,7 +1326,9 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     this.ensureAdmin(actor);
     const cleaned = (adminPassword ?? '').trim();
     if (cleaned.length === 0) {
-      throw new BadRequestException('Debes confirmar la contrasena de administrador.');
+      throw new BadRequestException(
+        'Debes confirmar la contrasena de administrador.',
+      );
     }
 
     const user = await this.prisma.user.findUnique({
@@ -1344,7 +1370,8 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     for (const row of expenseDetails) {
       if (!row || typeof row !== 'object') continue;
       const vouchers = Array.isArray((row as { vouchers?: unknown[] }).vouchers)
-        ? ((row as { vouchers: Array<{ storageKey?: unknown }> }).vouchers ?? [])
+        ? ((row as { vouchers: Array<{ storageKey?: unknown }> }).vouchers ??
+          [])
         : [];
       for (const voucher of vouchers) {
         const storageKey =
@@ -1369,7 +1396,9 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     await this.validateAdminPassword(actor, adminPassword);
     const companyId = requireTenant(actor as any);
 
-    const close = await this.prisma.close.findFirst({ where: { id, companyId } });
+    const close = await this.prisma.close.findFirst({
+      where: { id, companyId },
+    });
     if (!close) throw new NotFoundException('Cierre no encontrado');
 
     await this.cleanupCloseStorage(id, companyId);
@@ -1378,16 +1407,26 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     return { deletedCount: 1, deletedIds: [id] };
   }
 
-  async deleteClosesBulk(closeIds: string[], adminPassword: string, actor: Actor) {
+  async deleteClosesBulk(
+    closeIds: string[],
+    adminPassword: string,
+    actor: Actor,
+  ) {
     this.normalizeRoleGuard(actor);
     await this.validateAdminPassword(actor, adminPassword);
     const companyId = requireTenant(actor as any);
 
     const uniqueIds = Array.from(
-      new Set((closeIds ?? []).map((item) => (item ?? '').trim()).filter((item) => item.length > 0)),
+      new Set(
+        (closeIds ?? [])
+          .map((item) => (item ?? '').trim())
+          .filter((item) => item.length > 0),
+      ),
     );
     if (uniqueIds.length === 0) {
-      throw new BadRequestException('Debes enviar al menos un cierre para eliminar.');
+      throw new BadRequestException(
+        'Debes enviar al menos un cierre para eliminar.',
+      );
     }
 
     const existing = await this.prisma.close.findMany({
@@ -1397,18 +1436,26 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     const foundIds = existing.map((row) => row.id);
     const missingIds = uniqueIds.filter((idItem) => !foundIds.includes(idItem));
     if (missingIds.length > 0) {
-      throw new NotFoundException('Uno o varios cierres ya no existen. Actualiza la lista e intenta de nuevo.');
+      throw new NotFoundException(
+        'Uno o varios cierres ya no existen. Actualiza la lista e intenta de nuevo.',
+      );
     }
 
     for (const closeId of foundIds) {
       await this.cleanupCloseStorage(closeId, companyId);
     }
-    await this.prisma.close.deleteMany({ where: { id: { in: foundIds }, companyId } });
+    await this.prisma.close.deleteMany({
+      where: { id: { in: foundIds }, companyId },
+    });
 
     return { deletedCount: foundIds.length, deletedIds: foundIds };
   }
 
-  async toggleCloseCashDeposit(id: string, cashDeposited: boolean, actor: Actor) {
+  async toggleCloseCashDeposit(
+    id: string,
+    cashDeposited: boolean,
+    actor: Actor,
+  ) {
     this.ensureAdmin(actor);
     const companyId = requireTenant(actor as any);
 
@@ -1430,7 +1477,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
         cashDepositedAt: cashDeposited ? new Date() : null,
         cashDepositedById: cashDeposited ? actor.id! : null,
         cashDepositedByName: cashDeposited
-          ? user?.nombreCompleto ?? null
+          ? (user?.nombreCompleto ?? null)
           : null,
       },
       include: { transfers: { include: { vouchers: true } } },
@@ -1444,7 +1491,9 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
       throw new BadRequestException('Estado de revisión inválido');
     }
 
-    const close = await this.prisma.close.findFirst({ where: { id, companyId } });
+    const close = await this.prisma.close.findFirst({
+      where: { id, companyId },
+    });
     if (!close) throw new NotFoundException('Cierre no encontrado');
     if (close.status !== CloseStatus.PENDING) {
       throw new BadRequestException(
@@ -1474,7 +1523,10 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     actor: Actor,
     reviewNote?: string | null,
   ) {
-    if (status === CloseStatus.REJECTED && !this.toNullableTrimmed(reviewNote)) {
+    if (
+      status === CloseStatus.REJECTED &&
+      !this.toNullableTrimmed(reviewNote)
+    ) {
       throw new BadRequestException('El motivo de rechazo es obligatorio.');
     }
     const reviewed = await this.reviewClose(id, status, actor);
@@ -1522,8 +1574,12 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
         pdfUrl,
       );
     } catch (pdfError) {
-      const msg = pdfError instanceof Error ? pdfError.message : String(pdfError);
-      console.error('[afterCloseSubmitted] PDF/notification error (non-fatal):', msg);
+      const msg =
+        pdfError instanceof Error ? pdfError.message : String(pdfError);
+      console.error(
+        '[afterCloseSubmitted] PDF/notification error (non-fatal):',
+        msg,
+      );
       try {
         await this.prisma.close.update({
           where: { id: close.id },
@@ -1553,7 +1609,9 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     }).format(value);
   }
 
-  private async tryFetchImageBuffer(storageKey: string): Promise<Buffer | null> {
+  private async tryFetchImageBuffer(
+    storageKey: string,
+  ): Promise<Buffer | null> {
     try {
       const result = await this.r2.getObject(storageKey);
       return result.body;
@@ -1601,9 +1659,15 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
   private async buildCloseAiEvidence(
     close: Awaited<ReturnType<ContabilidadService['findCloseOrThrow']>>,
   ): Promise<CloseAiEvidence[]> {
-    const rawItems: Array<Omit<CloseAiEvidence, 'imageUrl' | 'includedInVision'>> = [];
+    const rawItems: Array<
+      Omit<CloseAiEvidence, 'imageUrl' | 'includedInVision'>
+    > = [];
 
-    if (close.evidenceUrl || close.evidenceStorageKey || close.evidenceFileName) {
+    if (
+      close.evidenceUrl ||
+      close.evidenceStorageKey ||
+      close.evidenceFileName
+    ) {
       rawItems.push({
         label: 'Boucher POS del cierre',
         source: 'pos',
@@ -1651,9 +1715,13 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
           label: `${concept || `Gasto ${expenseIndex + 1}`} - comprobante ${voucherIndex + 1}`,
           source: 'expense',
           fileName:
-            typeof voucher.fileName === 'string' ? voucher.fileName.trim() : null,
+            typeof voucher.fileName === 'string'
+              ? voucher.fileName.trim()
+              : null,
           mimeType:
-            typeof voucher.mimeType === 'string' ? voucher.mimeType.trim() : null,
+            typeof voucher.mimeType === 'string'
+              ? voucher.mimeType.trim()
+              : null,
           fileUrl:
             typeof voucher.fileUrl === 'string' ? voucher.fileUrl.trim() : null,
           storageKey:
@@ -1688,7 +1756,12 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
         }
       }
 
-      if (!imageUrl && supportedImage && item.fileUrl && /^https?:\/\//i.test(item.fileUrl)) {
+      if (
+        !imageUrl &&
+        supportedImage &&
+        item.fileUrl &&
+        /^https?:\/\//i.test(item.fileUrl)
+      ) {
         imageUrl = item.fileUrl;
       }
 
@@ -1743,7 +1816,9 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     ) => {
       const normalizedMime = (mimeType ?? '').toLowerCase();
       const normalizedName = (fileName ?? '').toLowerCase();
-      const supportedByMime = /^image\/(jpeg|jpg|png|webp)$/i.test(normalizedMime);
+      const supportedByMime = /^image\/(jpeg|jpg|png|webp)$/i.test(
+        normalizedMime,
+      );
       const supportedByName =
         normalizedName.endsWith('.jpg') ||
         normalizedName.endsWith('.jpeg') ||
@@ -1803,36 +1878,34 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
 
     // Expense details breakdown
     const expenseDetails =
-      (close.expenseDetails as
-        | Array<{
-            concept: string;
-            amount: number;
-            vouchers?: Array<{
-              storageKey: string;
-              fileUrl: string;
-              fileName: string;
-              mimeType: string;
-            }>;
-          }>
-        | null) ?? null;
+      (close.expenseDetails as Array<{
+        concept: string;
+        amount: number;
+        vouchers?: Array<{
+          storageKey: string;
+          fileUrl: string;
+          fileName: string;
+          mimeType: string;
+        }>;
+      }> | null) ?? null;
     if (expenseDetails && expenseDetails.length > 0) {
       section('Detalle de gastos');
       const colX = [42, 370];
       doc.font('Helvetica-Bold');
       doc.text('Concepto', colX[0], doc.y, { continued: true });
       doc.text('  ');
-      doc.font('Helvetica-Bold').text('Monto', colX[1], doc.y - doc.currentLineHeight());
-      doc.moveDown(0.3);
       doc
-        .moveTo(42, doc.y)
-        .lineTo(553, doc.y)
-        .strokeColor('#d1d5db')
-        .stroke();
+        .font('Helvetica-Bold')
+        .text('Monto', colX[1], doc.y - doc.currentLineHeight());
+      doc.moveDown(0.3);
+      doc.moveTo(42, doc.y).lineTo(553, doc.y).strokeColor('#d1d5db').stroke();
       doc.moveDown(0.3);
       for (const row of expenseDetails) {
         const rowY = doc.y;
         doc.font('Helvetica').text(row.concept, colX[0], rowY, { width: 310 });
-        doc.font('Helvetica').text(this.money(row.amount), colX[1], rowY, { width: 160 });
+        doc
+          .font('Helvetica')
+          .text(this.money(row.amount), colX[1], rowY, { width: 160 });
         doc.moveDown(0.15);
 
         if (Array.isArray(row.vouchers) && row.vouchers.length > 0) {
@@ -1858,15 +1931,15 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
         }
       }
       doc.moveDown(0.3);
-      doc
-        .moveTo(42, doc.y)
-        .lineTo(553, doc.y)
-        .strokeColor('#d1d5db')
-        .stroke();
+      doc.moveTo(42, doc.y).lineTo(553, doc.y).strokeColor('#d1d5db').stroke();
       doc.moveDown(0.3);
       const totalY = doc.y;
-      doc.font('Helvetica-Bold').text('Total gastos', colX[0], totalY, { width: 310 });
-      doc.font('Helvetica-Bold').text(this.money(close.expenses), colX[1], totalY, { width: 160 });
+      doc
+        .font('Helvetica-Bold')
+        .text('Total gastos', colX[0], totalY, { width: 310 });
+      doc
+        .font('Helvetica-Bold')
+        .text(this.money(close.expenses), colX[1], totalY, { width: 160 });
       doc.moveDown(0.5);
     }
 
@@ -2236,11 +2309,7 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     }
   }
 
-  async updateDepositBank(
-    id: string,
-    dto: UpdateDepositBankDto,
-    actor: Actor,
-  ) {
+  async updateDepositBank(id: string, dto: UpdateDepositBankDto, actor: Actor) {
     this.ensureAdmin(actor);
     const companyId = requireTenant(actor as any);
     const existing = await this.prisma.depositBank.findFirst({
@@ -2611,7 +2680,11 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     return this.enrichDepositOrderRow(updated);
   }
 
-  async approveDepositOrder(id: string, _reviewNote: string | undefined, actor: Actor) {
+  async approveDepositOrder(
+    id: string,
+    _reviewNote: string | undefined,
+    actor: Actor,
+  ) {
     this.ensureAdmin(actor);
     const companyId = requireTenant(actor as any);
 
@@ -2651,7 +2724,11 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     return this.enrichDepositOrderRow(updated);
   }
 
-  async cancelDepositOrder(id: string, reviewNote: string | undefined, actor: Actor) {
+  async cancelDepositOrder(
+    id: string,
+    reviewNote: string | undefined,
+    actor: Actor,
+  ) {
     this.ensureAdmin(actor);
     const companyId = requireTenant(actor as any);
 
@@ -2796,8 +2873,10 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     });
   }
 
-  async getFiscalInvoices(query: FiscalInvoicesQueryDto) {
-    const where: Record<string, unknown> = {};
+  async getFiscalInvoices(query: FiscalInvoicesQueryDto, actor: Actor) {
+    this.normalizeRoleGuard(actor);
+    const companyId = requireTenant(actor as any);
+    const where: Prisma.FiscalInvoiceWhereInput = { companyId };
 
     if (query.kind) {
       where.kind = query.kind;
@@ -2889,8 +2968,10 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     });
   }
 
-  async getPayableServices(query: PayableServicesQueryDto) {
-    const where: Prisma.PayableServiceWhereInput = {};
+  async getPayableServices(query: PayableServicesQueryDto, actor: Actor) {
+    this.normalizeRoleGuard(actor);
+    const companyId = requireTenant(actor as any);
+    const where: Prisma.PayableServiceWhereInput = { companyId };
 
     if (query.active != null) {
       where.active = query.active;
@@ -3016,8 +3097,10 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
     });
   }
 
-  async getPayablePayments(query: PayablePaymentsQueryDto) {
-    const where: Prisma.PayablePaymentWhereInput = {};
+  async getPayablePayments(query: PayablePaymentsQueryDto, actor: Actor) {
+    this.normalizeRoleGuard(actor);
+    const companyId = requireTenant(actor as any);
+    const where: Prisma.PayablePaymentWhereInput = { companyId };
 
     if (query.serviceId) {
       where.serviceId = query.serviceId;
@@ -3044,8 +3127,11 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
   async deletePayableService(id: string, actor: Actor) {
     this.ensureAdmin(actor);
     const companyId = requireTenant(actor as any);
-    const existing = await this.prisma.payableService.findFirst({ where: { id, companyId } });
-    if (!existing) throw new NotFoundException('Servicio por pagar no encontrado');
+    const existing = await this.prisma.payableService.findFirst({
+      where: { id, companyId },
+    });
+    if (!existing)
+      throw new NotFoundException('Servicio por pagar no encontrado');
     await this.prisma.payableService.deleteMany({ where: { id, companyId } });
     return { deleted: true, id };
   }
@@ -3053,16 +3139,24 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
   async deletePayablePayment(id: string, actor: Actor) {
     this.ensureAdmin(actor);
     const companyId = requireTenant(actor as any);
-    const existing = await this.prisma.payablePayment.findFirst({ where: { id, companyId } });
+    const existing = await this.prisma.payablePayment.findFirst({
+      where: { id, companyId },
+    });
     if (!existing) throw new NotFoundException('Pago no encontrado');
     await this.prisma.payablePayment.deleteMany({ where: { id, companyId } });
     return { deleted: true, id };
   }
 
-  async updatePayablePayment(id: string, dto: UpdatePayablePaymentDto, actor: Actor) {
+  async updatePayablePayment(
+    id: string,
+    dto: UpdatePayablePaymentDto,
+    actor: Actor,
+  ) {
     this.ensureAdmin(actor);
     const companyId = requireTenant(actor as any);
-    const existing = await this.prisma.payablePayment.findFirst({ where: { id, companyId } });
+    const existing = await this.prisma.payablePayment.findFirst({
+      where: { id, companyId },
+    });
     if (!existing) throw new NotFoundException('Pago no encontrado');
     if (dto.amount !== undefined && dto.amount <= 0) {
       throw new BadRequestException('El monto debe ser mayor a 0');
@@ -3072,7 +3166,9 @@ const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
       data: {
         ...(dto.amount !== undefined ? { amount: dto.amount } : {}),
         ...(dto.paidAt !== undefined ? { paidAt: new Date(dto.paidAt) } : {}),
-        ...(dto.note !== undefined ? { note: this.toNullableTrimmed(dto.note) } : {}),
+        ...(dto.note !== undefined
+          ? { note: this.toNullableTrimmed(dto.note) }
+          : {}),
       },
       include: { service: true },
     });

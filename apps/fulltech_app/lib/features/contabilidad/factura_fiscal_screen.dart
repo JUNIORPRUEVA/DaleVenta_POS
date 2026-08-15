@@ -552,19 +552,49 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
             ],
           ),
           const SizedBox(height: 14),
-          _FiscalTextField(controller: _rncCtrl, label: 'RNC emisor'),
-          const SizedBox(height: 10),
-          _FiscalTextField(
-            controller: _businessNameCtrl,
-            label: 'Razón social',
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final twoColumns = constraints.maxWidth >= 780;
+              final gap = twoColumns ? 10.0 : 8.0;
+              final fieldWidth = twoColumns
+                  ? (constraints.maxWidth - gap) / 2
+                  : constraints.maxWidth;
+              return Wrap(
+                spacing: gap,
+                runSpacing: 8,
+                children: [
+                  SizedBox(
+                    width: fieldWidth,
+                    child: _FiscalTextField(
+                      controller: _rncCtrl,
+                      label: 'RNC emisor',
+                    ),
+                  ),
+                  SizedBox(
+                    width: fieldWidth,
+                    child: _FiscalTextField(
+                      controller: _businessNameCtrl,
+                      label: 'Razón social',
+                    ),
+                  ),
+                  SizedBox(
+                    width: fieldWidth,
+                    child: _FiscalTextField(
+                      controller: _commercialNameCtrl,
+                      label: 'Nombre comercial',
+                    ),
+                  ),
+                  SizedBox(
+                    width: fieldWidth,
+                    child: _FiscalTextField(
+                      controller: _addressCtrl,
+                      label: 'Dirección fiscal',
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
-          const SizedBox(height: 10),
-          _FiscalTextField(
-            controller: _commercialNameCtrl,
-            label: 'Nombre comercial',
-          ),
-          const SizedBox(height: 10),
-          _FiscalTextField(controller: _addressCtrl, label: 'Dirección fiscal'),
           const SizedBox(height: 14),
           Text(
             'Secuencias NCF',
@@ -585,16 +615,19 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
             if (type != _fiscalVoucherTypes.last) const SizedBox(height: 8),
           ],
           const SizedBox(height: 14),
-          FilledButton.icon(
-            onPressed: _savingConfig ? null : _saveFiscalConfig,
-            icon: _savingConfig
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.save_outlined),
-            label: const Text('Guardar configuración fiscal'),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              onPressed: _savingConfig ? null : _saveFiscalConfig,
+              icon: _savingConfig
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save_outlined),
+              label: const Text('Guardar configuración'),
+            ),
           ),
         ],
       ),
@@ -614,17 +647,10 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                scheme.primary.withValues(alpha: 0.12),
-                scheme.secondary.withValues(alpha: 0.08),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(20),
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(color: scheme.outlineVariant),
           ),
           child: Column(
@@ -649,69 +675,67 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
                   ],
                 ),
               const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: scheme.surface.withValues(alpha: 0.82),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: scheme.outlineVariant),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: scheme.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      alignment: Alignment.center,
-                      child: Icon(_kindIcon(_kind), color: scheme.primary),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _kind.label,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+              Text(
+                'Tipo de comprobante',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
               const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: _saving ? null : _pickInvoiceImage,
-                icon: const Icon(Icons.upload_file_rounded),
-                label: Text(_uploadButtonLabel(_kind, hasFile)),
+              _FiscalKindSelector(
+                kinds: FiscalInvoiceKind.values,
+                selected: _kind,
+                iconFor: _kindIcon,
+                onChanged: _saving
+                    ? null
+                    : (kind) => setState(() => _kind = kind),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.icon(
+                  onPressed: _saving ? null : _pickInvoiceImage,
+                  icon: const Icon(Icons.upload_file_rounded, size: 18),
+                  label: Text(_uploadButtonLabel(_kind, hasFile)),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(190, 40),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                  ),
+                ),
               ),
               const SizedBox(height: 10),
               if (!hasFile)
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
-                    color: scheme.surface.withValues(alpha: 0.72),
-                    borderRadius: BorderRadius.circular(18),
+                    color: scheme.surface,
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: scheme.outlineVariant),
                   ),
-                  child: Column(
+                  child: Row(
                     children: [
                       Icon(
                         Icons.receipt_long_outlined,
-                        size: 30,
+                        size: 22,
                         color: scheme.primary,
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Sin archivos cargados',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
                       Text(
-                        'Sin archivos cargados',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.titleSmall?.copyWith(
+                        'Selecciona foto o PDF',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
@@ -831,33 +855,6 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
               ],
             ],
           ),
-        ),
-        const SizedBox(height: 14),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            const gap = 10.0;
-            final itemWidth = (constraints.maxWidth - (gap * 2)) / 3;
-            final kinds = FiscalInvoiceKind.values;
-
-            return Row(
-              children: [
-                for (var index = 0; index < kinds.length; index++) ...[
-                  SizedBox(
-                    width: itemWidth,
-                    child: _InvoiceKindOption(
-                      label: kinds[index].label,
-                      icon: _kindIcon(kinds[index]),
-                      selected: _kind == kinds[index],
-                      onTap: _saving
-                          ? null
-                          : () => setState(() => _kind = kinds[index]),
-                    ),
-                  ),
-                  if (index != kinds.length - 1) const SizedBox(width: gap),
-                ],
-              ],
-            );
-          },
         ),
       ],
     );
@@ -992,11 +989,11 @@ class _FiscalFixedInfoColumn extends StatelessWidget {
             'Resumen',
             style: TextStyle(
               color: desktopSalesText,
-              fontSize: 18,
+              fontSize: 17,
               fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           _FiscalSideStat(
             icon: Icons.category_outlined,
             label: 'Tipo',
@@ -1075,15 +1072,15 @@ class _FiscalSideStat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(9),
         border: Border.all(color: desktopSalesLine),
       ),
       child: Row(
         children: [
-          Icon(icon, color: desktopSalesAccent),
+          Icon(icon, size: 19, color: desktopSalesAccent),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -1093,17 +1090,17 @@ class _FiscalSideStat extends StatelessWidget {
                   label,
                   style: const TextStyle(
                     color: desktopSalesMuted,
-                    fontSize: 12,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 1),
                 Text(
                   value,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: desktopSalesText,
-                    fontSize: 15,
+                    fontSize: 14,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -1170,15 +1167,73 @@ class _InvoiceCard extends StatelessWidget {
   }
 }
 
-class _InvoiceKindOption extends StatelessWidget {
-  const _InvoiceKindOption({
-    required this.label,
+class _FiscalKindSelector extends StatelessWidget {
+  const _FiscalKindSelector({
+    required this.kinds,
+    required this.selected,
+    required this.iconFor,
+    required this.onChanged,
+  });
+
+  final List<FiscalInvoiceKind> kinds;
+  final FiscalInvoiceKind selected;
+  final IconData Function(FiscalInvoiceKind kind) iconFor;
+  final ValueChanged<FiscalInvoiceKind>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 520;
+        final children = [
+          for (final kind in kinds)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: _FiscalKindChip(
+                  kind: kind,
+                  icon: iconFor(kind),
+                  selected: selected == kind,
+                  onTap: onChanged == null ? null : () => onChanged!(kind),
+                ),
+              ),
+            ),
+        ];
+
+        if (compact) {
+          return Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final kind in kinds)
+                SizedBox(
+                  width: (constraints.maxWidth - 8) / 2,
+                  child: _FiscalKindChip(
+                    kind: kind,
+                    icon: iconFor(kind),
+                    selected: selected == kind,
+                    onTap: onChanged == null ? null : () => onChanged!(kind),
+                  ),
+                ),
+            ],
+          );
+        }
+
+        return Row(children: children);
+      },
+    );
+  }
+}
+
+class _FiscalKindChip extends StatelessWidget {
+  const _FiscalKindChip({
+    required this.kind,
     required this.icon,
     required this.selected,
     required this.onTap,
   });
 
-  final String label;
+  final FiscalInvoiceKind kind;
   final IconData icon;
   final bool selected;
   final VoidCallback? onTap;
@@ -1190,48 +1245,39 @@ class _InvoiceKindOption extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(9),
         onTap: onTap,
         child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          height: 42,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
             color: selected
-                ? scheme.primary.withValues(alpha: 0.12)
+                ? scheme.primary.withValues(alpha: 0.10)
                 : scheme.surface,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(9),
             border: Border.all(
               color: selected ? scheme.primary : scheme.outlineVariant,
-              width: selected ? 1.4 : 1,
+              width: selected ? 1.3 : 1,
             ),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: selected
-                      ? scheme.primary.withValues(alpha: 0.16)
-                      : scheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  icon,
-                  size: 20,
-                  color: selected ? scheme.primary : scheme.onSurfaceVariant,
-                ),
+              Icon(
+                icon,
+                size: 17,
+                color: selected ? scheme.primary : scheme.onSurfaceVariant,
               ),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.labelLarge?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  height: 1.15,
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  kind.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: selected ? scheme.primary : scheme.onSurface,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
             ],
@@ -1331,37 +1377,44 @@ class _FiscalSequenceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FBFF),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFD3E0E7)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '$type - $title',
-            style: const TextStyle(fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 8),
-          Row(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final narrow = constraints.maxWidth < 680;
+          final titleWidget = SizedBox(
+            width: narrow ? double.infinity : 178,
+            child: Text(
+              '$type - $title',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+          );
+          final fields = Row(
             children: [
-              Expanded(
+              Flexible(
+                flex: 2,
                 child: _FiscalSmallField(
                   controller: nextController,
                   label: 'Próximo',
                 ),
               ),
               const SizedBox(width: 8),
-              Expanded(
+              Flexible(
+                flex: 2,
                 child: _FiscalSmallField(
                   controller: endController,
                   label: 'Fin',
                 ),
               ),
               const SizedBox(width: 8),
-              Expanded(
+              Flexible(
+                flex: 2,
                 child: _FiscalSmallField(
                   controller: dueController,
                   label: 'Vence',
@@ -1375,8 +1428,23 @@ class _FiscalSequenceRow extends StatelessWidget {
                 icon: const Icon(Icons.auto_awesome_outlined),
               ),
             ],
-          ),
-        ],
+          );
+
+          if (narrow) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [titleWidget, const SizedBox(height: 8), fields],
+            );
+          }
+
+          return Row(
+            children: [
+              titleWidget,
+              const SizedBox(width: 10),
+              Expanded(child: fields),
+            ],
+          );
+        },
       ),
     );
   }

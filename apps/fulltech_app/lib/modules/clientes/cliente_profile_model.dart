@@ -164,6 +164,11 @@ class ClienteProfileMetrics {
   final int salesCount;
   final num? salesTotal;
   final DateTime? lastSaleAt;
+  final int creditSalesCount;
+  final num? creditAmountTotal;
+  final num? creditPaidTotal;
+  final num? creditBalanceTotal;
+  final DateTime? lastCreditAt;
   final int servicesCount;
   final int serviceOrdersCount;
   final int legacyServicesCount;
@@ -180,6 +185,11 @@ class ClienteProfileMetrics {
     required this.salesCount,
     required this.salesTotal,
     required this.lastSaleAt,
+    required this.creditSalesCount,
+    required this.creditAmountTotal,
+    required this.creditPaidTotal,
+    required this.creditBalanceTotal,
+    required this.lastCreditAt,
     required this.servicesCount,
     required this.serviceOrdersCount,
     required this.legacyServicesCount,
@@ -205,6 +215,13 @@ class ClienteProfileMetrics {
       salesTotal: _parseNum(json['salesTotal']),
       lastSaleAt: json['lastSaleAt'] != null
           ? DateTime.tryParse(json['lastSaleAt'].toString())
+          : null,
+      creditSalesCount: (json['creditSalesCount'] as num?)?.toInt() ?? 0,
+      creditAmountTotal: _parseNum(json['creditAmountTotal']),
+      creditPaidTotal: _parseNum(json['creditPaidTotal']),
+      creditBalanceTotal: _parseNum(json['creditBalanceTotal']),
+      lastCreditAt: json['lastCreditAt'] != null
+          ? DateTime.tryParse(json['lastCreditAt'].toString())
           : null,
       servicesCount: (json['servicesCount'] as num?)?.toInt() ?? 0,
       serviceOrdersCount: (json['serviceOrdersCount'] as num?)?.toInt() ?? 0,
@@ -234,6 +251,11 @@ class ClienteProfileMetrics {
       'salesCount': salesCount,
       'salesTotal': salesTotal,
       'lastSaleAt': lastSaleAt?.toIso8601String(),
+      'creditSalesCount': creditSalesCount,
+      'creditAmountTotal': creditAmountTotal,
+      'creditPaidTotal': creditPaidTotal,
+      'creditBalanceTotal': creditBalanceTotal,
+      'lastCreditAt': lastCreditAt?.toIso8601String(),
       'servicesCount': servicesCount,
       'serviceOrdersCount': serviceOrdersCount,
       'legacyServicesCount': legacyServicesCount,

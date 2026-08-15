@@ -24,7 +24,10 @@ import { Role } from '@prisma/client';
 import { RolesGuard } from '../auth/roles.guard';
 import { Permissions, Roles } from '../auth/roles.decorator';
 import { R2Service } from '../storage/r2.service';
-import { buildTenantObjectKey, sanitizeFileName } from '../storage/helpers/storage_helpers';
+import {
+  buildTenantObjectKey,
+  sanitizeFileName,
+} from '../storage/helpers/storage_helpers';
 import { requireTenant } from '../auth/tenant-context';
 import { ContabilidadService } from './contabilidad.service';
 import {
@@ -62,10 +65,7 @@ import {
 } from './payable.dto';
 
 type RequestActor = { id?: string; role?: string; companyId?: string | null };
-const CLOSING_ROLES: Role[] = [
-  Role.ADMIN,
-  Role.ASISTENTE,
-];
+const CLOSING_ROLES: Role[] = [Role.ADMIN, Role.ASISTENTE];
 const DEPOSIT_ROLES: Role[] = [Role.ADMIN, Role.ASISTENTE];
 
 @Controller('contabilidad')
@@ -266,7 +266,11 @@ export class ContabilidadController {
               : 'image/jpeg';
     const baseName = original.replace(/\.[^/.]+$/, '') || 'voucher';
     const objectKey = buildTenantObjectKey({
-      companyId: requireTenant({ id: actor.id ?? '', role: actor.role ?? '', companyId: actor.companyId }),
+      companyId: requireTenant({
+        id: actor.id ?? '',
+        role: actor.role ?? '',
+        companyId: actor.companyId,
+      }),
       area: 'contabilidad',
       kind: 'daily-close-vouchers',
       ownerId: actor.id ?? 'anon',
@@ -299,7 +303,10 @@ export class ContabilidadController {
       });
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.warn('[closes/vouchers/upload] R2 mirror failed, local file is used:', error);
+      console.warn(
+        '[closes/vouchers/upload] R2 mirror failed, local file is used:',
+        error,
+      );
     }
     const relativePath = `/${posix.join('uploads', objectKey)}`;
     return {
@@ -347,7 +354,10 @@ export class ContabilidadController {
 
   @Delete('deposit-banks/:bankId')
   @Roles(Role.ADMIN)
-  async deleteDepositBank(@Param('bankId') bankId: string, @Req() req: Request) {
+  async deleteDepositBank(
+    @Param('bankId') bankId: string,
+    @Req() req: Request,
+  ) {
     return this.contabilidadService.deleteDepositBank(
       bankId,
       (req.user ?? {}) as RequestActor,
@@ -414,23 +424,26 @@ export class ContabilidadController {
   @Get('deposit-orders')
   @Roles(...DEPOSIT_ROLES)
   @Permissions('viewAccounting')
-  async getDepositOrders(@Query() query: DepositOrdersQueryDto, @Req() req: Request) {
+  async getDepositOrders(
+    @Query() query: DepositOrdersQueryDto,
+    @Req() req: Request,
+  ) {
     const actor = (req.user ?? {}) as RequestActor;
     // Temporary diagnostics for persistent 500 on deposit list.
     // eslint-disable-next-line no-console
-    console.log('[deposit-orders][controller] GET /contabilidad/deposit-orders', {
-      actorId: actor.id ?? null,
-      actorRole: actor.role ?? null,
-      queryParams: req.query ?? {},
-      from: query.from ?? null,
-      to: query.to ?? null,
-      status: query.status ?? null,
-    });
+    console.log(
+      '[deposit-orders][controller] GET /contabilidad/deposit-orders',
+      {
+        actorId: actor.id ?? null,
+        actorRole: actor.role ?? null,
+        queryParams: req.query ?? {},
+        from: query.from ?? null,
+        to: query.to ?? null,
+        status: query.status ?? null,
+      },
+    );
     try {
-      return await this.contabilidadService.getDepositOrders(
-        query,
-        actor,
-      );
+      return await this.contabilidadService.getDepositOrders(query, actor);
     } catch (error: unknown) {
       const err = error as {
         name?: unknown;
@@ -440,19 +453,22 @@ export class ContabilidadController {
         stack?: unknown;
       };
       // eslint-disable-next-line no-console
-      console.error('[deposit-orders][controller] ERROR GET /contabilidad/deposit-orders', {
-        actorId: actor.id ?? null,
-        actorRole: actor.role ?? null,
-        queryParams: req.query ?? {},
-        from: query.from ?? null,
-        to: query.to ?? null,
-        status: query.status ?? null,
-        errorName: err?.name,
-        errorMessage: err?.message,
-        errorCode: err?.code,
-        errorMeta: err?.meta,
-        errorStack: err?.stack,
-      });
+      console.error(
+        '[deposit-orders][controller] ERROR GET /contabilidad/deposit-orders',
+        {
+          actorId: actor.id ?? null,
+          actorRole: actor.role ?? null,
+          queryParams: req.query ?? {},
+          from: query.from ?? null,
+          to: query.to ?? null,
+          status: query.status ?? null,
+          errorName: err?.name,
+          errorMessage: err?.message,
+          errorCode: err?.code,
+          errorMeta: err?.meta,
+          errorStack: err?.stack,
+        },
+      );
       throw error;
     }
   }
@@ -575,7 +591,11 @@ export class ContabilidadController {
     const ownerSegment = (actor.id ?? 'anon').trim() || 'anon';
     const baseName = original.replace(/\.[^/.]+$/, '') || 'voucher';
     const objectKey = buildTenantObjectKey({
-      companyId: requireTenant({ id: actor.id ?? '', role: actor.role ?? '', companyId: actor.companyId }),
+      companyId: requireTenant({
+        id: actor.id ?? '',
+        role: actor.role ?? '',
+        companyId: actor.companyId,
+      }),
       area: 'contabilidad',
       kind: 'deposit-orders',
       ownerId: ownerSegment,
@@ -645,7 +665,9 @@ export class ContabilidadController {
           file.mimetype === 'application/pdf';
         if (!isAllowed) {
           return cb(
-            new BadRequestException('Solo se permiten imágenes PNG/JPG/WEBP o PDF'),
+            new BadRequestException(
+              'Solo se permiten imágenes PNG/JPG/WEBP o PDF',
+            ),
             false,
           );
         }
@@ -665,26 +687,32 @@ export class ContabilidadController {
 
     const original = sanitizeFileName(file.originalname ?? 'factura');
     const ext = extname(original).toLowerCase();
-    const safeExt = ext && /\.(png|jpe?g|webp|pdf)$/.test(ext)
-      ? ext
-      : file.mimetype === 'application/pdf'
-        ? '.pdf'
-        : '.jpg';
-    const contentType = file.mimetype === 'application/pdf'
-      ? 'application/pdf'
-      : /^image\/(png|jpe?g|webp)$/.test(file.mimetype)
-      ? file.mimetype
-      : safeExt === '.png'
-        ? 'image/png'
-        : safeExt === '.webp'
-          ? 'image/webp'
-          : 'image/jpeg';
+    const safeExt =
+      ext && /\.(png|jpe?g|webp|pdf)$/.test(ext)
+        ? ext
+        : file.mimetype === 'application/pdf'
+          ? '.pdf'
+          : '.jpg';
+    const contentType =
+      file.mimetype === 'application/pdf'
+        ? 'application/pdf'
+        : /^image\/(png|jpe?g|webp)$/.test(file.mimetype)
+          ? file.mimetype
+          : safeExt === '.png'
+            ? 'image/png'
+            : safeExt === '.webp'
+              ? 'image/webp'
+              : 'image/jpeg';
 
     const actor = (req.user ?? {}) as RequestActor;
     const ownerSegment = (actor.id ?? 'anon').trim() || 'anon';
     const baseName = original.replace(/\.[^/.]+$/, '') || 'factura';
     const objectKey = buildTenantObjectKey({
-      companyId: requireTenant({ id: actor.id ?? '', role: actor.role ?? '', companyId: actor.companyId }),
+      companyId: requireTenant({
+        id: actor.id ?? '',
+        role: actor.role ?? '',
+        companyId: actor.companyId,
+      }),
       area: 'contabilidad',
       kind: 'fiscal-invoices',
       ownerId: ownerSegment,
@@ -757,8 +785,14 @@ export class ContabilidadController {
   @Get('fiscal-invoices')
   @Roles('ADMIN', 'ASISTENTE')
   @Permissions('viewAccounting')
-  async getFiscalInvoices(@Query() query: FiscalInvoicesQueryDto) {
-    return this.contabilidadService.getFiscalInvoices(query);
+  async getFiscalInvoices(
+    @Query() query: FiscalInvoicesQueryDto,
+    @Req() req: Request,
+  ) {
+    return this.contabilidadService.getFiscalInvoices(
+      query,
+      (req.user ?? {}) as RequestActor,
+    );
   }
 
   @Put('fiscal-invoices/:id')
@@ -802,8 +836,14 @@ export class ContabilidadController {
   @Get('payables/services')
   @Roles('ADMIN', 'ASISTENTE')
   @Permissions('viewAccounting')
-  async getPayableServices(@Query() query: PayableServicesQueryDto) {
-    return this.contabilidadService.getPayableServices(query);
+  async getPayableServices(
+    @Query() query: PayableServicesQueryDto,
+    @Req() req: Request,
+  ) {
+    return this.contabilidadService.getPayableServices(
+      query,
+      (req.user ?? {}) as RequestActor,
+    );
   }
 
   @Put('payables/services/:id')
@@ -839,8 +879,14 @@ export class ContabilidadController {
   @Get('payables/payments')
   @Roles('ADMIN', 'ASISTENTE')
   @Permissions('viewAccounting')
-  async getPayablePayments(@Query() query: PayablePaymentsQueryDto) {
-    return this.contabilidadService.getPayablePayments(query);
+  async getPayablePayments(
+    @Query() query: PayablePaymentsQueryDto,
+    @Req() req: Request,
+  ) {
+    return this.contabilidadService.getPayablePayments(
+      query,
+      (req.user ?? {}) as RequestActor,
+    );
   }
 
   @Delete('payables/services/:id')

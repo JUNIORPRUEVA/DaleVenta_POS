@@ -3131,7 +3131,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Future<void> _openClientDialog() async {
-    final screenContext = context;
     final repo = ref.read(ventasRepositoryProvider);
     final currentUserId = (ref.read(authStateProvider).user?.id ?? '').trim();
     final searchCtrl = TextEditingController();
@@ -3142,8 +3141,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     bool loading = true;
     bool dialogOpen = true;
     bool initialLoadQueued = false;
-    bool openingClient = false;
-    String? openingClientId;
     ClienteModel? detailClient;
     String? error;
     var ownerFilter = _ClientOwnerFilter.all;
@@ -3487,86 +3484,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 );
               }
 
-              Future<void> openClientDetail(ClienteModel client) async {
-                final clientId = client.id.trim();
-                final clientName = client.nombre.trim();
-                final startedAt = DateTime.now();
-
-                if (openingClient) {
-                  debugPrint(
-                    '[CLIENT_DETAIL] Ignored duplicate open while processing clientId=$openingClientId',
-                  );
-                  return;
-                }
-
-                if (clientId.isEmpty || client.isDeleted) {
-                  debugPrint(
-                    '[CLIENT_DETAIL] Invalid client. id="$clientId" deleted=${client.isDeleted} name="$clientName"',
-                  );
-                  if (screenContext.mounted) {
-                    ScaffoldMessenger.maybeOf(screenContext)?.showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'No se pudo abrir la información del cliente.',
-                        ),
-                      ),
-                    );
-                  }
-                  return;
-                }
-
-                setStateDialog(() {
-                  openingClient = true;
-                  openingClientId = clientId;
-                });
-
-                debugPrint(
-                  '[CLIENT_DETAIL] Opening clientId=$clientId name="$clientName"',
-                );
-
-                try {
-                  searchDebounce?.cancel();
-                  debugPrint('[CLIENT_DETAIL] Closing client panel');
-
-                  final navigator = Navigator.of(context);
-                  dialogOpen = false;
-                  await navigator.maybePop();
-
-                  if (!mounted || !screenContext.mounted) return;
-
-                  final route = Routes.clienteDetail(clientId);
-                  debugPrint('[CLIENT_DETAIL] Navigating route=$route');
-                  await screenContext.push(route);
-
-                  final elapsedMs = DateTime.now()
-                      .difference(startedAt)
-                      .inMilliseconds;
-                  debugPrint(
-                    '[CLIENT_DETAIL] Completed clientId=$clientId elapsedMs=$elapsedMs',
-                  );
-                } catch (error, stackTrace) {
-                  debugPrint(
-                    '[CLIENT_DETAIL] Error opening clientId=$clientId: $error',
-                  );
-                  debugPrintStack(stackTrace: stackTrace);
-                  if (!mounted || !screenContext.mounted) return;
-                  ScaffoldMessenger.maybeOf(screenContext)?.showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'No se pudo abrir la información del cliente. Inténtalo nuevamente.',
-                      ),
-                    ),
-                  );
-
-                  if (dialogOpen) {
-                    setStateDialog(() {
-                      openingClient = false;
-                      openingClientId = null;
-                    });
-                  }
-                }
-              }
-
               if (!initialLoadQueued &&
                   loading &&
                   clients.isEmpty &&
@@ -3599,148 +3516,144 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                       },
                     )
                   : Column(
-                mainAxisSize: isDesktop ? MainAxisSize.max : MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: searchCtrl,
-                          textInputAction: TextInputAction.search,
-                          decoration: InputDecoration(
-                            hintText: 'Buscar cliente',
-                            prefixIcon: const Icon(Icons.search),
-                            suffixIcon: searchCtrl.text.trim().isNotEmpty
-                                ? IconButton(
-                                    onPressed: () {
-                                      searchCtrl.clear();
-                                      detailClient = null;
-                                      scheduleLoadClients();
-                                      setStateDialog(() {});
-                                    },
-                                    icon: const Icon(Icons.close),
-                                  )
-                                : null,
-                            isDense: true,
-                          ),
-                          onChanged: (_) {
-                            detailClient = null;
-                            setStateDialog(() {});
-                            scheduleLoadClients();
-                          },
-                          onSubmitted: (_) {
-                            unawaited(loadClients());
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton.filledTonal(
-                        onPressed: openFilterSheet,
-                        tooltip: 'Filtrar clientes',
-                        icon: Icon(
-                          hasActiveFilters
-                              ? Icons.filter_alt
-                              : Icons.filter_alt_outlined,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton.filledTonal(
-                        onPressed: () async {
-                          final created = await openClientFormDrawer();
-                          if (!mounted ||
-                              !dialogOpen ||
-                              !context.mounted ||
-                              created == null) {
-                            return;
-                          }
-                          _commitEditorChange(() {
-                            _selectedClientId = created.id;
-                            _selectedClientName = created.nombre;
-                            _selectedClientPhone = created.telefono;
-                          });
-                          Navigator.pop(context);
-                        },
-                        tooltip: 'Agregar cliente',
-                        icon: const Icon(Icons.person_add_alt_1_outlined),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  if (hasActiveFilters)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          if (ownerFilter != _ClientOwnerFilter.all)
-                            _ClientFilterChip(label: ownerFilter.label),
-                          if (ageFilter != _ClientAgeFilter.all)
-                            _ClientFilterChip(label: ageFilter.label),
-                        ],
-                      ),
-                    ),
-                  if (hasActiveFilters) const SizedBox(height: 8),
-                  if (loading)
-                    const LinearProgressIndicator()
-                  else if (error != null)
-                    Text(
-                      error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    )
-                  else if (isDesktop)
-                    Expanded(
-                      child: filteredClients.isEmpty
-                          ? Center(
-                              child: Text(
-                                clients.isEmpty
-                                    ? 'No hay clientes, crea uno nuevo'
-                                    : 'No hay clientes con este filtro',
-                              ),
-                            )
-                          : ListView.separated(
-                              itemCount: filteredClients.length,
-                              separatorBuilder: (context, index) =>
-                                  const Divider(height: 1),
-                              itemBuilder: (context, index) {
-                                final client = filteredClients[index];
-                                final createdAt = client.createdAt?.toLocal();
-                                final createdLabel = createdAt == null
-                                    ? null
-                                    : DateFormat(
-                                        'dd/MM/yyyy',
-                                      ).format(createdAt);
-                                return ListTile(
-                                  dense: true,
-                                  title: Text(client.nombre),
-                                  subtitle: Text(
-                                    [
-                                      client.telefono,
-                                      if (createdLabel != null)
-                                        'Creado $createdLabel',
-                                    ].join(' · '),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  onTap: () {
-                                    _commitEditorChange(() {
-                                      _selectedClientId = client.id;
-                                      _selectedClientName = client.nombre;
-                                      _selectedClientPhone = client.telefono;
-                                    });
-                                    Navigator.pop(context);
-                                  },
-                                  trailing: openingClientId == client.id
-                                      ? const SizedBox(
-                                          width: 22,
-                                          height: 22,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2.4,
-                                          ),
+                      mainAxisSize: isDesktop
+                          ? MainAxisSize.max
+                          : MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: searchCtrl,
+                                textInputAction: TextInputAction.search,
+                                decoration: InputDecoration(
+                                  hintText: 'Buscar cliente',
+                                  prefixIcon: const Icon(Icons.search),
+                                  suffixIcon: searchCtrl.text.trim().isNotEmpty
+                                      ? IconButton(
+                                          onPressed: () {
+                                            searchCtrl.clear();
+                                            detailClient = null;
+                                            scheduleLoadClients();
+                                            setStateDialog(() {});
+                                          },
+                                          icon: const Icon(Icons.close),
                                         )
-                                      : TextButton.icon(
+                                      : null,
+                                  isDense: true,
+                                ),
+                                onChanged: (_) {
+                                  detailClient = null;
+                                  setStateDialog(() {});
+                                  scheduleLoadClients();
+                                },
+                                onSubmitted: (_) {
+                                  unawaited(loadClients());
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton.filledTonal(
+                              onPressed: openFilterSheet,
+                              tooltip: 'Filtrar clientes',
+                              icon: Icon(
+                                hasActiveFilters
+                                    ? Icons.filter_alt
+                                    : Icons.filter_alt_outlined,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton.filledTonal(
+                              onPressed: () async {
+                                final created = await openClientFormDrawer();
+                                if (!mounted ||
+                                    !dialogOpen ||
+                                    !context.mounted ||
+                                    created == null) {
+                                  return;
+                                }
+                                _commitEditorChange(() {
+                                  _selectedClientId = created.id;
+                                  _selectedClientName = created.nombre;
+                                  _selectedClientPhone = created.telefono;
+                                });
+                                Navigator.pop(context);
+                              },
+                              tooltip: 'Agregar cliente',
+                              icon: const Icon(Icons.person_add_alt_1_outlined),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        if (hasActiveFilters)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                if (ownerFilter != _ClientOwnerFilter.all)
+                                  _ClientFilterChip(label: ownerFilter.label),
+                                if (ageFilter != _ClientAgeFilter.all)
+                                  _ClientFilterChip(label: ageFilter.label),
+                              ],
+                            ),
+                          ),
+                        if (hasActiveFilters) const SizedBox(height: 8),
+                        if (loading)
+                          const LinearProgressIndicator()
+                        else if (error != null)
+                          Text(
+                            error!,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          )
+                        else if (isDesktop)
+                          Expanded(
+                            child: filteredClients.isEmpty
+                                ? Center(
+                                    child: Text(
+                                      clients.isEmpty
+                                          ? 'No hay clientes, crea uno nuevo'
+                                          : 'No hay clientes con este filtro',
+                                    ),
+                                  )
+                                : ListView.separated(
+                                    itemCount: filteredClients.length,
+                                    separatorBuilder: (context, index) =>
+                                        const Divider(height: 1),
+                                    itemBuilder: (context, index) {
+                                      final client = filteredClients[index];
+                                      final createdAt = client.createdAt
+                                          ?.toLocal();
+                                      final createdLabel = createdAt == null
+                                          ? null
+                                          : DateFormat(
+                                              'dd/MM/yyyy',
+                                            ).format(createdAt);
+                                      return ListTile(
+                                        dense: true,
+                                        title: Text(client.nombre),
+                                        subtitle: Text(
+                                          [
+                                            client.telefono,
+                                            if (createdLabel != null)
+                                              'Creado $createdLabel',
+                                          ].join(' · '),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        onTap: () {
+                                          _commitEditorChange(() {
+                                            _selectedClientId = client.id;
+                                            _selectedClientName = client.nombre;
+                                            _selectedClientPhone =
+                                                client.telefono;
+                                          });
+                                          Navigator.pop(context);
+                                        },
+                                        trailing: TextButton.icon(
                                           onPressed: () => setStateDialog(() {
                                             detailClient = client;
                                           }),
@@ -3750,62 +3663,56 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                           ),
                                           label: const Text('Ver'),
                                         ),
-                                );
-                              },
-                            ),
-                    )
-                  else
-                    SizedBox(
-                      height: 320,
-                      child: filteredClients.isEmpty
-                          ? Center(
-                              child: Text(
-                                clients.isEmpty
-                                    ? 'No hay clientes, crea uno nuevo'
-                                    : 'No hay clientes con este filtro',
-                              ),
-                            )
-                          : ListView.separated(
-                              itemCount: filteredClients.length,
-                              separatorBuilder: (context, index) =>
-                                  const Divider(height: 1),
-                              itemBuilder: (context, index) {
-                                final client = filteredClients[index];
-                                final createdAt = client.createdAt?.toLocal();
-                                final createdLabel = createdAt == null
-                                    ? null
-                                    : DateFormat(
-                                        'dd/MM/yyyy',
-                                      ).format(createdAt);
-                                return ListTile(
-                                  dense: true,
-                                  title: Text(client.nombre),
-                                  subtitle: Text(
-                                    [
-                                      client.telefono,
-                                      if (createdLabel != null)
-                                        'Creado $createdLabel',
-                                    ].join(' · '),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                      );
+                                    },
                                   ),
-                                  onTap: () {
-                                    _commitEditorChange(() {
-                                      _selectedClientId = client.id;
-                                      _selectedClientName = client.nombre;
-                                      _selectedClientPhone = client.telefono;
-                                    });
-                                    Navigator.pop(context);
-                                  },
-                                  trailing: openingClientId == client.id
-                                      ? const SizedBox(
-                                          width: 22,
-                                          height: 22,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2.4,
-                                          ),
-                                        )
-                                      : IconButton(
+                          )
+                        else
+                          SizedBox(
+                            height: 320,
+                            child: filteredClients.isEmpty
+                                ? Center(
+                                    child: Text(
+                                      clients.isEmpty
+                                          ? 'No hay clientes, crea uno nuevo'
+                                          : 'No hay clientes con este filtro',
+                                    ),
+                                  )
+                                : ListView.separated(
+                                    itemCount: filteredClients.length,
+                                    separatorBuilder: (context, index) =>
+                                        const Divider(height: 1),
+                                    itemBuilder: (context, index) {
+                                      final client = filteredClients[index];
+                                      final createdAt = client.createdAt
+                                          ?.toLocal();
+                                      final createdLabel = createdAt == null
+                                          ? null
+                                          : DateFormat(
+                                              'dd/MM/yyyy',
+                                            ).format(createdAt);
+                                      return ListTile(
+                                        dense: true,
+                                        title: Text(client.nombre),
+                                        subtitle: Text(
+                                          [
+                                            client.telefono,
+                                            if (createdLabel != null)
+                                              'Creado $createdLabel',
+                                          ].join(' · '),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        onTap: () {
+                                          _commitEditorChange(() {
+                                            _selectedClientId = client.id;
+                                            _selectedClientName = client.nombre;
+                                            _selectedClientPhone =
+                                                client.telefono;
+                                          });
+                                          Navigator.pop(context);
+                                        },
+                                        trailing: IconButton(
                                           tooltip: 'Ver cliente',
                                           onPressed: () => setStateDialog(() {
                                             detailClient = client;
@@ -3814,12 +3721,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                             Icons.open_in_new_rounded,
                                           ),
                                         ),
-                                );
-                              },
-                            ),
-                    ),
-                ],
-              );
+                                      );
+                                    },
+                                  ),
+                          ),
+                      ],
+                    );
 
               final actions = [
                 TextButton(
@@ -9900,6 +9807,229 @@ class _ClientFilterChip extends StatelessWidget {
           fontWeight: FontWeight.w700,
           color: theme.colorScheme.primary,
         ),
+      ),
+    );
+  }
+}
+
+class _QuoteClientInlineDetail extends StatelessWidget {
+  const _QuoteClientInlineDetail({
+    required this.client,
+    required this.onBack,
+    required this.onUse,
+  });
+
+  final ClienteModel client;
+  final VoidCallback onBack;
+  final VoidCallback onUse;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final name = client.nombre.trim().isEmpty
+        ? 'Cliente sin nombre'
+        : client.nombre.trim();
+    final phone = client.telefono.trim();
+    final email = (client.correo ?? '').trim();
+    final address = (client.direccion ?? '').trim();
+    final gps = (client.locationUrl ?? '').trim();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            IconButton(
+              tooltip: 'Volver a clientes',
+              onPressed: onBack,
+              icon: const Icon(Icons.arrow_back_rounded),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                'Detalle del cliente',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Expanded(
+          child: ListView(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFD8E5EC)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        height: 1.05,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: client.isDeleted
+                                ? theme.colorScheme.error
+                                : const Color(0xFF059669),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 7),
+                        Text(
+                          client.isDeleted ? 'Eliminado' : 'Activo',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: client.isDeleted
+                                ? theme.colorScheme.error
+                                : const Color(0xFF059669),
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (phone.isNotEmpty)
+                _QuoteClientDetailLine(
+                  icon: Icons.call_outlined,
+                  label: 'Teléfono',
+                  value: phone,
+                ),
+              if (email.isNotEmpty)
+                _QuoteClientDetailLine(
+                  icon: Icons.email_outlined,
+                  label: 'Correo',
+                  value: email,
+                ),
+              if (address.isNotEmpty)
+                _QuoteClientDetailLine(
+                  icon: Icons.place_outlined,
+                  label: 'Dirección',
+                  value: address,
+                  maxLines: 3,
+                ),
+              if (gps.isNotEmpty)
+                const _QuoteClientDetailLine(
+                  icon: Icons.map_outlined,
+                  label: 'Ubicación',
+                  value: 'GPS disponible',
+                ),
+              if (client.createdAt != null)
+                _QuoteClientDetailLine(
+                  icon: Icons.calendar_today_outlined,
+                  label: 'Creado',
+                  value: DateFormat(
+                    'dd/MM/yyyy',
+                  ).format(client.createdAt!.toLocal()),
+                ),
+              if (client.updatedAt != null)
+                _QuoteClientDetailLine(
+                  icon: Icons.update_rounded,
+                  label: 'Actualizado',
+                  value: DateFormat(
+                    'dd/MM/yyyy',
+                  ).format(client.updatedAt!.toLocal()),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: client.isDeleted ? null : onUse,
+          icon: const Icon(Icons.check_rounded),
+          label: const Text('Usar este cliente'),
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF1957E6),
+            foregroundColor: Colors.white,
+            minimumSize: const Size.fromHeight(46),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _QuoteClientDetailLine extends StatelessWidget {
+  const _QuoteClientDetailLine({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.maxLines = 1,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final int maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEAF1FF),
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: const Color(0xFFCFE0FF)),
+            ),
+            child: Icon(icon, color: const Color(0xFF1957E6), size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: const Color(0xFF64748B),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  maxLines: maxLines,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    height: 1.15,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
