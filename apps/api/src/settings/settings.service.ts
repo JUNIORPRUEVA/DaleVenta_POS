@@ -6,9 +6,11 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Prisma, Role } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import * as bcrypt from 'bcryptjs';
 import { requireTenant, type TenantUser } from '../auth/tenant-context';
 import { PrismaService } from '../prisma/prisma.service';
+import { CatalogRealtimeRelayService } from '../products/catalog-realtime-relay.service';
 
 type SettingsPayload = Record<string, unknown>;
 
@@ -17,6 +19,7 @@ export class SettingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly realtime: CatalogRealtimeRelayService,
   ) {}
 
   async getSettings(user: TenantUser) {
@@ -29,6 +32,7 @@ export class SettingsService {
     this.requireAdmin(user);
     const companyId = requireTenant(user);
     const data = this.settingsData(dto);
+    let changedCompanyName: string | null = null;
     const config = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.appConfig.upsert({
         where: { companyId },
@@ -45,9 +49,13 @@ export class SettingsService {
           where: { id: companyId },
           data: { name: companyName },
         });
+        changedCompanyName = companyName;
       }
       return updated;
     });
+    if (changedCompanyName) {
+      this.emitCompanyNameUpdated(companyId, changedCompanyName);
+    }
     return this.toPublicSettings(config);
   }
 
@@ -80,7 +88,9 @@ export class SettingsService {
     });
     const hash = config?.adminAuthorizationPinHash ?? '';
     if (!hash) {
-      throw new NotFoundException('La empresa no tiene PIN administrativo configurado');
+      throw new NotFoundException(
+        'La empresa no tiene PIN administrativo configurado',
+      );
     }
     const ok = await bcrypt.compare(normalizedPin, hash);
     if (!ok) {
@@ -104,16 +114,33 @@ export class SettingsService {
 
   private requireAdmin(user: TenantUser) {
     if (user.role !== Role.ADMIN) {
-      throw new ForbiddenException('Solo un administrador puede cambiar esta configuración');
+      throw new ForbiddenException(
+        'Solo un administrador puede cambiar esta configuración',
+      );
     }
   }
 
   private normalizePin(pin: unknown) {
     const value = `${pin ?? ''}`.trim();
     if (!/^\d{4}$/.test(value)) {
-      throw new BadRequestException('El PIN administrativo debe tener 4 dígitos');
+      throw new BadRequestException(
+        'El PIN administrativo debe tener 4 dígitos',
+      );
     }
     return value;
+  }
+
+  private emitCompanyNameUpdated(companyId: string, companyName: string) {
+    this.realtime.emitCompany(companyId, 'license.event', {
+      eventId: `settings_${Date.now()}_${randomUUID().slice(0, 8)}`,
+      type: 'license.company_name_updated',
+      companyId,
+      companyName,
+      account: {
+        businessName: companyName,
+      },
+      at: new Date().toISOString(),
+    });
   }
 
   private async ensureConfig(companyId: string) {
@@ -137,7 +164,10 @@ export class SettingsService {
     return typeof value === 'boolean' ? value : undefined;
   }
 
-  private settingsData(dto: SettingsPayload): Prisma.AppConfigUncheckedCreateInput & Prisma.AppConfigUncheckedUpdateInput {
+  private settingsData(
+    dto: SettingsPayload,
+  ): Prisma.AppConfigUncheckedCreateInput &
+    Prisma.AppConfigUncheckedUpdateInput {
     const bankAccounts = Array.isArray(dto.bankAccounts)
       ? (dto.bankAccounts as Prisma.InputJsonValue)
       : undefined;
@@ -155,14 +185,26 @@ export class SettingsService {
       businessHours: this.stringValue(dto, 'businessHours'),
       bankAccounts,
       legalRepresentativeName: this.stringValue(dto, 'legalRepresentativeName'),
-      legalRepresentativeCedula: this.stringValue(dto, 'legalRepresentativeCedula'),
+      legalRepresentativeCedula: this.stringValue(
+        dto,
+        'legalRepresentativeCedula',
+      ),
       legalRepresentativeRole: this.stringValue(dto, 'legalRepresentativeRole'),
-      legalRepresentativeNationality: this.stringValue(dto, 'legalRepresentativeNationality'),
-      legalRepresentativeCivilStatus: this.stringValue(dto, 'legalRepresentativeCivilStatus'),
+      legalRepresentativeNationality: this.stringValue(
+        dto,
+        'legalRepresentativeNationality',
+      ),
+      legalRepresentativeCivilStatus: this.stringValue(
+        dto,
+        'legalRepresentativeCivilStatus',
+      ),
       logoBase64: this.stringValue(dto, 'logoBase64'),
       openAiApiKey: this.stringValue(dto, 'openAiApiKey'),
       evolutionApiBaseUrl: this.stringValue(dto, 'evolutionApiBaseUrl'),
-      evolutionApiInstanceName: this.stringValue(dto, 'evolutionApiInstanceName'),
+      evolutionApiInstanceName: this.stringValue(
+        dto,
+        'evolutionApiInstanceName',
+      ),
       evolutionApiApiKey: this.stringValue(dto, 'evolutionApiApiKey'),
       whatsappWebhookEnabled: this.boolValue(dto, 'whatsappWebhookEnabled'),
     };
@@ -207,7 +249,9 @@ export class SettingsService {
       websiteUrl: config.websiteUrl,
       gpsLocationUrl: config.gpsLocationUrl,
       businessHours: config.businessHours,
-      bankAccounts: Array.isArray(config.bankAccounts) ? config.bankAccounts : [],
+      bankAccounts: Array.isArray(config.bankAccounts)
+        ? config.bankAccounts
+        : [],
       legalRepresentativeName: config.legalRepresentativeName,
       legalRepresentativeCedula: config.legalRepresentativeCedula,
       legalRepresentativeRole: config.legalRepresentativeRole,

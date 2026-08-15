@@ -19,7 +19,7 @@ final companySettingsRepositoryProvider = Provider<CompanySettingsRepository>((
   final repository = CompanySettingsRepository(
     ref.watch(dioProvider),
     ref.read(syncQueueServiceProvider.notifier),
-    cacheScope: user?.email ?? user?.id,
+    cacheScope: user?.companyId ?? user?.email ?? user?.id,
   );
   repository.registerSyncHandlers();
   return repository;
@@ -190,27 +190,12 @@ class CompanySettingsRepository {
   }
 
   Future<CompanySettings> getSettings() async {
-    final cached = await getCachedSettings();
-    if (cached != null) {
-      unawaited(
-        getSettingsRemoteAndCache().catchError((
-          Object error,
-          StackTrace stackTrace,
-        ) {
-          _traceProtectedError(
-            'background settings refresh failed',
-            error,
-            stackTrace,
-          );
-          return cached;
-        }),
-      );
-      return cached;
-    }
     try {
       return await getSettingsRemoteAndCache();
     } catch (error, stackTrace) {
       _traceProtectedError('settings load failed', error, stackTrace);
+      final cached = await getCachedSettings();
+      if (cached != null) return cached;
       return CompanySettings.empty();
     }
   }

@@ -4,13 +4,16 @@ import { JwtModule } from '@nestjs/jwt';
 import { SettingsController } from './settings.controller';
 import { SettingsService } from './settings.service';
 import { normalizeJwtSecret } from '../auth/jwt.util';
+import { ProductsModule } from '../products/products.module';
 
 @Module({
   imports: [
+    ProductsModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: normalizeJwtSecret(config.get<string>('JWT_SECRET')) ?? 'change-me',
+        secret:
+          normalizeJwtSecret(config.get<string>('JWT_SECRET')) ?? 'change-me',
         signOptions: { expiresIn: '10m' },
       }),
     }),

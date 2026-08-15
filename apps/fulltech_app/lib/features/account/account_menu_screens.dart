@@ -1910,6 +1910,7 @@ class _CompanySettingsEditorState
             ),
           );
       ref.invalidate(companySettingsProvider);
+      ref.invalidate(licenseStatusProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
