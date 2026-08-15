@@ -209,12 +209,21 @@ enum _MovementTypeFilter { all, inOnly, outOnly }
 
 enum _MovementDateFilter { today, yesterday, week, month, specific, all }
 
+DateTimeRange _last15DaysRange([DateTime? reference]) {
+  final now = reference ?? DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  return DateTimeRange(
+    start: today.subtract(const Duration(days: 14)),
+    end: today,
+  );
+}
+
 class _CashMovementsHistoryScreenState
     extends ConsumerState<CashMovementsHistoryScreen> {
   final _searchController = TextEditingController();
   _MovementTypeFilter _type = _MovementTypeFilter.all;
-  _MovementDateFilter _date = _MovementDateFilter.all;
-  DateTime? _specificDate;
+  _MovementDateFilter _date = _MovementDateFilter.specific;
+  DateTimeRange? _specificRange = _last15DaysRange();
   String? _selectedMovementId;
   Timer? _refreshTimer;
 
@@ -252,8 +261,8 @@ class _CashMovementsHistoryScreenState
   String get _movementFilterSummary {
     final typeLabel = _movementTypeLabel(_type);
     final dateLabel =
-        _date == _MovementDateFilter.specific && _specificDate != null
-        ? DateFormat('dd/MM/yyyy', 'es_DO').format(_specificDate!)
+        _date == _MovementDateFilter.specific && _specificRange != null
+        ? '${DateFormat('dd/MM/yyyy', 'es_DO').format(_specificRange!.start)} - ${DateFormat('dd/MM/yyyy', 'es_DO').format(_specificRange!.end)}'
         : _movementDateLabel(_date);
     if (_type == _MovementTypeFilter.all && _date == _MovementDateFilter.all) {
       return 'Todos';
@@ -310,7 +319,21 @@ class _CashMovementsHistoryScreenState
       _MovementDateFilter.month =>
         rowDay.year == today.year && rowDay.month == today.month,
       _MovementDateFilter.specific =>
-        _specificDate == null || _sameCalendarDay(rowDay, _specificDate!),
+        _specificRange == null ||
+            (!rowDay.isBefore(
+                  DateTime(
+                    _specificRange!.start.year,
+                    _specificRange!.start.month,
+                    _specificRange!.start.day,
+                  ),
+                ) &&
+                !rowDay.isAfter(
+                  DateTime(
+                    _specificRange!.end.year,
+                    _specificRange!.end.month,
+                    _specificRange!.end.day,
+                  ),
+                )),
       _MovementDateFilter.all => true,
     };
   }
@@ -328,7 +351,7 @@ class _CashMovementsHistoryScreenState
           child: _CashMovementsFilterDrawer(
             initialType: _type,
             initialDate: _date,
-            initialSpecificDate: _specificDate,
+            initialSpecificRange: _specificRange,
           ),
         );
       },
@@ -353,7 +376,7 @@ class _CashMovementsHistoryScreenState
       _type = result.type;
       _date = result.date;
       if (result.date == _MovementDateFilter.specific) {
-        _specificDate = result.specificDate;
+        _specificRange = result.specificRange ?? _last15DaysRange();
       }
     });
   }
@@ -709,24 +732,24 @@ class _CashMovementFilterDraft {
   const _CashMovementFilterDraft({
     required this.type,
     required this.date,
-    this.specificDate,
+    this.specificRange,
   });
 
   final _MovementTypeFilter type;
   final _MovementDateFilter date;
-  final DateTime? specificDate;
+  final DateTimeRange? specificRange;
 }
 
 class _CashMovementsFilterDrawer extends StatefulWidget {
   const _CashMovementsFilterDrawer({
     required this.initialType,
     required this.initialDate,
-    this.initialSpecificDate,
+    this.initialSpecificRange,
   });
 
   final _MovementTypeFilter initialType;
   final _MovementDateFilter initialDate;
-  final DateTime? initialSpecificDate;
+  final DateTimeRange? initialSpecificRange;
 
   @override
   State<_CashMovementsFilterDrawer> createState() =>
@@ -737,25 +760,27 @@ class _CashMovementsFilterDrawerState
     extends State<_CashMovementsFilterDrawer> {
   late _MovementTypeFilter _type;
   late _MovementDateFilter _date;
-  DateTime? _specificDate;
+  DateTimeRange? _specificRange;
 
   @override
   void initState() {
     super.initState();
     _type = widget.initialType;
     _date = widget.initialDate;
-    _specificDate = widget.initialSpecificDate;
+    _specificRange = widget.initialSpecificRange ?? _last15DaysRange();
   }
 
-  Future<DateTime?> _pickSpecificDate() async {
+  Future<DateTimeRange?> _pickSpecificRange() async {
     final now = DateTime.now();
-    return showDatePicker(
+    final today = DateTime(now.year, now.month, now.day);
+    return showDateRangePicker(
       context: context,
-      initialDate: _specificDate ?? now,
+      initialDateRange:
+          _specificRange ?? DateTimeRange(start: today, end: today),
       firstDate: DateTime(now.year - 5),
       lastDate: DateTime(now.year + 1),
       locale: const Locale('es', 'DO'),
-      helpText: 'Filtrar por fecha',
+      helpText: 'Filtrar por intervalo',
       cancelText: 'Cancelar',
       confirmText: 'Aplicar',
     );
@@ -766,7 +791,7 @@ class _CashMovementsFilterDrawerState
       _CashMovementFilterDraft(
         type: _type,
         date: _date,
-        specificDate: _specificDate,
+        specificRange: _specificRange,
       ),
     );
   }
@@ -884,10 +909,10 @@ class _CashMovementsFilterDrawerState
                         labelBuilder: _movementDateLabel,
                         onSelected: (value) async {
                           if (value == _MovementDateFilter.specific) {
-                            final picked = await _pickSpecificDate();
+                            final picked = await _pickSpecificRange();
                             if (picked == null || !mounted) return;
                             setState(() {
-                              _specificDate = picked;
+                              _specificRange = picked;
                               _date = value;
                             });
                             return;
@@ -900,19 +925,16 @@ class _CashMovementsFilterDrawerState
                           padding: const EdgeInsets.fromLTRB(8, 4, 0, 0),
                           child: OutlinedButton.icon(
                             onPressed: () async {
-                              final picked = await _pickSpecificDate();
+                              final picked = await _pickSpecificRange();
                               if (picked != null) {
-                                setState(() => _specificDate = picked);
+                                setState(() => _specificRange = picked);
                               }
                             },
                             icon: const Icon(Icons.event_rounded, size: 18),
                             label: Text(
-                              _specificDate == null
-                                  ? 'Elegir fecha'
-                                  : DateFormat(
-                                      'dd/MM/yyyy',
-                                      'es_DO',
-                                    ).format(_specificDate!),
+                              _specificRange == null
+                                  ? 'Elegir intervalo'
+                                  : '${DateFormat('dd/MM/yyyy', 'es_DO').format(_specificRange!.start)} - ${DateFormat('dd/MM/yyyy', 'es_DO').format(_specificRange!.end)}',
                             ),
                           ),
                         ),
@@ -937,7 +959,8 @@ class _CashMovementsFilterDrawerState
                           onPressed: () => Navigator.of(context).pop(
                             const _CashMovementFilterDraft(
                               type: _MovementTypeFilter.all,
-                              date: _MovementDateFilter.all,
+                              date: _MovementDateFilter.specific,
+                              specificRange: null,
                             ),
                           ),
                           style: OutlinedButton.styleFrom(
@@ -1117,7 +1140,7 @@ String _movementDateLabel(_MovementDateFilter filter) {
     case _MovementDateFilter.month:
       return 'Mes';
     case _MovementDateFilter.specific:
-      return 'Fecha específica';
+      return 'Intervalo';
     case _MovementDateFilter.all:
       return 'Todo';
   }

@@ -8,7 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { LicenseStatus, Prisma, Role } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
-import { requireTenant, type TenantUser } from '../auth/tenant-context';
+import { isAdminLike, requireTenant, type TenantUser } from '../auth/tenant-context';
 import { PrismaService } from '../prisma/prisma.service';
 import { CatalogRealtimeRelayService } from '../products/catalog-realtime-relay.service';
 
@@ -514,7 +514,7 @@ export class LicenseService {
   }
 
   private requireAdmin(user: TenantUser) {
-    if (user.role !== Role.ADMIN) {
+    if (!isAdminLike(user)) {
       throw new ForbiddenException('Solo un administrador puede modificar licencias');
     }
   }

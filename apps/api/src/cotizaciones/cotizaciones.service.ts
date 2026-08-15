@@ -23,7 +23,7 @@ import {
 import { RedisService } from "../common/redis/redis.service";
 import { EvolutionWhatsAppService } from "../notifications/evolution-whatsapp.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { requireTenant, TenantUser } from "../auth/tenant-context";
+import { isAdminLike, requireTenant, TenantUser } from "../auth/tenant-context";
 import { normalizePhone } from "../common/utils/normalize-phone";
 import { AnalyzeCotizacionAiDto } from "./dto/analyze-cotizacion-ai.dto";
 import { ChatCotizacionAiDto } from "./dto/chat-cotizacion-ai.dto";
@@ -731,7 +731,7 @@ export class CotizacionesService {
     const current = await this.prisma.cotizacion.findFirst({ where: { id, companyId } });
     if (!current) throw new NotFoundException("Cotización no encontrada");
 
-    if (user.role !== Role.ADMIN && current.createdByUserId !== user.id) {
+    if (!isAdminLike(user) && current.createdByUserId !== user.id) {
       throw new ForbiddenException("No puedes editar esta cotización");
     }
 
@@ -898,7 +898,7 @@ export class CotizacionesService {
     const current = await this.prisma.cotizacion.findFirst({ where: { id, companyId } });
     if (!current) throw new NotFoundException("Cotización no encontrada");
 
-    if (user.role !== Role.ADMIN && current.createdByUserId !== user.id) {
+    if (!isAdminLike(user) && current.createdByUserId !== user.id) {
       throw new ForbiddenException("No puedes eliminar esta cotización");
     }
 
@@ -1045,7 +1045,7 @@ export class CotizacionesService {
 
   async purgeAllForDebug(user: TenantUser) {
     const companyId = requireTenant(user);
-    if (user.role !== Role.ADMIN) {
+    if (!isAdminLike(user)) {
       throw new ForbiddenException(
         "Solo un administrador puede limpiar cotizaciones.",
       );

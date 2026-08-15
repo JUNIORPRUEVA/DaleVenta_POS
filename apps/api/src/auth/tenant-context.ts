@@ -5,6 +5,8 @@ export type TenantUser = {
   id: string;
   role: Role | string;
   companyId?: string | null;
+  adminAuthorized?: boolean;
+  authorizedPermissions?: string[];
 };
 
 export function requireTenant(user: TenantUser | null | undefined): string {
@@ -21,5 +23,9 @@ export function requireTenant(user: TenantUser | null | undefined): string {
 }
 
 export function isAdminLike(user: TenantUser) {
-  return user.role === Role.ADMIN || user.role === Role.ASISTENTE;
+  return (
+    user.role === Role.ADMIN ||
+    user.role === Role.ASISTENTE ||
+    user.adminAuthorized === true
+  );
 }

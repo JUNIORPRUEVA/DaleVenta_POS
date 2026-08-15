@@ -16,9 +16,9 @@ import { ClientsQueryDto } from './dto/clients-query.dto';
 import { UpdateClientLocationDto } from './dto/update-client-location.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { CatalogRealtimeRelayService } from '../products/catalog-realtime-relay.service';
-import { requireTenant } from '../auth/tenant-context';
+import { isAdminLike, requireTenant, type TenantUser } from '../auth/tenant-context';
 
-type AuthUser = { id: string; role: Role; companyId?: string | null };
+type AuthUser = TenantUser & { role: Role };
 
 @Injectable()
 export class ClientsService {
@@ -90,7 +90,7 @@ export class ClientsService {
   }
 
   private assertAdmin(user: AuthUser, message: string) {
-    if (user.role !== Role.ADMIN) {
+    if (!isAdminLike(user)) {
       throw new ForbiddenException(message);
     }
   }

@@ -298,6 +298,33 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _editingCreatedAt = quotation.createdAt;
   }
 
+  _DesktopTicketDraft _ticketDraftFromQuotation(
+    CotizacionModel quotation, {
+    required bool duplicate,
+  }) {
+    final user = ref.read(authStateProvider).user;
+    final cleanCustomer = quotation.customerName.trim();
+    return _DesktopTicketDraft.empty(
+      id: _newId(),
+      title: cleanCustomer.isEmpty || cleanCustomer == 'Sin cliente'
+          ? _nextDesktopTicketTitle()
+          : cleanCustomer,
+      companyId: user?.companyId,
+      createdByUserId: user?.id,
+      createdByUserName: user?.nombreCompleto,
+    ).copyWith(
+      items: quotation.items.map((item) => item.copyWith()).toList(),
+      selectedClientId: quotation.customerId,
+      selectedClientName: cleanCustomer.isEmpty ? 'Sin cliente' : cleanCustomer,
+      selectedClientPhone: quotation.customerPhone,
+      note: quotation.note,
+      includeItbis: quotation.includeItbis,
+      globalDiscountAmount: quotation.globalDiscountAmount,
+      editingId: duplicate ? null : quotation.id,
+      editingCreatedAt: duplicate ? null : quotation.createdAt,
+    );
+  }
+
   void _subscribeRouteObserver() {
     if (_routeObserverSubscribed) return;
     final route = ModalRoute.of(context);
@@ -419,11 +446,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     if (qp == null) return;
     final quotationId = (qp['quotationId'] ?? '').trim();
     final duplicate = (qp['duplicate'] ?? '').trim() == '1';
+    final openInNewTicket = (qp['newTicket'] ?? '').trim() == '1';
     if (quotationId.isEmpty) return;
-    final routeQuotationKey = duplicate
-        ? '$quotationId:duplicate'
-        : quotationId;
-    if (!duplicate && (_editingId ?? '').trim() == quotationId) return;
+    final routeQuotationKey =
+        '$quotationId:${duplicate ? 'duplicate' : 'source'}:${openInNewTicket ? 'new' : 'current'}';
+    if (!openInNewTicket &&
+        !duplicate &&
+        (_editingId ?? '').trim() == quotationId) {
+      return;
+    }
     if (_lastLoadedRouteQuotationId == routeQuotationKey) return;
 
     _loadingRouteQuotation = true;
@@ -434,12 +465,25 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       if (!mounted) return;
 
       setState(() {
-        _applyQuotationToEditor(quotation);
-        if (duplicate) {
-          _editingId = null;
-          _editingCreatedAt = null;
+        if (openInNewTicket) {
+          _writeActiveDesktopDraft();
+          final ticket = _ticketDraftFromQuotation(
+            quotation,
+            duplicate: duplicate,
+          );
+          _desktopTickets = [ticket, ..._desktopTickets];
+          _activeDesktopTicketId = ticket.id;
+          _showMobileTicketDropdown = false;
+          _replaceEditorStateFromDraft(ticket);
+          _writeActiveDesktopDraft();
+        } else {
+          _applyQuotationToEditor(quotation);
+          if (duplicate) {
+            _editingId = null;
+            _editingCreatedAt = null;
+          }
+          _writeActiveDesktopDraft();
         }
-        _writeActiveDesktopDraft();
       });
       _schedulePersistEditorDraft();
       _lastLoadedRouteQuotationId = routeQuotationKey;
@@ -4383,7 +4427,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               ),
               clipBehavior: Clip.antiAlias,
               child: SizedBox(
-                width: compact ? media.width - 12 : media.width * 0.94,
+                width: compact
+                    ? media.width - 12
+                    : (media.width * 0.58).clamp(760.0, 1120.0),
                 height: compact ? media.height * 0.96 : media.height * 0.92,
                 child: Column(
                   children: [

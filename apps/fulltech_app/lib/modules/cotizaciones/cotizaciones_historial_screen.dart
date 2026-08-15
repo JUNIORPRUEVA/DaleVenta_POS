@@ -223,7 +223,7 @@ class _CotizacionesHistorialScreenState
     }
 
     final quotationId = Uri.encodeQueryComponent(item.id);
-    context.go('${Routes.cotizaciones}?quotationId=$quotationId');
+    context.go('${Routes.cotizaciones}?quotationId=$quotationId&newTicket=1');
   }
 
   void _duplicateQuotation(CotizacionModel item) {
@@ -236,7 +236,9 @@ class _CotizacionesHistorialScreenState
     }
 
     final quotationId = Uri.encodeQueryComponent(item.id);
-    context.go('${Routes.cotizaciones}?quotationId=$quotationId&duplicate=1');
+    context.go(
+      '${Routes.cotizaciones}?quotationId=$quotationId&duplicate=1&newTicket=1',
+    );
   }
 
   @override
@@ -616,12 +618,14 @@ class _CotizacionesHistorialScreenState
               backgroundColor: Colors.white,
               surfaceTintColor: Colors.white,
               insetPadding: EdgeInsets.symmetric(
-                horizontal: compact ? 6 : 20,
+                horizontal: compact ? 6 : 28,
                 vertical: compact ? 6 : 16,
               ),
               clipBehavior: Clip.antiAlias,
               child: SizedBox(
-                width: compact ? media.width - 12 : media.width * 0.94,
+                width: compact
+                    ? media.width - 12
+                    : (media.width * 0.58).clamp(760.0, 1120.0),
                 height: compact ? media.height * 0.96 : media.height * 0.92,
                 child: Column(
                   children: [

@@ -12,7 +12,7 @@ import {
 import { AuthGuard } from "@nestjs/passport";
 import { Role } from "@prisma/client";
 import { Request } from "express";
-import { Roles } from "../auth/roles.decorator";
+import { Permissions, Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import type { TenantUser } from "../auth/tenant-context";
 import { SalesService } from "./sales.service";
@@ -112,6 +112,7 @@ export class SalesController {
   }
 
   @Post(":id/return")
+  @Permissions("refundSales")
   returnSale(@Req() req: Request, @Param("id") id: string) {
     const user = req.user as TenantUser;
     return this.sales.returnSale(user, id);

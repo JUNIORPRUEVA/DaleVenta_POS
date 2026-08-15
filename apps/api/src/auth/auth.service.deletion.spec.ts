@@ -1,4 +1,4 @@
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { AuthService } from './auth.service';
 import { CompanyMemberRole, CompanyMemberStatus } from '@prisma/client';
@@ -62,13 +62,8 @@ describe('AuthService account deletion', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('revokes user sessions and anonymizes normal member deletion', async () => {
+  it('rejects account deletion when the active user is not the company owner', async () => {
     const passwordHash = await bcrypt.hash('correct-password', 4);
-    const tx = {
-      companyMember: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
-      authSession: { updateMany: jest.fn().mockResolvedValue({ count: 2 }) },
-      user: { update: jest.fn().mockResolvedValue({ id: userId }) },
-    };
     const prisma = {
       user: {
         findUnique: jest.fn().mockResolvedValue({
@@ -85,26 +80,12 @@ describe('AuthService account deletion', () => {
         findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(0),
       },
-      $transaction: jest.fn(async (callback: any) => callback(tx)),
+      $transaction: jest.fn(),
     };
     const service = buildService(prisma);
 
-    const result = await service.deleteAccount(userId, companyId, { password: 'correct-password' });
-
-    expect(result.ok).toBe(true);
-    expect(result.companyDeleted).toBe(false);
-    expect(tx.authSession.updateMany).toHaveBeenCalledWith({
-      where: { userId, revokedAt: null },
-      data: { revokedAt: expect.any(Date), revocationReason: 'account_deleted' },
-    });
-    expect(tx.user.update).toHaveBeenCalledWith({
-      where: { id: userId },
-      data: expect.objectContaining({
-        blocked: true,
-        companyId: null,
-        email: `deleted-${userId}@deleted.local`,
-      }),
-    });
+    await expect(service.deleteAccount(userId, companyId, { password: 'correct-password' })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('cleans storage and revokes company sessions during sole-owner deletion', async () => {

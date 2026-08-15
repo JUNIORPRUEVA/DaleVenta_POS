@@ -8,7 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Prisma, Role } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import * as bcrypt from 'bcryptjs';
-import { requireTenant, type TenantUser } from '../auth/tenant-context';
+import { isAdminLike, requireTenant, type TenantUser } from '../auth/tenant-context';
 import { PrismaService } from '../prisma/prisma.service';
 import { CatalogRealtimeRelayService } from '../products/catalog-realtime-relay.service';
 
@@ -113,7 +113,7 @@ export class SettingsService {
   }
 
   private requireAdmin(user: TenantUser) {
-    if (user.role !== Role.ADMIN) {
+    if (!isAdminLike(user)) {
       throw new ForbiddenException(
         'Solo un administrador puede cambiar esta configuración',
       );

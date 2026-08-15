@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -232,6 +233,12 @@ export class AuthService {
       memberships.find((membership) => membership.companyId === user.companyId) ??
       memberships[0] ??
       null;
+
+    if (!activeMembership || activeMembership.role !== CompanyMemberRole.OWNER) {
+      throw new ForbiddenException(
+        "Solo el responsable de la empresa puede eliminar esta cuenta",
+      );
+    }
 
     const soleOwnedCompanyIds = await this.findSoleOwnedCompanyIds(user.id);
     const activeCompanyIsSoleOwned =

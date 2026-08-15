@@ -60,7 +60,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
       now.year,
       now.month,
       now.day,
-    ).subtract(const Duration(days: 90));
+    ).subtract(const Duration(days: 14));
     _toDate = DateTime(now.year, now.month, now.day);
     _searchController.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
@@ -243,7 +243,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
         now.year,
         now.month,
         now.day,
-      ).subtract(const Duration(days: 90));
+      ).subtract(const Duration(days: 14));
       _toDate = DateTime(now.year, now.month, now.day);
       _filter = _InvoiceFilter.active;
       _paymentFilter = _PaymentFilter.all;

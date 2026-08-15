@@ -718,7 +718,7 @@ export class SalesService {
       throw new NotFoundException("Venta no encontrada");
     }
 
-    const isAdmin = `${requestUser.role}`.trim().toUpperCase() === Role.ADMIN;
+    const isAdmin = isAdminLike(requestUser);
     if (!isAdmin && sale.userId !== requestUser.id) {
       throw new ForbiddenException("No puedes eliminar esta venta");
     }
@@ -742,7 +742,11 @@ export class SalesService {
 
   async returnSale(requestUser: TenantUser, saleId: string) {
     const companyId = requireTenant(requestUser);
-    if (requestUser.role !== Role.ADMIN) {
+    const canReturn =
+      requestUser.role === Role.ADMIN ||
+      requestUser.adminAuthorized === true ||
+      requestUser.authorizedPermissions?.includes("refundSales") === true;
+    if (!canReturn) {
       throw new ForbiddenException(
         "Solo un administrador puede devolver ventas",
       );
@@ -890,7 +894,7 @@ export class SalesService {
   }
 
   async purgeAllForDebug(user: TenantUser) {
-    if (`${user.role}`.trim().toUpperCase() !== "ADMIN") {
+    if (!isAdminLike(user)) {
       throw new ForbiddenException(
         "Solo un administrador puede limpiar ventas.",
       );

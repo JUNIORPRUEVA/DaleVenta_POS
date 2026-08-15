@@ -36,6 +36,21 @@ export class RolesGuard implements CanActivate {
       PERMISSIONS_KEY,
       [context.getHandler(), context.getClass()],
     );
+    const request = context.switchToHttp().getRequest();
+    const user = request.user as
+      | {
+          id?: string;
+          role?: Role | string;
+          companyId?: string | null;
+          adminAuthorized?: boolean;
+          authorizedPermissions?: string[];
+        }
+      | undefined;
+    const adminAuthorized = this.hasValidAdminAuthorization(request, user);
+    if (adminAuthorized) {
+      this.markAdminAuthorization(request, user);
+    }
+
     if (
       (!requiredRoles || requiredRoles.length === 0) &&
       (!requiredPermissions || requiredPermissions.length === 0)
@@ -43,10 +58,6 @@ export class RolesGuard implements CanActivate {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest();
-    const user = request.user as
-      | { id?: string; role?: Role | string; companyId?: string | null }
-      | undefined;
     const role = this.normalizeRole(user?.role);
     if (!role) {
       throw new ForbiddenException("Missing role");
@@ -54,14 +65,15 @@ export class RolesGuard implements CanActivate {
     if (role === Role.ADMIN) {
       return true;
     }
-    if (this.hasValidAdminAuthorization(request, user)) {
+    if (adminAuthorized) {
       return true;
     }
-    if (
-      requiredPermissions?.length &&
-      (await this.hasAnyUserPermission(user, requiredPermissions))
-    ) {
-      return true;
+    if (requiredPermissions?.length) {
+      const granted = await this.hasAnyUserPermission(user, requiredPermissions);
+      if (granted) {
+        this.markPermissionAuthorization(user, requiredPermissions);
+        return true;
+      }
     }
     if (!requiredRoles || requiredRoles.length === 0) {
       throw new ForbiddenException("No tienes permiso para esta acción.");
@@ -161,5 +173,28 @@ export class RolesGuard implements CanActivate {
     } catch {
       return false;
     }
+  }
+
+  private markAdminAuthorization(
+    request: Record<string, unknown>,
+    user?: { adminAuthorized?: boolean },
+  ) {
+    if (user) user.adminAuthorized = true;
+    request.adminAuthorized = true;
+  }
+
+  private markPermissionAuthorization(
+    user:
+      | { authorizedPermissions?: string[] }
+      | undefined,
+    permissions: string[],
+  ) {
+    if (!user) return;
+    const current = new Set(user.authorizedPermissions ?? []);
+    for (const permission of permissions) {
+      const clean = permission.trim();
+      if (clean) current.add(clean);
+    }
+    user.authorizedPermissions = [...current];
   }
 }
