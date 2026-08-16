@@ -26,7 +26,9 @@ class AppNavigator {
     if (router?.canPop() ?? false) return true;
 
     final location = currentLocation(context);
-    if (effectiveFallbackRouteFor(location) != null) return true;
+    if (_effectiveFallbackRouteForContext(context, location) != null) {
+      return true;
+    }
 
     return _canUseNavigatorPop(context, location);
   }
@@ -37,7 +39,8 @@ class AppNavigator {
     String tooltip = 'Regresar',
   }) {
     final fallback =
-        fallbackRoute ?? effectiveFallbackRouteFor(currentLocation(context));
+        fallbackRoute ??
+        _effectiveFallbackRouteForContext(context, currentLocation(context));
     if (!canGoBack(context) && fallback == null) return null;
 
     return IconButton(
@@ -72,7 +75,8 @@ class AppNavigator {
     final location = router == null
         ? currentLocation(context)
         : (_routerLocation(router) ?? currentLocation(context));
-    final fallback = fallbackRoute ?? effectiveFallbackRouteFor(location);
+    final fallback =
+        fallbackRoute ?? _effectiveFallbackRouteForContext(context, location);
 
     if (router != null &&
         fallback != null &&
@@ -113,7 +117,7 @@ class AppNavigator {
     final location = router == null
         ? currentLocation(context)
         : (_routerLocation(router) ?? currentLocation(context));
-    final shellFallback = effectiveFallbackRouteFor(location);
+    final shellFallback = _effectiveFallbackRouteForContext(context, location);
 
     if (router != null &&
         shellFallback != null &&
@@ -176,6 +180,22 @@ class AppNavigator {
 
     if (explicitFallback != null) return explicitFallback;
     return null;
+  }
+
+  static String? _effectiveFallbackRouteForContext(
+    BuildContext context,
+    String location,
+  ) {
+    final normalized = _normalizeLocation(location);
+    final path = (Uri.tryParse(normalized)?.path ?? normalized).trim();
+    final isDesktopLayout = MediaQuery.maybeSizeOf(context)?.width != null &&
+        MediaQuery.maybeSizeOf(context)!.width >= 900;
+    if (isDesktopLayout &&
+        path.startsWith('${Routes.configuracion}/') &&
+        path != Routes.configuracion) {
+      return Routes.cotizaciones;
+    }
+    return effectiveFallbackRouteFor(normalized);
   }
 
   static String? fallbackRouteFor(String location) {

@@ -143,7 +143,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: Routes.configuracionImpresora,
             redirect: (context, state) =>
-                kIsWeb ? Routes.configuracion : null,
+                kIsWeb ? Routes.cotizaciones : null,
             builder: (context, state) => const AccountPrinterSettingsScreen(),
           ),
           GoRoute(
