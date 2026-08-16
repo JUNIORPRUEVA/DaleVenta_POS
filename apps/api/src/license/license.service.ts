@@ -21,6 +21,16 @@ type LicenseUpdateInput = {
   plan?: unknown;
   companyName?: unknown;
   businessName?: unknown;
+  taxId?: unknown;
+  businessPhone?: unknown;
+  businessAddress?: unknown;
+  businessType?: unknown;
+  responsibleName?: unknown;
+  responsibleEmail?: unknown;
+  responsibleWhatsapp?: unknown;
+  legalRepresentativeName?: unknown;
+  legalRepresentativeCedula?: unknown;
+  legalRepresentativeRole?: unknown;
   name?: unknown;
   actorEmail?: unknown;
 };
@@ -189,6 +199,7 @@ export class LicenseService {
       if (displayName) {
         await this.syncAppConfigCompanyName(tx, companyId, displayName);
       }
+      await this.syncCompanyAccount(tx, companyId, dto, displayName);
     });
     const after = await this.getCompanyLicenseStatus(companyId);
     await this.writeAuditLog(
@@ -237,6 +248,7 @@ export class LicenseService {
       if (displayName) {
         await this.syncAppConfigCompanyName(tx, companyId, displayName);
       }
+      await this.syncCompanyAccount(tx, companyId, dto, displayName);
     });
     const after = await this.getCompanyLicenseStatus(companyId);
     await this.writeAuditLog(companyId, 'license.update_limits', before, after, dto);
@@ -513,6 +525,80 @@ export class LicenseService {
     });
   }
 
+  private async syncCompanyAccount(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    dto: LicenseUpdateInput,
+    displayName?: string | null,
+  ) {
+    const appConfigData: Prisma.AppConfigUpdateInput = {};
+    const companyName = displayName ?? this.fieldValue(dto, 'businessName');
+    const taxId = this.fieldValue(dto, 'taxId');
+    const phone = this.fieldValue(dto, 'businessPhone');
+    const address = this.fieldValue(dto, 'businessAddress');
+    const description = this.fieldValue(dto, 'businessType');
+    const legalName =
+      this.fieldValue(dto, 'legalRepresentativeName') ??
+      this.fieldValue(dto, 'responsibleName');
+    const legalCedula = this.fieldValue(dto, 'legalRepresentativeCedula');
+    const legalRole = this.fieldValue(dto, 'legalRepresentativeRole');
+
+    if (companyName !== undefined) appConfigData.companyName = companyName ?? '';
+    if (taxId !== undefined) appConfigData.rnc = taxId ?? '';
+    if (phone !== undefined) appConfigData.phone = phone ?? '';
+    if (address !== undefined) appConfigData.address = address ?? '';
+    if (description !== undefined) appConfigData.description = description ?? '';
+    if (legalName !== undefined) {
+      appConfigData.legalRepresentativeName = legalName ?? '';
+    }
+    if (legalCedula !== undefined) {
+      appConfigData.legalRepresentativeCedula = legalCedula ?? '';
+    }
+    if (legalRole !== undefined) {
+      appConfigData.legalRepresentativeRole = legalRole ?? '';
+    }
+
+    if (Object.keys(appConfigData).length > 0) {
+      await tx.appConfig.upsert({
+        where: { companyId },
+        create: {
+          id: `company_${companyId}`,
+          companyId,
+          companyName: companyName ?? '',
+          rnc: taxId ?? '',
+          phone: phone ?? '',
+          address: address ?? '',
+          description: description ?? '',
+          legalRepresentativeName: legalName ?? '',
+          legalRepresentativeCedula: legalCedula ?? '',
+          legalRepresentativeRole: legalRole ?? '',
+        },
+        update: appConfigData,
+      });
+    }
+
+    const responsibleData: Prisma.UserUpdateInput = {};
+    const responsibleName = this.fieldValue(dto, 'responsibleName');
+    const responsibleEmail = this.fieldValue(dto, 'responsibleEmail');
+    const responsibleWhatsapp = this.fieldValue(dto, 'responsibleWhatsapp');
+    if (responsibleName) responsibleData.nombreCompleto = responsibleName;
+    if (responsibleEmail) responsibleData.email = responsibleEmail;
+    if (responsibleWhatsapp) responsibleData.telefono = responsibleWhatsapp;
+    if (Object.keys(responsibleData).length === 0) return;
+
+    const owner = await tx.companyMember.findFirst({
+      where: { companyId, status: 'ACTIVE', role: 'OWNER' },
+      orderBy: { createdAt: 'asc' },
+      select: { userId: true },
+    });
+    if (!owner) return;
+    await tx.user.update({
+      where: { id: owner.userId },
+      data: responsibleData,
+      select: { id: true },
+    });
+  }
+
   private requireAdmin(user: TenantUser) {
     if (!isAdminLike(user)) {
       throw new ForbiddenException('Solo un administrador puede modificar licencias');
@@ -596,6 +682,11 @@ export class LicenseService {
     if (typeof value !== 'string') return undefined;
     const cleaned = value.trim();
     return cleaned.length > 0 ? cleaned : null;
+  }
+
+  private fieldValue(dto: Record<string, unknown>, key: string) {
+    if (!Object.prototype.hasOwnProperty.call(dto, key)) return undefined;
+    return this.stringValue(dto[key]);
   }
 
   private pageValue(value: unknown) {
