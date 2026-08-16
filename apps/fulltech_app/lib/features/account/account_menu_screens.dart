@@ -224,6 +224,13 @@ class AccountSettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (MediaQuery.sizeOf(context).width >= 900) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) context.go(Routes.cotizaciones);
+      });
+      return const SizedBox.shrink();
+    }
+
     return _SettingsHubScaffold(
       children: [
         if (!kIsWeb)
@@ -520,12 +527,15 @@ class _SettingsDetailScaffold extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final showInlineTitle = MediaQuery.sizeOf(context).width < 900;
+    final isDesktopLayout = MediaQuery.sizeOf(context).width >= 900;
+    final showInlineTitle = !isDesktopLayout;
     final compact = MediaQuery.sizeOf(context).width < 640;
     final user = ref.watch(authStateProvider).user;
     final backButton = IconButton(
       tooltip: 'Volver',
-      onPressed: () => context.go(Routes.configuracion),
+      onPressed: () => context.go(
+        isDesktopLayout ? Routes.cotizaciones : Routes.configuracion,
+      ),
       icon: const Icon(Icons.arrow_back_rounded),
     );
     final content = Center(
