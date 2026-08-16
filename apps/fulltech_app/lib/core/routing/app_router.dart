@@ -131,6 +131,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: Routes.configuracion,
+            redirect: (context, state) => _isDesktopSettingsLayout(context)
+                ? Routes.cotizaciones
+                : null,
             builder: (context, state) => const AccountSettingsScreen(),
           ),
           GoRoute(
@@ -375,4 +378,9 @@ final routerProvider = Provider<GoRouter>((ref) {
 
 class _RouterRefreshNotifier extends ChangeNotifier {
   void refresh() => notifyListeners();
+}
+
+bool _isDesktopSettingsLayout(BuildContext context) {
+  final size = MediaQuery.maybeSizeOf(context);
+  return size != null && size.width >= 900;
 }
