@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -109,6 +110,7 @@ class MobilePrintService {
   }
 
   Future<List<BluetoothInfo>> discoverBluetoothPrinters() async {
+    if (kIsWeb) return const [];
     if (!Platform.isAndroid) return const [];
     final permission = await ensureBluetoothPermissions();
     if (!permission.success) return const [];
@@ -136,6 +138,12 @@ class MobilePrintService {
     MobilePrinterSettingsModel settings, {
     Set<String> ignoredAddresses = const {},
   }) async {
+    if (kIsWeb) {
+      return const MobilePrintServiceResult(
+        success: false,
+        message: 'Bluetooth directo no está disponible en la version web.',
+      );
+    }
     if (!Platform.isAndroid) {
       return const MobilePrintServiceResult(
         success: false,
@@ -263,6 +271,12 @@ class MobilePrintService {
   }
 
   Future<MobilePrintServiceResult> ensureBluetoothPermissions() async {
+    if (kIsWeb) {
+      return const MobilePrintServiceResult(
+        success: false,
+        message: 'Bluetooth directo no está disponible en la version web.',
+      );
+    }
     if (!Platform.isAndroid) {
       return const MobilePrintServiceResult(
         success: false,
@@ -653,6 +667,7 @@ class MobilePrintService {
   }
 
   Future<void> _disconnectPluginBluetooth() async {
+    if (kIsWeb) return;
     if (!Platform.isAndroid) return;
     try {
       await PrintBluetoothThermal.disconnect.timeout(
@@ -666,6 +681,9 @@ class MobilePrintService {
   Future<String?> _validateBluetoothSettings(
     MobilePrinterSettingsModel settings,
   ) async {
+    if (kIsWeb) {
+      return 'Bluetooth térmico directo no está disponible en la version web.';
+    }
     if (!Platform.isAndroid) {
       return 'Bluetooth térmico directo está soportado en Android. En iOS usa AirPrint/PDF.';
     }
@@ -717,6 +735,7 @@ class MobilePrintService {
     required String address,
     required int timeoutSeconds,
   }) async {
+    if (kIsWeb) return false;
     if (!Platform.isAndroid || address.trim().isEmpty) return false;
     try {
       return await _nativeBluetooth.invokeMethod<bool>('connect', {
@@ -735,6 +754,7 @@ class MobilePrintService {
     required int timeoutSeconds,
     bool forceReconnect = false,
   }) async {
+    if (kIsWeb) return false;
     if (!Platform.isAndroid || address.trim().isEmpty || bytes.isEmpty) {
       return false;
     }
@@ -752,6 +772,7 @@ class MobilePrintService {
   }
 
   static Future<List<BluetoothInfo>> _nativePairedDevices() async {
+    if (kIsWeb) return const [];
     if (!Platform.isAndroid) return const [];
     try {
       final raw =

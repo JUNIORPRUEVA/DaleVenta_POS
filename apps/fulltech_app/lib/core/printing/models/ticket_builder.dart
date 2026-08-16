@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
@@ -45,16 +45,22 @@ class TicketBuilder {
       return null;
     }
 
-    final executableDir = File(Platform.resolvedExecutable).parent.path;
+    final executableDir = kIsWeb
+        ? ''
+        : File(Platform.resolvedExecutable).parent.path;
     final regular = loadFont([
       'assets/fonts/RobotoMono-Regular.ttf',
-      '$executableDir/data/flutter_assets/assets/fonts/RobotoMono-Regular.ttf',
-      '$executableDir/flutter_assets/assets/fonts/RobotoMono-Regular.ttf',
+      if (executableDir.isNotEmpty)
+        '$executableDir/data/flutter_assets/assets/fonts/RobotoMono-Regular.ttf',
+      if (executableDir.isNotEmpty)
+        '$executableDir/flutter_assets/assets/fonts/RobotoMono-Regular.ttf',
     ]);
     final bold = loadFont([
       'assets/fonts/RobotoMono-Medium.ttf',
-      '$executableDir/data/flutter_assets/assets/fonts/RobotoMono-Medium.ttf',
-      '$executableDir/flutter_assets/assets/fonts/RobotoMono-Medium.ttf',
+      if (executableDir.isNotEmpty)
+        '$executableDir/data/flutter_assets/assets/fonts/RobotoMono-Medium.ttf',
+      if (executableDir.isNotEmpty)
+        '$executableDir/flutter_assets/assets/fonts/RobotoMono-Medium.ttf',
     ]);
 
     if (regular != null && bold != null) {

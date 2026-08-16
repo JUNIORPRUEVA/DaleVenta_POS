@@ -54,26 +54,24 @@ class ProductNetworkImage extends StatelessWidget {
     final shouldSendAuth = !kIsWeb && _shouldSendAuthHeader(sourceUrl);
 
     if (kIsWeb) {
-      return Image.network(
-        effectiveUrl,
-        key: ValueKey(effectiveUrl),
+      final originalEffectiveUrl = buildProductThumbnailUrl(
+        imageUrl: url,
+        width: thumbnailSize,
+        height: thumbnailSize,
+      );
+      return _WebProductImage(
+        primaryUrl: effectiveUrl,
+        fallbackUrl: originalEffectiveUrl == effectiveUrl
+            ? ''
+            : originalEffectiveUrl,
+        productId: productId,
+        productName: productName,
+        originalUrl: originalUrl,
         fit: fit,
+        fallback: fallback,
+        loading: loading,
         width: width,
         height: height,
-        loadingBuilder: (context, child, progress) {
-          if (progress == null) return child;
-          return loading ?? fallback;
-        },
-        errorBuilder: (context, error, _) {
-          debugLogProductImageFailure(
-            productId: productId,
-            productName: productName,
-            originalUrl: originalUrl,
-            attemptedUrl: effectiveUrl,
-            error: error,
-          );
-          return fallback;
-        },
       );
     }
 
@@ -123,5 +121,63 @@ class ProductNetworkImage extends StatelessWidget {
     final apiUri = Uri.tryParse(Env.apiBaseUrl.trim());
     if (apiUri == null || !apiUri.hasScheme) return false;
     return imageUri.host.toLowerCase() == apiUri.host.toLowerCase();
+  }
+}
+
+class _WebProductImage extends StatelessWidget {
+  const _WebProductImage({
+    required this.primaryUrl,
+    required this.fallbackUrl,
+    required this.productId,
+    required this.productName,
+    required this.originalUrl,
+    required this.fit,
+    required this.fallback,
+    required this.loading,
+    required this.width,
+    required this.height,
+  });
+
+  final String primaryUrl;
+  final String fallbackUrl;
+  final String productId;
+  final String productName;
+  final String? originalUrl;
+  final BoxFit fit;
+  final Widget fallback;
+  final Widget? loading;
+  final double? width;
+  final double? height;
+
+  @override
+  Widget build(BuildContext context) {
+    return _buildImage(primaryUrl, allowFallbackUrl: fallbackUrl.isNotEmpty);
+  }
+
+  Widget _buildImage(String url, {required bool allowFallbackUrl}) {
+    return Image.network(
+      url,
+      key: ValueKey(url),
+      fit: fit,
+      width: width,
+      height: height,
+      loadingBuilder: (context, child, progress) {
+        if (progress == null) return child;
+        return loading ?? fallback;
+      },
+      errorBuilder: (context, error, _) {
+        debugLogProductImageFailure(
+          productId: productId,
+          productName: productName,
+          originalUrl: originalUrl,
+          attemptedUrl: url,
+          error: error,
+        );
+        if (allowFallbackUrl) {
+          return _buildImage(fallbackUrl, allowFallbackUrl: false);
+        }
+        return fallback;
+      },
+    );
   }
 }
