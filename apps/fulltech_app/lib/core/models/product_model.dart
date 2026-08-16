@@ -54,6 +54,7 @@ class ProductModel {
   final double? stock;
   final String? fotoUrl;
   final String? originalFotoUrl;
+  final String? imageKey;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final String? categoria;
@@ -72,6 +73,7 @@ class ProductModel {
     this.categoria,
     this.fotoUrl,
     this.originalFotoUrl,
+    this.imageKey,
     this.createdAt,
     this.updatedAt,
     this.activo = true,
@@ -90,6 +92,7 @@ class ProductModel {
     String? categoria,
     String? fotoUrl,
     String? originalFotoUrl,
+    String? imageKey,
     DateTime? createdAt,
     DateTime? updatedAt,
     bool? activo,
@@ -107,6 +110,7 @@ class ProductModel {
       categoria: categoria ?? this.categoria,
       fotoUrl: fotoUrl ?? this.fotoUrl,
       originalFotoUrl: originalFotoUrl ?? this.originalFotoUrl,
+      imageKey: imageKey ?? this.imageKey,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       activo: activo ?? this.activo,
@@ -136,6 +140,7 @@ class ProductModel {
           json['image_url'] ??
           json['originalFotoUrl'],
     );
+    final imageKey = _asNullableString(json['imageKey'] ?? json['image_key']);
     final createdAt = _firstParsedDate([json['createdAt'], json['created_at']]);
     final updatedAt = _firstParsedDate([
       json['updatedAt'],
@@ -160,7 +165,7 @@ class ProductModel {
         ? activoValue
         : (json['estado']?.toString().toLowerCase() != 'inactivo');
     final normalizedFotoUrl = normalizeProductImageUrl(
-      imageUrl: foto,
+      imageUrl: kIsWeb && imageKey != null ? imageKey : foto,
       baseUrl: Env.apiBaseUrl,
       proxyUploadsOnWeb: kIsWeb,
     );
@@ -192,6 +197,7 @@ class ProductModel {
       categoria: categoria,
       fotoUrl: normalizedFotoUrl.isEmpty ? null : normalizedFotoUrl,
       originalFotoUrl: foto,
+      imageKey: imageKey,
       createdAt: createdAt,
       updatedAt: updatedAt,
       activo: activo,
@@ -215,6 +221,7 @@ class ProductModel {
       'categoria': categoria,
       'fotoUrl': fotoUrl,
       'originalFotoUrl': originalFotoUrl,
+      'imageKey': imageKey,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
       'activo': activo,

@@ -45,7 +45,7 @@ class ProductNetworkImage extends StatelessWidget {
     final webProductUrl = kIsWeb
         ? buildPublicProductMediaUrl(productId: productId, baseUrl: baseUrl)
         : '';
-    final sourceUrl = webProductUrl.isNotEmpty ? webProductUrl : url;
+    final sourceUrl = url;
     final effectiveUrl = buildProductThumbnailUrl(
       imageUrl: sourceUrl,
       width: thumbnailSize,
@@ -54,16 +54,20 @@ class ProductNetworkImage extends StatelessWidget {
     final shouldSendAuth = !kIsWeb && _shouldSendAuthHeader(sourceUrl);
 
     if (kIsWeb) {
-      final originalEffectiveUrl = buildProductThumbnailUrl(
-        imageUrl: url,
-        width: thumbnailSize,
-        height: thumbnailSize,
-      );
+      final productEffectiveUrl = webProductUrl.isEmpty
+          ? ''
+          : buildProductThumbnailUrl(
+              imageUrl: webProductUrl,
+              width: thumbnailSize,
+              height: thumbnailSize,
+            );
+      final fallbackEffectiveUrl = productEffectiveUrl.isEmpty ||
+              productEffectiveUrl == effectiveUrl
+          ? ''
+          : productEffectiveUrl;
       return _WebProductImage(
         primaryUrl: effectiveUrl,
-        fallbackUrl: originalEffectiveUrl == effectiveUrl
-            ? ''
-            : originalEffectiveUrl,
+        fallbackUrl: fallbackEffectiveUrl,
         productId: productId,
         productName: productName,
         originalUrl: originalUrl,
