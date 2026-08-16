@@ -113,6 +113,21 @@ void main() {
       expect(uri.queryParameters['h'], '48');
     });
 
+    test('adds thumbnail dimensions to proxied PWA product media URLs', () {
+      final result = buildProductThumbnailUrl(
+        imageUrl: 'https://pwa.example.com/api/media/products/product-1?v=123',
+        width: 320,
+        height: 320,
+      );
+
+      final uri = Uri.parse(result);
+
+      expect(uri.path, '/api/media/products/product-1');
+      expect(uri.queryParameters['v'], '123');
+      expect(uri.queryParameters['w'], '320');
+      expect(uri.queryParameters['h'], '320');
+    });
+
     test('does not rewrite external product image URLs', () {
       const imageUrl =
           'https://legacy.example.com/uploads/products/demo-image.jpg?v=123';

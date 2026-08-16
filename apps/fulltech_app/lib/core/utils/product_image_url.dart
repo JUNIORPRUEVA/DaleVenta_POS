@@ -226,7 +226,10 @@ String buildProductThumbnailUrl({
   if (uri == null) return imageUrl;
 
   final isMediaEndpoint =
-      uri.path == '/media/object' || uri.path.startsWith('/media/products/');
+      uri.path == '/media/object' ||
+      uri.path == '/api/media/object' ||
+      uri.path.startsWith('/media/products/') ||
+      uri.path.startsWith('/api/media/products/');
   if (!isMediaEndpoint) return imageUrl;
 
   final queryParameters = <String, List<String>>{

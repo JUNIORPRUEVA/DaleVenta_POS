@@ -161,6 +161,7 @@ class _WebProductImage extends StatelessWidget {
       fit: fit,
       width: width,
       height: height,
+      webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
       loadingBuilder: (context, child, progress) {
         if (progress == null) return child;
         return loading ?? fallback;
