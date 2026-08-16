@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -138,6 +139,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: Routes.configuracionImpresora,
+            redirect: (context, state) =>
+                kIsWeb ? Routes.configuracion : null,
             builder: (context, state) => const AccountPrinterSettingsScreen(),
           ),
           GoRoute(

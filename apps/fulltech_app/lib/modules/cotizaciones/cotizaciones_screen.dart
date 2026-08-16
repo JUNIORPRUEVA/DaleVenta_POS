@@ -7850,23 +7850,24 @@ class _CompanyAccountMenu extends ConsumerWidget {
                   'Configura el nombre comercial, RNC, teléfonos, dirección, logo y datos principales usados por la empresa.',
             ),
           ),
-          PopupMenuItem(
-            enabled: false,
-            padding: EdgeInsets.zero,
-            child: _CompanyMenuItem(
-              icon: Icons.print_outlined,
-              label: 'Impresora',
-              onTap: () => _activateProtectedRoute(
-                context,
-                ref,
-                menuContext,
-                route: Routes.configuracionImpresora,
+          if (!kIsWeb)
+            PopupMenuItem(
+              enabled: false,
+              padding: EdgeInsets.zero,
+              child: _CompanyMenuItem(
+                icon: Icons.print_outlined,
                 label: 'Impresora',
+                onTap: () => _activateProtectedRoute(
+                  context,
+                  ref,
+                  menuContext,
+                  route: Routes.configuracionImpresora,
+                  label: 'Impresora',
+                ),
+                helpText:
+                    'Ajusta la impresora, copias, tamaño del papel, datos visibles y formato del ticket.',
               ),
-              helpText:
-                  'Ajusta la impresora, copias, tamaño del papel, datos visibles y formato del ticket.',
             ),
-          ),
           PopupMenuItem(
             enabled: false,
             padding: EdgeInsets.zero,

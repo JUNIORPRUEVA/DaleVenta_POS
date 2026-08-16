@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -3531,14 +3531,15 @@ class _SalesCompanyAccountMenu extends ConsumerWidget {
             ),
             onTap: () => _goAfterMenu(context, Routes.configuracionEmpresa),
           ),
-          PopupMenuItem(
-            value: 'printer_settings',
-            child: const _SalesCompanyMenuRow(
-              icon: Icons.print_outlined,
-              label: 'Impresora',
+          if (!kIsWeb)
+            PopupMenuItem(
+              value: 'printer_settings',
+              child: const _SalesCompanyMenuRow(
+                icon: Icons.print_outlined,
+                label: 'Impresora',
+              ),
+              onTap: () => _goAfterMenu(context, Routes.configuracionImpresora),
             ),
-            onTap: () => _goAfterMenu(context, Routes.configuracionImpresora),
-          ),
           PopupMenuItem(
             value: 'backup_settings',
             child: const _SalesCompanyMenuRow(

@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -226,13 +226,14 @@ class AccountSettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return _SettingsHubScaffold(
       children: [
-        _SettingsActionCard(
-          icon: Icons.print_outlined,
-          title: 'Impresora',
-          description: 'Configura tickets, papel, copias y datos impresos.',
-          accent: const Color(0xFF2563EB),
-          onTap: () => context.go(Routes.configuracionImpresora),
-        ),
+        if (!kIsWeb)
+          _SettingsActionCard(
+            icon: Icons.print_outlined,
+            title: 'Impresora',
+            description: 'Configura tickets, papel, copias y datos impresos.',
+            accent: const Color(0xFF2563EB),
+            onTap: () => context.go(Routes.configuracionImpresora),
+          ),
         _SettingsActionCard(
           icon: Icons.business_center_outlined,
           title: 'Empresa',
@@ -664,21 +665,22 @@ class _SettingsCompanyAccountMenu extends ConsumerWidget {
                   'Configura datos fiscales, dirección, representante, logo y datos comerciales.',
             ),
           ),
-          PopupMenuItem(
-            enabled: false,
-            padding: EdgeInsets.zero,
-            child: _SettingsCompanyMenuRow(
-              icon: Icons.print_outlined,
-              label: 'Impresora',
-              onTap: () => _activate(
-                menuContext,
-                context,
-                Routes.configuracionImpresora,
+          if (!kIsWeb)
+            PopupMenuItem(
+              enabled: false,
+              padding: EdgeInsets.zero,
+              child: _SettingsCompanyMenuRow(
+                icon: Icons.print_outlined,
+                label: 'Impresora',
+                onTap: () => _activate(
+                  menuContext,
+                  context,
+                  Routes.configuracionImpresora,
+                ),
+                helpText:
+                    'Ajusta impresora, copias, papel, formato y datos visibles del ticket.',
               ),
-              helpText:
-                  'Ajusta impresora, copias, papel, formato y datos visibles del ticket.',
             ),
-          ),
           PopupMenuItem(
             enabled: false,
             padding: EdgeInsets.zero,
