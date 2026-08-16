@@ -300,7 +300,13 @@ class AppNavigator {
 
   static bool _mustPreferExplicitFallback(String location) {
     final path = (Uri.tryParse(location)?.path ?? location).trim();
-    return path == Routes.userPermissions || path.startsWith('/users/');
+    return _isUsersSubRoute(path);
+  }
+
+  static bool _isUsersSubRoute(String path) {
+    return path == Routes.userPermissions ||
+        path.startsWith('/users/') ||
+        (path.startsWith('/users/') && path.endsWith('/permissions'));
   }
 
   static String? _shellHomeFallbackFor(String location) {

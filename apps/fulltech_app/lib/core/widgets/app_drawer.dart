@@ -124,48 +124,75 @@ class _MobileDrawerAccountFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const footerBorder = Color(0xFFE8EEF5);
+    const logoutColor = Color(0xFFDC2626);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _MobileDrawerFooterButton(
-                compact: compact,
-                icon: Icons.badge_outlined,
-                label: 'Perfil',
-                selected: isNavigationRouteActive(location, Routes.profile),
-                onTap: onProfileTap,
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.82),
+            borderRadius: BorderRadius.circular(17),
+            border: Border.all(color: footerBorder),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.025),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
-            ),
-            SizedBox(width: compact ? 6 : 8),
-            _MobileDrawerFooterIconButton(
-              compact: compact,
-              icon: Icons.settings_outlined,
-              tooltip: 'Configuración',
-              selected: isNavigationRouteActive(location, Routes.configuracion),
-              onTap: onSettingsTap,
-            ),
-            SizedBox(width: compact ? 2 : 4),
-            _MobileDrawerFooterIconButton(
-              compact: compact,
-              icon: Icons.logout_rounded,
-              tooltip: 'Cerrar sesión',
-              destructive: true,
-              onTap: onLogoutTap,
-            ),
-          ],
-        ),
-        if (canManageUsers) ...[
-          SizedBox(height: compact ? 2 : 4),
-          _MobileDrawerFooterButton(
-            compact: compact,
-            icon: Icons.manage_accounts_outlined,
-            label: 'Usuario',
-            selected: isNavigationRouteActive(location, Routes.users),
-            onTap: onUsersTap,
+            ],
           ),
-        ],
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: _MobileDrawerFooterButton(
+                      compact: compact,
+                      icon: Icons.badge_outlined,
+                      label: 'Perfil',
+                      selected: isNavigationRouteActive(
+                        location,
+                        Routes.profile,
+                      ),
+                      onTap: onProfileTap,
+                    ),
+                  ),
+                  _MobileDrawerFooterIconButton(
+                    compact: compact,
+                    icon: Icons.settings_outlined,
+                    tooltip: 'Configuración',
+                    selected: isNavigationRouteActive(
+                      location,
+                      Routes.configuracion,
+                    ),
+                    onTap: onSettingsTap,
+                  ),
+                  _MobileDrawerFooterIconButton(
+                    compact: compact,
+                    icon: Icons.logout_rounded,
+                    tooltip: 'Cerrar sesión',
+                    color: logoutColor,
+                    onTap: onLogoutTap,
+                  ),
+                ],
+              ),
+              if (canManageUsers) ...[
+                const Divider(height: 1, color: footerBorder),
+                _MobileDrawerFooterButton(
+                  compact: compact,
+                  icon: Icons.manage_accounts_outlined,
+                  label: 'Usuario',
+                  selected: isNavigationRouteActive(location, Routes.users),
+                  onTap: onUsersTap,
+                ),
+              ],
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -234,7 +261,7 @@ class _MobileDrawerFooterIconButton extends StatelessWidget {
     required this.tooltip,
     required this.onTap,
     this.selected = false,
-    this.destructive = false,
+    this.color,
   });
 
   final bool compact;
@@ -242,15 +269,12 @@ class _MobileDrawerFooterIconButton extends StatelessWidget {
   final String tooltip;
   final VoidCallback onTap;
   final bool selected;
-  final bool destructive;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    final color = destructive
-        ? const Color(0xFFB91C1C)
-        : selected
-        ? AppColors.primary
-        : AppColors.textSecondary;
+    final foreground =
+        color ?? (selected ? AppColors.primary : AppColors.textSecondary);
     return Tooltip(
       message: tooltip,
       child: Material(
@@ -267,7 +291,7 @@ class _MobileDrawerFooterIconButton extends StatelessWidget {
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: color, size: compact ? 20 : 21),
+            child: Icon(icon, color: foreground, size: compact ? 20 : 21),
           ),
         ),
       ),
@@ -451,6 +475,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
     final expandedGroupIndex = isDesktop
         ? (_openGroupIndex ?? -1)
         : _openGroupIndex;
+    final drawerWidth = isDesktop ? 318.0 : mediaQuery.size.width * 0.80;
     final panelShadow = BoxShadow(
       color: AppColors.primary.withValues(alpha: 0.08),
       blurRadius: 24,
@@ -458,20 +483,20 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
     );
 
     return Drawer(
-      width: isDesktop ? 318 : null,
+      width: drawerWidth,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: isDesktop ? AppColors.surface : const Color(0xFFF7FCFF),
+          color: isDesktop ? AppColors.surface : const Color(0xFFF8FBFF),
           gradient: isDesktop
               ? null
               : const LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Color(0xFFE6F7FF),
-                    Color(0xFFFBFEFF),
-                    Color(0xFFE9F5FF),
+                    Color(0xFFF5FAFF),
+                    Color(0xFFFFFFFF),
+                    Color(0xFFF1F7FF),
                   ],
                   stops: [0, 0.52, 1],
                 ),
@@ -487,9 +512,9 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                   Padding(
                     padding: EdgeInsets.fromLTRB(
                       isDesktop ? 14 : 10,
-                      isDesktop ? 12 : 6,
+                      isDesktop ? 12 : 4,
                       isDesktop ? 14 : 10,
-                      isDesktop ? 10 : 4,
+                      isDesktop ? 10 : 2,
                     ),
                     child: isDesktop
                         ? Container(
@@ -546,14 +571,18 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                         : Row(
                             children: [
                               const Spacer(),
-                              IconButton(
-                                tooltip: 'Cerrar menú',
-                                onPressed: () => Navigator.pop(context),
-                                icon: AppIcon(
-                                  AppIcons.close,
-                                  size: AppIconSizes.button,
-                                  color: AppColors.textSecondary,
-                                  semanticLabel: 'Cerrar menú',
+                              SizedBox(
+                                height: 46,
+                                width: 46,
+                                child: IconButton(
+                                  tooltip: 'Cerrar menú',
+                                  onPressed: () => Navigator.pop(context),
+                                  icon: AppIcon(
+                                    AppIcons.close,
+                                    size: 21,
+                                    color: const Color(0xFF334155),
+                                    semanticLabel: 'Cerrar menú',
+                                  ),
                                 ),
                               ),
                             ],
@@ -562,9 +591,17 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                   Expanded(
                     child: ListView(
                       padding: EdgeInsets.fromLTRB(
-                        isCompactMobile ? 8 : 10,
-                        4,
-                        isCompactMobile ? 8 : 10,
+                        isDesktop
+                            ? 10
+                            : isCompactMobile
+                            ? 14
+                            : 16,
+                        isDesktop ? 4 : 6,
+                        isDesktop
+                            ? 10
+                            : isCompactMobile
+                            ? 14
+                            : 16,
                         8,
                       ),
                       children: [
@@ -573,7 +610,9 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                             group: groups[i],
                             index: i,
                             compact: isCompactMobile,
-                            expanded: expandedGroupIndex == i,
+                            desktop: isDesktop,
+                            expanded:
+                                groups[i].hasSubmenu && expandedGroupIndex == i,
                             selected: groups[i].containsActiveRoute(location),
                             onHoverOpen: isDesktop && groups[i].openOnHover
                                 ? () => _openGroup(i)
@@ -581,12 +620,19 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                             onHoverExit: isDesktop && groups[i].openOnHover
                                 ? () => _closeGroup(i)
                                 : null,
-                            onTapHeader: () => _toggleGroup(i),
+                            onTapHeader: () {
+                              if (!isDesktop && !groups[i].hasSubmenu) {
+                                _handleItemTap(context, groups[i].items.first);
+                                return;
+                              }
+                              _toggleGroup(i);
+                            },
                             itemBuilder: (item) => _DrawerMenuItem(
                               icon: item.icon,
                               appIcon: item.appIcon,
                               title: item.title,
                               compact: isCompactMobile,
+                              desktop: isDesktop,
                               selected: isNavigationRouteActive(
                                 location,
                                 item.route,
@@ -598,13 +644,22 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                       ],
                     ),
                   ),
-                  const Divider(height: 1, color: AppColors.border),
+                  if (isDesktop)
+                    const Divider(height: 1, color: AppColors.border),
                   Padding(
                     padding: EdgeInsets.fromLTRB(
-                      isCompactMobile ? 10 : 12,
-                      8,
-                      isCompactMobile ? 10 : 12,
-                      12,
+                      isDesktop
+                          ? 12
+                          : isCompactMobile
+                          ? 14
+                          : 16,
+                      isDesktop ? 8 : 6,
+                      isDesktop
+                          ? 12
+                          : isCompactMobile
+                          ? 14
+                          : 16,
+                      isDesktop ? 12 : 14,
                     ),
                     child: isDesktop
                         ? _DrawerCloudFooter(compact: isCompactMobile)
@@ -1017,6 +1072,8 @@ class _DrawerMenuGroup {
   final List<AppNavigationItem> items;
   final bool openOnHover;
 
+  bool get hasSubmenu => items.length > 1;
+
   bool containsActiveRoute(String location) {
     bool active(AppNavigationItem item) {
       return isNavigationRouteActive(location, item.route);
@@ -1107,6 +1164,7 @@ class _DrawerMenuGroupTile extends StatelessWidget {
     required this.group,
     required this.index,
     required this.compact,
+    required this.desktop,
     required this.expanded,
     required this.selected,
     required this.onTapHeader,
@@ -1118,6 +1176,7 @@ class _DrawerMenuGroupTile extends StatelessWidget {
   final _DrawerMenuGroup group;
   final int index;
   final bool compact;
+  final bool desktop;
   final bool expanded;
   final bool selected;
   final VoidCallback onTapHeader;
@@ -1127,54 +1186,88 @@ class _DrawerMenuGroupTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = AppColors.textPrimary;
-    final headerBg = selected || expanded
-        ? AppColors.primary.withValues(alpha: 0.09)
-        : Colors.transparent;
+    final hasSubmenu = group.hasSubmenu;
+    final foreground = desktop
+        ? AppColors.textPrimary
+        : const Color(0xFF0F172A);
+    final iconColor = selected && !desktop
+        ? const Color(0xFF2563EB)
+        : desktop
+        ? foreground
+        : const Color(0xFF172554);
+    final headerBg = desktop
+        ? (selected || expanded
+              ? AppColors.primary.withValues(alpha: 0.09)
+              : Colors.transparent)
+        : (selected
+              ? const Color(0xFFE8F1FF)
+              : Colors.white.withValues(alpha: 0.76));
+    final borderColor = desktop ? Colors.transparent : const Color(0xFFE8EEF5);
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: onHoverOpen == null ? null : (_) => onHoverOpen!(),
       onExit: onHoverExit == null ? null : (_) => onHoverExit!(),
       child: Padding(
-        padding: EdgeInsets.only(bottom: compact ? 4 : 5),
+        padding: EdgeInsets.only(bottom: desktop ? (compact ? 4 : 5) : 7),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOut,
           decoration: BoxDecoration(
-            color: expanded
+            color: desktop && expanded
                 ? AppColors.surfaceMuted.withValues(alpha: 0.36)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(desktop ? 14 : 16),
           ),
           child: Column(
             children: [
               Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(15),
+                  borderRadius: BorderRadius.circular(desktop ? 15 : 14),
                   onTap: onTapHeader,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
-                    height: compact ? 46 : 50,
-                    padding: EdgeInsets.symmetric(horizontal: compact ? 9 : 10),
+                    height: desktop ? (compact ? 46 : 50) : (compact ? 52 : 56),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: desktop ? (compact ? 9 : 10) : 10,
+                    ),
                     decoration: BoxDecoration(
                       color: headerBg,
-                      borderRadius: BorderRadius.circular(13),
+                      borderRadius: BorderRadius.circular(desktop ? 13 : 14),
+                      border: Border.all(
+                        color: borderColor,
+                        width: desktop ? 0 : 0.9,
+                      ),
+                      boxShadow: desktop
+                          ? null
+                          : [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.025),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                     ),
                     child: Row(
                       children: [
                         Container(
-                          width: compact ? 32 : 34,
-                          height: compact ? 32 : 34,
+                          width: desktop ? (compact ? 32 : 34) : 40,
+                          height: desktop ? (compact ? 32 : 34) : 40,
                           decoration: BoxDecoration(
-                            color: foreground.withValues(alpha: 0.10),
-                            borderRadius: BorderRadius.circular(10),
+                            color: desktop
+                                ? foreground.withValues(alpha: 0.10)
+                                : selected
+                                ? const Color(0xFFE0ECFF)
+                                : const Color(0xFFF2F6FC),
+                            borderRadius: BorderRadius.circular(
+                              desktop ? 10 : 11,
+                            ),
                           ),
                           child: Icon(
                             group.icon,
-                            color: foreground,
-                            size: compact ? 18 : 19,
+                            color: iconColor,
+                            size: desktop ? (compact ? 18 : 19) : 21,
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -1185,42 +1278,51 @@ class _DrawerMenuGroupTile extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: AppTextStyles.body.copyWith(
                               color: foreground,
-                              fontWeight: FontWeight.w600,
-                              fontSize: compact ? 13.8 : 14.6,
+                              fontWeight: selected
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
+                              fontSize: desktop
+                                  ? (compact ? 13.8 : 14.6)
+                                  : (compact ? 15.2 : 15.8),
                             ),
                           ),
                         ),
                         Icon(
-                          Icons.keyboard_arrow_down_rounded,
-                          color: AppColors.textSecondary,
-                          size: compact ? 20 : 22,
+                          hasSubmenu
+                              ? Icons.keyboard_arrow_down_rounded
+                              : Icons.chevron_right_rounded,
+                          color: desktop
+                              ? AppColors.textSecondary
+                              : const Color(0xFF334155),
+                          size: desktop ? (compact ? 20 : 22) : 21,
                         ),
                       ],
                     ),
                   ),
                 ),
               ),
-              AnimatedCrossFade(
-                firstChild: const SizedBox(width: double.infinity),
-                secondChild: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    compact ? 6 : 7,
-                    2,
-                    compact ? 6 : 7,
-                    compact ? 5 : 6,
+              if (hasSubmenu)
+                AnimatedCrossFade(
+                  firstChild: const SizedBox(width: double.infinity),
+                  secondChild: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      desktop ? (compact ? 6 : 7) : 7,
+                      desktop ? 2 : 5,
+                      desktop ? (compact ? 6 : 7) : 7,
+                      desktop ? (compact ? 5 : 6) : 6,
+                    ),
+                    child: Column(
+                      children: [
+                        for (final item in group.items) itemBuilder(item),
+                      ],
+                    ),
                   ),
-                  child: Column(
-                    children: [
-                      for (final item in group.items) itemBuilder(item),
-                    ],
-                  ),
+                  crossFadeState: expanded
+                      ? CrossFadeState.showSecond
+                      : CrossFadeState.showFirst,
+                  duration: const Duration(milliseconds: 200),
+                  sizeCurve: Curves.easeOut,
                 ),
-                crossFadeState: expanded
-                    ? CrossFadeState.showSecond
-                    : CrossFadeState.showFirst,
-                duration: const Duration(milliseconds: 170),
-                sizeCurve: Curves.easeOut,
-              ),
             ],
           ),
         ),
@@ -1234,6 +1336,7 @@ class _DrawerMenuItem extends StatefulWidget {
   final AppIconData? appIcon;
   final String title;
   final bool compact;
+  final bool desktop;
   final bool selected;
   final bool showIndicator;
   final VoidCallback onTap;
@@ -1243,6 +1346,7 @@ class _DrawerMenuItem extends StatefulWidget {
     this.appIcon,
     required this.title,
     required this.compact,
+    required this.desktop,
     required this.selected,
     this.showIndicator = false,
     required this.onTap,
@@ -1288,15 +1392,25 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final selected = widget.selected;
-    final tileBg = selected
-        ? AppColors.primary.withValues(alpha: 0.09)
-        : (_hovered
-              ? AppColors.surfaceMuted.withValues(alpha: 0.72)
-              : Colors.transparent);
-    final foreground = selected ? AppColors.primary : AppColors.textSecondary;
+    final tileBg = widget.desktop
+        ? (selected
+              ? AppColors.primary.withValues(alpha: 0.09)
+              : (_hovered
+                    ? AppColors.surfaceMuted.withValues(alpha: 0.72)
+                    : Colors.transparent))
+        : (selected
+              ? const Color(0xFFE8F1FF)
+              : (_hovered
+                    ? Colors.white.withValues(alpha: 0.72)
+                    : Colors.transparent));
+    final foreground = selected
+        ? const Color(0xFF2563EB)
+        : widget.desktop
+        ? AppColors.textSecondary
+        : const Color(0xFF334155);
 
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: widget.compact ? 2 : 3),
+      padding: EdgeInsets.symmetric(vertical: widget.desktop ? 2 : 1.5),
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         onEnter: (_) => setState(() => _hovered = true),
@@ -1320,10 +1434,14 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   curve: Curves.easeOut,
-                  height: widget.compact ? 44 : 48,
+                  height: widget.desktop
+                      ? (widget.compact ? 44 : 48)
+                      : (widget.compact ? 38 : 40),
                   padding: EdgeInsets.symmetric(
-                    horizontal: widget.compact ? 10 : 12,
-                    vertical: 8,
+                    horizontal: widget.desktop
+                        ? (widget.compact ? 10 : 12)
+                        : 12,
+                    vertical: widget.desktop ? 8 : 6,
                   ),
                   decoration: BoxDecoration(
                     color: tileBg,
@@ -1337,7 +1455,7 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
                         height: 28,
                         decoration: BoxDecoration(
                           color: selected
-                              ? AppColors.primary
+                              ? const Color(0xFF2563EB)
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(999),
                         ),
@@ -1346,12 +1464,16 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
                       widget.appIcon == null
                           ? Icon(
                               widget.icon,
-                              size: widget.compact ? 19 : 20,
+                              size: widget.desktop
+                                  ? (widget.compact ? 19 : 20)
+                                  : 18,
                               color: foreground,
                             )
                           : AppIcon(
                               widget.appIcon!,
-                              size: widget.compact ? 19 : 20,
+                              size: widget.desktop
+                                  ? (widget.compact ? 19 : 20)
+                                  : 18,
                               color: foreground,
                               semanticLabel: widget.title,
                             ),
@@ -1363,7 +1485,9 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
                           overflow: TextOverflow.ellipsis,
                           style: AppTextStyles.body.copyWith(
                             fontWeight: FontWeight.w500,
-                            fontSize: widget.compact ? 13.8 : 14.4,
+                            fontSize: widget.desktop
+                                ? (widget.compact ? 13.8 : 14.4)
+                                : 13.4,
                             color: foreground,
                           ),
                         ),

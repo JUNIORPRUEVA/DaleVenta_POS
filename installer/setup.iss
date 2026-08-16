@@ -20,7 +20,9 @@
 #define MyAppVersionInfo "1.0.0.1"
 #endif
 
+#ifndef MyAppSourceDir
 #define MyAppSourceDir "..\apps\fulltech_app\build\windows\x64\runner\Release"
+#endif
 #define BrandSetupIcon "..\apps\fulltech_app\windows\runner\resources\app_icon.ico"
 
 [Setup]

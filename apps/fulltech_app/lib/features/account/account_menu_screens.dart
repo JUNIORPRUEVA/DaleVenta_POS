@@ -224,7 +224,32 @@ class AccountSettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return const _SettingsHubScaffold(children: [_DeleteAccountLaunchCard()]);
+    return _SettingsHubScaffold(
+      children: [
+        _SettingsActionCard(
+          icon: Icons.print_outlined,
+          title: 'Impresora',
+          description: 'Configura tickets, papel, copias y datos impresos.',
+          accent: const Color(0xFF2563EB),
+          onTap: () => context.go(Routes.configuracionImpresora),
+        ),
+        _SettingsActionCard(
+          icon: Icons.business_center_outlined,
+          title: 'Empresa',
+          description: 'Datos fiscales, logo, dirección y contacto.',
+          accent: const Color(0xFF0F766E),
+          onTap: () => context.go(Routes.configuracionEmpresa),
+        ),
+        _SettingsActionCard(
+          icon: Icons.cloud_sync_outlined,
+          title: 'Backup',
+          description: 'Crear, revisar y recuperar respaldos locales.',
+          accent: const Color(0xFF7C3AED),
+          onTap: () => context.go(Routes.configuracionBackup),
+        ),
+        const _DeleteAccountLaunchCard(),
+      ],
+    );
   }
 }
 
@@ -431,11 +456,6 @@ class _SettingsHubScaffold extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final mobile = MediaQuery.sizeOf(context).width < 900;
     final user = ref.watch(authStateProvider).user;
-    final backButton = IconButton(
-      tooltip: 'Volver',
-      onPressed: () => context.go(Routes.cotizaciones),
-      icon: const Icon(Icons.arrow_back_rounded),
-    );
     return Scaffold(
       backgroundColor: AppColors.background,
       drawer: buildAdaptiveDrawer(context, currentUser: user),
@@ -443,7 +463,7 @@ class _SettingsHubScaffold extends ConsumerWidget {
         title: 'Configuración',
         showLogo: false,
         showDepartmentLabel: false,
-        leading: backButton,
+        preferDrawerLeading: true,
         trailing: const SizedBox.shrink(),
         actions: mobile
             ? null
@@ -504,7 +524,7 @@ class _SettingsDetailScaffold extends ConsumerWidget {
     final user = ref.watch(authStateProvider).user;
     final backButton = IconButton(
       tooltip: 'Volver',
-      onPressed: () => context.go(Routes.cotizaciones),
+      onPressed: () => context.go(Routes.configuracion),
       icon: const Icon(Icons.arrow_back_rounded),
     );
     final content = Center(

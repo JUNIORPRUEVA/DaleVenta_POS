@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,7 +5,6 @@ import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/auth/admin_authorization.dart';
-import '../../core/auth/token_storage.dart';
 import '../../core/auth/app_permissions.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
@@ -15,19 +13,12 @@ import '../../core/errors/api_exception.dart';
 import '../../core/models/user_model.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/utils/is_flutter_test.dart';
-import '../../core/utils/media_url.dart';
 import '../../core/utils/string_utils.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../user/application/users_controller.dart';
 import 'utils/work_contract_preview_screen.dart';
-
-String? _resolveUserDocUrl(String? url) {
-  final resolved = resolvePublicMediaUrl(url);
-  return resolved.isEmpty ? null : resolved;
-}
 
 class UsersScreen extends ConsumerWidget {
   const UsersScreen({super.key});
@@ -368,7 +359,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                 final user = filteredUsers[index];
                 return _UserCard(
                   user: user,
-                  onView: () => _openUserDetailsScreen(context, user),
+                  onView: () => context.go(Routes.userPermissionsById(user.id)),
                   onEdit: () => _showUserDialog(context, ref, user),
                   onDelete: () => _showDeleteDialog(context, ref, user),
                   onToggleBlock: () => _toggleBlock(context, ref, user),
@@ -1323,180 +1314,6 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
       ),
     );
   }
-
-  void _openUserDetailsScreen(BuildContext context, UserModel user) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => _UserDetailsScreen(
-          user: user,
-          onOpenContract: () => _openWorkContractPreview(context, user),
-        ),
-      ),
-    );
-  }
-}
-
-class _UserDetailsScreen extends StatelessWidget {
-  const _UserDetailsScreen({required this.user, required this.onOpenContract});
-
-  final UserModel user;
-  final Future<void> Function() onOpenContract;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Detalle de usuario'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: FilledButton.tonalIcon(
-              onPressed: onOpenContract,
-              icon: const Icon(Icons.picture_as_pdf_outlined),
-              label: const Text('Contrato'),
-            ),
-          ),
-        ],
-      ),
-      body: Container(
-        color: theme.colorScheme.surfaceContainerLowest,
-        child: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 980),
-              child: ListView(
-                padding: const EdgeInsets.all(20),
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: theme.colorScheme.outlineVariant,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        _UserAvatar(user: user, radius: 30),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                user.nombreCompleto,
-                                style: theme.textTheme.titleLarge?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                user.email,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        _UserStatusBadge(blocked: user.blocked),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  _DetailSection(
-                    title: 'Información principal',
-                    children: [
-                      _DetailRow('Nombre', user.nombreCompleto),
-                      _DetailRow('Email', user.email),
-                      _DetailRow('Rol', _managementRole(user).label),
-                      _DetailRow('Teléfono', user.telefono),
-                      _DetailRow(
-                        'Teléfono familiar',
-                        user.telefonoFamiliar ?? '—',
-                      ),
-                      _DetailRow('Cédula', user.cedula ?? '—'),
-                      _DetailRow('Edad', user.edad?.toString() ?? '—'),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  _DetailSection(
-                    title: 'Datos laborales y personales',
-                    children: [
-                      _DetailRow('Tiene hijos', user.tieneHijos ? 'Sí' : 'No'),
-                      _DetailRow(
-                        'Estado civil',
-                        user.estaCasado ? 'Casado/a' : 'Soltero/a',
-                      ),
-                      _DetailRow('Casa propia', user.casaPropia ? 'Sí' : 'No'),
-                      _DetailRow('Vehículo', user.vehiculo ? 'Sí' : 'No'),
-                      _DetailRow(
-                        'Licencia',
-                        user.licenciaConducir ? 'Sí' : 'No',
-                      ),
-                      _DetailRow(
-                        'Fecha de ingreso',
-                        user.fechaIngreso != null
-                            ? DateFormat(
-                                'dd/MM/yyyy',
-                              ).format(user.fechaIngreso!)
-                            : '—',
-                      ),
-                      _DetailRow(
-                        'Días en la empresa',
-                        user.diasEnEmpresa?.toString() ?? '—',
-                      ),
-                      _DetailRow(
-                        'Cuenta nómina preferencial',
-                        (user.cuentaNominaPreferencial ?? '').trim().isEmpty
-                            ? '—'
-                            : user.cuentaNominaPreferencial!.trim(),
-                      ),
-                      _DetailRow(
-                        'Habilidades',
-                        user.habilidades.isEmpty
-                            ? '—'
-                            : user.habilidades.join(', '),
-                      ),
-                      _DetailRow(
-                        'Creado',
-                        user.createdAt != null
-                            ? DateFormat('dd/MM/yyyy').format(user.createdAt!)
-                            : '—',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  _DetailSection(
-                    title: 'Documentos',
-                    children: [
-                      _UserDocumentPreviewCard(
-                        title: 'Foto de cédula',
-                        imageUrl: _resolveUserDocUrl(user.fotoCedulaUrl),
-                      ),
-                      const SizedBox(height: 10),
-                      _UserDocumentPreviewCard(
-                        title: 'Foto de licencia',
-                        imageUrl: _resolveUserDocUrl(user.fotoLicenciaUrl),
-                      ),
-                      const SizedBox(height: 10),
-                      _UserDocumentPreviewCard(
-                        title: 'Foto personal',
-                        imageUrl: _resolveUserDocUrl(user.fotoPersonalUrl),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _UserPermissionDetailsPanel extends StatelessWidget {
@@ -2031,6 +1848,57 @@ class _UserPermissionsScreenState extends ConsumerState<UserPermissionsScreen> {
     }
   }
 
+  void _showUserDetailsSheet(UserModel user) {
+    showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        final joinedAt = user.fechaIngreso == null
+            ? '—'
+            : DateFormat('dd/MM/yyyy').format(user.fechaIngreso!);
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(18, 4, 18, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  _UserAvatar(user: user, radius: 26),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      user.nombreCompleto,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  _UserStatusBadge(blocked: user.blocked),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _DetailRow('Rol', _managementRole(user).label),
+              _DetailRow('Teléfono', user.telefono),
+              _DetailRow('Correo', user.email),
+              _DetailRow('Cédula', user.cedula ?? '—'),
+              _DetailRow('Ingreso', joinedAt),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -2041,7 +1909,11 @@ class _UserPermissionsScreenState extends ConsumerState<UserPermissionsScreen> {
       appBar: CustomAppBar(
         title: 'Editar permisos',
         showLogo: false,
-        fallbackRoute: Routes.users,
+        leading: IconButton(
+          tooltip: 'Volver',
+          onPressed: () => context.go(Routes.users),
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
         trailing: currentUser == null
             ? null
             : Padding(
@@ -2070,9 +1942,58 @@ class _UserPermissionsScreenState extends ConsumerState<UserPermissionsScreen> {
           if (user == null) {
             return const Center(child: Text('Usuario no encontrado'));
           }
+          final compact = MediaQuery.sizeOf(context).width < 640;
           if (_managementRole(user) == AppRole.admin) {
-            return const Center(
-              child: Text('El administrador siempre tiene todos los permisos'),
+            return Container(
+              color: theme.colorScheme.surfaceContainerLowest,
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(
+                  compact ? 14 : 28,
+                  compact ? 14 : 22,
+                  compact ? 14 : 28,
+                  24,
+                ),
+                children: [
+                  _UserPermissionsHeader(
+                    user: user,
+                    compact: compact,
+                    saving: true,
+                    showBulkActions: false,
+                    onDetails: () => _showUserDetailsSheet(user),
+                    onAllowAll: () {},
+                    onDenyAll: () {},
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFECFDF5),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.successBorder),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.verified_user_outlined,
+                          color: AppColors.success,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'El administrador siempre tiene todos los permisos. Puedes ver sus detalles, pero sus permisos no se editan desde aquí.',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: AppColors.success,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             );
           }
 
@@ -2083,56 +2004,20 @@ class _UserPermissionsScreenState extends ConsumerState<UserPermissionsScreen> {
               children: [
                 Expanded(
                   child: ListView(
-                    padding: const EdgeInsets.fromLTRB(28, 22, 28, 24),
+                    padding: EdgeInsets.fromLTRB(
+                      compact ? 14 : 28,
+                      compact ? 14 : 22,
+                      compact ? 14 : 28,
+                      24,
+                    ),
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surface,
-                          border: Border.all(
-                            color: theme.colorScheme.outlineVariant,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            _UserAvatar(user: user, radius: 28),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    user.nombreCompleto,
-                                    style: theme.textTheme.titleLarge?.copyWith(
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  Text(
-                                    '${user.email}  •  Cajero',
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            FilledButton.tonalIcon(
-                              onPressed: _saving
-                                  ? null
-                                  : () => _setAllPermissions(user, true),
-                              icon: const Icon(Icons.done_all_rounded),
-                              label: const Text('Dar todos'),
-                            ),
-                            const SizedBox(width: 8),
-                            OutlinedButton.icon(
-                              onPressed: _saving
-                                  ? null
-                                  : () => _setAllPermissions(user, false),
-                              icon: const Icon(Icons.remove_done_outlined),
-                              label: const Text('Quitar todos'),
-                            ),
-                          ],
-                        ),
+                      _UserPermissionsHeader(
+                        user: user,
+                        compact: compact,
+                        saving: _saving,
+                        onDetails: () => _showUserDetailsSheet(user),
+                        onAllowAll: () => _setAllPermissions(user, true),
+                        onDenyAll: () => _setAllPermissions(user, false),
                       ),
                       const SizedBox(height: 14),
                       for (final module in _permissionModules) ...[
@@ -2155,7 +2040,12 @@ class _UserPermissionsScreenState extends ConsumerState<UserPermissionsScreen> {
                   ),
                   child: SafeArea(
                     top: false,
-                    minimum: const EdgeInsets.fromLTRB(28, 12, 28, 16),
+                    minimum: EdgeInsets.fromLTRB(
+                      compact ? 14 : 28,
+                      12,
+                      compact ? 14 : 28,
+                      16,
+                    ),
                     child: Row(
                       children: [
                         OutlinedButton.icon(
@@ -2240,6 +2130,111 @@ class _PermissionModuleEditor extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+class _UserPermissionsHeader extends StatelessWidget {
+  const _UserPermissionsHeader({
+    required this.user,
+    required this.compact,
+    required this.saving,
+    required this.onDetails,
+    required this.onAllowAll,
+    required this.onDenyAll,
+    this.showBulkActions = true,
+  });
+
+  final UserModel user;
+  final bool compact;
+  final bool saving;
+  final VoidCallback onDetails;
+  final VoidCallback onAllowAll;
+  final VoidCallback onDenyAll;
+  final bool showBulkActions;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final role = _managementRole(user);
+    final userInfo = Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _UserAvatar(user: user, radius: compact ? 24 : 28),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                user.nombreCompleto,
+                maxLines: compact ? 2 : 1,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    (compact
+                            ? theme.textTheme.titleMedium
+                            : theme.textTheme.titleLarge)
+                        ?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                '${role.label} • ${user.blocked ? 'Bloqueado' : 'Activo'}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    final actionButtons = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        OutlinedButton.icon(
+          onPressed: onDetails,
+          icon: const Icon(Icons.info_outline_rounded, size: 18),
+          label: const Text('Detalles'),
+        ),
+        if (showBulkActions) ...[
+          FilledButton.tonalIcon(
+            onPressed: saving ? null : onAllowAll,
+            icon: const Icon(Icons.done_all_rounded, size: 18),
+            label: const Text('Dar todos'),
+          ),
+          OutlinedButton.icon(
+            onPressed: saving ? null : onDenyAll,
+            icon: const Icon(Icons.remove_done_outlined, size: 18),
+            label: const Text('Quitar todos'),
+          ),
+        ],
+      ],
+    );
+
+    return Container(
+      padding: EdgeInsets.all(compact ? 14 : 18),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: compact
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [userInfo, const SizedBox(height: 12), actionButtons],
+            )
+          : Row(
+              children: [
+                Expanded(child: userInfo),
+                const SizedBox(width: 12),
+                Flexible(child: actionButtons),
+              ],
+            ),
     );
   }
 }
@@ -2565,6 +2560,7 @@ class _UserRowCardState extends State<_UserRowCard> {
                       icon: const Icon(Icons.more_vert),
                       onSelected: (action) {
                         switch (action) {
+                          case _UserMenuAction.permisos:
                           case _UserMenuAction.ver:
                             widget.onView();
                             break;
@@ -2799,7 +2795,7 @@ class _DesktopUsersEmptyState extends StatelessWidget {
   }
 }
 
-enum _UserMenuAction { ver, editar, contrato, bloquear, eliminar }
+enum _UserMenuAction { permisos, ver, editar, contrato, bloquear, eliminar }
 
 class _UserCard extends StatelessWidget {
   const _UserCard({
@@ -2850,6 +2846,7 @@ class _UserCard extends StatelessWidget {
           icon: const Icon(Icons.more_vert),
           onSelected: (action) {
             switch (action) {
+              case _UserMenuAction.permisos:
               case _UserMenuAction.ver:
                 onView();
                 break;
@@ -2868,6 +2865,10 @@ class _UserCard extends StatelessWidget {
             }
           },
           itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: _UserMenuAction.permisos,
+              child: Text('Permisos'),
+            ),
             const PopupMenuItem(
               value: _UserMenuAction.editar,
               child: Text('Editar'),
@@ -2925,144 +2926,6 @@ class _DetailRow extends StatelessWidget {
             ),
           ),
           Expanded(child: Text(value)),
-        ],
-      ),
-    );
-  }
-}
-
-class _DetailSection extends StatelessWidget {
-  const _DetailSection({required this.title, required this.children});
-
-  final String title;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 10),
-          ...children,
-        ],
-      ),
-    );
-  }
-}
-
-/// Provee el token de sesión para cargar imágenes de documentos que el
-/// endpoint /media/object sirve únicamente con autenticación JWT.
-class _UserDocImageCache {
-  static final TokenStorage storage = TokenStorage();
-
-  static Future<String?> token() => storage.getAccessToken();
-}
-
-class _UserDocumentPreviewCard extends StatelessWidget {
-  const _UserDocumentPreviewCard({required this.title, required this.imageUrl});
-
-  final String title;
-  final String? imageUrl;
-
-  @override
-  Widget build(BuildContext context) {
-    final hasImage = imageUrl != null && imageUrl!.isNotEmpty;
-    final outline = Theme.of(context).colorScheme.outlineVariant;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: outline),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-          ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              height: 150,
-              width: double.infinity,
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: hasImage
-                  ? FutureBuilder<String?>(
-                      future: isFlutterTest
-                          ? Future<String?>.value()
-                          : _UserDocImageCache.token(),
-                      builder: (context, snapshot) {
-                        final token = snapshot.data?.trim();
-                        final headers = token == null || token.isEmpty
-                            ? null
-                            : <String, String>{
-                                'Authorization': 'Bearer $token',
-                              };
-                        return CachedNetworkImage(
-                          imageUrl: imageUrl!,
-                          httpHeaders: headers,
-                          fit: BoxFit.cover,
-                          placeholder: (_, __) => const _DocumentImageFallback(
-                            text: 'Cargando imagen...',
-                          ),
-                          errorWidget: (_, __, ___) =>
-                              const _DocumentImageFallback(
-                                text: 'No se pudo cargar la imagen',
-                              ),
-                        );
-                      },
-                    )
-                  : const _DocumentImageFallback(text: 'Sin imagen'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DocumentImageFallback extends StatelessWidget {
-  const _DocumentImageFallback({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.image_not_supported_outlined,
-            color: Theme.of(context).colorScheme.outline,
-          ),
-          const SizedBox(height: 6),
-          Text(
-            text,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.outline,
-              fontSize: 12,
-            ),
-          ),
         ],
       ),
     );

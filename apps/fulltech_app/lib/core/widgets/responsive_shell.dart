@@ -123,6 +123,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     return Scaffold(
       key: _shellScaffoldKey,
       backgroundColor: Colors.transparent,
+      drawerScrimColor: Colors.black.withValues(alpha: 0.40),
       drawer: buildAdaptiveDrawer(context, currentUser: user),
       body: Material(
         color: Colors.transparent,

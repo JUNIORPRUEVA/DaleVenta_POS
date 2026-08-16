@@ -2620,7 +2620,7 @@ class _CatalogTabState extends State<CatalogTab> {
           child: ListView(
             padding: productsResponsivePagePadding(
               constraints,
-              top: mobile ? 10 : 14,
+              top: mobile ? 6 : 14,
               bottom: mobile ? 96 : 18,
             ),
             children: [
@@ -3178,8 +3178,8 @@ class _CompactCatalogList extends StatelessWidget {
   Widget build(BuildContext context) {
     final mobile = MediaQuery.sizeOf(context).width < 640;
     return ProductsSurface(
-      padding: EdgeInsets.all(mobile ? 5 : 16),
-      radius: mobile ? 10 : 14,
+      padding: EdgeInsets.all(mobile ? 3 : 16),
+      radius: mobile ? 8 : 14,
       child: Column(
         children: [
           for (final product in products)
@@ -3316,7 +3316,11 @@ class _InventoryTabState extends State<InventoryTab> {
         return RefreshIndicator(
           onRefresh: widget.onRefresh,
           child: ListView(
-            padding: productsResponsivePagePadding(constraints),
+            padding: productsResponsivePagePadding(
+              constraints,
+              top: mobile ? 6 : 14,
+              bottom: mobile ? 96 : 18,
+            ),
             children: [
               Center(
                 child: ConstrainedBox(
@@ -3869,9 +3873,9 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
                   onRefresh: widget.onRefresh,
                   child: ListView(
                     padding: EdgeInsets.fromLTRB(
-                      mobile ? 10 : 18,
-                      mobile ? 10 : 18,
-                      mobile ? 10 : 18,
+                      mobile ? 8 : 18,
+                      mobile ? 8 : 18,
+                      mobile ? 8 : 18,
                       16,
                     ),
                     children: [
@@ -4005,16 +4009,17 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
                             child: Text(
                               'Productos',
                               style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                                color: Color(0xFF1E293B),
                               ),
                             ),
                           ),
                           Text(
                             '${filtered.length}',
                             style: const TextStyle(
-                              color: _textSecondary,
-                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF94A3B8),
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
@@ -4105,15 +4110,16 @@ class _SelectedStockProduct extends StatelessWidget {
   Widget build(BuildContext context) {
     final level = _resolveStockLevel(product);
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: _lightBlueHover,
-        border: Border.all(color: const Color(0xFFCFE0FF)),
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE8EEF5), width: 0.8),
       ),
       child: Row(
         children: [
-          ProductThumbnail(product: product, size: 48, radius: 0),
-          const SizedBox(width: 12),
+          ProductThumbnail(product: product, size: 44, radius: 9),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -4123,19 +4129,21 @@ class _SelectedStockProduct extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF1E293B),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    height: 1.12,
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 3),
                 Text(
                   product.categoriaLabel,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: _textSecondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF94A3B8),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w400,
                   ),
                 ),
               ],
@@ -4146,10 +4154,22 @@ class _SelectedStockProduct extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                'Stock ${_stockText(product.stock)}',
-                style: const TextStyle(fontWeight: FontWeight.w900),
+                _stockText(product.stock),
+                style: TextStyle(
+                  color: _stockLevelColor(level),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-              const SizedBox(height: 5),
+              const Text(
+                'Stock',
+                style: TextStyle(
+                  color: Color(0xFF94A3B8),
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+              const SizedBox(height: 4),
               _StockLevelBadge(level: level),
             ],
           ),
@@ -4276,22 +4296,35 @@ class _StockProductRow extends StatelessWidget {
     final level = _resolveStockLevel(product);
     final color = _stockLevelColor(level);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.only(bottom: 5),
       child: Material(
         color: selected ? _lightBlueHover : Colors.white,
+        borderRadius: BorderRadius.circular(8),
         child: InkWell(
           onTap: onSelected,
+          borderRadius: BorderRadius.circular(8),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            constraints: const BoxConstraints(minHeight: 74),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: selected ? _primaryBlue : _borderSoft,
-                width: selected ? 1.2 : 1,
+                color: selected
+                    ? const Color(0xFFBFDBFE)
+                    : const Color(0xFFE8EEF5),
+                width: 0.8,
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.02),
+                  blurRadius: 5,
+                  offset: const Offset(0, 1),
+                ),
+              ],
             ),
             child: Row(
               children: [
-                ProductThumbnail(product: product, size: 38, radius: 0),
+                ProductThumbnail(product: product, size: 44, radius: 9),
                 const SizedBox(width: 9),
                 Expanded(
                   child: Column(
@@ -4303,23 +4336,24 @@ class _StockProductRow extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 12.5,
-                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                          height: 1.12,
+                          color: Color(0xFF1E293B),
                         ),
                       ),
-                      const SizedBox(height: 1),
+                      const SizedBox(height: 3),
                       Text(
                         product.categoriaLabel,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: _textSecondary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 10.8,
+                          color: Color(0xFF94A3B8),
+                          fontWeight: FontWeight.w400,
+                          fontSize: 10,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 5),
                       _StockLevelBadge(level: level),
                     ],
                   ),
@@ -4333,28 +4367,37 @@ class _StockProductRow extends StatelessWidget {
                       _stockText(product.stock),
                       style: TextStyle(
                         color: color,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
                       ),
                     ),
                     const Text(
-                      'Stock actual',
-                      style: TextStyle(color: _textSecondary, fontSize: 9),
+                      'Stock',
+                      style: TextStyle(
+                        color: Color(0xFF94A3B8),
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w400,
+                      ),
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 5),
                     OutlinedButton(
                       onPressed: onSelected,
                       style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(48, 26),
+                        minimumSize: const Size(54, 28),
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         visualDensity: VisualDensity.compact,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        shape: const RoundedRectangleBorder(),
-                        side: const BorderSide(color: _borderSoft),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        side: const BorderSide(color: Color(0xFFDCE5F0)),
                       ),
                       child: const Text(
                         'Ajustar',
-                        style: TextStyle(fontSize: 12),
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ],
@@ -4380,14 +4423,15 @@ class _StockLevelBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.10),
-        border: Border.all(color: color.withValues(alpha: 0.22)),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: color.withValues(alpha: 0.20), width: 0.8),
       ),
       child: Text(
         _stockLevelLabel(level),
         style: TextStyle(
           color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.w900,
+          fontSize: 9.5,
+          fontWeight: FontWeight.w500,
         ),
       ),
     );
@@ -4792,21 +4836,21 @@ class _CategoryManagementCard extends StatelessWidget {
     final content = Row(
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(mobile ? 9 : 10),
           child: Container(
-            width: 74,
-            height: 58,
-            color: _lightBlueHover,
+            width: mobile ? 44 : 74,
+            height: mobile ? 44 : 58,
+            color: const Color(0xFFF8FAFC),
             child: imageBytes == null
                 ? const Icon(
                     Icons.category_outlined,
-                    size: 28,
-                    color: _primaryBlue,
+                    size: 24,
+                    color: Color(0xFF94A3B8),
                   )
-                : Image.memory(imageBytes, fit: BoxFit.cover),
+                : Image.memory(imageBytes, fit: BoxFit.contain),
           ),
         ),
-        const SizedBox(width: 12),
+        SizedBox(width: mobile ? 10 : 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -4816,18 +4860,19 @@ class _CategoryManagementCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 15,
-                  color: Color(0xFF17212B),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  height: 1.12,
+                  color: Color(0xFF1E293B),
                 ),
               ),
-              const SizedBox(height: 5),
+              const SizedBox(height: 3),
               Text(
                 '$productCount productos · ${managed ? 'Administrada' : 'Detectada'}',
                 style: const TextStyle(
-                  color: _textSecondary,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
+                  color: Color(0xFF94A3B8),
+                  fontWeight: FontWeight.w400,
+                  fontSize: 10,
                 ),
               ),
             ],
@@ -4865,11 +4910,18 @@ class _CategoryManagementCard extends StatelessWidget {
           onTap: mobile ? onOpenDetail : null,
           borderRadius: BorderRadius.circular(mobile ? 8 : 14),
           child: Container(
+            constraints: BoxConstraints(minHeight: mobile ? 74 : 0),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(mobile ? 8 : 14),
-              border: Border.all(color: _borderSoft),
+              border: Border.all(color: const Color(0xFFE8EEF5), width: 0.8),
               boxShadow: mobile
-                  ? null
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.02),
+                        blurRadius: 5,
+                        offset: const Offset(0, 1),
+                      ),
+                    ]
                   : [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.04),
@@ -4878,7 +4930,10 @@ class _CategoryManagementCard extends StatelessWidget {
                       ),
                     ],
             ),
-            padding: EdgeInsets.all(mobile ? 10 : 12),
+            padding: EdgeInsets.symmetric(
+              horizontal: mobile ? 8 : 12,
+              vertical: mobile ? 6 : 12,
+            ),
             child: content,
           ),
         ),
@@ -5304,7 +5359,7 @@ class CompactProductCard extends StatelessWidget {
     final mobile = MediaQuery.sizeOf(context).width < 640;
 
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: mobile ? 3 : 5),
+      padding: EdgeInsets.symmetric(vertical: mobile ? 2.5 : 5),
       child: Material(
         color: selected ? _lightBlueHover : Colors.white,
         borderRadius: BorderRadius.circular(mobile ? 8 : 12),
@@ -5312,41 +5367,56 @@ class CompactProductCard extends StatelessWidget {
           onTap: mobile ? onTap : null,
           borderRadius: BorderRadius.circular(mobile ? 8 : 12),
           child: Container(
+            constraints: BoxConstraints(minHeight: mobile ? 74 : 0),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(mobile ? 8 : 12),
-              border: Border.all(color: selected ? _primaryBlue : _borderSoft),
+              border: Border.all(
+                color: selected
+                    ? const Color(0xFFBFDBFE)
+                    : const Color(0xFFE8EEF5),
+                width: 0.8,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.02),
+                  blurRadius: 5,
+                  offset: const Offset(0, 1),
+                ),
+              ],
             ),
-            padding: EdgeInsets.all(mobile ? 7 : 0),
+            padding: EdgeInsets.symmetric(
+              horizontal: mobile ? 8 : 0,
+              vertical: mobile ? 6 : 0,
+            ),
             child: mobile
                 ? Row(
                     children: [
-                      Transform.scale(
-                        scale: 0.82,
-                        child: Checkbox(
-                          value: selected,
-                          onChanged: (v) => onSelected(v ?? false),
+                      SizedBox(
+                        width: 34,
+                        height: 44,
+                        child: Center(
+                          child: Transform.scale(
+                            scale: 0.78,
+                            child: Checkbox(
+                              value: selected,
+                              onChanged: (v) => onSelected(v ?? false),
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
                         ),
                       ),
-                      ProductThumbnail(product: product, size: 46, radius: 8),
+                      ProductThumbnail(product: product, size: 44, radius: 9),
                       const SizedBox(width: 9),
                       Expanded(child: _CompactProductInfo(product: product)),
                       const SizedBox(width: 6),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _CompactMiniValue(
-                            label: 'Stock',
-                            value: _stockText(product.stock),
-                            color: statusColor,
-                          ),
-                          const SizedBox(height: 3),
-                          _CompactMiniValue(
-                            label: 'Costo',
-                            value: _costText(product),
-                          ),
-                        ],
+                      _CompactStockCostColumn(
+                        stockText: _stockText(product.stock),
+                        stockColor: statusColor,
+                        costText: _costText(product),
                       ),
+                      const SizedBox(width: 2),
                       _ProductActionsMenu(
                         onEdit: onEdit,
                         onStock: onStock,
@@ -5358,9 +5428,12 @@ class CompactProductCard extends StatelessWidget {
                     child: Row(
                       children: [
                         Container(width: 3, color: statusColor),
-                        Checkbox(
-                          value: selected,
-                          onChanged: (v) => onSelected(v ?? false),
+                        Transform.scale(
+                          scale: 1,
+                          child: Checkbox(
+                            value: selected,
+                            onChanged: (v) => onSelected(v ?? false),
+                          ),
                         ),
                         ProductThumbnail(product: product, size: 42),
                         const SizedBox(width: 10),
@@ -5414,89 +5487,124 @@ class _ProductActionsMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<String>(
-      tooltip: 'Acciones',
-      icon: const Icon(Icons.more_vert_rounded),
-      onSelected: (value) {
-        switch (value) {
-          case 'edit':
-            onEdit?.call();
-            break;
-          case 'stock':
-            onStock?.call();
-            break;
-          case 'delete':
-            onDelete?.call();
-            break;
-        }
-      },
-      itemBuilder: (context) => [
-        if (onEdit != null)
-          const PopupMenuItem(
-            value: 'edit',
-            child: ListTile(
-              dense: true,
-              leading: Icon(Icons.edit_outlined),
-              title: Text('Editar'),
+    return SizedBox(
+      width: 38,
+      height: 44,
+      child: PopupMenuButton<String>(
+        tooltip: 'Acciones',
+        icon: const Icon(
+          Icons.more_vert_rounded,
+          size: 20,
+          color: Color(0xFF64748B),
+        ),
+        constraints: const BoxConstraints(minWidth: 180),
+        padding: EdgeInsets.zero,
+        iconSize: 20,
+        onSelected: (value) {
+          switch (value) {
+            case 'edit':
+              onEdit?.call();
+              break;
+            case 'stock':
+              onStock?.call();
+              break;
+            case 'delete':
+              onDelete?.call();
+              break;
+          }
+        },
+        itemBuilder: (context) => [
+          if (onEdit != null)
+            const PopupMenuItem(
+              value: 'edit',
+              child: ListTile(
+                dense: true,
+                leading: Icon(Icons.edit_outlined),
+                title: Text('Editar'),
+              ),
             ),
-          ),
-        if (onStock != null)
-          const PopupMenuItem(
-            value: 'stock',
-            child: ListTile(
-              dense: true,
-              leading: Icon(Icons.tune_outlined),
-              title: Text('Ajustar stock'),
+          if (onStock != null)
+            const PopupMenuItem(
+              value: 'stock',
+              child: ListTile(
+                dense: true,
+                leading: Icon(Icons.tune_outlined),
+                title: Text('Ajustar stock'),
+              ),
             ),
-          ),
-        if (onDelete != null)
-          const PopupMenuItem(
-            value: 'delete',
-            child: ListTile(
-              dense: true,
-              leading: Icon(Icons.delete_outline_rounded),
-              title: Text('Eliminar'),
+          if (onDelete != null)
+            const PopupMenuItem(
+              value: 'delete',
+              child: ListTile(
+                dense: true,
+                leading: Icon(Icons.delete_outline_rounded),
+                title: Text('Eliminar'),
+              ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
 
-class _CompactMiniValue extends StatelessWidget {
-  const _CompactMiniValue({
-    required this.label,
-    required this.value,
-    this.color,
+class _CompactStockCostColumn extends StatelessWidget {
+  const _CompactStockCostColumn({
+    required this.stockText,
+    required this.stockColor,
+    required this.costText,
   });
 
-  final String label;
-  final String value;
-  final Color? color;
+  final String stockText;
+  final Color stockColor;
+  final String costText;
 
   @override
   Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 74),
+    return SizedBox(
+      width: 72,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            value,
+            stockText,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: color ?? AppColors.textPrimary,
-              fontWeight: FontWeight.w900,
-              fontSize: 12,
+              color: stockColor,
+              fontWeight: FontWeight.w600,
+              fontSize: 12.5,
+              letterSpacing: 0,
             ),
           ),
-          Text(
-            label,
-            style: const TextStyle(
-              color: _textSecondary,
-              fontWeight: FontWeight.w700,
+          const Text(
+            'Stock',
+            style: TextStyle(
+              color: Color(0xFF94A3B8),
+              fontWeight: FontWeight.w400,
               fontSize: 9.5,
+              letterSpacing: 0,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            costText,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF334155),
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+              letterSpacing: 0,
+            ),
+          ),
+          const Text(
+            'Costo',
+            style: TextStyle(
+              color: Color(0xFF94A3B8),
+              fontWeight: FontWeight.w400,
+              fontSize: 9.5,
+              letterSpacing: 0,
             ),
           ),
         ],
@@ -5517,28 +5625,29 @@ class _CompactProductInfo extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
-          product.codigo?.trim().isNotEmpty == true
-              ? product.codigo!.trim()
-              : product.categoriaLabel,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: _textSecondary,
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        Text(
           product.nombre,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w900),
+          style: const TextStyle(
+            color: Color(0xFF1E293B),
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            height: 1.12,
+            letterSpacing: 0,
+          ),
         ),
+        const SizedBox(height: 3),
         Text(
           product.categoriaLabel,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: _textSecondary, fontSize: 12),
+          style: const TextStyle(
+            color: Color(0xFF94A3B8),
+            fontSize: 10,
+            fontWeight: FontWeight.w400,
+            height: 1.05,
+            letterSpacing: 0,
+          ),
         ),
       ],
     );
@@ -5756,14 +5865,14 @@ class ProductThumbnail extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: const Color(0xFFDDE6F0)),
+        border: Border.all(color: const Color(0xFFE8EEF5), width: 0.8),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 5,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
@@ -5775,7 +5884,7 @@ class ProductThumbnail extends StatelessWidget {
               productId: product.id,
               productName: product.nombre,
               originalUrl: product.originalFotoUrl,
-              fit: BoxFit.cover,
+              fit: BoxFit.contain,
               loading: const SizedBox.shrink(),
               fallback: const Icon(
                 Icons.sell_outlined,

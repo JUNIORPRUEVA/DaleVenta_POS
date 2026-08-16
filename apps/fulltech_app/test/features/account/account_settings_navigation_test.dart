@@ -110,7 +110,6 @@ Future<GoRouter> _pumpSettingsRouter(
 void main() {
   const targets = <String, String>{
     'Empresa': 'Datos de empresa',
-    'Documentos': 'Datos para documentos',
     'Impresora': 'Impresión y tickets',
     'Backup': 'Backup y recuperación',
   };
@@ -157,7 +156,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('Documentos'), findsOneWidget);
+    expect(find.text('Empresa'), findsOneWidget);
+    expect(find.text('Impresora'), findsOneWidget);
     expect(find.text('Backup'), findsOneWidget);
   });
 
