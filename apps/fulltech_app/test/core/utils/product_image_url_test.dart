@@ -52,6 +52,19 @@ void main() {
       );
     });
 
+    test('keeps R2 object keys as upload URLs when web proxy is requested', () {
+      final result = normalizeProductImageUrl(
+        imageUrl: 'uploads/companies/company-1/products/images/demo.jpg',
+        baseUrl: 'https://api.example.com/',
+        proxyUploadsOnWeb: true,
+      );
+
+      expect(
+        result,
+        'https://api.example.com/uploads/companies/company-1/products/images/demo.jpg',
+      );
+    });
+
     test('keeps relative media object URLs on the API host', () {
       final result = normalizeProductImageUrl(
         imageUrl:
@@ -111,6 +124,26 @@ void main() {
       );
 
       expect(result, imageUrl);
+    });
+  });
+
+  group('buildPublicProductMediaUrl', () {
+    test('builds public product media URLs from product id', () {
+      final result = buildPublicProductMediaUrl(
+        productId: 'product 1',
+        baseUrl: 'https://api.example.com/',
+      );
+
+      expect(result, 'https://api.example.com/media/products/product%201');
+    });
+
+    test('returns empty URL when product id is missing', () {
+      final result = buildPublicProductMediaUrl(
+        productId: ' ',
+        baseUrl: 'https://api.example.com/',
+      );
+
+      expect(result, isEmpty);
     });
   });
 }

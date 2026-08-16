@@ -90,6 +90,16 @@ String _buildMediaObjectUrl(String objectKey, String baseUrl) {
   return _joinBaseAndPath(baseUrl, path);
 }
 
+String buildPublicProductMediaUrl({
+  required String productId,
+  required String? baseUrl,
+}) {
+  final cleanProductId = productId.trim();
+  if (cleanProductId.isEmpty) return '';
+  final path = '/media/products/${Uri.encodeComponent(cleanProductId)}';
+  return _joinBaseAndPath(baseUrl ?? '', path);
+}
+
 String _stringifyUri(String value) {
   final uri = Uri.tryParse(value);
   if (uri == null) {
@@ -129,6 +139,9 @@ String normalizeProductImageUrl({
       (raw == normalizedBase || raw.startsWith('$normalizedBase/'))) {
     final objectKey = _extractR2ObjectKey(raw);
     if (objectKey != null) {
+      if (proxyUploadsOnWeb) {
+        return _joinBaseAndPath(normalizedBase, objectKey);
+      }
       return _buildMediaObjectUrl(objectKey, normalizedBase);
     }
     return _stringifyUri(raw);
@@ -138,6 +151,9 @@ String normalizeProductImageUrl({
     final absolute = _stringifyUri(raw);
     final objectKey = _extractR2ObjectKey(raw);
     if (objectKey != null && normalizedBase.isNotEmpty) {
+      if (proxyUploadsOnWeb) {
+        return _joinBaseAndPath(normalizedBase, objectKey);
+      }
       return _buildMediaObjectUrl(objectKey, normalizedBase);
     }
     return absolute;
@@ -145,6 +161,9 @@ String normalizeProductImageUrl({
 
   final objectKey = _extractR2ObjectKey(raw);
   if (objectKey != null && normalizedBase.isNotEmpty) {
+    if (proxyUploadsOnWeb) {
+      return _joinBaseAndPath(normalizedBase, objectKey);
+    }
     return _buildMediaObjectUrl(objectKey, normalizedBase);
   }
 

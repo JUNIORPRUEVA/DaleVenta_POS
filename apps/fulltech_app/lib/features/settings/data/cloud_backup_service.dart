@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:archive/archive_io.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -60,6 +61,7 @@ class CloudBackupService {
   Future<CloudBackupResult?> createAutomaticBackupIfDue({
     Duration interval = const Duration(days: 2),
   }) async {
+    if (kIsWeb) return null;
     if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) {
       return null;
     }
@@ -74,6 +76,7 @@ class CloudBackupService {
   }
 
   Future<String?> lastBackupZipPath() async {
+    if (kIsWeb) return null;
     final prefs = await SharedPreferences.getInstance();
     final path = prefs.getString(_lastBackupZipKey);
     if (path == null || path.trim().isEmpty) return null;
@@ -81,6 +84,9 @@ class CloudBackupService {
   }
 
   Future<CloudBackupInspection> inspectBackupZip(String zipPath) async {
+    if (kIsWeb) {
+      throw UnsupportedError('Backup local no disponible en la version web.');
+    }
     final file = File(zipPath);
     if (!await file.exists()) {
       throw const FormatException('El archivo seleccionado no existe.');
@@ -113,6 +119,9 @@ class CloudBackupService {
   }
 
   Future<CloudBackupResult> createCloudBackup() async {
+    if (kIsWeb) {
+      throw UnsupportedError('Backup local no disponible en la version web.');
+    }
     final now = DateTime.now();
     final stamp = _stamp(now);
     final root = await _backupRoot();

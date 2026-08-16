@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../auth/token_storage.dart';
@@ -40,12 +41,41 @@ class ProductNetworkImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final url = imageUrl.trim();
     if (url.isEmpty) return fallback;
+    final baseUrl = Env.apiBaseUrl.trim();
+    final webProductUrl = kIsWeb
+        ? buildPublicProductMediaUrl(productId: productId, baseUrl: baseUrl)
+        : '';
+    final sourceUrl = webProductUrl.isNotEmpty ? webProductUrl : url;
     final effectiveUrl = buildProductThumbnailUrl(
-      imageUrl: url,
+      imageUrl: sourceUrl,
       width: thumbnailSize,
       height: thumbnailSize,
     );
-    final shouldSendAuth = _shouldSendAuthHeader(url);
+    final shouldSendAuth = !kIsWeb && _shouldSendAuthHeader(sourceUrl);
+
+    if (kIsWeb) {
+      return Image.network(
+        effectiveUrl,
+        key: ValueKey(effectiveUrl),
+        fit: fit,
+        width: width,
+        height: height,
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return loading ?? fallback;
+        },
+        errorBuilder: (context, error, _) {
+          debugLogProductImageFailure(
+            productId: productId,
+            productName: productName,
+            originalUrl: originalUrl,
+            attemptedUrl: effectiveUrl,
+            error: error,
+          );
+          return fallback;
+        },
+      );
+    }
 
     return FutureBuilder<String?>(
       future: isFlutterTest || !shouldSendAuth
