@@ -5358,7 +5358,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       toolbarHeight: 44,
       elevation: 0,
       centerTitle: true,
-      leadingWidth: 56,
+      leadingWidth: 50,
       titleSpacing: 0,
       backgroundColor: Colors.white,
       surfaceTintColor: Colors.transparent,
@@ -5367,8 +5367,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       systemOverlayStyle: SystemUiOverlayStyle.dark,
       shape: const Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
       leading: Builder(
-        builder: (context) => Padding(
-          padding: const EdgeInsets.only(left: 6),
+        builder: (context) => Center(
           child: _AnimatedDrawerButton(
             onPressed: () => Scaffold.maybeOf(context)?.openDrawer(),
           ),
@@ -7611,47 +7610,54 @@ class _AnimatedDrawerButtonState extends State<_AnimatedDrawerButton>
         onTapCancel: () => setState(() => _pressed = false),
         onTapUp: (_) => setState(() => _pressed = false),
         onTap: widget.onPressed,
-        child: AnimatedScale(
-          scale: _pressed ? 0.94 : (_hovered ? 1.035 : 1),
-          duration: const Duration(milliseconds: 140),
-          curve: Curves.easeOutCubic,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOutCubic,
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: active
-                    ? const [Color(0xFFEAF1FF), Color(0xFFFFFFFF)]
-                    : const [Color(0xFFFFFFFF), Color(0xFFF4F8FF)],
-              ),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: active
-                    ? const Color(0xFF8FB4FF)
-                    : const Color(0xFFC7D9FF),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(
-                    0xFF1957E6,
-                  ).withValues(alpha: active ? 0.20 : 0.08),
-                  blurRadius: active ? 18 : 10,
-                  offset: Offset(0, active ? 7 : 3),
-                ),
-              ],
-            ),
-            child: AnimatedRotation(
-              turns: _pressed ? 0.03 : 0,
-              duration: const Duration(milliseconds: 150),
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Center(
+            child: AnimatedScale(
+              scale: _pressed ? 0.94 : (_hovered ? 1.03 : 1),
+              duration: const Duration(milliseconds: 140),
               curve: Curves.easeOutCubic,
-              child: Icon(
-                Icons.menu_rounded,
-                size: 23,
-                color: const Color(0xFF1957E6),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                width: 38,
+                height: 34,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: active
+                        ? const [Color(0xFFEAF1FF), Color(0xFFFFFFFF)]
+                        : const [Color(0xFFFFFFFF), Color(0xFFF6F9FF)],
+                  ),
+                  borderRadius: BorderRadius.circular(7),
+                  border: Border.all(
+                    color: active
+                        ? const Color(0xFF9FBCFF)
+                        : const Color(0xFFD5E2FF),
+                    width: 0.8,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(
+                        0xFF1957E6,
+                      ).withValues(alpha: active ? 0.14 : 0.05),
+                      blurRadius: active ? 12 : 7,
+                      offset: Offset(0, active ? 4 : 2),
+                    ),
+                  ],
+                ),
+                child: AnimatedRotation(
+                  turns: _pressed ? 0.03 : 0,
+                  duration: const Duration(milliseconds: 150),
+                  curve: Curves.easeOutCubic,
+                  child: const Icon(
+                    Icons.menu_rounded,
+                    size: 21,
+                    color: Color(0xFF1957E6),
+                  ),
+                ),
               ),
             ),
           ),
