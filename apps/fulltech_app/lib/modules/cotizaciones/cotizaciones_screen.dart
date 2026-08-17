@@ -5441,11 +5441,18 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   void _openProductImagePreview(ProductModel product) {
+    final user = ref.read(authStateProvider).user;
+    final isMobile = MediaQuery.sizeOf(context).width < _desktopBreakpoint;
+    final showAdminCost =
+        isMobile && user?.appRole == AppRole.admin && product.costAvailable;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
-        builder: (_) =>
-            _ProductImagePreviewScreen(product: product, money: _money),
+        builder: (_) => _ProductImagePreviewScreen(
+          product: product,
+          money: _money,
+          showAdminCost: showAdminCost,
+        ),
       ),
     );
   }
@@ -11204,10 +11211,12 @@ class _ProductImagePreviewScreen extends StatelessWidget {
   const _ProductImagePreviewScreen({
     required this.product,
     required this.money,
+    required this.showAdminCost,
   });
 
   final ProductModel product;
   final String Function(double) money;
+  final bool showAdminCost;
 
   @override
   Widget build(BuildContext context) {
@@ -11274,15 +11283,36 @@ class _ProductImagePreviewScreen extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 4),
-                          Text(
-                            money(product.precio),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFF2563EB),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                            ),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  money(product.precio),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Color(0xFF2563EB),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              if (showAdminCost) ...[
+                                const SizedBox(width: 10),
+                                Flexible(
+                                  child: Text(
+                                    'Costo ${money(product.costo)}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Color(0xFFDC2626),
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ],
                       ),
