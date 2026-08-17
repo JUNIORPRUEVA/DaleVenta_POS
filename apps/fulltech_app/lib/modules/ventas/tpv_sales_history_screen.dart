@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/printing/unified_ticket_printer.dart';
+import '../../core/realtime/operations_realtime_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
@@ -51,6 +53,8 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   bool _loading = true;
   bool _searchOpen = false;
   String? _error;
+  StreamSubscription<SalesRealtimeMessage>? _salesRealtimeSubscription;
+  Timer? _realtimeReloadDebounce;
 
   @override
   void initState() {
@@ -63,13 +67,38 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     ).subtract(const Duration(days: 14));
     _toDate = DateTime(now.year, now.month, now.day);
     _searchController.addListener(() => setState(() {}));
+    _salesRealtimeSubscription = ref
+        .read(operationsRealtimeServiceProvider)
+        .salesStream
+        .listen(_handleSalesRealtime);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
   @override
   void dispose() {
+    _realtimeReloadDebounce?.cancel();
+    unawaited(_salesRealtimeSubscription?.cancel());
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _handleSalesRealtime(SalesRealtimeMessage message) {
+    final saleDate = message.saleDate;
+    if (saleDate != null && !_rangeContains(saleDate)) {
+      return;
+    }
+    _realtimeReloadDebounce?.cancel();
+    _realtimeReloadDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (mounted && !_loading) {
+        unawaited(_load());
+      }
+    });
+  }
+
+  bool _rangeContains(DateTime date) {
+    final local = date.toLocal();
+    final day = DateTime(local.year, local.month, local.day);
+    return !day.isBefore(_fromDate) && !day.isAfter(_toDate);
   }
 
   Future<void> _load() async {

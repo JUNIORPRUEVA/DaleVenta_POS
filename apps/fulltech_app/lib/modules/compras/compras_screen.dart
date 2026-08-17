@@ -55,6 +55,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   bool _loading = false;
   bool _saving = false;
   bool _mobilePurchaseSearchOpen = false;
+  bool _showPurchaseExtras = false;
   Timer? _draftSaveTimer;
   bool _restoringDraft = false;
   List<ProductModel> _products = const [];
@@ -138,6 +139,13 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   double get _total => (_subtotal - _discount + _shipping + _additional + _tax)
       .clamp(0, double.infinity)
       .toDouble();
+  bool get _hasPurchaseExtras =>
+      _discount != 0 ||
+      _shipping != 0 ||
+      _additional != 0 ||
+      _tax != 0 ||
+      _instructionsCtrl.text.trim().isNotEmpty ||
+      _notesCtrl.text.trim().isNotEmpty;
   int get _differentProducts => _cart.length;
   double get _totalUnits => _cart.fold(0, (sum, item) => sum + item.quantity);
 
@@ -1032,66 +1040,77 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                           ),
                   ),
                   const SizedBox(height: 10),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final stack = constraints.maxWidth < 360;
-                      final fields = [
-                        _moneyField(_discountCtrl, 'Descuento'),
-                        _moneyField(_shippingCtrl, 'Transporte'),
-                        _moneyField(_additionalCtrl, 'Adicional'),
-                        _moneyField(_taxCtrl, 'Impuestos'),
-                      ];
-                      if (stack) {
+                  _PurchaseExtrasSwitch(
+                    value: _showPurchaseExtras,
+                    hasData: _hasPurchaseExtras,
+                    onChanged: (value) => setState(() {
+                      _showPurchaseExtras = value;
+                      _scheduleDraftSave();
+                    }),
+                  ),
+                  if (_showPurchaseExtras) ...[
+                    const SizedBox(height: 8),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final stack = constraints.maxWidth < 360;
+                        final fields = [
+                          _moneyField(_discountCtrl, 'Descuento'),
+                          _moneyField(_shippingCtrl, 'Transporte'),
+                          _moneyField(_additionalCtrl, 'Adicional'),
+                          _moneyField(_taxCtrl, 'Impuestos'),
+                        ];
+                        if (stack) {
+                          return Column(
+                            children: [
+                              for (final field in fields) ...[
+                                field,
+                                const SizedBox(height: 8),
+                              ],
+                            ],
+                          );
+                        }
                         return Column(
                           children: [
-                            for (final field in fields) ...[
-                              field,
-                              const SizedBox(height: 8),
-                            ],
+                            Row(
+                              children: [
+                                Expanded(child: fields[0]),
+                                const SizedBox(width: 8),
+                                Expanded(child: fields[1]),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(child: fields[2]),
+                                const SizedBox(width: 8),
+                                Expanded(child: fields[3]),
+                              ],
+                            ),
                           ],
                         );
-                      }
-                      return Column(
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(child: fields[0]),
-                              const SizedBox(width: 8),
-                              Expanded(child: fields[1]),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(child: fields[2]),
-                              const SizedBox(width: 8),
-                              Expanded(child: fields[3]),
-                            ],
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _instructionsCtrl,
-                    minLines: 1,
-                    maxLines: 2,
-                    decoration: _fieldDecoration(
-                      'Instrucciones o enlace para suplidor',
-                      icon: Icons.link_outlined,
+                      },
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _notesCtrl,
-                    minLines: 1,
-                    maxLines: 2,
-                    decoration: _fieldDecoration(
-                      'Observaciones internas',
-                      icon: Icons.notes_outlined,
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _instructionsCtrl,
+                      minLines: 1,
+                      maxLines: 2,
+                      decoration: _fieldDecoration(
+                        'Instrucciones o enlace para suplidor',
+                        icon: Icons.link_outlined,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _notesCtrl,
+                      minLines: 1,
+                      maxLines: 2,
+                      decoration: _fieldDecoration(
+                        'Observaciones internas',
+                        icon: Icons.notes_outlined,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   _TotalsPanel(
                     units: _qty(_totalUnits),
@@ -1200,6 +1219,13 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     if (confirmed != true) return;
     setState(() {
       _cart = const [];
+      _showPurchaseExtras = false;
+      _notesCtrl.clear();
+      _instructionsCtrl.clear();
+      _discountCtrl.text = '0';
+      _shippingCtrl.text = '0';
+      _additionalCtrl.text = '0';
+      _taxCtrl.text = '0';
       _scheduleDraftSave();
     });
   }
@@ -2637,8 +2663,13 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       _restoringDraft = true;
       setState(() {
         _cart = const [];
+        _showPurchaseExtras = false;
         _notesCtrl.clear();
         _instructionsCtrl.clear();
+        _discountCtrl.text = '0';
+        _shippingCtrl.text = '0';
+        _additionalCtrl.text = '0';
+        _taxCtrl.text = '0';
       });
       _restoringDraft = false;
       _draftSaveTimer?.cancel();
@@ -3584,6 +3615,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
           'shipping': _shippingCtrl.text,
           'additional': _additionalCtrl.text,
           'tax': _taxCtrl.text,
+          'showPurchaseExtras': _showPurchaseExtras,
           'items': _cart.map((item) => item.toDraftJson()).toList(),
         }),
       );
@@ -3622,6 +3654,10 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         _shippingCtrl.text = '${data['shipping'] ?? '0'}';
         _additionalCtrl.text = '${data['additional'] ?? '0'}';
         _taxCtrl.text = '${data['tax'] ?? '0'}';
+        final storedExtrasVisibility = data['showPurchaseExtras'];
+        _showPurchaseExtras = storedExtrasVisibility is bool
+            ? storedExtrasVisibility || _hasPurchaseExtras
+            : _hasPurchaseExtras;
         _cart = items;
       });
     } catch (_) {
@@ -5371,6 +5407,71 @@ class _TotalsPanel extends StatelessWidget {
           ],
         ),
       );
+}
+
+class _PurchaseExtrasSwitch extends StatelessWidget {
+  const _PurchaseExtrasSwitch({
+    required this.value,
+    required this.hasData,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final bool hasData;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .28),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => onChanged(!value),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: theme.dividerColor.withValues(alpha: .45),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.tune_outlined,
+                size: 19,
+                color: value
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Opciones adicionales',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              if (hasData && !value) ...[
+                const SizedBox(width: 8),
+                const _MiniChip(label: 'aplicadas'),
+              ],
+              Switch.adaptive(
+                value: value,
+                onChanged: onChanged,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _EmptyOrderState extends StatelessWidget {

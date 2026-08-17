@@ -17,6 +17,7 @@ import '../../core/models/product_model.dart';
 
 import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/realtime/catalog_realtime_service.dart';
+import '../../core/realtime/operations_data_refresh_service.dart';
 import '../../core/routing/app_route_observer.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
@@ -2221,8 +2222,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     }
   }
 
-  Future<SaleModel?> _createSale(_SalePaymentDraft payment) {
-    return ref
+  Future<SaleModel?> _createSale(_SalePaymentDraft payment) async {
+    final sale = await ref
         .read(ventasRepositoryProvider)
         .createSale(
           customerId: _selectedClient!.id,
@@ -2235,6 +2236,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           expectedTotalSold: _totalSold,
           items: _cart,
         );
+    ref.read(operationsDataRefreshProvider).refreshSalesAndCash();
+    return sale;
   }
 
   bool _isPermissionDenied(Object error) {

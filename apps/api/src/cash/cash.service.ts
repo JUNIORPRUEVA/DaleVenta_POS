@@ -6,7 +6,9 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma, Role } from "@prisma/client";
+import crypto from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
+import { CatalogRealtimeRelayService } from "../products/catalog-realtime-relay.service";
 import { isAdminLike, requireTenant, type TenantUser } from "../auth/tenant-context";
 import {
   CloseCashSessionDto,
@@ -18,7 +20,10 @@ type RequestUser = TenantUser;
 
 @Injectable()
 export class CashService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realtime: CatalogRealtimeRelayService,
+  ) {}
 
   private businessDate(date = new Date()) {
     return date.toISOString().slice(0, 10);
@@ -69,7 +74,7 @@ export class CashService {
     const businessDate = this.businessDate();
     const openingAmount = new Prisma.Decimal(dto.openingAmount);
 
-    return this.prisma.$transaction(async (tx) => {
+    const session = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.cashSession.findFirst({
         where: { openedByUserId: user.id, companyId, status: "OPEN", closedAt: null },
         orderBy: { openedAt: "desc" },
@@ -115,6 +120,11 @@ export class CashService {
 
       return this.mapActiveSession(session);
     });
+    this.emitCashEvent(companyId, "cash.session.opened", session.shiftId, {
+      userId: user.id,
+      businessDate: session.businessDate,
+    });
+    return session;
   }
 
   async addMovement(user: RequestUser, dto: CreateCashMovementDto) {
@@ -134,7 +144,7 @@ export class CashService {
     const affectsProfit =
       dto.affectsProfit ?? (dto.type === "OUT" && movementType === "expense");
 
-    return this.prisma.cashMovement.create({
+    const movement = await this.prisma.cashMovement.create({
       data: {
         sessionId: session.id,
         companyId,
@@ -146,6 +156,12 @@ export class CashService {
         userId: user.id,
       },
     });
+    this.emitCashEvent(companyId, "cash.movement.created", session.id, {
+      userId: user.id,
+      movementId: movement.id,
+      businessDate: session.businessDate,
+    });
+    return movement;
   }
 
   async closeSession(user: RequestUser, dto: CloseCashSessionDto) {
@@ -156,7 +172,7 @@ export class CashService {
     const expectedAmount = new Prisma.Decimal(summary.expectedCash);
     const difference = closingAmount.minus(expectedAmount);
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const closeResult = await tx.cashSession.updateMany({
         where: {
           id: session.id,
@@ -215,6 +231,11 @@ export class CashService {
         difference: this.toNumber(difference),
       };
     });
+    this.emitCashEvent(companyId, "cash.session.closed", session.id, {
+      userId: user.id,
+      businessDate: session.businessDate,
+    });
+    return result;
   }
 
   async summary(user: RequestUser) {
@@ -566,5 +587,21 @@ export class CashService {
       userName: session.userName ?? "Usuario",
       businessDate: session.businessDate ?? this.businessDate(),
     };
+  }
+
+  private emitCashEvent(
+    companyId: string,
+    type: string,
+    sessionId?: string | null,
+    extra: Record<string, unknown> = {},
+  ) {
+    this.realtime.emitCompany(companyId, "cash.event", {
+      eventId: crypto.randomUUID(),
+      type,
+      sessionId,
+      companyId,
+      emittedAt: new Date().toISOString(),
+      ...extra,
+    });
   }
 }

@@ -50,6 +50,36 @@ class LicenseRealtimeMessage {
   final Map<String, dynamic> license;
 }
 
+class SalesRealtimeMessage {
+  const SalesRealtimeMessage({
+    required this.eventId,
+    required this.type,
+    this.saleId,
+    this.cashSessionId,
+    this.saleDate,
+  });
+
+  final String eventId;
+  final String type;
+  final String? saleId;
+  final String? cashSessionId;
+  final DateTime? saleDate;
+}
+
+class CashRealtimeMessage {
+  const CashRealtimeMessage({
+    required this.eventId,
+    required this.type,
+    this.sessionId,
+    this.businessDate,
+  });
+
+  final String eventId;
+  final String type;
+  final String? sessionId;
+  final String? businessDate;
+}
+
 class OperationsRealtimeService {
   OperationsRealtimeService(this._storage);
 
@@ -62,6 +92,10 @@ class OperationsRealtimeService {
       StreamController<Map<String, dynamic>>.broadcast();
   final StreamController<LicenseRealtimeMessage> _licenseController =
       StreamController<LicenseRealtimeMessage>.broadcast();
+  final StreamController<SalesRealtimeMessage> _salesController =
+      StreamController<SalesRealtimeMessage>.broadcast();
+  final StreamController<CashRealtimeMessage> _cashController =
+      StreamController<CashRealtimeMessage>.broadcast();
   final Set<String> _seenEventIds = <String>{};
 
   io.Socket? _socket;
@@ -70,6 +104,8 @@ class OperationsRealtimeService {
   Stream<ClientsRealtimeMessage> get clientStream => _clientsController.stream;
   Stream<Map<String, dynamic>> get whatsappStream => _whatsappController.stream;
   Stream<LicenseRealtimeMessage> get licenseStream => _licenseController.stream;
+  Stream<SalesRealtimeMessage> get salesStream => _salesController.stream;
+  Stream<CashRealtimeMessage> get cashStream => _cashController.stream;
 
   /// Register a callback for incoming WhatsApp CRM messages.
   void onWhatsappMessage(void Function(Map<String, dynamic> data) callback) {
@@ -224,6 +260,49 @@ class OperationsRealtimeService {
       );
     });
 
+    socket.on('sales.event', (data) {
+      if (data is! Map) return;
+      final payload = Map<String, dynamic>.from(data);
+      final eventId = payload['eventId']?.toString() ?? '';
+      if (eventId.isNotEmpty && !_seenEventIds.add(eventId)) {
+        return;
+      }
+      if (_seenEventIds.length > 300) {
+        _seenEventIds.remove(_seenEventIds.first);
+      }
+
+      _salesController.add(
+        SalesRealtimeMessage(
+          eventId: eventId,
+          type: payload['type']?.toString() ?? 'sale.updated',
+          saleId: _trimmedOrNull(payload['saleId']),
+          cashSessionId: _trimmedOrNull(payload['cashSessionId']),
+          saleDate: DateTime.tryParse(payload['saleDate']?.toString() ?? ''),
+        ),
+      );
+    });
+
+    socket.on('cash.event', (data) {
+      if (data is! Map) return;
+      final payload = Map<String, dynamic>.from(data);
+      final eventId = payload['eventId']?.toString() ?? '';
+      if (eventId.isNotEmpty && !_seenEventIds.add(eventId)) {
+        return;
+      }
+      if (_seenEventIds.length > 300) {
+        _seenEventIds.remove(_seenEventIds.first);
+      }
+
+      _cashController.add(
+        CashRealtimeMessage(
+          eventId: eventId,
+          type: payload['type']?.toString() ?? 'cash.updated',
+          sessionId: _trimmedOrNull(payload['sessionId']),
+          businessDate: _trimmedOrNull(payload['businessDate']),
+        ),
+      );
+    });
+
     socket.connect();
     _socket = socket;
   }
@@ -240,3 +319,8 @@ final operationsRealtimeServiceProvider = Provider<OperationsRealtimeService>((
   final storage = ref.read(tokenStorageProvider);
   return OperationsRealtimeService(storage);
 });
+
+String? _trimmedOrNull(dynamic value) {
+  final normalized = value?.toString().trim() ?? '';
+  return normalized.isEmpty ? null : normalized;
+}

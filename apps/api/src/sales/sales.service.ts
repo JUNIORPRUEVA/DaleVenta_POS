@@ -6,10 +6,12 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Prisma, Role } from "@prisma/client";
+import crypto from "node:crypto";
 import * as fs from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { PrismaService } from "../prisma/prisma.service";
+import { CatalogRealtimeRelayService } from "../products/catalog-realtime-relay.service";
 import {
   isAdminLike,
   requireTenant,
@@ -23,6 +25,7 @@ export class SalesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly realtime: CatalogRealtimeRelayService,
   ) {}
 
   private saleInclude() {
@@ -551,7 +554,7 @@ export class SalesService {
     } = payment;
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const sale = await this.prisma.$transaction(async (tx) => {
         for (const item of normalizedItems) {
           if (!item.productId) continue;
           const updated = await tx.product.updateMany({
@@ -637,6 +640,12 @@ export class SalesService {
 
         return sale;
       });
+      this.emitSaleEvent(companyId, "sale.created", sale.id, {
+        userId: user.id,
+        cashSessionId: sale.cashSessionId,
+        saleDate: sale.saleDate,
+      });
+      return sale;
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
       throw new BadRequestException(
@@ -732,6 +741,9 @@ export class SalesService {
           deletedById: requestUser.id,
         },
       });
+      this.emitSaleEvent(companyId, "sale.deleted", saleId, {
+        userId: requestUser.id,
+      });
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
       throw new NotFoundException("Venta no encontrada");
@@ -771,7 +783,7 @@ export class SalesService {
     }
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const returned = await this.prisma.$transaction(async (tx) => {
         for (const item of sale!.items) {
           if (!item.productId) continue;
           await tx.product.update({
@@ -793,6 +805,12 @@ export class SalesService {
           include: this.saleInclude(),
         });
       });
+      this.emitSaleEvent(companyId, "sale.returned", saleId, {
+        userId: requestUser.id,
+        cashSessionId: returned.cashSessionId,
+        saleDate: returned.saleDate,
+      });
+      return returned;
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
       throw new NotFoundException("Venta no encontrada");
@@ -860,7 +878,7 @@ export class SalesService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const payment = await tx.saleCreditPayment.create({
         data: {
           saleId,
@@ -891,6 +909,12 @@ export class SalesService {
       });
       return { payment, sale: updatedSale };
     });
+    this.emitSaleEvent(companyId, "sale.credit_payment.created", saleId, {
+      userId: user.id,
+      cashSessionId: activeSession.id,
+      saleDate: result.sale.saleDate,
+    });
+    return result;
   }
 
   async purgeAllForDebug(user: TenantUser) {
@@ -1127,5 +1151,21 @@ export class SalesService {
       return new Date(date.getTime() + 24 * 60 * 60 * 1000);
     }
     return new Date(trimmed);
+  }
+
+  private emitSaleEvent(
+    companyId: string,
+    type: string,
+    saleId: string,
+    extra: Record<string, unknown> = {},
+  ) {
+    this.realtime.emitCompany(companyId, "sales.event", {
+      eventId: crypto.randomUUID(),
+      type,
+      saleId,
+      companyId,
+      emittedAt: new Date().toISOString(),
+      ...extra,
+    });
   }
 }

@@ -23,6 +23,7 @@ import 'core/license/license_repository.dart';
 import 'core/offline/sync_queue_service.dart';
 import 'core/offline/offline_sync_handlers_bootstrap.dart';
 import 'core/realtime/catalog_realtime_service.dart';
+import 'core/realtime/operations_data_refresh_service.dart';
 import 'core/realtime/operations_realtime_service.dart';
 import 'core/startup/app_startup_controller.dart';
 import 'core/startup/app_storage_scope_guard.dart';
@@ -283,6 +284,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     if (widget.enableBackgroundStartup && _backgroundStartupStarted) {
       ref.watch(offlineSyncHandlersBootstrapProvider);
       ref.watch(syncQueueBootstrapProvider);
+      ref.watch(operationsDataRefreshProvider);
     }
     ref.watch(appUpdateProvider);
     final router = ref.watch(routerProvider);
