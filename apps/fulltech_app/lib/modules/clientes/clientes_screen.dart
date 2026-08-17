@@ -61,6 +61,8 @@ final _clientActivityBundleProvider = FutureProvider.family
       );
     });
 
+enum _ClientesMobileAction { summary, refresh, export, import }
+
 class _ClientActivityBundle {
   const _ClientActivityBundle({required this.profile, required this.timeline});
 
@@ -490,11 +492,11 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
       drawer: buildAdaptiveDrawer(context, currentUser: currentUser),
       floatingActionButton: !isDesktop
           ? FloatingActionButton(
-              onPressed: () => _showSummary(state),
-              tooltip: 'Resumen',
+              onPressed: _openCreateClientFlow,
+              tooltip: 'Nuevo cliente',
               backgroundColor: AppColors.secondary,
               foregroundColor: Colors.white,
-              child: const Icon(Icons.summarize_rounded),
+              child: const Icon(Icons.add_rounded, size: 30),
             )
           : null,
 
@@ -547,29 +549,67 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                   IconButton(
                     tooltip: 'Filtros',
                     onPressed: () => _openFilters(state),
-                    icon: const Icon(Icons.filter_alt_outlined),
+                    icon: Badge(
+                      isLabelVisible: activeFilterCount > 0,
+                      label: Text('$activeFilterCount'),
+                      child: const Icon(Icons.filter_alt_outlined),
+                    ),
                   ),
-                  IconButton(
-                    tooltip: 'Actualizar',
-                    onPressed: () {
-                      if (!state.refreshing) controller.refresh();
+                  PopupMenuButton<_ClientesMobileAction>(
+                    tooltip: 'Más opciones',
+                    icon: const Icon(Icons.more_vert_rounded),
+                    onSelected: (action) {
+                      switch (action) {
+                        case _ClientesMobileAction.summary:
+                          _showSummary(state);
+                          return;
+                        case _ClientesMobileAction.refresh:
+                          if (!state.refreshing) controller.refresh();
+                          return;
+                        case _ClientesMobileAction.export:
+                          _exportClients();
+                          return;
+                        case _ClientesMobileAction.import:
+                          if (!_importingClients) _importClients();
+                          return;
+                      }
                     },
-                    icon: const Icon(Icons.refresh_rounded),
-                  ),
-                  IconButton(
-                    tooltip: 'Nuevo cliente',
-                    onPressed: _openCreateClientFlow,
-                    icon: const Icon(Icons.person_add_alt_1_rounded),
-                  ),
-                  IconButton(
-                    tooltip: 'Exportar clientes',
-                    onPressed: _exportClients,
-                    icon: const Icon(Icons.download_rounded),
-                  ),
-                  IconButton(
-                    tooltip: 'Importar clientes',
-                    onPressed: _importingClients ? null : _importClients,
-                    icon: const Icon(Icons.upload_file_rounded),
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: _ClientesMobileAction.summary,
+                        child: _ClientesMobileMenuEntry(
+                          icon: Icons.summarize_outlined,
+                          label: 'Resumen',
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: _ClientesMobileAction.refresh,
+                        enabled: !state.refreshing,
+                        child: _ClientesMobileMenuEntry(
+                          icon: Icons.refresh_rounded,
+                          label: state.refreshing
+                              ? 'Actualizando'
+                              : 'Actualizar',
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: _ClientesMobileAction.export,
+                        child: _ClientesMobileMenuEntry(
+                          icon: Icons.download_rounded,
+                          label: 'Exportar clientes',
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: _ClientesMobileAction.import,
+                        enabled: !_importingClients,
+                        child: _ClientesMobileMenuEntry(
+                          icon: Icons.upload_file_rounded,
+                          label: _importingClients
+                              ? 'Importando'
+                              : 'Importar clientes',
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ],
@@ -953,6 +993,31 @@ class _ClienteCard extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ClientesMobileMenuEntry extends StatelessWidget {
+  const _ClientesMobileMenuEntry({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: const Color(0xFF2563EB)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+      ],
     );
   }
 }
