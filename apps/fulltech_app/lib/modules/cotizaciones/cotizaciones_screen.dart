@@ -11301,7 +11301,7 @@ class _ProductImagePreviewScreen extends StatelessWidget {
                                 const SizedBox(width: 10),
                                 Flexible(
                                   child: Text(
-                                    'Costo ${money(product.costo)}',
+                                    'COSTE ${money(product.costo)}',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
