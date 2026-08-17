@@ -269,6 +269,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const CashTurnHistoryScreen(),
           ),
           GoRoute(
+            path: Routes.ventasBase,
+            redirect: (context, state) => Routes.ventas,
+          ),
+          GoRoute(
             path: Routes.ventas,
             builder: (context, state) => const ReportsPage(),
           ),

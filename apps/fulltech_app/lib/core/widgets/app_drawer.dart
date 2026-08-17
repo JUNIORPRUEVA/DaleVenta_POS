@@ -621,7 +621,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                                 ? () => _closeGroup(i)
                                 : null,
                             onTapHeader: () {
-                              if (!isDesktop && !groups[i].hasSubmenu) {
+                              if (!groups[i].hasSubmenu) {
                                 _handleItemTap(context, groups[i].items.first);
                                 return;
                               }

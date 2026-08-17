@@ -21,7 +21,8 @@ class Routes {
   static const contabilidadFacturaFiscal = '/contabilidad/factura-fiscal';
   static const contabilidadPagosPendientes = '/contabilidad/pagos-pendientes';
   static const clientes = '/clientes';
-  static const ventas = '/ventas';
+  static const ventasBase = '/ventas';
+  static const ventas = '/ventas/reportes';
   static const ventasLista = '/ventas/lista';
   static const ventasCreditos = '/ventas/creditos';
   static const compras = '/ventas/compras';

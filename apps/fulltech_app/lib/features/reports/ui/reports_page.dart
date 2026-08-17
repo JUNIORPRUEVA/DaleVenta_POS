@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/auth/auth_provider.dart';
-import '../../../core/realtime/operations_realtime_service.dart';
+import '../../../core/realtime/operations_refresh_signals.dart';
 import '../../../core/utils/app_feedback.dart';
 import '../../../core/utils/money_formatters.dart';
 import '../../../core/widgets/app_drawer.dart';
@@ -172,8 +172,8 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   bool _generatingPdf = false;
   String? _error;
   String? _selectedCategory;
-  StreamSubscription<SalesRealtimeMessage>? _salesRealtimeSubscription;
-  StreamSubscription<CashRealtimeMessage>? _cashRealtimeSubscription;
+  ProviderSubscription<int>? _salesRefreshSubscription;
+  ProviderSubscription<int>? _cashRefreshSubscription;
   Timer? _realtimeReloadDebounce;
 
   KpisData _kpis = KpisData.fromSummary(SalesSummaryModel.empty());
@@ -192,38 +192,23 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   @override
   void initState() {
     super.initState();
-    _salesRealtimeSubscription = ref
-        .read(operationsRealtimeServiceProvider)
-        .salesStream
-        .listen(_handleSalesRealtime);
-    _cashRealtimeSubscription = ref
-        .read(operationsRealtimeServiceProvider)
-        .cashStream
-        .listen((_) => _scheduleRealtimeReload());
+    _salesRefreshSubscription = ref.listenManual<int>(
+      salesDataRefreshTickProvider,
+      (previous, next) => _scheduleRealtimeReload(),
+    );
+    _cashRefreshSubscription = ref.listenManual<int>(
+      cashDataRefreshTickProvider,
+      (previous, next) => _scheduleRealtimeReload(),
+    );
     Future.microtask(_loadData);
   }
 
   @override
   void dispose() {
     _realtimeReloadDebounce?.cancel();
-    unawaited(_salesRealtimeSubscription?.cancel());
-    unawaited(_cashRealtimeSubscription?.cancel());
+    _salesRefreshSubscription?.close();
+    _cashRefreshSubscription?.close();
     super.dispose();
-  }
-
-  void _handleSalesRealtime(SalesRealtimeMessage message) {
-    final saleDate = message.saleDate;
-    if (saleDate != null && !_rangeContains(saleDate)) {
-      return;
-    }
-    _scheduleRealtimeReload();
-  }
-
-  bool _rangeContains(DateTime date) {
-    final local = date.toLocal();
-    final day = DateTime(local.year, local.month, local.day);
-    final range = _range;
-    return !day.isBefore(range.start) && !day.isAfter(range.end);
   }
 
   void _scheduleRealtimeReload() {

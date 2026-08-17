@@ -6,6 +6,7 @@ import '../../modules/cash/cash_management_screens.dart';
 import '../../modules/cash/cash_providers.dart';
 import '../../modules/ventas/application/ventas_controller.dart';
 import '../../modules/ventas/sales_credit_screen.dart';
+import 'operations_refresh_signals.dart';
 import 'operations_realtime_service.dart';
 
 final operationsDataRefreshProvider = Provider<OperationsDataRefreshService>((
@@ -32,12 +33,14 @@ class OperationsDataRefreshService {
   StreamSubscription<CashRealtimeMessage>? _cashSubscription;
 
   void refreshSalesAndCash() {
+    _ref.read(salesDataRefreshTickProvider.notifier).state++;
     _ref.invalidate(ventasControllerProvider);
     _ref.invalidate(salesCreditsProvider);
     refreshCash();
   }
 
   void refreshCash() {
+    _ref.read(cashDataRefreshTickProvider.notifier).state++;
     _ref.invalidate(activeCashSessionControllerProvider);
     _ref.invalidate(cashGateStateProvider);
     _ref.invalidate(activeCashSessionProvider);
