@@ -214,7 +214,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   bool _finalizingCheckout = false;
   bool _barcodeCatalogRefreshInFlight = false;
   DateTime? _lastBarcodeCatalogRefreshAt;
-  double _mobileCartExtent = 0.48;
+  double _mobileCartExtent = 0;
+  bool _mobileCartExtentInitialized = false;
 
   String? _lastRoutePrefillUri;
   bool _routeObserverSubscribed = false;
@@ -386,7 +387,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   void _syncProductsOnEnter() {
     if (!mounted) return;
+    _clearMobileSearchFocus();
     _loadProducts(forceRemote: true, silent: true);
+  }
+
+  void _clearMobileSearchFocus() {
+    final width = MediaQuery.maybeSizeOf(context)?.width;
+    if (width == null || width >= _desktopBreakpoint) return;
+    _mobileSearchFocusNode.unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
   }
 
   @override
@@ -2568,6 +2577,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   void _addProduct(ProductModel product) {
     final index = _items.indexWhere((item) => item.productId == product.id);
+    final addingNewLine = index < 0;
     final nextQty = index >= 0 ? _items[index].qty + 1 : 1.0;
     final stock = product.stock;
     if (stock != null && nextQty > stock) {
@@ -2597,6 +2607,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         );
       }
     });
+    final isMobile =
+        MediaQuery.maybeSizeOf(context)?.width != null &&
+        MediaQuery.maybeSizeOf(context)!.width < _desktopBreakpoint;
+    if (isMobile && addingNewLine && _items.length <= 2) {
+      setState(() => _mobileCartExtentInitialized = false);
+    }
   }
 
   Future<void> _openExternalItemDialog({int? editIndex}) async {
@@ -3649,6 +3665,61 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                           ),
                         ),
                         const SizedBox(height: 10),
+                        if ((_selectedClientId ?? '').trim().isNotEmpty) ...[
+                          Material(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(12),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () {
+                                _commitEditorChange(() {
+                                  _selectedClientId = null;
+                                  _selectedClientName = 'Sin cliente';
+                                  _selectedClientPhone = null;
+                                });
+                                Navigator.pop(context);
+                              },
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 9,
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: const Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.person_remove_alt_1_outlined,
+                                      color: Color(0xFFDC2626),
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        'Quitar cliente de esta factura',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium
+                                            ?.copyWith(
+                                              color: const Color(0xFFB91C1C),
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
                         if (loading)
                           const LinearProgressIndicator()
                         else if (error != null)
@@ -5287,7 +5358,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       toolbarHeight: 44,
       elevation: 0,
       centerTitle: true,
-      leadingWidth: 42,
+      leadingWidth: 56,
       titleSpacing: 0,
       backgroundColor: Colors.white,
       surfaceTintColor: Colors.transparent,
@@ -5296,11 +5367,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       systemOverlayStyle: SystemUiOverlayStyle.dark,
       shape: const Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
       leading: Builder(
-        builder: (context) => IconButton(
-          tooltip: 'Menú',
-          onPressed: () => Scaffold.maybeOf(context)?.openDrawer(),
-          constraints: const BoxConstraints.tightFor(width: 40, height: 40),
-          icon: const Icon(Icons.menu_rounded, size: 23),
+        builder: (context) => Padding(
+          padding: const EdgeInsets.only(left: 6),
+          child: _AnimatedDrawerButton(
+            onPressed: () => Scaffold.maybeOf(context)?.openDrawer(),
+          ),
         ),
       ),
       title: const Text(
@@ -5429,6 +5500,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           Expanded(
             child: _MobileSelectorButton(
               icon: Icons.receipt_long_outlined,
+              overline: 'Ticket',
               label: primaryLabel,
               showDot: canExpandTickets,
               onTap: canExpandTickets
@@ -5443,6 +5515,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           Expanded(
             child: _MobileSelectorButton(
               icon: Icons.person_outline_rounded,
+              overline: 'Cliente actual',
               label: hasClient ? clientLabel : 'Cliente general',
               onTap: _openClientDialog,
             ),
@@ -5467,6 +5540,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           controller: _searchCtrl,
           focusNode: _mobileSearchFocusNode,
           textInputAction: TextInputAction.search,
+          canRequestFocus: true,
+          onTapOutside: (_) => _mobileSearchFocusNode.unfocus(),
           onChanged: (_) => _commitEditorChange(() {}),
           onSubmitted: (_) => _submitSearchAndAddFirstVisibleProduct(),
           style: const TextStyle(
@@ -5670,11 +5745,49 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     final compactForKeyboard = keyboardVisible && panelHeight < 210;
 
     void dragCartBy(double delta) {
+      if (!hasItems) return;
       final nextExtent = (_mobileCartExtent - delta / availableHeight)
           .clamp(collapsedSize, expandedSize)
           .toDouble();
       if ((nextExtent - _mobileCartExtent).abs() < 0.001) return;
       setState(() => _mobileCartExtent = nextExtent);
+    }
+
+    Widget cartDragHandle(double nextExtent) {
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onVerticalDragUpdate: hasItems
+            ? (details) => dragCartBy(details.primaryDelta ?? 0)
+            : null,
+        onVerticalDragEnd: hasItems
+            ? (_) {
+                setState(() {
+                  _mobileCartExtent = _mobileCartExtent
+                      .clamp(collapsedSize, expandedSize)
+                      .toDouble();
+                });
+              }
+            : null,
+        onTap: hasItems
+            ? () => unawaited(_animateMobileCartTo(nextExtent))
+            : null,
+        child: SizedBox(
+          width: 96,
+          height: compactForKeyboard ? 18 : 20,
+          child: Center(
+            child: Container(
+              width: compactForKeyboard ? 38 : 48,
+              height: 4,
+              decoration: BoxDecoration(
+                color: hasItems
+                    ? const Color(0xFF94A3B8)
+                    : const Color(0xFFCBD5E1),
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+          ),
+        ),
+      );
     }
 
     Widget cartHeader() {
@@ -5686,88 +5799,67 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           ? mediumSize
           : expandedSize;
 
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onVerticalDragUpdate: (details) {
-          final delta = details.primaryDelta ?? 0;
-          dragCartBy(delta);
-        },
-        onVerticalDragEnd: (_) {
-          setState(() {
-            _mobileCartExtent = _mobileCartExtent
-                .clamp(collapsedSize, expandedSize)
-                .toDouble();
-          });
-        },
-        onTap: () => unawaited(_animateMobileCartTo(nextExtent)),
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(14, compactForKeyboard ? 4 : 5, 12, 4),
-          child: Column(
-            children: [
-              Container(
-                width: compactForKeyboard ? 38 : 44,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFCBD5E1),
-                  borderRadius: BorderRadius.circular(99),
+      return Padding(
+        padding: EdgeInsets.fromLTRB(14, compactForKeyboard ? 2 : 3, 12, 4),
+        child: Column(
+          children: [
+            Center(child: cartDragHandle(nextExtent)),
+            Row(
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.shopping_cart_outlined,
+                    size: 18,
+                    color: Color(0xFF2563EB),
+                  ),
                 ),
-              ),
-              SizedBox(height: compactForKeyboard ? 4 : 5),
-              Row(
-                children: [
-                  Container(
-                    width: 30,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.shopping_cart_outlined,
-                      size: 18,
-                      color: Color(0xFF2563EB),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    itemCountLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF0F172A),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      itemCountLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF0F172A),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  if (isCollapsed || compactForKeyboard)
-                    Flexible(
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: Text(
-                          _money(_total),
-                          textAlign: TextAlign.right,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xFF0F172A),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
+                ),
+                if (isCollapsed || compactForKeyboard)
+                  Flexible(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Text(
+                        _money(_total),
+                        textAlign: TextAlign.right,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF0F172A),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
-                  Icon(
-                    isExpanded
-                        ? Icons.keyboard_arrow_down_rounded
-                        : Icons.keyboard_arrow_up_rounded,
-                    color: const Color(0xFF0F172A),
                   ),
-                ],
-              ),
-            ],
-          ),
+                Icon(
+                  isExpanded
+                      ? Icons.keyboard_arrow_down_rounded
+                      : Icons.keyboard_arrow_up_rounded,
+                  color: hasItems
+                      ? const Color(0xFF0F172A)
+                      : const Color(0xFF94A3B8),
+                ),
+              ],
+            ),
+          ],
         ),
       );
     }
@@ -5794,6 +5886,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           item: _items[index],
           index: index,
           isAdmin: isAdmin,
+          onAfterCommit: () {
+            if (_items.length <= 2) {
+              setState(() => _mobileCartExtentInitialized = false);
+            }
+          },
         ),
       );
     }
@@ -6029,30 +6126,24 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       right: 0,
       bottom: 0,
       height: panelHeight,
-      child: Listener(
-        behavior: HitTestBehavior.translucent,
-        onPointerMove: (event) => dragCartBy(event.delta.dy),
-        child: Material(
-          color: Colors.white,
-          elevation: 18,
-          shadowColor: Colors.black.withValues(alpha: 0.22),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
-          clipBehavior: Clip.antiAlias,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(22),
-              ),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: Column(
-              children: [
-                cartHeader(),
-                Expanded(child: cartProductsList()),
-                checkoutFooter(),
-              ],
-            ),
+      child: Material(
+        color: Colors.white,
+        elevation: 18,
+        shadowColor: Colors.black.withValues(alpha: 0.22),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+        clipBehavior: Clip.antiAlias,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Column(
+            children: [
+              cartHeader(),
+              Expanded(child: cartProductsList()),
+              checkoutFooter(),
+            ],
           ),
         ),
       ),
@@ -6065,8 +6156,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       builder: (context, constraints) {
         final bottomSafe = MediaQuery.viewPaddingOf(context).bottom;
         final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
-        final collapsedBaseHeight = keyboardVisible ? 112.0 : 174.0;
-        final collapsedMaxRatio = keyboardVisible ? 0.24 : 0.29;
+        final lineCount = _items.length;
+        final defaultVisibleRows = lineCount <= 2 ? lineCount : 2;
+        const cartLineHeight = 58.0;
+        final collapsedBaseHeight = keyboardVisible ? 112.0 : 168.0;
+        final collapsedMaxRatio = keyboardVisible ? 0.24 : 0.28;
         final maxCollapsedCartHeight =
             constraints.maxHeight * collapsedMaxRatio;
         final minCollapsedCartHeight =
@@ -6076,18 +6170,23 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         final collapsedCartHeight = (collapsedBaseHeight + bottomSafe)
             .clamp(minCollapsedCartHeight, maxCollapsedCartHeight)
             .toDouble();
-        final twoLineCartHeight = (collapsedCartHeight + 104.0).clamp(
-          constraints.maxHeight * 0.36,
-          constraints.maxHeight * 0.52,
-        );
         final collapsedSize = (collapsedCartHeight / constraints.maxHeight)
             .clamp(0.20, 0.36)
             .toDouble();
-        final mediumSize = (twoLineCartHeight / constraints.maxHeight)
-            .clamp(collapsedSize + 0.12, 0.62)
+        final mediumCartHeight =
+            collapsedCartHeight + (defaultVisibleRows * cartLineHeight);
+        final expandedCartHeight =
+            collapsedCartHeight + (lineCount * cartLineHeight);
+        final mediumSize = (mediumCartHeight / constraints.maxHeight)
+            .clamp(collapsedSize, 0.58)
             .toDouble();
-        const expandedSize = 1.0;
-        if (_mobileCartExtent < collapsedSize ||
+        final expandedSize = (expandedCartHeight / constraints.maxHeight)
+            .clamp(collapsedSize, 0.82)
+            .toDouble();
+        if (!_mobileCartExtentInitialized) {
+          _mobileCartExtent = lineCount > 0 ? mediumSize : collapsedSize;
+          _mobileCartExtentInitialized = true;
+        } else if (_mobileCartExtent < collapsedSize ||
             _mobileCartExtent > expandedSize) {
           _mobileCartExtent = _mobileCartExtent
               .clamp(collapsedSize, expandedSize)
@@ -10835,12 +10934,14 @@ class _MobileSelectorButton extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.overline,
     this.showDot = false,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final String? overline;
   final bool showDot;
 
   @override
@@ -10864,15 +10965,34 @@ class _MobileSelectorButton extends StatelessWidget {
               Icon(icon, color: const Color(0xFF2563EB), size: 17),
               const SizedBox(width: 6),
               Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF334155),
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w500,
-                  ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if ((overline ?? '').trim().isNotEmpty)
+                      Text(
+                        overline!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF64748B),
+                          fontSize: 9,
+                          height: 1,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF334155),
+                        fontSize: 12.2,
+                        height: 1.15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               if (showDot) ...[

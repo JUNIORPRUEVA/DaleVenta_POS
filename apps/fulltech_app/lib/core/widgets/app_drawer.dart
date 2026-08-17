@@ -868,6 +868,36 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
   }
 
   if (mobileLayout) {
+    final turnosItems = <AppNavigationItem>[
+      if (hasPermission(role, AppPermission.viewSales))
+        const AppNavigationItem(
+          icon: Icons.point_of_sale_outlined,
+          title: 'Turno actual',
+          route: Routes.caja,
+        ),
+      if (hasPermission(role, AppPermission.viewSales))
+        const AppNavigationItem(
+          icon: Icons.lock_clock_outlined,
+          title: 'Cerrar turno',
+          route: _drawerCloseTurnAction,
+        ),
+      pick(Routes.cajaTurnosHistorial) ??
+          const AppNavigationItem(
+            icon: Icons.history_rounded,
+            title: 'Historial de turnos',
+            route: Routes.cajaTurnosHistorial,
+          ),
+    ];
+    groups.add(
+      _DrawerMenuGroup(
+        title: 'Turno',
+        icon: Icons.play_circle_outline_rounded,
+        items: turnosItems,
+        openOnHover: false,
+        featured: true,
+      ),
+    );
+
     if (ventasItems.isNotEmpty) {
       groups.add(
         _DrawerMenuGroup(
@@ -898,35 +928,6 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
         ),
       );
     }
-
-    final turnosItems = <AppNavigationItem>[
-      if (hasPermission(role, AppPermission.viewSales))
-        const AppNavigationItem(
-          icon: Icons.point_of_sale_outlined,
-          title: 'Turno actual',
-          route: Routes.caja,
-        ),
-      if (hasPermission(role, AppPermission.viewSales))
-        const AppNavigationItem(
-          icon: Icons.lock_clock_outlined,
-          title: 'Cerrar turno',
-          route: _drawerCloseTurnAction,
-        ),
-      pick(Routes.cajaTurnosHistorial) ??
-          const AppNavigationItem(
-            icon: Icons.history_rounded,
-            title: 'Historial de turnos',
-            route: Routes.cajaTurnosHistorial,
-          ),
-    ];
-    groups.add(
-      _DrawerMenuGroup(
-        title: 'Turno',
-        icon: Icons.schedule_outlined,
-        items: turnosItems,
-        openOnHover: false,
-      ),
-    );
 
     discard([
       Routes.apps,
@@ -1065,12 +1066,14 @@ class _DrawerMenuGroup {
     required this.icon,
     required this.items,
     this.openOnHover = true,
+    this.featured = false,
   });
 
   final String title;
   final IconData icon;
   final List<AppNavigationItem> items;
   final bool openOnHover;
+  final bool featured;
 
   bool get hasSubmenu => items.length > 1;
 
@@ -1187,18 +1190,25 @@ class _DrawerMenuGroupTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasSubmenu = group.hasSubmenu;
+    final featured = group.featured && !desktop;
     final foreground = desktop
         ? AppColors.textPrimary
+        : featured
+        ? Colors.white
         : const Color(0xFF0F172A);
     final iconColor = selected && !desktop
         ? const Color(0xFF2563EB)
         : desktop
         ? foreground
+        : featured
+        ? Colors.white
         : const Color(0xFF172554);
     final headerBg = desktop
         ? (selected || expanded
               ? AppColors.primary.withValues(alpha: 0.09)
               : Colors.transparent)
+        : featured
+        ? Colors.transparent
         : (selected
               ? const Color(0xFFE8F1FF)
               : Colors.white.withValues(alpha: 0.76));
@@ -1228,24 +1238,47 @@ class _DrawerMenuGroupTile extends StatelessWidget {
                   onTap: onTapHeader,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
-                    height: desktop ? (compact ? 46 : 50) : (compact ? 52 : 56),
+                    height: desktop
+                        ? (compact ? 46 : 50)
+                        : featured
+                        ? (compact ? 64 : 70)
+                        : (compact ? 52 : 56),
                     padding: EdgeInsets.symmetric(
-                      horizontal: desktop ? (compact ? 9 : 10) : 10,
+                      horizontal: desktop ? (compact ? 9 : 10) : 12,
                     ),
                     decoration: BoxDecoration(
                       color: headerBg,
-                      borderRadius: BorderRadius.circular(desktop ? 13 : 14),
+                      gradient: featured
+                          ? const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF2563EB), Color(0xFF0F766E)],
+                            )
+                          : null,
+                      borderRadius: BorderRadius.circular(
+                        desktop
+                            ? 13
+                            : featured
+                            ? 18
+                            : 14,
+                      ),
                       border: Border.all(
-                        color: borderColor,
+                        color: featured
+                            ? Colors.white.withValues(alpha: 0.28)
+                            : borderColor,
                         width: desktop ? 0 : 0.9,
                       ),
                       boxShadow: desktop
                           ? null
                           : [
                               BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.025),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
+                                color: featured
+                                    ? const Color(
+                                        0xFF2563EB,
+                                      ).withValues(alpha: 0.24)
+                                    : Colors.black.withValues(alpha: 0.025),
+                                blurRadius: featured ? 18 : 6,
+                                offset: Offset(0, featured ? 8 : 2),
                               ),
                             ],
                     ),
@@ -1257,6 +1290,8 @@ class _DrawerMenuGroupTile extends StatelessWidget {
                           decoration: BoxDecoration(
                             color: desktop
                                 ? foreground.withValues(alpha: 0.10)
+                                : featured
+                                ? Colors.white.withValues(alpha: 0.18)
                                 : selected
                                 ? const Color(0xFFE0ECFF)
                                 : const Color(0xFFF2F6FC),
@@ -1272,21 +1307,63 @@ class _DrawerMenuGroupTile extends StatelessWidget {
                         ),
                         const SizedBox(width: 10),
                         Expanded(
-                          child: Text(
-                            group.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.body.copyWith(
-                              color: foreground,
-                              fontWeight: selected
-                                  ? FontWeight.w600
-                                  : FontWeight.w500,
-                              fontSize: desktop
-                                  ? (compact ? 13.8 : 14.6)
-                                  : (compact ? 15.2 : 15.8),
-                            ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                group.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTextStyles.body.copyWith(
+                                  color: foreground,
+                                  fontWeight: featured || selected
+                                      ? FontWeight.w800
+                                      : FontWeight.w500,
+                                  fontSize: desktop
+                                      ? (compact ? 13.8 : 14.6)
+                                      : featured
+                                      ? (compact ? 16 : 17)
+                                      : (compact ? 15.2 : 15.8),
+                                ),
+                              ),
+                              if (featured) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Abre y controla tu turno',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTextStyles.body.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.84),
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
+                        if (featured) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              'Inicio',
+                              style: AppTextStyles.body.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                        ],
                         Icon(
                           hasSubmenu
                               ? Icons.keyboard_arrow_down_rounded
