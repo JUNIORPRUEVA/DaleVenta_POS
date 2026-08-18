@@ -34,6 +34,7 @@ import '../../core/realtime/catalog_realtime_service.dart';
 import '../../core/routing/app_route_observer.dart';
 import '../../core/routing/route_access.dart';
 import '../../core/routing/routes.dart';
+import '../../core/tax/product_tax_preview_calculator.dart';
 import '../../core/tax/product_tax_options_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
@@ -79,6 +80,24 @@ enum _CheckoutPaymentMethod {
   const _CheckoutPaymentMethod(this.label, this.icon);
   final String label;
   final IconData icon;
+}
+
+class _QuoteTaxSummary {
+  const _QuoteTaxSummary({
+    required this.taxEnabled,
+    required this.taxableBase,
+    required this.taxAmount,
+    required this.exemptAmount,
+    required this.total,
+    required this.defaultRate,
+  });
+
+  final bool taxEnabled;
+  final double taxableBase;
+  final double taxAmount;
+  final double exemptAmount;
+  final double total;
+  final double defaultRate;
 }
 
 enum _QuotePdfShareAction {
@@ -194,8 +213,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   String? _selectedClientPhone;
   String _note = '';
 
-  bool _includeItbis = false;
-  static const double _itbisRate = 0.18;
   String _fiscalCustomerTaxId = '';
   String _fiscalCustomerName = '';
   double _generalDiscountAmount = 0;
@@ -338,7 +355,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _selectedClientName = quotation.customerName;
     _selectedClientPhone = quotation.customerPhone;
     _note = quotation.note;
-    _includeItbis = quotation.includeItbis;
     _generalDiscountAmount = quotation.globalDiscountAmount;
     _editingId = quotation.id;
     _editingCreatedAt = quotation.createdAt;
@@ -1007,14 +1023,63 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _commitEditorChange(() {});
   }
 
-  double get _subtotal => _items.fold(0, (sum, item) => sum + item.total);
+  ProductTaxUiConfig? get _currentTaxConfig =>
+      ref.read(productTaxUiConfigProvider).valueOrNull;
+
+  _QuoteTaxSummary get _quoteTaxSummary {
+    final config = _currentTaxConfig;
+    final settings = config?.settings;
+    final taxEnabled = settings?.taxEnabled == true;
+    final defaultRate = config?.defaultRate ?? settings?.defaultTaxRate ?? 0.18;
+    final pricesIncludeTax = settings?.pricesIncludeTax ?? true;
+
+    var taxableBase = 0.0;
+    var taxAmount = 0.0;
+    var exemptAmount = 0.0;
+    var total = 0.0;
+    for (final item in _items) {
+      final preview = ProductTaxPreviewCalculator.calculate(
+        price: item.unitPrice,
+        quantity: item.qty,
+        companyTaxEnabled: taxEnabled,
+        companyPricesIncludeTax: pricesIncludeTax,
+        companyDefaultTaxRate: defaultRate,
+        taxTreatment: item.taxTreatment,
+        taxRate: item.taxRate > 0 ? item.taxRate : null,
+        taxPriceMode: item.taxPriceMode,
+      );
+      taxableBase += preview.baseAmount;
+      taxAmount += preview.taxAmount;
+      exemptAmount += preview.exemptAmount;
+      total += preview.finalAmount;
+    }
+    return _QuoteTaxSummary(
+      taxEnabled: taxEnabled,
+      taxableBase: _roundCurrency(taxableBase),
+      taxAmount: _roundCurrency(taxAmount),
+      exemptAmount: _roundCurrency(exemptAmount),
+      total: _roundCurrency(total),
+      defaultRate: defaultRate,
+    );
+  }
+
+  bool get _quoteTaxEnabled => _quoteTaxSummary.taxEnabled;
+
+  double get _subtotal {
+    final summary = _quoteTaxSummary;
+    if (!summary.taxEnabled) {
+      return _items.fold(0, (sum, item) => sum + item.total);
+    }
+    return _roundCurrency(summary.taxableBase + summary.exemptAmount);
+  }
+
   double get _subtotalBeforeDiscount => _items.fold(
     0,
     (sum, item) => sum + (item.effectiveOriginalUnitPrice * item.qty),
   );
   double get _lineDiscountAmount =>
       _items.fold(0, (sum, item) => sum + item.discountAmount);
-  double get _grossTotalBeforeGeneralDiscount => _subtotal + _itbisAmount;
+  double get _grossTotalBeforeGeneralDiscount => _quoteTaxSummary.total;
   double get _effectiveGeneralDiscountAmount {
     final maxDiscount = _grossTotalBeforeGeneralDiscount;
     if (_generalDiscountAmount <= 0) return 0;
@@ -1025,7 +1090,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   double get _discountAmount =>
       _lineDiscountAmount + _effectiveGeneralDiscountAmount;
-  double get _itbisAmount => _includeItbis ? (_subtotal * _itbisRate) : 0;
+  double get _taxAmount => _quoteTaxSummary.taxAmount;
   double get _totalCost =>
       _items.fold(0, (sum, item) => sum + item.subtotalCost);
   double get _total =>
@@ -1041,9 +1106,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       double.parse(value.toStringAsFixed(6));
 
   List<SaleDraftItem> _buildCheckoutSaleItems() {
-    final grossMultiplier = _includeItbis ? 1 + _itbisRate : 1.0;
     final grossLines = _items
-        .map((item) => (item.total * grossMultiplier).clamp(0, double.infinity))
+        .map((item) => item.total.clamp(0, double.infinity))
         .toList(growable: false);
     final grossBase = grossLines.fold<double>(0, (sum, value) => sum + value);
     final targetTotal = _roundCurrency(_total.clamp(0, double.infinity));
@@ -1097,7 +1161,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       selectedClientName: _selectedClientName,
       selectedClientPhone: _selectedClientPhone,
       note: _note,
-      includeItbis: _includeItbis,
+      includeItbis: _quoteTaxEnabled,
       fiscalVoucherType: '',
       fiscalVoucherNumber: '',
       fiscalVoucherDueDate: null,
@@ -1140,7 +1204,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _selectedClientName = draft.selectedClientName;
     _selectedClientPhone = draft.selectedClientPhone;
     _note = draft.note;
-    _includeItbis = draft.includeItbis;
     _fiscalCustomerTaxId = draft.fiscalCustomerTaxId;
     _fiscalCustomerName = draft.fiscalCustomerName;
     _generalDiscountAmount = draft.globalDiscountAmount;
@@ -1160,7 +1223,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _selectedClientName = 'Sin cliente';
     _selectedClientPhone = null;
     _note = '';
-    _includeItbis = false;
     _fiscalCustomerTaxId = '';
     _fiscalCustomerName = '';
     _generalDiscountAmount = 0;
@@ -1195,7 +1257,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         _selectedClientName.trim() != 'Sin cliente' ||
         (_selectedClientPhone ?? '').trim().isNotEmpty ||
         _note.trim().isNotEmpty ||
-        _includeItbis ||
         _fiscalCustomerTaxId.trim().isNotEmpty ||
         _fiscalCustomerName.trim().isNotEmpty ||
         _generalDiscountAmount != 0 ||
@@ -1207,18 +1268,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     return _fiscalVoucherValidationMessage == null;
   }
 
-  String? get _fiscalVoucherValidationMessage {
-    if (!_includeItbis) return null;
-    return null;
-  }
-
-  void _setItbisEnabled(bool value) {
-    _includeItbis = value;
-    if (value && _fiscalCustomerName.trim().isEmpty) {
-      final clientName = _selectedClientName.trim();
-      _fiscalCustomerName = clientName == 'Sin cliente' ? '' : clientName;
-    }
-  }
+  String? get _fiscalVoucherValidationMessage => null;
 
   Future<bool> _ensurePosActionPermission(
     AppPermission permission,
@@ -1235,7 +1285,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   Future<bool> _ensureFiscalInvoicePermission() {
     return _ensurePosActionPermission(
       AppPermission.createFiscalInvoices,
-      'Activar factura fiscal e ITBIS',
+      'Completar datos fiscales de la cotización',
     );
   }
 
@@ -1261,35 +1311,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     return allowed;
   }
 
-  Future<void> _toggleMobileItbis() async {
-    if (_includeItbis) {
-      _commitEditorChange(() => _setItbisEnabled(false));
-      return;
-    }
-    final allowed = await _ensureFiscalInvoicePermission();
-    if (!allowed || !mounted) return;
-    await _openMobileFiscalInvoicePanel(authorized: true);
-  }
-
-  Future<void> _setItbisFromDesktop(bool value) async {
-    if (!value) {
-      _commitEditorChange(() => _setItbisEnabled(false));
-      return;
-    }
-    final allowed = await _ensureFiscalInvoicePermission();
-    if (!allowed || !mounted) return;
-    _commitEditorChange(() => _setItbisEnabled(true));
-  }
-
   List<String> _fiscalSaleNoteLines() {
-    if (!_includeItbis) return const [];
+    if (!_quoteTaxEnabled) return const [];
     return [
-      'Cotización con ITBIS informativo',
+      'Cotización con impuestos automáticos',
       if (_fiscalCustomerTaxId.trim().isNotEmpty)
         'RNC/Cédula: ${_fiscalCustomerTaxId.trim()}',
       if (_fiscalCustomerName.trim().isNotEmpty)
         'Razón social: ${_fiscalCustomerName.trim()}',
-      'ITBIS ${(_itbisRate * 100).toStringAsFixed(0)}%: ${_money(_itbisAmount)}',
+      'ITBIS ${(_quoteTaxSummary.defaultRate * 100).toStringAsFixed(0)}%: ${_money(_taxAmount)}',
     ];
   }
 
@@ -1900,15 +1930,20 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Future<void> _openMobileFiscalInvoicePanel({bool authorized = false}) async {
-    if (!_includeItbis && !authorized) {
+    if (!authorized) {
       final allowed = await _ensureFiscalInvoicePermission();
       if (!allowed || !mounted) return;
     }
-    _commitEditorChange(() => _setItbisEnabled(true));
+    if (_fiscalCustomerName.trim().isEmpty) {
+      _commitEditorChange(() {
+        final clientName = _selectedClientName.trim();
+        _fiscalCustomerName = clientName == 'Sin cliente' ? '' : clientName;
+      });
+    }
     await showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
-      barrierLabel: 'Configurar ITBIS',
+      barrierLabel: 'Datos fiscales',
       barrierColor: Colors.black.withValues(alpha: 0.24),
       transitionDuration: const Duration(milliseconds: 240),
       pageBuilder: (dialogContext, animation, secondaryAnimation) {
@@ -2253,9 +2288,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         'clientId': _selectedClientId,
         'clientName': _selectedClientName,
         'clientPhone': _selectedClientPhone,
-        'includeItbis': _includeItbis,
+        'taxEnabled': _quoteTaxEnabled,
         'subtotal': _subtotal,
-        'itbisAmount': _itbisAmount,
+        'taxAmount': _taxAmount,
         'activeDesktopTicketId': _activeDesktopTicketId,
       },
     );
@@ -4002,8 +4037,19 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       customerName: _selectedClientName,
       customerPhone: _selectedClientPhone,
       note: _note,
-      includeItbis: _includeItbis,
-      itbisRate: _itbisRate,
+      includeItbis: _quoteTaxEnabled && _taxAmount > 0,
+      itbisRate: _quoteTaxSummary.defaultRate,
+      fiscalTaxEnabled: _quoteTaxEnabled,
+      fiscalPriceMode: _quoteTaxEnabled
+          ? (_currentTaxConfig?.settings.pricesIncludeTax == true
+                ? 'TAX_INCLUDED'
+                : 'TAX_ADDED')
+          : 'NO_TAX',
+      taxableBase: _quoteTaxSummary.taxableBase,
+      taxAmount: _quoteTaxSummary.taxAmount,
+      exemptAmount: _quoteTaxSummary.exemptAmount,
+      fiscalDiscountAmount: _effectiveGeneralDiscountAmount,
+      totalSnapshot: _total,
       globalDiscountAmount: _effectiveGeneralDiscountAmount,
       items: [..._items],
     );
@@ -5968,27 +6014,20 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     ),
                   ),
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      'ITBIS',
-                      style: TextStyle(
-                        color: Color(0xFF64748B),
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w500,
+                if (_quoteTaxEnabled)
+                  GestureDetector(
+                    onTap: () => unawaited(
+                      _openMobileFiscalInvoicePanel(authorized: true),
+                    ),
+                    child: Text(
+                      'ITBIS ${_money(_taxAmount)}',
+                      style: const TextStyle(
+                        color: Color(0xFF2563EB),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    Transform.scale(
-                      scale: 0.68,
-                      child: Switch.adaptive(
-                        value: _includeItbis,
-                        activeThumbColor: const Color(0xFF2563EB),
-                        onChanged: (_) => unawaited(_toggleMobileItbis()),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
                 const SizedBox(width: 8),
                 GestureDetector(
                   onTap: _applyGeneralDiscount,
@@ -6304,13 +6343,13 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                             items: _items,
                             selectedClientName: _selectedClientName,
                             selectedClientPhone: _selectedClientPhone,
-                            includeItbis: _includeItbis,
+                            includeItbis: _quoteTaxEnabled,
                             subtotalBeforeDiscount: _subtotalBeforeDiscount,
                             discountAmount: _lineDiscountAmount,
                             generalDiscountAmount:
                                 _effectiveGeneralDiscountAmount,
                             subtotal: _subtotal,
-                            itbisAmount: _itbisAmount,
+                            itbisAmount: _taxAmount,
                             total: _total,
                             isAdmin: isAdmin,
                             utilityAmount: _utilityAmount,
@@ -6322,8 +6361,13 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                               _selectedClientPhone = null;
                             }),
                             onOpenHistory: _openRecentSalesPanel,
-                            onToggleItbis: (value) =>
-                                unawaited(_setItbisFromDesktop(value)),
+                            onOpenFiscalData: _quoteTaxEnabled
+                                ? () => unawaited(
+                                    _openMobileFiscalInvoicePanel(
+                                      authorized: true,
+                                    ),
+                                  )
+                                : null,
                             hasNote: _note.trim().isNotEmpty,
                             onOpenNote: _openNoteDialog,
                             onClear: !_hasEditorContent
@@ -6364,17 +6408,17 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                       bottom: 0,
                       width: fiscalPaneWidth,
                       child: IgnorePointer(
-                        ignoring: !_includeItbis || overlayOpen,
+                        ignoring: !_quoteTaxEnabled || overlayOpen,
                         child: AnimatedSlide(
                           duration: const Duration(milliseconds: 260),
                           curve: Curves.easeOutCubic,
-                          offset: _includeItbis && !overlayOpen
+                          offset: _quoteTaxEnabled && !overlayOpen
                               ? Offset.zero
                               : const Offset(-1.04, 0),
                           child: AnimatedOpacity(
                             duration: const Duration(milliseconds: 180),
                             curve: Curves.easeOutCubic,
-                            opacity: _includeItbis && !overlayOpen ? 1 : 0,
+                            opacity: _quoteTaxEnabled && !overlayOpen ? 1 : 0,
                             child: _DesktopFiscalInvoicePanel(
                               customerTaxId: _fiscalCustomerTaxId,
                               customerName: _fiscalCustomerName,
@@ -12562,7 +12606,7 @@ class _DesktopQuotePanel extends StatelessWidget {
     required this.onPickClient,
     required this.onClearClient,
     required this.onOpenHistory,
-    required this.onToggleItbis,
+    required this.onOpenFiscalData,
     required this.hasNote,
     required this.onOpenNote,
     required this.onClear,
@@ -12593,7 +12637,7 @@ class _DesktopQuotePanel extends StatelessWidget {
   final VoidCallback onPickClient;
   final VoidCallback onClearClient;
   final VoidCallback onOpenHistory;
-  final ValueChanged<bool> onToggleItbis;
+  final VoidCallback? onOpenFiscalData;
   final bool hasNote;
   final VoidCallback onOpenNote;
   final VoidCallback? onClear;
@@ -13017,16 +13061,15 @@ class _DesktopQuotePanel extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _DesktopPanelSwitchAction(
-                          icon: Icons.receipt_long_outlined,
-                          label: 'ITBIS',
-                          value: includeItbis,
-                          helpTitle: 'ITBIS en cotización',
-                          helpMessage:
-                              'Al activar este switch se muestra el panel de datos fiscales informativos. El NCF se asigna únicamente al emitir la venta desde el backend.',
-                          onTap: () => onToggleItbis(!includeItbis),
-                        ),
-                        const SizedBox(width: 6),
+                        if (includeItbis) ...[
+                          IconButton(
+                            tooltip: 'Datos fiscales',
+                            onPressed: onOpenFiscalData,
+                            icon: const Icon(Icons.receipt_long_outlined),
+                            color: const Color(0xFF1957E6),
+                          ),
+                          const SizedBox(width: 6),
+                        ],
                         _DesktopPanelSwitchAction(
                           icon: Icons.sticky_note_2_outlined,
                           label: 'Notas',

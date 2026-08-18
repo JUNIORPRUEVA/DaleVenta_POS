@@ -222,8 +222,15 @@ class SaleModel {
   final double discountAmount;
   final String? fiscalVoucherType;
   final String? ncf;
+  final String? issuerNameSnapshot;
+  final String? issuerTaxIdSnapshot;
+  final String? issuerAddressSnapshot;
+  final String? issuerPhoneSnapshot;
+  final String? issuerEmailSnapshot;
   final String? fiscalCustomerTaxId;
   final String? fiscalCustomerName;
+  final String? customerAddressSnapshot;
+  final String? customerPhoneSnapshot;
   final List<SaleItemModel> items;
 
   const SaleModel({
@@ -256,8 +263,15 @@ class SaleModel {
     this.discountAmount = 0,
     this.fiscalVoucherType,
     this.ncf,
+    this.issuerNameSnapshot,
+    this.issuerTaxIdSnapshot,
+    this.issuerAddressSnapshot,
+    this.issuerPhoneSnapshot,
+    this.issuerEmailSnapshot,
     this.fiscalCustomerTaxId,
     this.fiscalCustomerName,
+    this.customerAddressSnapshot,
+    this.customerPhoneSnapshot,
     required this.items,
   });
 
@@ -321,8 +335,15 @@ class SaleModel {
       discountAmount: _toDouble(json['discountAmount']),
       fiscalVoucherType: json['fiscalVoucherType']?.toString(),
       ncf: json['ncf']?.toString(),
+      issuerNameSnapshot: json['issuerNameSnapshot']?.toString(),
+      issuerTaxIdSnapshot: json['issuerTaxIdSnapshot']?.toString(),
+      issuerAddressSnapshot: json['issuerAddressSnapshot']?.toString(),
+      issuerPhoneSnapshot: json['issuerPhoneSnapshot']?.toString(),
+      issuerEmailSnapshot: json['issuerEmailSnapshot']?.toString(),
       fiscalCustomerTaxId: json['fiscalCustomerTaxId']?.toString(),
       fiscalCustomerName: json['fiscalCustomerName']?.toString(),
+      customerAddressSnapshot: json['customerAddressSnapshot']?.toString(),
+      customerPhoneSnapshot: json['customerPhoneSnapshot']?.toString(),
       items: rawItems
           .whereType<Map>()
           .map((item) => SaleItemModel.fromJson(item.cast<String, dynamic>()))

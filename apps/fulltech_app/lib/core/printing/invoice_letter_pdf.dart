@@ -21,6 +21,20 @@ class InvoiceLetterPdf {
     final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$ ');
     final date = DateFormat('dd/MM/yyyy HH:mm');
     final color = PdfColor.fromInt(brandColorArgb);
+    final issuerName = (sale.issuerNameSnapshot ?? '').trim().isNotEmpty
+        ? sale.issuerNameSnapshot!.trim()
+        : business.companyName.trim().isEmpty
+        ? 'FULLTECH POS'
+        : business.companyName.trim();
+    final issuerRnc = (sale.issuerTaxIdSnapshot ?? '').trim().isNotEmpty
+        ? sale.issuerTaxIdSnapshot!.trim()
+        : business.rnc.trim();
+    final issuerPhone = (sale.issuerPhoneSnapshot ?? '').trim().isNotEmpty
+        ? sale.issuerPhoneSnapshot!.trim()
+        : business.phone.trim();
+    final issuerAddress = (sale.issuerAddressSnapshot ?? '').trim().isNotEmpty
+        ? sale.issuerAddressSnapshot!.trim()
+        : business.address.trim();
     final subtotal = sale.fiscalTaxEnabled && sale.taxableBase > 0
         ? sale.taxableBase
         : items.fold(0.0, (sum, item) => sum + item.subtotalSold);
@@ -38,21 +52,16 @@ class InvoiceLetterPdf {
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text(
-                      business.companyName.trim().isEmpty
-                          ? 'FULLTECH POS'
-                          : business.companyName.trim(),
+                      issuerName,
                       style: pw.TextStyle(
                         fontSize: 22,
                         fontWeight: pw.FontWeight.bold,
                         color: color,
                       ),
                     ),
-                    if (business.rnc.trim().isNotEmpty)
-                      pw.Text('RNC: ${business.rnc}'),
-                    if (business.phone.trim().isNotEmpty)
-                      pw.Text('Tel: ${business.phone}'),
-                    if (business.address.trim().isNotEmpty)
-                      pw.Text(business.address),
+                    if (issuerRnc.isNotEmpty) pw.Text('RNC: $issuerRnc'),
+                    if (issuerPhone.isNotEmpty) pw.Text('Tel: $issuerPhone'),
+                    if (issuerAddress.isNotEmpty) pw.Text(issuerAddress),
                   ],
                 ),
               ),
@@ -90,6 +99,8 @@ class InvoiceLetterPdf {
                 'Cliente: ${sale.fiscalCustomerName ?? sale.customerName ?? 'Consumidor Final'}',
                 if ((sale.fiscalCustomerTaxId ?? '').trim().isNotEmpty)
                   'RNC/Cedula: ${sale.fiscalCustomerTaxId}',
+                if ((sale.customerPhoneSnapshot ?? '').trim().isNotEmpty)
+                  'Tel: ${sale.customerPhoneSnapshot}',
               ].join('\n'),
             ),
           ),
@@ -124,14 +135,18 @@ class InvoiceLetterPdf {
                     sale.fiscalTaxEnabled ? 'Base imponible' : 'Subtotal',
                     money.format(subtotal),
                   ),
-                  if (sale.fiscalTaxEnabled && sale.fiscalPriceMode == 'TAX_INCLUDED')
+                  if (sale.fiscalTaxEnabled &&
+                      sale.fiscalPriceMode == 'TAX_INCLUDED')
                     _total('ITBIS incluido', ''),
                   if (sale.fiscalTaxEnabled && sale.taxAmount > 0)
                     _total('ITBIS', money.format(sale.taxAmount)),
                   if (sale.fiscalTaxEnabled && sale.exemptAmount > 0)
                     _total('Exento', money.format(sale.exemptAmount)),
                   if (sale.discountAmount > 0)
-                    _total('Descuento', '-${money.format(sale.discountAmount)}'),
+                    _total(
+                      'Descuento',
+                      '-${money.format(sale.discountAmount)}',
+                    ),
                   pw.Divider(),
                   _total(
                     'Total factura',

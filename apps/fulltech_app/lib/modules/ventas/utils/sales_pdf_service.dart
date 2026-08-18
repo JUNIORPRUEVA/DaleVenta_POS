@@ -143,7 +143,10 @@ Future<Uint8List> buildSaleInvoicePdf({
   final dateFmt = DateFormat('dd/MM/yyyy h:mm a', 'es_DO');
   final qtyFmt = NumberFormat('#,##0.##', 'es_DO');
   final logoImage = await _resolveCompanyLogo(company);
-  final companyName = _fallback(company?.companyName, fallback: 'FULLTECH');
+  final companyName = _fallback(
+    sale.issuerNameSnapshot,
+    fallback: _fallback(company?.companyName, fallback: 'FULLTECH'),
+  );
   final invoiceCode = _buildInvoiceCode(sale.id);
 
   final doc = pw.Document(title: 'Factura $invoiceCode', author: companyName);
@@ -186,16 +189,28 @@ pw.Widget _invoiceHeader({
   required DateFormat dateFmt,
   required bool isContinuation,
 }) {
-  final companyName = _fallback(company?.companyName, fallback: 'FULLTECH');
-  final rnc = _clean(company?.rnc);
-  final phone = _clean(company?.phone);
-  final address = _clean(company?.address);
+  final companyName = _fallback(
+    sale.issuerNameSnapshot,
+    fallback: _fallback(company?.companyName, fallback: 'FULLTECH'),
+  );
+  final rnc = _fallback(
+    sale.issuerTaxIdSnapshot,
+    fallback: _clean(company?.rnc),
+  );
+  final phone = _fallback(
+    sale.issuerPhoneSnapshot,
+    fallback: _clean(company?.phone),
+  );
+  final address = _fallback(
+    sale.issuerAddressSnapshot,
+    fallback: _clean(company?.address),
+  );
   final customerName = _fallback(
-    sale.customerName,
+    sale.fiscalCustomerName ?? sale.customerName,
     fallback: 'Consumidor Final',
   );
   final customerPhone = _fallback(
-    sale.customerPhone,
+    sale.customerPhoneSnapshot ?? sale.customerPhone,
     fallback: 'No registrado',
   );
   final statusText = sale.isDeleted ? 'Factura devuelta' : null;

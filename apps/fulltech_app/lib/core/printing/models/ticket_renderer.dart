@@ -29,6 +29,19 @@ class TicketRenderer {
       );
     }
 
+    final companyName = (data.issuerName ?? '').trim().isNotEmpty
+        ? data.issuerName!.trim()
+        : company.name;
+    final companyRnc = (data.issuerRnc ?? '').trim().isNotEmpty
+        ? data.issuerRnc!.trim()
+        : company.rnc;
+    final companyPhone = (data.issuerPhone ?? '').trim().isNotEmpty
+        ? data.issuerPhone!.trim()
+        : company.phone;
+    final companyAddress = (data.issuerAddress ?? '').trim().isNotEmpty
+        ? data.issuerAddress!.trim()
+        : company.address;
+
     bool isFiscalTicket() {
       final voucher = (data.fiscalVoucherType ?? '').trim().toUpperCase();
       return (voucher == 'B01' || voucher == 'B02') &&
@@ -61,34 +74,34 @@ class TicketRenderer {
 
     add(
       compact58
-          ? ReceiptTextUtils.center(company.name, width)
-          : ReceiptTextUtils.align(company.name, width, layout.headerAlignment),
+          ? ReceiptTextUtils.center(companyName, width)
+          : ReceiptTextUtils.align(companyName, width, layout.headerAlignment),
     );
     if (layout.showBusinessData) {
-      if (company.rnc.isNotEmpty) {
+      if (companyRnc.isNotEmpty) {
         add(
           compact58
-              ? ReceiptTextUtils.center('RNC: ${company.rnc}', width)
+              ? ReceiptTextUtils.center('RNC: $companyRnc', width)
               : ReceiptTextUtils.align(
-                  'RNC: ${company.rnc}',
+                  'RNC: $companyRnc',
                   width,
                   layout.headerAlignment,
                 ),
         );
       }
-      if (company.phone.isNotEmpty) {
+      if (companyPhone.isNotEmpty) {
         add(
           compact58
-              ? ReceiptTextUtils.center('Tel: ${company.phone}', width)
+              ? ReceiptTextUtils.center('Tel: $companyPhone', width)
               : ReceiptTextUtils.align(
-                  'Tel: ${company.phone}',
+                  'Tel: $companyPhone',
                   width,
                   layout.headerAlignment,
                 ),
         );
       }
-      if (company.address.isNotEmpty) {
-        for (final line in ReceiptTextUtils.wrap(company.address, width)) {
+      if (companyAddress.isNotEmpty) {
+        for (final line in ReceiptTextUtils.wrap(companyAddress, width)) {
           add(
             compact58
                 ? ReceiptTextUtils.center(line, width)

@@ -1,269 +1,107 @@
 # FULLPOS FINAL FISCAL REMEDIATION PLAN
 
-Verdict basis: `B — ALMOST CLOSED, SPECIFIC FIXES REQUIRED`.
+Updated: 2026-08-18
+
+Verdict basis: `B - ALMOST CLOSED, CODE REMEDIATED LOCALLY, STAGING BLOCKED`.
 
 No production deploy, no production migration, no e-CF.
 
-# P0
+# CLOSED IN THIS REMEDIATION
 
-No confirmed P0 code defect in this audit.
-
-P0-risk controls still required before production:
-
-| Item | Effort | Required proof |
+| Item | Result | Proof |
 |---|---|---|
-| Run controlled staging fiscal validation on `fullpos_staging` | small | `npm run test:staging:fiscal` JSON output with concurrency20, concurrency100, idempotency, exhausted, sequenceRules, quotes all passing |
-| Production migration read-only inventory | small | Export of production `_prisma_migrations`, current DB name, backup timestamp, and planned baseline/cutover decision |
-| Fresh disposable DB migrate deploy | small | `npx prisma migrate deploy` against empty disposable DB plus API boot |
+| Remove quote legacy ITBIS toggle | CLOSED | `rg "_includeItbis|_itbisAmount|_setItbisEnabled|_toggleMobileItbis"` returns 0 matches |
+| Quote fiscal preview from config | CLOSED | `cotizaciones_screen.dart` uses `ProductTaxPreviewCalculator` |
+| Quote->invoice double conversion guard | CLOSED | `SalesService.create` returns existing invoice for same `sourceQuotationId` |
+| Issuer/customer sale snapshots | CLOSED | Prisma fields + migration `20260818213000_add_sale_issuer_customer_snapshots` |
+| PDF/ticket issuer snapshot usage | CLOSED | `SaleModel`, invoice PDF, letter PDF, ticket data/rendering updated |
+| Refund copies historical issuer/customer | CLOSED | Refund create copies original sale snapshot fields |
+| Fresh disposable DB migrate | CLOSED | `npx prisma migrate deploy` passed on `fullpos_fresh_migration_codex` |
+| Local backend tests/build | CLOSED | 11 suites / 47 tests, build pass |
+| Local Flutter tests/build | CLOSED | 130 tests, web build pass |
 
-# P1
+# REMAINING P1
 
-## 1. Remove or quarantine legacy ITBIS toggle in cotizaciones UI
+## 1. Baseline/migrate real staging database
 
-Severity: P1  
-Effort: medium  
-Files:
-
-- `apps/fulltech_app/lib/modules/cotizaciones/cotizaciones_screen.dart`
-- `apps/fulltech_app/lib/modules/cotizaciones/cotizacion_models.dart`
-- `apps/api/src/cotizaciones/dto/create-cotizacion.dto.ts`
-- `apps/api/src/cotizaciones/dto/update-cotizacion.dto.ts`
+Status: `BLOCKED`
 
 Problem:
 
-- `_includeItbis`, `_itbisAmount`, `_setItbisEnabled`, `_toggleMobileItbis`, and UI switches labelled `ITBIS` remain.
-- Backend recalculates fiscal snapshots, but UI still looks like cashier-controlled tax behavior.
+- `fullpos_staging` is non-empty and not baselined for the current Prisma migration history.
+- Fiscal validation failed because `Sale.source_quotation_id` is missing.
 
-Fix:
+Evidence:
 
-- Replace runtime ITBIS switch with config-driven, read-only tax summary.
-- If a draft-only flag must remain for legacy non-fiscal quotes, rename it and stop presenting it as fiscal authority.
-- Ensure quote UI does not alter tax mode independently of company/product tax config.
+```text
+P3005: The database schema is not empty.
+The column `Sale.source_quotation_id` does not exist in the current database.
+```
 
-Tests:
+Required proof:
 
-- Widget: tax off hides fiscal controls.
-- Widget: tax on included displays correct summary without toggle.
-- Widget: tax on added displays final total.
-- Widget: selecting/saving quote does not depend on manual ITBIS switch.
-- Backend: malicious `includeItbis` cannot override backend snapshots.
+- Backup staging.
+- Decide baseline strategy for current schema.
+- Apply migrations with `prisma migrate deploy`.
+- Rerun `npm run test:staging:fiscal` and archive output.
 
-## 2. Add fiscal HTTP E2E suite
+## 2. Add full authenticated fiscal HTTP DB E2E
 
-Severity: P1  
-Effort: large  
-Files:
+Status: `PARTIAL`
 
-- New script or Jest E2E under `apps/api/scripts/` or `apps/api/src/**/*.e2e-spec.ts`.
+Current proof:
 
-Required flows:
+- Controller E2E harness passes for `POST /sales` and `POST /sales/:id/return`.
 
-- login
-- tenant/company context
-- create tax settings
-- create active 18% tax
-- create product inherit/taxable/exempt
-- create fiscal client
-- create quote
-- quote PDF endpoint if available
-- create sale no voucher
-- create sale B01
-- create sale B02
-- refund full/partial
-- report summary
-- NCF sequence list/admin permissions
-- cross-tenant negative tests
+Still required:
 
-Tests:
+- Real auth/login.
+- Real tenant/company context.
+- Real DB fixtures.
+- Product/tax/client/quote/sale/B01/B02/refund/report chain.
+- Cross-tenant negative cases.
+- NCF idempotency/concurrency over HTTP.
 
-- Must use real HTTP calls and auth headers.
-- Must prove backend rejects malicious body `companyId`.
-- Must prove UI-hidden controls are not required for fiscal enforcement.
+# REMAINING P2
 
-## 3. Execute staging fiscal script on real staging DB
+## 3. Historical PDF immutability visual/content test
 
-Severity: P1  
-Effort: small  
-Files:
+Add a test that emits a sale, mutates current company/client/product data, renders invoice PDF/ticket again, and asserts original issuer/customer/product/tax snapshots remain.
 
-- `apps/api/scripts/fiscal-staging-validation.cjs`
+## 4. Report consistency fixtures
 
-Fix:
+Add report tests for:
 
-- Point `DATABASE_URL` to disposable/staging DB named `fullpos_staging`.
-- Run `npm run test:staging:fiscal`.
-- Store JSON output in `FULLPOS_TAX_PHASE5_STAGING_VALIDATION.md` or a new dated evidence file.
+- Company A vs Company B isolation.
+- Mixed taxable/exempt sale.
+- Refund negative values.
+- Commercial profit vs net-tax profit.
 
-Expected proof:
+## 5. Refund fiscal expansion
 
-- schema tables/indexes present.
-- duplicate NCF blocked same company.
-- same NCF allowed across companies.
-- concurrency20 passes.
-- concurrency100 passes.
-- idempotency 20 same key creates one sale/one NCF.
-- sequence 14-15 exhausts and blocks third.
-- one active sequence per type.
-- overlapping sequence blocked.
-- 100 quotes consume 0 NCF.
+Add full coverage for:
 
-## 4. Complete migration/cutover proof
-
-Severity: P1  
-Effort: medium  
-Files:
-
-- `apps/api/prisma/migrations/*`
-- `apps/api/scripts/start-prod.sh`
-- deployment docs
-
-Fix:
-
-- Run fresh DB migration test.
-- Run staging migration deploy.
-- Inspect production `_prisma_migrations` read-only.
-- Document backup and rollback.
-- Keep `PRISMA_SYNC_MODE=push` blocked in production.
-
-Tests:
-
-- `npx prisma validate`
-- `npx prisma generate`
-- `npx prisma migrate deploy` on empty disposable DB
-- `npm run build`
-- API startup smoke after migrate
-
-# P2
-
-## 5. Expand refund fiscal tests
-
-Severity: P2  
-Effort: medium  
-Files:
-
-- `apps/api/src/sales/sales.service.fiscal-final.spec.ts`
-
-Add tests:
-
-- Full refund of 1180 included => base -1000, tax -180, total -1180.
-- Partial refund 1 of 2 units.
+- Full refund included tax.
+- Partial refund.
 - Exempt refund.
 - Mixed refund.
 - Discount refund.
-- Product edited after sale does not affect refund snapshot.
+- Product edited after sale.
 
-## 6. Add historical immutability tests
+# REMAINING P3
 
-Severity: P2  
-Effort: medium  
-Files:
+## 6. Clean ts-jest deprecation warning
 
-- `apps/api/src/sales/sales.service.fiscal-final.spec.ts`
-- Flutter document/ticket tests
-
-Add tests:
-
-- Emit sale from product/client/company snapshots.
-- Mutate current product/client/company data.
-- Reopen sale and render PDF/ticket.
-- Assert historical document still uses original customer, line, tax, total, NCF, and date values.
-
-Important:
-
-- If issuer/company snapshot is not persisted, decide whether to add fields or formally mark issuer as current-company rendering.
-
-## 7. Add report consistency fixtures
-
-Severity: P2  
-Effort: medium  
-Files:
-
-- `apps/api/src/reports/reports.service.spec.ts` or new report fiscal spec
-
-Add tests:
-
-- Company A sales 10,000, Company B sales 20,000.
-- Report A returns only A.
-- Report B returns only B.
-- Mixed tax sale report equals sale item snapshots.
-- Refund reduces net metrics correctly.
-- Profit commercial and net tax profit are separated.
-
-## 8. Add POS no-NCF-before-sale UI test
-
-Severity: P2  
-Effort: small  
-Files:
-
-- `apps/fulltech_app/test/modules/ventas/`
-
-Add tests:
-
-- Tax off: no voucher selector.
-- Tax on / NCF off: tax summary shown, no voucher selector.
-- Tax on / NCF on: selector shows configured B01/B02.
-- Selecting B01 without RNC blocks with exact message.
-- Selecting B01/B02 does not display NCF.
-- Changing company resets voucher/cart/client.
-
-## 9. Shared monetary golden matrix
-
-Severity: P2  
-Effort: medium  
-Files:
-
-- backend tax tests
-- Flutter preview tests
-
-Add matrix:
-
-Prices:
-
-```text
-0.01, 0.05, 0.99, 9.99, 99.99, 129.95, 333.33, 999.99
-```
-
-Quantities:
-
-```text
-1, 2, 3, 7, 11
-```
-
-Modes:
-
-```text
-tax off, included, added, exempt, mixed, line discount, global discount
-```
-
-Required:
-
-- Backend Decimal result is source of truth.
-- Flutter preview matches for display cases or explicitly labels approximation.
-
-# P3
-
-## 10. Clean ts-jest deprecation warning
-
-Severity: P3  
-Effort: small  
-Fix:
-
-- Move deprecated `ts-jest` isolated modules setting to `tsconfig`.
-
-Proof:
-
-- `npm test` passes without config warning.
+Move deprecated `ts-jest` isolated modules config into `tsconfig`.
 
 # FINAL CLOSE CRITERIA
 
-The module can move from `B — ALMOST CLOSED` to `A — TECHNICALLY CLOSED` only when:
+Move to `A - TECHNICALLY CLOSED` only when:
 
-1. Cotizaciones legacy ITBIS switch is removed/quarantined.
-2. Fiscal HTTP E2E suite passes.
-3. Staging fiscal script passes on `fullpos_staging`.
-4. Fresh DB migration deploy passes.
-5. Production cutover plan has backup/rollback and read-only migration inventory.
-6. Refund/report/historical immutability tests cover the listed critical cases.
-7. Remaining work is only manual visual/device QA.
+1. `fullpos_staging` migrates cleanly.
+2. `npm run test:staging:fiscal` passes.
+3. Full authenticated fiscal HTTP DB E2E passes.
+4. Production cutover has backup, rollback, and read-only migration inventory.
+5. Remaining work is only visual/device manual QA.
 
 e-CF remains OUT OF SCOPE / FUTURE.

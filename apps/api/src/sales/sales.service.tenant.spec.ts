@@ -14,8 +14,13 @@ describe("SalesService tenant isolation", () => {
       { get: jest.fn().mockReturnValue("") } as never,
       { emitCompany: jest.fn() } as never,
       {
-        getCompanyFiscalSettings: jest.fn(),
-        resolvePriceMode: jest.fn(),
+        getCompanyFiscalSettings: jest.fn().mockResolvedValue({
+          taxEnabled: false,
+          defaultTaxRate: 0,
+          pricesIncludeTax: false,
+          ncfEnabled: false,
+        }),
+        resolvePriceMode: jest.fn().mockReturnValue("NO_TAX"),
         calculatorService: { calculate: jest.fn() },
       } as never,
       { normalizeType: jest.fn(), reserveNextNcf: jest.fn(), markIssued: jest.fn() } as never,
@@ -44,6 +49,7 @@ describe("SalesService tenant isolation", () => {
       },
       select: {
         nombre: true,
+        telefono: true,
         taxId: true,
         businessName: true,
         direccion: true,
@@ -55,6 +61,8 @@ describe("SalesService tenant isolation", () => {
     const prisma = {
       sale: { findFirst: jest.fn() },
       product: { findMany: jest.fn().mockResolvedValue([]) },
+      company: { findFirst: jest.fn().mockResolvedValue({ name: "Empresa A" }) },
+      appConfig: { findFirst: jest.fn().mockResolvedValue(null) },
     };
     const service = serviceWith(prisma);
 

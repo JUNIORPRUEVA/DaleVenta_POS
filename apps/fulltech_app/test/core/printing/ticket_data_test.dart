@@ -190,6 +190,92 @@ void main() {
     expect(text, isNot(contains('Ajuste')));
   });
 
+  test(
+    'ticket header prefers issuer snapshot over current company settings',
+    () {
+      final sale = SaleModel(
+        id: 'snapshot-sale',
+        userId: 'user-a',
+        userName: 'Caja',
+        customerId: 'client-a',
+        customerName: 'Cliente actual cambiado',
+        customerPhone: '809-999-9999',
+        saleDate: DateTime(2026, 8, 18, 10),
+        note: '',
+        totalSold: 1180,
+        totalCost: 600,
+        totalProfit: 580,
+        commissionAmount: 58,
+        paymentMethod: 'cash',
+        paymentCashAmount: 1180,
+        paymentTransferAmount: 0,
+        creditAmount: 0,
+        creditPaidAmount: 0,
+        creditBalance: 0,
+        creditStatus: 'none',
+        isDeleted: false,
+        deletedAt: null,
+        fiscalTaxEnabled: true,
+        fiscalPriceMode: 'TAX_INCLUDED',
+        taxableBase: 1000,
+        taxAmount: 180,
+        exemptAmount: 0,
+        discountAmount: 0,
+        fiscalVoucherType: 'B01',
+        ncf: 'B0100000099',
+        issuerNameSnapshot: 'EMISOR ORIGINAL SRL',
+        issuerTaxIdSnapshot: '130000001',
+        issuerPhoneSnapshot: '809-111-1111',
+        issuerAddressSnapshot: 'Direccion original',
+        fiscalCustomerTaxId: '101010101',
+        fiscalCustomerName: 'CLIENTE ORIGINAL',
+        customerPhoneSnapshot: '809-222-2222',
+        items: const [
+          SaleItemModel(
+            id: 'item-a',
+            productId: 'product-a',
+            productNameSnapshot: 'PRODUCTO ORIGINAL',
+            productImageSnapshot: null,
+            qty: 1,
+            priceSoldUnit: 1180,
+            costUnitSnapshot: 600,
+            subtotalSold: 1180,
+            subtotalCost: 600,
+            profit: 580,
+            category: null,
+            taxableBase: 1000,
+            taxRate: 0.18,
+            taxAmount: 180,
+            exemptAmount: 0,
+            taxIncluded: true,
+            taxExempt: false,
+          ),
+        ],
+      );
+
+      final ticket = TicketData.fromSale(sale);
+      final lines = const TicketRenderer(
+        layout: _layout80,
+        company: CompanyInfo(
+          name: 'Empresa Cambiada',
+          rnc: '999999999',
+          phone: '809-000-0000',
+          address: 'Direccion cambiada',
+        ),
+      ).buildLines(ticket);
+      final text = lines.join('\n');
+
+      expect(text, contains('EMISOR ORIGINAL SRL'));
+      expect(text, contains('130000001'));
+      expect(text, contains('809-111-1111'));
+      expect(text, contains('Direccion original'));
+      expect(text, contains('CLIENTE ORIGINAL'));
+      expect(text, contains('PRODUCTO ORIGINAL'));
+      expect(text, isNot(contains('Empresa Cambiada')));
+      expect(text, isNot(contains('Cliente actual cambiado')));
+    },
+  );
+
   test('B02 ticket prints type and NCF without forcing RNC', () {
     final ticket = TicketData(
       ticketNumber: 'FV-B02',

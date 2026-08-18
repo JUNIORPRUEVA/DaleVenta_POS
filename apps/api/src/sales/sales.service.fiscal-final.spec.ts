@@ -54,6 +54,15 @@ describe("SalesService fiscal closure", () => {
           ],
         }),
       },
+      company: { findFirst: jest.fn().mockResolvedValue({ name: "Fallback SRL" }) },
+      appConfig: {
+        findFirst: jest.fn().mockResolvedValue({
+          companyName: "FULLTECH, SRL",
+          rnc: "133080206",
+          address: "Higuey",
+          phone: "809-000-0000",
+        }),
+      },
       sale: { findFirst: jest.fn() },
       product: { findMany: jest.fn().mockResolvedValue([]) },
       cashSession: { findFirst: jest.fn().mockResolvedValue({ id: "cash-a" }) },
@@ -109,9 +118,51 @@ describe("SalesService fiscal closure", () => {
           taxableBase: new Prisma.Decimal("21779.66"),
           taxAmount: new Prisma.Decimal("3920.34"),
           ncf: "B0100000001",
+          issuerNameSnapshot: "FULLTECH, SRL",
+          issuerTaxIdSnapshot: "133080206",
+          issuerAddressSnapshot: "Higuey",
+          issuerPhoneSnapshot: "809-000-0000",
         }),
       }),
     );
+  });
+
+  it("does not convert the same quotation twice", async () => {
+    const existingSale = { id: "sale-existing" };
+    const prisma = {
+      cotizacion: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "22222222-2222-4222-8222-222222222222",
+          companyId: user.companyId,
+          customerId: null,
+          fiscalTaxEnabled: true,
+          fiscalPriceMode: "TAX_INCLUDED",
+          taxableBase: new Prisma.Decimal("1000"),
+          taxAmount: new Prisma.Decimal("180"),
+          exemptAmount: new Prisma.Decimal("0"),
+          discountAmount: new Prisma.Decimal("0"),
+          total: new Prisma.Decimal("1180"),
+          items: [],
+        }),
+      },
+      sale: { findFirst: jest.fn().mockResolvedValue(existingSale) },
+    };
+    const ncf = { normalizeType: jest.fn(), reserveNextNcf: jest.fn(), markIssued: jest.fn() };
+    const service = new SalesService(
+      prisma as never,
+      { get: jest.fn().mockReturnValue("") } as never,
+      { emitCompany: jest.fn() } as never,
+      {} as never,
+      ncf as never,
+    );
+
+    const result = await service.create(user as never, {
+      sourceQuotationId: "22222222-2222-4222-8222-222222222222",
+      items: [{ productName: "Ignored", qty: 1, priceSoldUnit: 1180, costUnitSnapshot: 0 }],
+    });
+
+    expect(result).toBe(existingSale);
+    expect(ncf.reserveNextNcf).not.toHaveBeenCalled();
   });
 
   it("rejects a partial return above the remaining original quantity", async () => {

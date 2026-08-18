@@ -56,6 +56,10 @@ class TicketData {
     this.taxIncluded = false,
     this.ncf,
     this.fiscalVoucherType,
+    this.issuerName,
+    this.issuerRnc,
+    this.issuerPhone,
+    this.issuerAddress,
     this.note,
     this.isCopy = false,
     this.customLines,
@@ -77,6 +81,10 @@ class TicketData {
   final bool taxIncluded;
   final String? ncf;
   final String? fiscalVoucherType;
+  final String? issuerName;
+  final String? issuerRnc;
+  final String? issuerPhone;
+  final String? issuerAddress;
   final String? note;
   final bool isCopy;
   final List<String>? customLines;
@@ -123,9 +131,14 @@ class TicketData {
       taxIncluded: sale.fiscalPriceMode == 'TAX_INCLUDED',
       ncf: sale.ncf,
       fiscalVoucherType: sale.fiscalVoucherType,
+      issuerName: sale.issuerNameSnapshot,
+      issuerRnc: sale.issuerTaxIdSnapshot,
+      issuerPhone: sale.issuerPhoneSnapshot,
+      issuerAddress: sale.issuerAddressSnapshot,
       client: ClientInfo(
-        name: sale.customerName ?? 'Consumidor Final',
-        phone: sale.customerPhone ?? '',
+        name:
+            sale.fiscalCustomerName ?? sale.customerName ?? 'Consumidor Final',
+        phone: sale.customerPhoneSnapshot ?? sale.customerPhone ?? '',
         document: sale.fiscalCustomerTaxId ?? '',
       ),
       cashierName: cashierName.isEmpty ? 'Cajero' : cashierName,

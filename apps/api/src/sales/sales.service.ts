@@ -453,6 +453,19 @@ export class SalesService {
       throw new BadRequestException("Cotización inválida para esta empresa.");
     }
 
+    if (sourceQuotationId) {
+      const existingFromQuotation = await this.prisma.sale.findFirst({
+        where: {
+          companyId,
+          sourceQuotationId,
+          kind: "invoice",
+          isDeleted: false,
+        },
+        include: this.saleInclude(),
+      });
+      if (existingFromQuotation) return existingFromQuotation;
+    }
+
     const customerId =
       dto.customerId?.trim() || sourceQuotation?.customerId || null;
     const clientRequestId = dto.clientRequestId?.trim() || null;
@@ -467,6 +480,7 @@ export class SalesService {
 
     let customerFiscalSnapshot: {
       nombre: string;
+      telefono: string;
       taxId: string | null;
       businessName: string | null;
       direccion: string | null;
@@ -477,6 +491,7 @@ export class SalesService {
           where: { id: customerId, companyId, isDeleted: false },
           select: {
             nombre: true,
+            telefono: true,
             taxId: true,
             businessName: true,
             direccion: true,
@@ -490,6 +505,30 @@ export class SalesService {
         if (!this.isSchemaMismatch(error)) throw error;
       }
     }
+
+    const [companySnapshot, appConfigSnapshot] = await Promise.all([
+      this.prisma.company.findFirst({
+        where: { id: companyId },
+        select: { name: true },
+      }),
+      this.prisma.appConfig.findFirst({
+        where: { companyId },
+        select: {
+          companyName: true,
+          rnc: true,
+          address: true,
+          phone: true,
+        },
+      }),
+    ]);
+    const issuerNameSnapshot =
+      appConfigSnapshot?.companyName?.trim() ||
+      companySnapshot?.name?.trim() ||
+      null;
+    const issuerTaxIdSnapshot = appConfigSnapshot?.rnc?.trim() || null;
+    const issuerAddressSnapshot = appConfigSnapshot?.address?.trim() || null;
+    const issuerPhoneSnapshot = appConfigSnapshot?.phone?.trim() || null;
+    const issuerEmailSnapshot = null;
 
     const productIds = Array.from(
       new Set(
@@ -819,8 +858,17 @@ export class SalesService {
             discountAmount: taxCalculation.discountAmount,
             fiscalVoucherType: requestedVoucherType,
             ncf: reservedNcf?.ncf ?? null,
+            issuerNameSnapshot,
+            issuerTaxIdSnapshot,
+            issuerAddressSnapshot,
+            issuerPhoneSnapshot,
+            issuerEmailSnapshot,
             fiscalCustomerTaxId,
             fiscalCustomerName,
+            customerAddressSnapshot:
+              customerFiscalSnapshot?.direccion?.trim() || null,
+            customerPhoneSnapshot:
+              customerFiscalSnapshot?.telefono?.trim() || null,
             totalCost,
             totalProfit,
             commercialProfit,
@@ -1343,8 +1391,15 @@ export class SalesService {
             exemptAmount,
             discountAmount,
             fiscalVoucherType: sale!.fiscalVoucherType,
+            issuerNameSnapshot: sale!.issuerNameSnapshot,
+            issuerTaxIdSnapshot: sale!.issuerTaxIdSnapshot,
+            issuerAddressSnapshot: sale!.issuerAddressSnapshot,
+            issuerPhoneSnapshot: sale!.issuerPhoneSnapshot,
+            issuerEmailSnapshot: sale!.issuerEmailSnapshot,
             fiscalCustomerTaxId: sale!.fiscalCustomerTaxId,
             fiscalCustomerName: sale!.fiscalCustomerName,
+            customerAddressSnapshot: sale!.customerAddressSnapshot,
+            customerPhoneSnapshot: sale!.customerPhoneSnapshot,
             totalCost,
             totalProfit,
             commercialProfit: totalProfit,
