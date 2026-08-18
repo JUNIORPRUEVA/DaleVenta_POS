@@ -14,6 +14,8 @@ BEGIN
 END
 $$;
 
+CREATE EXTENSION IF NOT EXISTS "btree_gist";
+
 ALTER TABLE "companies"
   ADD COLUMN IF NOT EXISTS "tax_enabled" BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS "default_tax_id" UUID,
@@ -150,11 +152,26 @@ $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS "Sale_company_id_ncf_key" ON "Sale"("company_id", "ncf");
 CREATE INDEX IF NOT EXISTS "Sale_company_id_fiscal_voucher_type_idx" ON "Sale"("company_id", "fiscal_voucher_type");
-CREATE UNIQUE INDEX IF NOT EXISTS "ncf_sequences_company_id_voucher_type_prefix_key"
+CREATE INDEX IF NOT EXISTS "ncf_sequences_company_id_voucher_type_prefix_idx"
   ON "ncf_sequences"("company_id", "voucher_type", "prefix");
 CREATE UNIQUE INDEX IF NOT EXISTS "ncf_sequences_company_id_voucher_type_active_key"
   ON "ncf_sequences"("company_id", "voucher_type")
   WHERE "active" = true;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'ncf_sequences_no_overlap'
+  ) THEN
+    ALTER TABLE "ncf_sequences"
+      ADD CONSTRAINT "ncf_sequences_no_overlap"
+      EXCLUDE USING gist (
+        "company_id" WITH =,
+        "voucher_type" WITH =,
+        int4range("start_number", "end_number", '[]') WITH &&
+      );
+  END IF;
+END
+$$;
 CREATE INDEX IF NOT EXISTS "ncf_sequences_company_id_voucher_type_active_idx"
   ON "ncf_sequences"("company_id", "voucher_type", "active");
 CREATE INDEX IF NOT EXISTS "ncf_audit_logs_company_id_ncf_idx" ON "ncf_audit_logs"("company_id", "ncf");

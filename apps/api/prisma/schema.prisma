@@ -2430,7 +2430,7 @@ model NcfSequence {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   auditLogs NcfAuditLog[]
 
-  @@unique([companyId, voucherType, prefix])
+  @@index([companyId, voucherType, prefix])
   @@index([companyId, voucherType, active])
   @@map("ncf_sequences")
 }
