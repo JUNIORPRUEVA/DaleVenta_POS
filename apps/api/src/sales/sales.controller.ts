@@ -16,7 +16,7 @@ import { Permissions, Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import type { TenantUser } from "../auth/tenant-context";
 import { SalesService } from "./sales.service";
-import { CreateSaleDto } from "./dto/create-sale.dto";
+import { CreateSaleDto, CreateSaleReturnDto } from "./dto/create-sale.dto";
 import { CreateSalePdfShareLinkDto } from "./dto/create-sale-pdf-share-link.dto";
 import { SalesRangeQueryDto } from "./dto/sales-range-query.dto";
 
@@ -119,8 +119,12 @@ export class SalesController {
 
   @Post(":id/return")
   @Permissions("refundSales")
-  returnSale(@Req() req: Request, @Param("id") id: string) {
+  returnSale(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() dto: CreateSaleReturnDto,
+  ) {
     const user = req.user as TenantUser;
-    return this.sales.returnSale(user, id);
+    return this.sales.returnSale(user, id, dto);
   }
 }

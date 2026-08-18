@@ -44,6 +44,10 @@ export class CreateSaleDto {
 
   @IsOptional()
   @IsUUID()
+  sourceQuotationId?: string;
+
+  @IsOptional()
+  @IsUUID()
   customerId?: string;
 
   @IsOptional()
@@ -105,4 +109,26 @@ export class CreateSaleDto {
   @ValidateNested({ each: true })
   @Type(() => CreateSaleItemDto)
   items!: CreateSaleItemDto[];
+}
+
+export class CreateSaleReturnItemDto {
+  @IsUUID()
+  saleItemId!: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.0001)
+  qty!: number;
+}
+
+export class CreateSaleReturnDto {
+  @IsOptional()
+  @IsString()
+  reason?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateSaleReturnItemDto)
+  items?: CreateSaleReturnItemDto[];
 }

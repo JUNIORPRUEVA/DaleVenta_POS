@@ -47,8 +47,15 @@ export class ReportsService {
       isDeleted: true,
       deletedAt: range,
     };
+    const refundWhere: Prisma.SaleWhereInput = {
+      companyId,
+      ...userFilter,
+      kind: "refund",
+      isDeleted: false,
+      saleDate: range,
+    };
 
-    const [sales, returnedSales, products, movements] = await Promise.all([
+    const [sales, returnedSales, refundSales, products, movements] = await Promise.all([
       this.prisma.sale.findMany({
         where: saleWhere,
         include: {
@@ -72,6 +79,18 @@ export class ReportsService {
           },
         },
         orderBy: { deletedAt: "asc" },
+      }),
+      this.prisma.sale.findMany({
+        where: refundWhere,
+        include: {
+          customer: { select: { id: true, nombre: true } },
+          items: {
+            include: {
+              product: { select: { categoria: true } },
+            },
+          },
+        },
+        orderBy: { saleDate: "asc" },
       }),
       this.prisma.product.findMany({
         where: { companyId },
@@ -99,12 +118,13 @@ export class ReportsService {
             this.saleItemsForCategory(sale, selectedCategory).length > 0,
         )
       : sales;
+    const returnedAndRefundedSales = [...returnedSales, ...refundSales];
     const visibleReturnedSales = selectedCategory
-      ? returnedSales.filter(
+      ? returnedAndRefundedSales.filter(
           (sale) =>
             this.saleItemsForCategory(sale, selectedCategory).length > 0,
         )
-      : returnedSales;
+      : returnedAndRefundedSales;
 
     const totals = visibleSales.reduce(
       (acc, sale) => {
@@ -170,18 +190,18 @@ export class ReportsService {
       (acc, sale) => {
         const categoryItems = this.saleItemsForCategory(sale, selectedCategory);
         acc.count += 1;
-        acc.amount += categoryItems.reduce(
+        acc.amount += Math.abs(categoryItems.reduce(
           (sum, item) => sum + this.toNumber(item.subtotalSold),
           0,
-        );
-        acc.cost += categoryItems.reduce(
+        ));
+        acc.cost += Math.abs(categoryItems.reduce(
           (sum, item) => sum + this.toNumber(item.subtotalCost),
           0,
-        );
-        acc.profit += categoryItems.reduce(
+        ));
+        acc.profit += Math.abs(categoryItems.reduce(
           (sum, item) => sum + this.toNumber(item.profit),
           0,
-        );
+        ));
         return acc;
       },
       { count: 0, amount: 0, cost: 0, profit: 0 },
@@ -350,15 +370,16 @@ export class ReportsService {
       ? totals.cash
       : totals.cash + expenses.cashIn;
     const cashExpense = selectedCategory ? 0 : expenses.cashOut;
-    const netProfit = totals.totalProfit - profitExpenses;
+    const netSales = totals.totalSold - returns.amount;
+    const netProfit = totals.totalProfit - returns.profit - profitExpenses;
     const warnings = [
       ...(returns.count > 0
         ? [
             {
-              code: "returns_soft_deleted",
-              severity: "warning",
+              code: "returns_present",
+              severity: "info",
               message:
-                "Las devoluciones actuales restauran stock y marcan la factura como devuelta, pero no generan un comprobante financiero separado.",
+                "El reporte distingue ventas brutas, devoluciones y ventas netas usando snapshots historicos.",
             },
           ]
         : []),
@@ -399,12 +420,17 @@ export class ReportsService {
       categories: this.availableCategories(products),
       kpis: {
         totalSales: visibleSales.length,
-        grossSales: totals.totalSold + returns.amount,
+        grossSales: totals.totalSold,
         returnedSales: returns.amount,
-        netSales: totals.totalSold,
-        totalSold: totals.totalSold,
+        netSales,
+        totalSold: netSales,
         totalCost: totals.totalCost,
         totalProfit: totals.totalProfit,
+        commercialProfit: totals.totalProfit,
+        netTaxProfit:
+          totals.taxableBase + totals.exemptAmount > 0
+            ? totals.taxableBase + totals.exemptAmount - totals.totalCost
+            : totals.totalProfit,
         netProfit,
         totalCommission: totals.totalCommission,
         taxableBase: totals.taxableBase,
@@ -441,6 +467,7 @@ export class ReportsService {
           0,
         ),
         returnedRows: returns.count,
+        refundDocumentRows: refundSales.length,
         cashMovementRows: movements.length,
         categoryFiltered: selectedCategory !== null,
         warnings,

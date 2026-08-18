@@ -89,7 +89,8 @@ Advertencia Flutter:
 
 ## Pendientes No Cerrados
 
-- Reparar/baselinear migraciones historicas para que `migrate deploy` funcione desde DB vacia.
+- Baseline de migraciones historicas creado en Fase 6 y probado contra DB vacia (`fullpos_migration_test`).
+- Ejecutar despliegue controlado de produccion con backup + `migrate resolve --applied 20260818190000_phase6_baseline`; no aplicar baseline SQL sobre tablas productivas existentes.
 - Probar los mismos flujos por HTTP/API autenticada, no solo via Prisma/SQL sobre staging.
 - Completar devoluciones fiscales total/parcial con snapshot negativo.
 - Terminar snapshot fiscal completo de cotizaciones por linea en backend.
@@ -103,7 +104,7 @@ Advertencia Flutter:
 
 | Component | Status | Nota |
 | --- | --- | --- |
-| Database Migration | BLOCKED | `migrate deploy` no aplica limpio por migraciones historicas. |
+| Database Migration | PARTIAL | Fase 6 baseline probado en DB vacia; produccion pendiente de plan controlado. |
 | Postgres Constraints | READY | Verificados fisicamente en `fullpos_staging`. |
 | NCF Concurrency | READY | 20 y 100 solicitudes: NCF unicos. |
 | Idempotency | READY | 20 concurrentes con mismo key: 1 sale / 1 NCF. |
@@ -119,14 +120,14 @@ Advertencia Flutter:
 | 80mm | PARTIAL | Usa snapshots; falta prueba fisica/visual. |
 | Reports | PARTIAL | Falta prueba fiscal multiempresa real por endpoint. |
 | Offline Fiscal | READY | Fiscal con NCF bloqueado sin conexion. |
-| Traditional NCF Production Readiness | PARTIAL | Algoritmo/constraints OK; migraciones y E2E faltan. |
+| Traditional NCF Production Readiness | PARTIAL | Algoritmo/constraints OK; baseline listo, E2E y despliegue controlado faltan. |
 | e-CF | NOT IMPLEMENTED | Sin XML, firma, envio DGII ni acuses. |
 
 ## Decision De Readiness
 
 No iniciar e-CF todavia. Primero cerrar:
 
-- baseline/migraciones;
+- despliegue controlado del baseline/migraciones;
 - E2E API autenticado B01/B02;
 - devoluciones fiscales;
 - QA PDF/ticket;

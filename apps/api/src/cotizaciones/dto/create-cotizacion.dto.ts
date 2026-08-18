@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Min, ValidateNested } from 'class-validator';
 
 export class CreateCotizacionItemDto {
   @IsOptional()
@@ -35,6 +35,20 @@ export class CreateCotizacionItemDto {
   @IsNumber()
   @Min(0)
   costUnitSnapshot?: number;
+
+  @IsOptional()
+  @IsIn(['INHERIT', 'TAXABLE', 'EXEMPT'])
+  taxTreatment?: 'INHERIT' | 'TAXABLE' | 'EXEMPT';
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  taxRate?: number;
+
+  @IsOptional()
+  @IsIn(['NO_TAX', 'TAX_ADDED', 'TAX_INCLUDED'])
+  taxPriceMode?: 'NO_TAX' | 'TAX_ADDED' | 'TAX_INCLUDED';
 }
 
 export class CreateCotizacionDto {

@@ -129,7 +129,12 @@ preflight
 
 if [ "$RUN_MIGRATIONS" = "true" ] || [ "$RUN_MIGRATIONS" = "1" ]; then
   if [ "$PRISMA_SYNC_MODE" = "push" ]; then
-    echo "[startup] prisma db push for initial managed deployment"
+    if [ "${NODE_ENV:-production}" = "production" ] && [ "${ALLOW_PRODUCTION_DB_PUSH:-false}" != "true" ]; then
+      echo "[startup] ERROR: PRISMA_SYNC_MODE=push is blocked in production."
+      echo "[startup] Use prisma migrate deploy after the Phase 6 baseline/resolve plan, or set ALLOW_PRODUCTION_DB_PUSH=true only for a documented emergency."
+      exit 1
+    fi
+    echo "[startup] prisma db push for non-production or explicitly approved emergency sync"
     npx prisma db push --accept-data-loss
   else
     echo "[startup] prisma migrate deploy (retries: ${MIGRATION_MAX_RETRIES})"

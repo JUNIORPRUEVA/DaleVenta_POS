@@ -4,6 +4,24 @@ Fecha de auditoria: 2026-08-18
 
 Alcance revisado: backend Nest/Prisma en `apps/api`, app Flutter en `apps/fulltech_app`, ventas, cotizaciones, productos, clientes, configuracion de empresa, contabilidad fiscal, PDF/tickets, reportes, caja y flujos offline visibles en el repositorio.
 
+## Nota Fase 6
+
+El historial Prisma legacy fue archivado y reemplazado por el baseline activo
+`20260818190000_phase6_baseline`. La validacion contra `fullpos_migration_test`
+demostro `npx prisma migrate deploy = PASS` desde DB vacia. Produccion no fue
+migrada; requiere backup y `migrate resolve --applied` en un despliegue
+controlado.
+
+## Nota UI fiscal de productos
+
+La integracion de UI fiscal de productos quedo documentada en
+`FULLPOS_PRODUCT_TAX_UX_IMPLEMENTATION.md`. El flujo activo de
+Inventario/Catalogo ya expone tratamiento fiscal por producto solo cuando
+`taxEnabled=true`, calcula preview con helper central, persiste
+`taxTreatment`/`taxRate`/`taxPriceMode` y el backend valida que la tasa gravada
+exista activa para el `companyId` autenticado. El modelo actual de producto no
+tiene `taxId`; el blindaje se hace por `taxRate` contra `taxes.companyId`.
+
 ## 1. Estado actual
 
 FullPOS Cloud actualmente opera principalmente como POS sin impuestos fiscales integrados en ventas. Las ventas (`Sale`/`SaleItem`) guardan `totalSold`, costo, ganancia, pago, cliente y snapshots basicos de producto, pero no guardan base imponible, ITBIS, exento, tasa, modo incluido/agregado ni NCF.

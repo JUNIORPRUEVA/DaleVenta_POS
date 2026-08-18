@@ -11,6 +11,17 @@ class CotizacionItem {
   final double? externalCostUnit;
   final double? subtotalCostSnapshot;
   final double? profitSnapshot;
+  final String taxTreatment;
+  final double taxRate;
+  final String taxPriceMode;
+  final double grossAmount;
+  final double lineDiscountAmount;
+  final double taxableBase;
+  final double taxAmount;
+  final double exemptAmount;
+  final double? lineTotalSnapshot;
+  final bool taxIncluded;
+  final bool taxExempt;
 
   const CotizacionItem({
     required this.productId,
@@ -23,6 +34,17 @@ class CotizacionItem {
     this.externalCostUnit,
     this.subtotalCostSnapshot,
     this.profitSnapshot,
+    this.taxTreatment = 'INHERIT',
+    this.taxRate = 0,
+    this.taxPriceMode = 'NO_TAX',
+    this.grossAmount = 0,
+    this.lineDiscountAmount = 0,
+    this.taxableBase = 0,
+    this.taxAmount = 0,
+    this.exemptAmount = 0,
+    this.lineTotalSnapshot,
+    this.taxIncluded = false,
+    this.taxExempt = false,
   });
 
   bool get isExternal => !_isUuid(productId);
@@ -38,7 +60,7 @@ class CotizacionItem {
 
   double get discountAmount => discountUnitAmount * qty;
 
-  double get total => unitPrice * qty;
+  double get total => lineTotalSnapshot ?? (unitPrice * qty);
 
   double? get tracedCostUnit => costUnit ?? externalCostUnit;
 
@@ -56,6 +78,17 @@ class CotizacionItem {
     double? externalCostUnit,
     double? subtotalCostSnapshot,
     double? profitSnapshot,
+    String? taxTreatment,
+    double? taxRate,
+    String? taxPriceMode,
+    double? grossAmount,
+    double? lineDiscountAmount,
+    double? taxableBase,
+    double? taxAmount,
+    double? exemptAmount,
+    double? lineTotalSnapshot,
+    bool? taxIncluded,
+    bool? taxExempt,
   }) {
     return CotizacionItem(
       productId: productId ?? this.productId,
@@ -68,6 +101,17 @@ class CotizacionItem {
       externalCostUnit: externalCostUnit ?? this.externalCostUnit,
       subtotalCostSnapshot: subtotalCostSnapshot ?? this.subtotalCostSnapshot,
       profitSnapshot: profitSnapshot ?? this.profitSnapshot,
+      taxTreatment: taxTreatment ?? this.taxTreatment,
+      taxRate: taxRate ?? this.taxRate,
+      taxPriceMode: taxPriceMode ?? this.taxPriceMode,
+      grossAmount: grossAmount ?? this.grossAmount,
+      lineDiscountAmount: lineDiscountAmount ?? this.lineDiscountAmount,
+      taxableBase: taxableBase ?? this.taxableBase,
+      taxAmount: taxAmount ?? this.taxAmount,
+      exemptAmount: exemptAmount ?? this.exemptAmount,
+      lineTotalSnapshot: lineTotalSnapshot ?? this.lineTotalSnapshot,
+      taxIncluded: taxIncluded ?? this.taxIncluded,
+      taxExempt: taxExempt ?? this.taxExempt,
     );
   }
 
@@ -82,6 +126,17 @@ class CotizacionItem {
     'externalCostUnit': externalCostUnit,
     'subtotalCostSnapshot': subtotalCostSnapshot,
     'profitSnapshot': profitSnapshot,
+    'taxTreatment': taxTreatment,
+    'taxRate': taxRate,
+    'taxPriceMode': taxPriceMode,
+    'grossAmount': grossAmount,
+    'lineDiscountAmount': lineDiscountAmount,
+    'taxableBase': taxableBase,
+    'taxAmount': taxAmount,
+    'exemptAmount': exemptAmount,
+    'lineTotal': lineTotalSnapshot,
+    'taxIncluded': taxIncluded,
+    'taxExempt': taxExempt,
   };
 
   Map<String, dynamic> toCreateDto() => {
@@ -95,6 +150,9 @@ class CotizacionItem {
     'unitPrice': unitPrice,
     if ((costUnit ?? externalCostUnit) != null)
       'costUnitSnapshot': costUnit ?? externalCostUnit,
+    if (taxTreatment.trim().isNotEmpty) 'taxTreatment': taxTreatment,
+    if (taxRate > 0) 'taxRate': taxRate,
+    if (taxPriceMode.trim().isNotEmpty) 'taxPriceMode': taxPriceMode,
   };
 
   static bool _isUuid(String? value) {
@@ -117,6 +175,17 @@ class CotizacionItem {
       externalCostUnit: (map['externalCostUnit'] as num?)?.toDouble(),
       subtotalCostSnapshot: (map['subtotalCostSnapshot'] as num?)?.toDouble(),
       profitSnapshot: (map['profitSnapshot'] as num?)?.toDouble(),
+      taxTreatment: (map['taxTreatment'] ?? 'INHERIT').toString(),
+      taxRate: (map['taxRate'] as num?)?.toDouble() ?? 0,
+      taxPriceMode: (map['taxPriceMode'] ?? 'NO_TAX').toString(),
+      grossAmount: (map['grossAmount'] as num?)?.toDouble() ?? 0,
+      lineDiscountAmount: (map['lineDiscountAmount'] as num?)?.toDouble() ?? 0,
+      taxableBase: (map['taxableBase'] as num?)?.toDouble() ?? 0,
+      taxAmount: (map['taxAmount'] as num?)?.toDouble() ?? 0,
+      exemptAmount: (map['exemptAmount'] as num?)?.toDouble() ?? 0,
+      lineTotalSnapshot: (map['lineTotal'] as num?)?.toDouble(),
+      taxIncluded: map['taxIncluded'] == true,
+      taxExempt: map['taxExempt'] == true,
     );
   }
 
@@ -157,6 +226,19 @@ class CotizacionItem {
           ? null
           : _asDouble(map['subtotalCost']),
       profitSnapshot: map['profit'] == null ? null : _asDouble(map['profit']),
+      taxTreatment: (map['taxTreatment'] ?? 'INHERIT').toString(),
+      taxRate: _asDouble(map['taxRate']),
+      taxPriceMode: (map['taxPriceMode'] ?? 'NO_TAX').toString(),
+      grossAmount: _asDouble(map['grossAmount']),
+      lineDiscountAmount: _asDouble(map['lineDiscountAmount']),
+      taxableBase: _asDouble(map['taxableBase']),
+      taxAmount: _asDouble(map['taxAmount']),
+      exemptAmount: _asDouble(map['exemptAmount']),
+      lineTotalSnapshot: map['lineTotal'] == null
+          ? null
+          : _asDouble(map['lineTotal']),
+      taxIncluded: map['taxIncluded'] == true,
+      taxExempt: map['taxExempt'] == true,
     );
   }
 }
@@ -173,6 +255,13 @@ class CotizacionModel {
   final bool includeItbis;
   final double itbisRate;
   final double globalDiscountAmount;
+  final bool fiscalTaxEnabled;
+  final String fiscalPriceMode;
+  final double taxableBase;
+  final double taxAmount;
+  final double exemptAmount;
+  final double fiscalDiscountAmount;
+  final double? totalSnapshot;
   final double? totalCost;
   final double? totalProfit;
   final List<CotizacionItem> items;
@@ -189,12 +278,27 @@ class CotizacionModel {
     required this.includeItbis,
     required this.itbisRate,
     this.globalDiscountAmount = 0,
+    this.fiscalTaxEnabled = false,
+    this.fiscalPriceMode = 'NO_TAX',
+    this.taxableBase = 0,
+    this.taxAmount = 0,
+    this.exemptAmount = 0,
+    this.fiscalDiscountAmount = 0,
+    this.totalSnapshot,
     this.totalCost,
     this.totalProfit,
     required this.items,
   });
 
-  double get subtotal => items.fold(0, (sum, item) => sum + item.total);
+  bool get hasFiscalSnapshot =>
+      fiscalTaxEnabled ||
+      taxAmount > 0.0001 ||
+      taxableBase > 0.0001 ||
+      exemptAmount > 0.0001;
+
+  double get subtotal => hasFiscalSnapshot
+      ? taxableBase + exemptAmount
+      : items.fold(0, (sum, item) => sum + item.total);
   double get subtotalBeforeDiscount => items.fold(
     0,
     (sum, item) => sum + (item.effectiveOriginalUnitPrice * item.qty),
@@ -203,9 +307,11 @@ class CotizacionModel {
       items.fold(0, (sum, item) => sum + item.discountAmount);
   double get discountAmount => lineDiscountAmount + globalDiscountAmount;
   bool get hasDiscount => discountAmount > 0.0001;
-  double get itbisAmount => includeItbis ? subtotal * itbisRate : 0;
+  double get itbisAmount =>
+      hasFiscalSnapshot ? taxAmount : (includeItbis ? subtotal * itbisRate : 0);
   double get totalBeforeGeneralDiscount => subtotal + itbisAmount;
   double get total {
+    if (totalSnapshot != null) return totalSnapshot!;
     final nextTotal = totalBeforeGeneralDiscount - globalDiscountAmount;
     return nextTotal > 0 ? nextTotal : 0;
   }
@@ -222,6 +328,13 @@ class CotizacionModel {
     bool? includeItbis,
     double? itbisRate,
     double? globalDiscountAmount,
+    bool? fiscalTaxEnabled,
+    String? fiscalPriceMode,
+    double? taxableBase,
+    double? taxAmount,
+    double? exemptAmount,
+    double? fiscalDiscountAmount,
+    double? totalSnapshot,
     double? totalCost,
     double? totalProfit,
     List<CotizacionItem>? items,
@@ -238,6 +351,13 @@ class CotizacionModel {
       includeItbis: includeItbis ?? this.includeItbis,
       itbisRate: itbisRate ?? this.itbisRate,
       globalDiscountAmount: globalDiscountAmount ?? this.globalDiscountAmount,
+      fiscalTaxEnabled: fiscalTaxEnabled ?? this.fiscalTaxEnabled,
+      fiscalPriceMode: fiscalPriceMode ?? this.fiscalPriceMode,
+      taxableBase: taxableBase ?? this.taxableBase,
+      taxAmount: taxAmount ?? this.taxAmount,
+      exemptAmount: exemptAmount ?? this.exemptAmount,
+      fiscalDiscountAmount: fiscalDiscountAmount ?? this.fiscalDiscountAmount,
+      totalSnapshot: totalSnapshot ?? this.totalSnapshot,
       totalCost: totalCost ?? this.totalCost,
       totalProfit: totalProfit ?? this.totalProfit,
       items: items ?? this.items,
@@ -256,6 +376,13 @@ class CotizacionModel {
     'includeItbis': includeItbis,
     'itbisRate': itbisRate,
     'globalDiscountAmount': globalDiscountAmount,
+    'fiscalTaxEnabled': fiscalTaxEnabled,
+    'fiscalPriceMode': fiscalPriceMode,
+    'taxableBase': taxableBase,
+    'taxAmount': taxAmount,
+    'exemptAmount': exemptAmount,
+    'discountAmount': fiscalDiscountAmount,
+    'total': totalSnapshot,
     'totalCost': totalCost,
     'totalProfit': totalProfit,
     'items': items.map((item) => item.toMap()).toList(),
@@ -278,6 +405,13 @@ class CotizacionModel {
       itbisRate: (map['itbisRate'] as num?)?.toDouble() ?? 0.18,
       globalDiscountAmount:
           (map['globalDiscountAmount'] as num?)?.toDouble() ?? 0,
+      fiscalTaxEnabled: map['fiscalTaxEnabled'] == true,
+      fiscalPriceMode: (map['fiscalPriceMode'] ?? 'NO_TAX').toString(),
+      taxableBase: (map['taxableBase'] as num?)?.toDouble() ?? 0,
+      taxAmount: (map['taxAmount'] as num?)?.toDouble() ?? 0,
+      exemptAmount: (map['exemptAmount'] as num?)?.toDouble() ?? 0,
+      fiscalDiscountAmount: (map['discountAmount'] as num?)?.toDouble() ?? 0,
+      totalSnapshot: (map['total'] as num?)?.toDouble(),
       totalCost: (map['totalCost'] as num?)?.toDouble(),
       totalProfit: (map['totalProfit'] as num?)?.toDouble(),
       items: rawItems
@@ -326,6 +460,13 @@ class CotizacionModel {
       includeItbis: map['includeItbis'] == true,
       itbisRate: _asDouble(map['itbisRate'], 0.18),
       globalDiscountAmount: _asDouble(map['globalDiscountAmount']),
+      fiscalTaxEnabled: map['fiscalTaxEnabled'] == true,
+      fiscalPriceMode: (map['fiscalPriceMode'] ?? 'NO_TAX').toString(),
+      taxableBase: _asDouble(map['taxableBase']),
+      taxAmount: _asDouble(map['taxAmount']),
+      exemptAmount: _asDouble(map['exemptAmount']),
+      fiscalDiscountAmount: _asDouble(map['discountAmount']),
+      totalSnapshot: map['total'] == null ? null : _asDouble(map['total']),
       totalCost: map['totalCost'] == null ? null : _asDouble(map['totalCost']),
       totalProfit: map['totalProfit'] == null
           ? null

@@ -29,6 +29,21 @@ class TicketRenderer {
       );
     }
 
+    bool isFiscalTicket() {
+      final voucher = (data.fiscalVoucherType ?? '').trim().toUpperCase();
+      return (voucher == 'B01' || voucher == 'B02') &&
+          (data.ncf ?? '').trim().isNotEmpty;
+    }
+
+    String fiscalSubtitle() {
+      final voucher = (data.fiscalVoucherType ?? '').trim().toUpperCase();
+      return switch (voucher) {
+        'B01' => 'B01 - CREDITO FISCAL',
+        'B02' => 'B02 - CONSUMO',
+        _ => '',
+      };
+    }
+
     final topBlanks = compact58 ? 0 : layout.topMargin ~/ 4;
     for (var i = 0; i < topBlanks; i++) {
       blank();
@@ -120,12 +135,25 @@ class TicketRenderer {
         add(ReceiptTextUtils.leftRight('Cliente', name, width));
       }
       final doc = data.client!.document.trim();
-      if (doc.isNotEmpty) {
+      if (isFiscalTicket() && doc.isNotEmpty) {
         add(ReceiptTextUtils.leftRight('Doc.', doc, width));
       }
       final phone = data.client!.phone.trim();
       if (phone.isNotEmpty) {
         add(ReceiptTextUtils.leftRight('Tel.', phone, width));
+      }
+    }
+    if (isFiscalTicket()) {
+      add(sep);
+      add(ReceiptTextUtils.truncate(fiscalSubtitle(), width));
+      add(ReceiptTextUtils.leftRight('NCF', data.ncf!.trim(), width));
+      final fiscalName = (data.client?.name ?? '').trim();
+      if (fiscalName.isNotEmpty) {
+        add(ReceiptTextUtils.leftRight('CLIENTE', fiscalName, width));
+      }
+      final fiscalDoc = (data.client?.document ?? '').trim();
+      if (fiscalDoc.isNotEmpty) {
+        add(ReceiptTextUtils.leftRight('RNC', fiscalDoc, width));
       }
     }
     add(sep);
@@ -167,7 +195,7 @@ class TicketRenderer {
     if (layout.showSubtotalItbisTotal) {
       addMoneyLine('Subtotal', data.resolvedSubtotal);
       if (data.taxIncluded && data.itbis > 0) {
-        add('ITBIS incluido');
+        if (isFiscalTicket()) add('ITBIS incluido');
       }
       if (layout.showDiscounts && data.discount > 0) {
         add(
@@ -178,18 +206,15 @@ class TicketRenderer {
           ),
         );
       }
-      if (layout.showItbis && data.itbis > 0) {
-        addMoneyLine('ITBIS', data.itbis);
+      if (isFiscalTicket() && layout.showItbis && data.itbis > 0) {
+        if (data.taxableBase > 0) {
+          addMoneyLine('Base imponible', data.taxableBase);
+        }
+        if (data.exemptAmount > 0) {
+          addMoneyLine('Monto exento', data.exemptAmount);
+        }
+        addMoneyLine('ITBIS 18%', data.itbis);
       }
-      if (data.exemptAmount > 0) {
-        addMoneyLine('Exento', data.exemptAmount);
-      }
-    }
-    if ((data.ncf ?? '').trim().isNotEmpty) {
-      add('NCF: ${data.ncf!.trim()}');
-    }
-    if ((data.client?.document ?? '').trim().isNotEmpty) {
-      add('RNC cliente: ${data.client!.document.trim()}');
     }
     addMoneyLine('TOTAL', data.total);
     if (layout.showPaymentMethod &&

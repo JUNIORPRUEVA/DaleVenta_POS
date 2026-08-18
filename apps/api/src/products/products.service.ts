@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -76,6 +77,62 @@ export class ProductsService {
         "Productos en modo solo-lectura: fuente FULLPOS (cloud). Administra productos en FULLPOS.",
       );
     }
+  }
+
+  private async normalizeProductFiscalInput(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    dto: CreateProductDto | UpdateProductDto,
+  ) {
+    const treatment = dto.taxTreatment;
+    if (treatment === undefined) {
+      return {
+        taxRate:
+          dto.taxRate === undefined
+            ? undefined
+            : new Prisma.Decimal(dto.taxRate),
+        taxPriceMode: dto.taxPriceMode,
+      };
+    }
+
+    if (treatment === "INHERIT") {
+      return {
+        taxTreatment: "INHERIT" as const,
+        taxRate: null,
+        taxPriceMode: null,
+      };
+    }
+
+    if (treatment === "EXEMPT") {
+      return {
+        taxTreatment: "EXEMPT" as const,
+        taxRate: null,
+        taxPriceMode: null,
+      };
+    }
+
+    if (dto.taxRate === undefined || dto.taxRate <= 0) {
+      throw new BadRequestException(
+        "Selecciona un impuesto activo para productos gravados",
+      );
+    }
+
+    const rate = new Prisma.Decimal(dto.taxRate);
+    const activeTax = await tx.tax.findFirst({
+      where: { companyId, isActive: true, rate },
+      select: { id: true },
+    });
+    if (!activeTax) {
+      throw new BadRequestException(
+        "El impuesto seleccionado no pertenece a esta empresa",
+      );
+    }
+
+    return {
+      taxTreatment: "TAXABLE" as const,
+      taxRate: rate,
+      taxPriceMode: dto.taxPriceMode ?? null,
+    };
   }
 
   private normalizeProductCode(dto: {
@@ -286,7 +343,7 @@ export class ProductsService {
         );
         continue;
       }
-        await tx.product.deleteMany({ where: { id: duplicate.id, companyId } });
+      await tx.product.deleteMany({ where: { id: duplicate.id, companyId } });
       deleted += 1;
       this.logger.log(
         `product-duplicate-prune deleted companyId=${companyId} canonicalProductId=${canonical.id} duplicateProductId=${duplicate.id}`,
@@ -357,6 +414,11 @@ export class ProductsService {
         const normalizedImagePath = imageKey
           ? this.buildObjectMediaUrl(imageKey)
           : this.normalizeImagePathForStorage(dto.fotoUrl);
+        const fiscalData = await this.normalizeProductFiscalInput(
+          tx,
+          companyId,
+          dto,
+        );
         const data = {
           id: operationProductId ?? undefined,
           nombre: dto.nombre,
@@ -365,10 +427,7 @@ export class ProductsService {
           precio: new Prisma.Decimal(dto.precio),
           costo: new Prisma.Decimal(dto.costo),
           stock: new Prisma.Decimal(dto.stock ?? 0),
-          taxTreatment: dto.taxTreatment ?? "INHERIT",
-          taxRate:
-            dto.taxRate === undefined ? undefined : new Prisma.Decimal(dto.taxRate),
-          taxPriceMode: dto.taxPriceMode ?? undefined,
+          ...fiscalData,
           imagen: normalizedImagePath,
           imageStorageProvider: imageKey ? "r2" : undefined,
           imageKey: imageKey ?? undefined,
@@ -598,6 +657,11 @@ export class ProductsService {
           : imageKey
             ? this.buildObjectMediaUrl(imageKey)
             : this.normalizeImagePathForStorage(dto.fotoUrl);
+      const fiscalData = await this.normalizeProductFiscalInput(
+        tx,
+        companyId,
+        dto,
+      );
       const data = {
         nombre: dto.nombre,
         codigo: this.hasProductCodeInput(dto)
@@ -610,10 +674,7 @@ export class ProductsService {
           dto.costo === undefined ? undefined : new Prisma.Decimal(dto.costo),
         stock:
           dto.stock === undefined ? undefined : new Prisma.Decimal(dto.stock),
-        taxTreatment: dto.taxTreatment,
-        taxRate:
-          dto.taxRate === undefined ? undefined : new Prisma.Decimal(dto.taxRate),
-        taxPriceMode: dto.taxPriceMode,
+        ...fiscalData,
         imagen: normalizedImagePath,
         imageStorageProvider:
           imageKey === undefined ? undefined : imageKey ? "r2" : null,
@@ -637,11 +698,16 @@ export class ProductsService {
       }
 
       try {
-        const updateResult = await tx.product.updateMany({ where: { id, companyId }, data });
+        const updateResult = await tx.product.updateMany({
+          where: { id, companyId },
+          data,
+        });
         if (updateResult.count !== 1) {
           throw new NotFoundException("Producto no encontrado");
         }
-        const updated = await tx.product.findFirst({ where: { id, companyId } });
+        const updated = await tx.product.findFirst({
+          where: { id, companyId },
+        });
         if (!updated) {
           throw new NotFoundException("Producto no encontrado");
         }
@@ -667,11 +733,16 @@ export class ProductsService {
           );
         }
         if (!this.isSchemaMismatch(error)) throw error;
-        const updateResult = await tx.product.updateMany({ where: { id, companyId }, data });
+        const updateResult = await tx.product.updateMany({
+          where: { id, companyId },
+          data,
+        });
         if (updateResult.count !== 1) {
           throw new NotFoundException("Producto no encontrado");
         }
-        const updated = await tx.product.findFirst({ where: { id, companyId } });
+        const updated = await tx.product.findFirst({
+          where: { id, companyId },
+        });
         if (!updated) {
           throw new NotFoundException("Producto no encontrado");
         }

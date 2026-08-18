@@ -12,7 +12,7 @@ final cotizacionesLocalRepositoryProvider =
 
 class CotizacionesLocalRepository {
   static const _dbName = 'cotizaciones_local.db';
-  static const _dbVersion = 4;
+  static const _dbVersion = 5;
   static const _tableCotizaciones = 'cotizaciones';
   static const _tableItems = 'cotizacion_items';
 
@@ -37,6 +37,13 @@ class CotizacionesLocalRepository {
             note TEXT,
             include_itbis INTEGER NOT NULL DEFAULT 0,
             itbis_rate REAL NOT NULL DEFAULT 0.18,
+            fiscal_tax_enabled INTEGER NOT NULL DEFAULT 0,
+            fiscal_price_mode TEXT NOT NULL DEFAULT 'NO_TAX',
+            taxable_base REAL NOT NULL DEFAULT 0,
+            tax_amount REAL NOT NULL DEFAULT 0,
+            exempt_amount REAL NOT NULL DEFAULT 0,
+            discount_amount REAL NOT NULL DEFAULT 0,
+            total REAL,
             global_discount_amount REAL NOT NULL DEFAULT 0,
             total_cost REAL,
             total_profit REAL,
@@ -56,6 +63,17 @@ class CotizacionesLocalRepository {
             external_cost_unit REAL,
             subtotal_cost_snapshot REAL,
             profit_snapshot REAL,
+            tax_treatment TEXT NOT NULL DEFAULT 'INHERIT',
+            tax_price_mode TEXT NOT NULL DEFAULT 'NO_TAX',
+            gross_amount REAL NOT NULL DEFAULT 0,
+            line_discount_amount REAL NOT NULL DEFAULT 0,
+            taxable_base REAL NOT NULL DEFAULT 0,
+            tax_rate REAL NOT NULL DEFAULT 0,
+            tax_amount REAL NOT NULL DEFAULT 0,
+            exempt_amount REAL NOT NULL DEFAULT 0,
+            line_total REAL,
+            tax_included INTEGER NOT NULL DEFAULT 0,
+            tax_exempt INTEGER NOT NULL DEFAULT 0,
             unit_price REAL NOT NULL,
             qty REAL NOT NULL
           )
@@ -119,6 +137,44 @@ class CotizacionesLocalRepository {
             columnName: 'profit_snapshot',
             definition: 'REAL',
           );
+        }
+        if (oldVersion < 5) {
+          for (final column in const [
+            ('fiscal_tax_enabled', 'INTEGER NOT NULL DEFAULT 0'),
+            ('fiscal_price_mode', "TEXT NOT NULL DEFAULT 'NO_TAX'"),
+            ('taxable_base', 'REAL NOT NULL DEFAULT 0'),
+            ('tax_amount', 'REAL NOT NULL DEFAULT 0'),
+            ('exempt_amount', 'REAL NOT NULL DEFAULT 0'),
+            ('discount_amount', 'REAL NOT NULL DEFAULT 0'),
+            ('total', 'REAL'),
+          ]) {
+            await _addColumnIfMissing(
+              db,
+              tableName: _tableCotizaciones,
+              columnName: column.$1,
+              definition: column.$2,
+            );
+          }
+          for (final column in const [
+            ('tax_treatment', "TEXT NOT NULL DEFAULT 'INHERIT'"),
+            ('tax_price_mode', "TEXT NOT NULL DEFAULT 'NO_TAX'"),
+            ('gross_amount', 'REAL NOT NULL DEFAULT 0'),
+            ('line_discount_amount', 'REAL NOT NULL DEFAULT 0'),
+            ('taxable_base', 'REAL NOT NULL DEFAULT 0'),
+            ('tax_rate', 'REAL NOT NULL DEFAULT 0'),
+            ('tax_amount', 'REAL NOT NULL DEFAULT 0'),
+            ('exempt_amount', 'REAL NOT NULL DEFAULT 0'),
+            ('line_total', 'REAL'),
+            ('tax_included', 'INTEGER NOT NULL DEFAULT 0'),
+            ('tax_exempt', 'INTEGER NOT NULL DEFAULT 0'),
+          ]) {
+            await _addColumnIfMissing(
+              db,
+              tableName: _tableItems,
+              columnName: column.$1,
+              definition: column.$2,
+            );
+          }
         }
       },
     );
@@ -310,6 +366,13 @@ class CotizacionesLocalRepository {
         'note': cotizacion.note,
         'include_itbis': cotizacion.includeItbis ? 1 : 0,
         'itbis_rate': cotizacion.itbisRate,
+        'fiscal_tax_enabled': cotizacion.fiscalTaxEnabled ? 1 : 0,
+        'fiscal_price_mode': cotizacion.fiscalPriceMode,
+        'taxable_base': cotizacion.taxableBase,
+        'tax_amount': cotizacion.taxAmount,
+        'exempt_amount': cotizacion.exemptAmount,
+        'discount_amount': cotizacion.fiscalDiscountAmount,
+        'total': cotizacion.totalSnapshot,
         'global_discount_amount': cotizacion.globalDiscountAmount,
         'total_cost': cotizacion.totalCost,
         'total_profit': cotizacion.totalProfit,
@@ -333,6 +396,17 @@ class CotizacionesLocalRepository {
           'external_cost_unit': item.externalCostUnit,
           'subtotal_cost_snapshot': item.subtotalCostSnapshot,
           'profit_snapshot': item.profitSnapshot,
+          'tax_treatment': item.taxTreatment,
+          'tax_price_mode': item.taxPriceMode,
+          'gross_amount': item.grossAmount,
+          'line_discount_amount': item.lineDiscountAmount,
+          'taxable_base': item.taxableBase,
+          'tax_rate': item.taxRate,
+          'tax_amount': item.taxAmount,
+          'exempt_amount': item.exemptAmount,
+          'line_total': item.lineTotalSnapshot,
+          'tax_included': item.taxIncluded ? 1 : 0,
+          'tax_exempt': item.taxExempt ? 1 : 0,
           'unit_price': item.unitPrice,
           'qty': item.qty,
         });
@@ -377,6 +451,13 @@ class CotizacionesLocalRepository {
       itbisRate: (row['itbis_rate'] as num?)?.toDouble() ?? 0.18,
       globalDiscountAmount:
           (row['global_discount_amount'] as num?)?.toDouble() ?? 0,
+      fiscalTaxEnabled: (row['fiscal_tax_enabled'] as num?)?.toInt() == 1,
+      fiscalPriceMode: (row['fiscal_price_mode'] ?? 'NO_TAX').toString(),
+      taxableBase: (row['taxable_base'] as num?)?.toDouble() ?? 0,
+      taxAmount: (row['tax_amount'] as num?)?.toDouble() ?? 0,
+      exemptAmount: (row['exempt_amount'] as num?)?.toDouble() ?? 0,
+      fiscalDiscountAmount: (row['discount_amount'] as num?)?.toDouble() ?? 0,
+      totalSnapshot: (row['total'] as num?)?.toDouble(),
       totalCost: (row['total_cost'] as num?)?.toDouble(),
       totalProfit: (row['total_profit'] as num?)?.toDouble(),
       items: itemRows
@@ -393,6 +474,18 @@ class CotizacionesLocalRepository {
               subtotalCostSnapshot: (itemRow['subtotal_cost_snapshot'] as num?)
                   ?.toDouble(),
               profitSnapshot: (itemRow['profit_snapshot'] as num?)?.toDouble(),
+              taxTreatment: (itemRow['tax_treatment'] ?? 'INHERIT').toString(),
+              taxPriceMode: (itemRow['tax_price_mode'] ?? 'NO_TAX').toString(),
+              grossAmount: (itemRow['gross_amount'] as num?)?.toDouble() ?? 0,
+              lineDiscountAmount:
+                  (itemRow['line_discount_amount'] as num?)?.toDouble() ?? 0,
+              taxableBase: (itemRow['taxable_base'] as num?)?.toDouble() ?? 0,
+              taxRate: (itemRow['tax_rate'] as num?)?.toDouble() ?? 0,
+              taxAmount: (itemRow['tax_amount'] as num?)?.toDouble() ?? 0,
+              exemptAmount: (itemRow['exempt_amount'] as num?)?.toDouble() ?? 0,
+              lineTotalSnapshot: (itemRow['line_total'] as num?)?.toDouble(),
+              taxIncluded: (itemRow['tax_included'] as num?)?.toInt() == 1,
+              taxExempt: (itemRow['tax_exempt'] as num?)?.toInt() == 1,
               unitPrice: (itemRow['unit_price'] as num?)?.toDouble() ?? 0,
               qty: (itemRow['qty'] as num?)?.toDouble() ?? 0,
             ),

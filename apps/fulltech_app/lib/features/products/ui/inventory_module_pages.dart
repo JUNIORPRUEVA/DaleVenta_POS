@@ -19,6 +19,8 @@ import '../../../core/auth/auth_provider.dart';
 import '../../../core/cache/fulltech_cache_manager.dart';
 import '../../../core/cache/local_json_cache.dart';
 import '../../../core/models/product_model.dart';
+import '../../../core/tax/product_tax_options_provider.dart';
+import '../../../core/tax/product_tax_preview_calculator.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/media_file_actions.dart';
 import '../../../core/utils/money_formatters.dart';
@@ -1471,6 +1473,8 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
       3 => 'Categorías',
       _ => 'Catálogo',
     };
+    final taxConfig = ref.watch(productTaxUiConfigProvider).valueOrNull;
+    final showTaxBadges = taxConfig?.settings.taxEnabled == true;
 
     final pages = [
       CatalogTab(
@@ -1490,6 +1494,8 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
         onSetStock: _setProductStock,
         canEditProducts: canEditProducts,
         canAddStock: canAddStock,
+        showTaxBadges: showTaxBadges,
+        taxConfig: taxConfig,
         onDelete: (product) async {
           final allowed = await ensureAdminAuthorization(
             context,
@@ -2385,6 +2391,8 @@ class CatalogTab extends StatefulWidget {
     required this.onSetStock,
     required this.canEditProducts,
     required this.canAddStock,
+    this.showTaxBadges = false,
+    this.taxConfig,
     required this.onDelete,
   });
 
@@ -2404,6 +2412,8 @@ class CatalogTab extends StatefulWidget {
   final Future<void> Function(ProductModel product, double stock) onSetStock;
   final bool canEditProducts;
   final bool canAddStock;
+  final bool showTaxBadges;
+  final ProductTaxUiConfig? taxConfig;
   final Future<void> Function(ProductModel product) onDelete;
 
   @override
@@ -2670,6 +2680,8 @@ class _CatalogTabState extends State<CatalogTab> {
                   onSetStock: widget.onSetStock,
                   canEditProducts: widget.canEditProducts,
                   canAddStock: widget.canAddStock,
+                  showTaxBadges: widget.showTaxBadges,
+                  taxConfig: widget.taxConfig,
                   onDelete: _confirmDelete,
                   onOpenDetail: _openProductDetail,
                 )
@@ -2688,6 +2700,8 @@ class _CatalogTabState extends State<CatalogTab> {
                   onSetStock: widget.onSetStock,
                   canEditProducts: widget.canEditProducts,
                   canAddStock: widget.canAddStock,
+                  showTaxBadges: widget.showTaxBadges,
+                  taxConfig: widget.taxConfig,
                   onDelete: _confirmDelete,
                 ),
             ],
@@ -3044,6 +3058,8 @@ class _CatalogTable extends StatelessWidget {
     required this.onSetStock,
     required this.canEditProducts,
     required this.canAddStock,
+    required this.showTaxBadges,
+    required this.taxConfig,
     required this.onDelete,
   });
 
@@ -3056,6 +3072,8 @@ class _CatalogTable extends StatelessWidget {
   final Future<void> Function(ProductModel product, double stock) onSetStock;
   final bool canEditProducts;
   final bool canAddStock;
+  final bool showTaxBadges;
+  final ProductTaxUiConfig? taxConfig;
   final ValueChanged<ProductModel> onDelete;
 
   @override
@@ -3108,7 +3126,13 @@ class _CatalogTable extends StatelessWidget {
                   DataCell(_ProductNameCell(product: product)),
                   DataCell(Text(product.categoriaLabel)),
                   DataCell(Text(_costText(product))),
-                  DataCell(_MoneyText(product.precio)),
+                  DataCell(
+                    _PriceWithTaxBadge(
+                      product: product,
+                      showTaxBadge: showTaxBadges,
+                      taxConfig: taxConfig,
+                    ),
+                  ),
                   DataCell(_StockBadge(product: product)),
                   DataCell(Text(_profitText(product))),
                   DataCell(Text(_marginText(product))),
@@ -3160,6 +3184,8 @@ class _CompactCatalogList extends StatelessWidget {
     required this.onSetStock,
     required this.canEditProducts,
     required this.canAddStock,
+    required this.showTaxBadges,
+    required this.taxConfig,
     required this.onDelete,
     required this.onOpenDetail,
   });
@@ -3171,6 +3197,8 @@ class _CompactCatalogList extends StatelessWidget {
   final Future<void> Function(ProductModel product, double stock) onSetStock;
   final bool canEditProducts;
   final bool canAddStock;
+  final bool showTaxBadges;
+  final ProductTaxUiConfig? taxConfig;
   final ValueChanged<ProductModel> onDelete;
   final ValueChanged<ProductModel> onOpenDetail;
 
@@ -3186,6 +3214,8 @@ class _CompactCatalogList extends StatelessWidget {
             CompactProductCard(
               product: product,
               selected: selectedIds.contains(product.id),
+              showTaxBadge: showTaxBadges,
+              taxConfig: taxConfig,
               onSelected: (value) => onToggle(product, value),
               onTap: () => onOpenDetail(product),
               onEdit: canEditProducts ? () => onEdit(product) : null,
@@ -5333,6 +5363,8 @@ class CompactProductCard extends StatelessWidget {
     super.key,
     required this.product,
     this.selected = false,
+    this.showTaxBadge = false,
+    this.taxConfig,
     required this.onSelected,
     this.onTap,
     this.onEdit,
@@ -5342,6 +5374,8 @@ class CompactProductCard extends StatelessWidget {
 
   final ProductModel product;
   final bool selected;
+  final bool showTaxBadge;
+  final ProductTaxUiConfig? taxConfig;
   final ValueChanged<bool> onSelected;
   final VoidCallback? onTap;
   final VoidCallback? onEdit;
@@ -5409,7 +5443,13 @@ class CompactProductCard extends StatelessWidget {
                       ),
                       ProductThumbnail(product: product, size: 44, radius: 9),
                       const SizedBox(width: 9),
-                      Expanded(child: _CompactProductInfo(product: product)),
+                      Expanded(
+                        child: _CompactProductInfo(
+                          product: product,
+                          showTaxBadge: showTaxBadge,
+                          taxConfig: taxConfig,
+                        ),
+                      ),
                       const SizedBox(width: 6),
                       _CompactStockCostColumn(
                         stockText: _stockText(product.stock),
@@ -5437,7 +5477,13 @@ class CompactProductCard extends StatelessWidget {
                         ),
                         ProductThumbnail(product: product, size: 42),
                         const SizedBox(width: 10),
-                        Expanded(child: _CompactProductInfo(product: product)),
+                        Expanded(
+                          child: _CompactProductInfo(
+                            product: product,
+                            showTaxBadge: showTaxBadge,
+                            taxConfig: taxConfig,
+                          ),
+                        ),
                         _CompactMetric(
                           label: 'Stock',
                           value: _stockText(product.stock),
@@ -5614,9 +5660,15 @@ class _CompactStockCostColumn extends StatelessWidget {
 }
 
 class _CompactProductInfo extends StatelessWidget {
-  const _CompactProductInfo({required this.product});
+  const _CompactProductInfo({
+    required this.product,
+    required this.showTaxBadge,
+    required this.taxConfig,
+  });
 
   final ProductModel product;
+  final bool showTaxBadge;
+  final ProductTaxUiConfig? taxConfig;
 
   @override
   Widget build(BuildContext context) {
@@ -5649,6 +5701,10 @@ class _CompactProductInfo extends StatelessWidget {
             letterSpacing: 0,
           ),
         ),
+        if (showTaxBadge && taxConfig != null) ...[
+          const SizedBox(height: 5),
+          _ProductTaxBadge(product: product, config: taxConfig!),
+        ],
       ],
     );
   }
@@ -6024,6 +6080,85 @@ class _MoneyText extends StatelessWidget {
       formatRdCurrencyAccounting(value),
       textAlign: TextAlign.right,
       style: const TextStyle(fontWeight: FontWeight.w800),
+    );
+  }
+}
+
+class _PriceWithTaxBadge extends StatelessWidget {
+  const _PriceWithTaxBadge({
+    required this.product,
+    required this.showTaxBadge,
+    required this.taxConfig,
+  });
+
+  final ProductModel product;
+  final bool showTaxBadge;
+  final ProductTaxUiConfig? taxConfig;
+
+  @override
+  Widget build(BuildContext context) {
+    final config = taxConfig;
+    final preview = config == null
+        ? null
+        : ProductTaxPreviewCalculator.calculate(
+            price: product.precio,
+            companyTaxEnabled: config.settings.taxEnabled,
+            companyPricesIncludeTax: config.settings.pricesIncludeTax,
+            companyDefaultTaxRate: config.defaultRate,
+            taxTreatment: product.taxTreatment,
+            taxRate: product.taxRate,
+            taxPriceMode: product.taxPriceMode,
+          );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _MoneyText(preview?.finalAmount ?? product.precio),
+        if (showTaxBadge && config != null) ...[
+          const SizedBox(height: 4),
+          _ProductTaxBadge(product: product, config: config),
+        ],
+      ],
+    );
+  }
+}
+
+class _ProductTaxBadge extends StatelessWidget {
+  const _ProductTaxBadge({required this.product, required this.config});
+
+  final ProductModel product;
+  final ProductTaxUiConfig config;
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = ProductTaxPreviewCalculator.calculate(
+      price: product.precio,
+      companyTaxEnabled: config.settings.taxEnabled,
+      companyPricesIncludeTax: config.settings.pricesIncludeTax,
+      companyDefaultTaxRate: config.defaultRate,
+      taxTreatment: product.taxTreatment,
+      taxRate: product.taxRate,
+      taxPriceMode: product.taxPriceMode,
+    );
+    final label = preview.taxable
+        ? '${preview.priceIncludesTax ? 'Incl.' : '+'} ${(preview.rate * 100).toStringAsFixed(0)}%'
+        : 'Exento';
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: preview.taxable
+            ? const Color(0xFFEFF6FF)
+            : const Color(0xFFF8FAFC),
+        border: Border.all(color: _borderSoft),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800),
+        ),
+      ),
     );
   }
 }
@@ -6653,6 +6788,9 @@ class _InventoryProductEditorPageState
   bool _isSaving = false;
   bool _isPickingImage = false;
   String? _formError;
+  String _taxTreatment = 'INHERIT';
+  double? _taxRate;
+  String? _taxPriceMode;
 
   ProductModel? get _product => widget.product;
 
@@ -6666,12 +6804,19 @@ class _InventoryProductEditorPageState
   void initState() {
     super.initState();
     debugPrint('[ProductForm#$hashCode] initState');
+    ref.listenManual<AuthState>(authStateProvider, (previous, next) {
+      final previousCompanyId = (previous?.user?.companyId ?? '').trim();
+      final nextCompanyId = (next.user?.companyId ?? '').trim();
+      if (previousCompanyId == nextCompanyId) return;
+      _handleCompanyChanged(nextCompanyId);
+    });
     final product = widget.product;
     _nameCtrl = TextEditingController(text: product?.nombre ?? '');
     _codeCtrl = TextEditingController(text: product?.codigo ?? '');
     _priceCtrl = TextEditingController(
       text: product == null ? '' : formatRdAccountingAmount(product.precio),
     );
+    _priceCtrl.addListener(_onTaxPreviewInputChanged);
     _costCtrl = TextEditingController(
       text: product == null ? '' : formatRdAccountingAmount(product.costo),
     );
@@ -6689,6 +6834,9 @@ class _InventoryProductEditorPageState
     _costFocus = FocusNode();
     _stockFocus = FocusNode();
     _categoryFocus = FocusNode();
+    _taxTreatment = product?.taxTreatment ?? 'INHERIT';
+    _taxRate = product?.taxRate;
+    _taxPriceMode = product?.taxPriceMode;
   }
 
   @override
@@ -6696,6 +6844,7 @@ class _InventoryProductEditorPageState
     debugPrint('[ProductForm#$hashCode] dispose');
     _nameCtrl.dispose();
     _codeCtrl.dispose();
+    _priceCtrl.removeListener(_onTaxPreviewInputChanged);
     _priceCtrl.dispose();
     _costCtrl.dispose();
     _stockCtrl.dispose();
@@ -6707,6 +6856,43 @@ class _InventoryProductEditorPageState
     _stockFocus.dispose();
     _categoryFocus.dispose();
     super.dispose();
+  }
+
+  void _onTaxPreviewInputChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  void _handleCompanyChanged(String companyId) {
+    if (!mounted) return;
+    if (_product != null && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() {
+      _nameCtrl.clear();
+      _codeCtrl.clear();
+      _priceCtrl.clear();
+      _costCtrl.clear();
+      _stockCtrl.text = '0';
+      _categoryCtrl.clear();
+      _imageBytes = null;
+      _imageName = null;
+      _uploadedImagePath = null;
+      _imageUploadFuture = null;
+      _taxTreatment = 'INHERIT';
+      _taxRate = null;
+      _taxPriceMode = null;
+      _formError = null;
+    });
+  }
+
+  double? _effectiveTaxRate(ProductTaxUiConfig? taxConfig) {
+    if (_taxTreatment == 'EXEMPT') return null;
+    if (_taxTreatment == 'TAXABLE') {
+      return _taxRate ?? taxConfig?.defaultRate;
+    }
+    return null;
   }
 
   Future<void> _pickImage() async {
@@ -6849,6 +7035,9 @@ class _InventoryProductEditorPageState
     final cost = _parseInventoryNumber(_costCtrl.text);
     final stock = _parseInventoryNumber(_stockCtrl.text);
     final category = _categoryCtrl.text.trim();
+    final taxConfig = ref.read(productTaxUiConfigProvider).valueOrNull;
+    final taxEnabled = taxConfig?.settings.taxEnabled == true;
+    final effectiveTaxRate = _effectiveTaxRate(taxConfig);
     if (name.isEmpty ||
         price == null ||
         cost == null ||
@@ -6858,6 +7047,15 @@ class _InventoryProductEditorPageState
         () => _formError = 'Completa nombre, precio, costo, stock y categoría',
       );
       return;
+    }
+    if (taxEnabled && _taxTreatment == 'TAXABLE') {
+      final hasActiveRate = (effectiveTaxRate ?? 0) > 0;
+      if (!hasActiveRate) {
+        setState(
+          () => _formError = 'Selecciona un ITBIS activo para este producto',
+        );
+        return;
+      }
     }
 
     setState(() {
@@ -6883,6 +7081,13 @@ class _InventoryProductEditorPageState
           categoria: category,
           fotoUrl: readyImagePath,
           operationId: operationId,
+          taxTreatment: taxEnabled ? _taxTreatment : null,
+          taxRate: taxEnabled && _taxTreatment == 'TAXABLE'
+              ? effectiveTaxRate
+              : null,
+          taxPriceMode: taxEnabled && _taxTreatment == 'TAXABLE'
+              ? _taxPriceMode
+              : null,
           skipLoader: true,
         );
       } else {
@@ -6896,6 +7101,13 @@ class _InventoryProductEditorPageState
           categoria: category,
           fotoUrl: readyImagePath,
           operationId: operationId,
+          taxTreatment: taxEnabled ? _taxTreatment : null,
+          taxRate: taxEnabled && _taxTreatment == 'TAXABLE'
+              ? effectiveTaxRate
+              : null,
+          taxPriceMode: taxEnabled && _taxTreatment == 'TAXABLE'
+              ? _taxPriceMode
+              : null,
           skipLoader: true,
         );
       }
@@ -6966,6 +7178,9 @@ class _InventoryProductEditorPageState
   Widget build(BuildContext context) {
     final product = _product;
     final existingImageUrl = product?.displayFotoUrl?.trim() ?? '';
+    final taxConfigAsync = ref.watch(productTaxUiConfigProvider);
+    final taxConfig = taxConfigAsync.valueOrNull;
+    final showTaxSection = taxConfig?.settings.taxEnabled == true;
 
     return _InventorySidePanelScaffold(
       title: product == null ? 'Nuevo producto' : 'Editar producto',
@@ -6974,161 +7189,197 @@ class _InventoryProductEditorPageState
       onSubmit: _isSaving || _isPickingImage ? null : _advanceFormOrSave,
       body: Padding(
         padding: const EdgeInsets.fromLTRB(0, 14, 0, 0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (_formError != null) ...[
-              _FormErrorBanner(message: _formError!),
-              const SizedBox(height: 10),
-            ],
-            TextField(
-              controller: _nameCtrl,
-              focusNode: _nameFocus,
-              enabled: !_isSaving,
-              textInputAction: TextInputAction.next,
-              decoration: _inventoryTextInputDecoration('Nombre del producto'),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _codeCtrl,
-              focusNode: _codeFocus,
-              enabled: !_isSaving,
-              textInputAction: TextInputAction.next,
-              decoration: _inventoryTextInputDecoration(
-                'Código / código de barra (opcional)',
-                hintText: 'Escanea o escribe el código del producto',
-                prefixIcon: Icon(Icons.qr_code_2_outlined),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _priceCtrl,
-                    focusNode: _priceFocus,
-                    enabled: !_isSaving,
-                    textInputAction: TextInputAction.next,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: _inventoryTextInputDecoration('Precio'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _costCtrl,
-                    focusNode: _costFocus,
-                    enabled: !_isSaving,
-                    textInputAction: TextInputAction.next,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: _inventoryTextInputDecoration('Costo'),
-                  ),
-                ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_formError != null) ...[
+                _FormErrorBanner(message: _formError!),
+                const SizedBox(height: 10),
               ],
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _stockCtrl,
-              focusNode: _stockFocus,
-              enabled: !_isSaving,
-              textInputAction: TextInputAction.next,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
+              TextField(
+                controller: _nameCtrl,
+                focusNode: _nameFocus,
+                enabled: !_isSaving,
+                textInputAction: TextInputAction.next,
+                decoration: _inventoryTextInputDecoration(
+                  'Nombre del producto',
+                ),
               ),
-              decoration: _inventoryTextInputDecoration('Stock disponible'),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _categoryCtrl,
-              focusNode: _categoryFocus,
-              enabled: !_isSaving,
-              textInputAction: TextInputAction.done,
-              decoration: _inventoryTextInputDecoration('Categoría'),
-            ),
-            if (widget.categories.isNotEmpty) ...[
               const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
+              TextField(
+                controller: _codeCtrl,
+                focusNode: _codeFocus,
+                enabled: !_isSaving,
+                textInputAction: TextInputAction.next,
+                decoration: _inventoryTextInputDecoration(
+                  'Código / código de barra (opcional)',
+                  hintText: 'Escanea o escribe el código del producto',
+                  prefixIcon: Icon(Icons.qr_code_2_outlined),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
                 children: [
-                  for (final category in widget.categories)
-                    _InventoryCategoryChoiceChip(
-                      label: category,
-                      selected: _categoryCtrl.text.trim() == category,
-                      onTap: _isSaving
-                          ? null
-                          : () => setState(() {
-                              _categoryCtrl.text = category;
-                            }),
+                  Expanded(
+                    child: TextField(
+                      controller: _priceCtrl,
+                      focusNode: _priceFocus,
+                      enabled: !_isSaving,
+                      textInputAction: TextInputAction.next,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: _inventoryTextInputDecoration('Precio'),
                     ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _costCtrl,
+                      focusNode: _costFocus,
+                      enabled: !_isSaving,
+                      textInputAction: TextInputAction.next,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: _inventoryTextInputDecoration('Costo'),
+                    ),
+                  ),
                 ],
               ),
-            ],
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: _isSaving || _isPickingImage ? null : _pickImage,
-              icon: _isPickingImage
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.upload_file_rounded),
-              label: Text(
-                _isPickingImage
-                    ? 'Seleccionando imagen...'
-                    : _imageName ?? 'Subir imagen desde el ordenador',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              style: OutlinedButton.styleFrom(
-                shape: const RoundedRectangleBorder(),
-                minimumSize: const Size.fromHeight(36),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: Container(
-                constraints: const BoxConstraints(minHeight: 180),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: _lightBlueHover,
-                  borderRadius: BorderRadius.zero,
-                  border: Border.all(color: _borderSoft),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _stockCtrl,
+                focusNode: _stockFocus,
+                enabled: !_isSaving,
+                textInputAction: TextInputAction.next,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
                 ),
-                clipBehavior: Clip.antiAlias,
-                child: _imageBytes != null
-                    ? Image.memory(
-                        _imageBytes!,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: double.infinity,
+                decoration: _inventoryTextInputDecoration('Stock disponible'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _categoryCtrl,
+                focusNode: _categoryFocus,
+                enabled: !_isSaving,
+                textInputAction: TextInputAction.done,
+                decoration: _inventoryTextInputDecoration('Categoría'),
+              ),
+              if (widget.categories.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    for (final category in widget.categories)
+                      _InventoryCategoryChoiceChip(
+                        label: category,
+                        selected: _categoryCtrl.text.trim() == category,
+                        onTap: _isSaving
+                            ? null
+                            : () => setState(() {
+                                _categoryCtrl.text = category;
+                              }),
+                      ),
+                  ],
+                ),
+              ],
+              if (showTaxSection) ...[
+                const SizedBox(height: 12),
+                _ProductFiscalSection(
+                  config: taxConfig!,
+                  price: _parseInventoryNumber(_priceCtrl.text) ?? 0,
+                  taxTreatment: _taxTreatment,
+                  taxRate: _effectiveTaxRate(taxConfig),
+                  taxPriceMode: _taxPriceMode,
+                  enabled: !_isSaving,
+                  onTaxTreatmentChanged: (value) {
+                    setState(() {
+                      _taxTreatment = value;
+                      if (value != 'TAXABLE') {
+                        _taxRate = null;
+                        _taxPriceMode = null;
+                      } else {
+                        _taxRate ??= taxConfig.defaultRate > 0
+                            ? taxConfig.defaultRate
+                            : null;
+                      }
+                    });
+                  },
+                  onTaxRateChanged: (value) => setState(() => _taxRate = value),
+                  onTaxPriceModeChanged: (value) {
+                    setState(() => _taxPriceMode = value);
+                  },
+                ),
+              ] else if (taxConfigAsync.isLoading) ...[
+                const SizedBox(height: 12),
+                const LinearProgressIndicator(minHeight: 2),
+              ],
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _isSaving || _isPickingImage ? null : _pickImage,
+                icon: _isPickingImage
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : (product != null && existingImageUrl.isNotEmpty)
-                    ? ProductNetworkImage(
-                        imageUrl: existingImageUrl,
-                        productId: product.id,
-                        productName: product.nombre,
-                        originalUrl: product.originalFotoUrl,
-                        fit: BoxFit.cover,
-                        fallback: const Icon(
+                    : const Icon(Icons.upload_file_rounded),
+                label: Text(
+                  _isPickingImage
+                      ? 'Seleccionando imagen...'
+                      : _imageName ?? 'Subir imagen desde el ordenador',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                style: OutlinedButton.styleFrom(
+                  shape: const RoundedRectangleBorder(),
+                  minimumSize: const Size.fromHeight(36),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 180,
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: 64),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _lightBlueHover,
+                    borderRadius: BorderRadius.zero,
+                    border: Border.all(color: _borderSoft),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: _imageBytes != null
+                      ? Image.memory(
+                          _imageBytes!,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          height: double.infinity,
+                        )
+                      : (product != null && existingImageUrl.isNotEmpty)
+                      ? ProductNetworkImage(
+                          imageUrl: existingImageUrl,
+                          productId: product.id,
+                          productName: product.nombre,
+                          originalUrl: product.originalFotoUrl,
+                          fit: BoxFit.cover,
+                          fallback: const Icon(
+                            Icons.image_outlined,
+                            size: 44,
+                            color: _textSecondary,
+                          ),
+                        )
+                      : const Icon(
                           Icons.image_outlined,
                           size: 44,
                           color: _textSecondary,
                         ),
-                      )
-                    : const Icon(
-                        Icons.image_outlined,
-                        size: 44,
-                        color: _textSecondary,
-                      ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       footer: SizedBox(
@@ -7146,6 +7397,236 @@ class _InventoryProductEditorPageState
                 )
               : const Icon(Icons.save_outlined),
           label: Text(product == null ? 'Crear producto' : 'Guardar cambios'),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProductFiscalSection extends StatelessWidget {
+  const _ProductFiscalSection({
+    required this.config,
+    required this.price,
+    required this.taxTreatment,
+    required this.taxRate,
+    required this.taxPriceMode,
+    required this.enabled,
+    required this.onTaxTreatmentChanged,
+    required this.onTaxRateChanged,
+    required this.onTaxPriceModeChanged,
+  });
+
+  final ProductTaxUiConfig config;
+  final double price;
+  final String taxTreatment;
+  final double? taxRate;
+  final String? taxPriceMode;
+  final bool enabled;
+  final ValueChanged<String> onTaxTreatmentChanged;
+  final ValueChanged<double?> onTaxRateChanged;
+  final ValueChanged<String?> onTaxPriceModeChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final taxes = config.activeTaxes;
+    final selectedRate = taxes.any((tax) => tax.rate == taxRate)
+        ? taxRate
+        : null;
+    final preview = ProductTaxPreviewCalculator.calculate(
+      price: price,
+      companyTaxEnabled: config.settings.taxEnabled,
+      companyPricesIncludeTax: config.settings.pricesIncludeTax,
+      companyDefaultTaxRate: config.defaultRate,
+      taxTreatment: taxTreatment,
+      taxRate: taxRate,
+      taxPriceMode: taxPriceMode,
+    );
+    final taxable = taxTreatment == 'TAXABLE';
+    final inherit = taxTreatment == 'INHERIT';
+    final noActiveTaxes = taxes.isEmpty;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: _borderSoft),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.receipt_long_outlined, size: 18),
+                SizedBox(width: 8),
+                Text(
+                  'Fiscal',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              initialValue: taxTreatment,
+              items: const [
+                DropdownMenuItem(
+                  value: 'INHERIT',
+                  child: Text('Predeterminado'),
+                ),
+                DropdownMenuItem(value: 'TAXABLE', child: Text('Gravado')),
+                DropdownMenuItem(value: 'EXEMPT', child: Text('Exento')),
+              ],
+              onChanged: enabled
+                  ? (value) => onTaxTreatmentChanged(value ?? 'INHERIT')
+                  : null,
+              decoration: _inventoryTextInputDecoration('Tratamiento'),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _taxHelpText(
+                treatment: taxTreatment,
+                preview: preview,
+                config: config,
+              ),
+              style: const TextStyle(
+                color: _textSecondary,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (inherit) const SizedBox(height: 2),
+            if (taxable) ...[
+              const SizedBox(height: 10),
+              if (noActiveTaxes)
+                const _FormErrorBanner(
+                  message: 'No hay impuestos disponibles para esta empresa.',
+                )
+              else
+                DropdownButtonFormField<double>(
+                  initialValue: selectedRate,
+                  items: [
+                    for (final tax in taxes)
+                      DropdownMenuItem(
+                        value: tax.rate,
+                        child: Text(
+                          '${tax.name} ${(tax.rate * 100).toStringAsFixed(0)}%',
+                        ),
+                      ),
+                  ],
+                  onChanged: enabled ? onTaxRateChanged : null,
+                  decoration: _inventoryTextInputDecoration('Impuesto'),
+                ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String?>(
+                initialValue: taxPriceMode,
+                items: const [
+                  DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Usar configuración de empresa'),
+                  ),
+                  DropdownMenuItem<String?>(
+                    value: 'TAX_INCLUDED',
+                    child: Text('Precio incluye impuesto'),
+                  ),
+                  DropdownMenuItem<String?>(
+                    value: 'TAX_ADDED',
+                    child: Text('Precio + impuesto'),
+                  ),
+                ],
+                onChanged: enabled ? onTaxPriceModeChanged : null,
+                decoration: _inventoryTextInputDecoration('Modo de precio'),
+              ),
+            ],
+            const SizedBox(height: 10),
+            _TaxPreviewStrip(preview: preview),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _taxHelpText({
+  required String treatment,
+  required ProductTaxPreview preview,
+  required ProductTaxUiConfig config,
+}) {
+  final rateLabel = '${(preview.rate * 100).toStringAsFixed(0)}%';
+  final modeLabel = preview.priceIncludesTax ? 'incluido' : '+ impuesto';
+  if (treatment == 'EXEMPT') return 'Producto exento de impuesto.';
+  if (treatment == 'TAXABLE') {
+    return 'Usa ITBIS $rateLabel $modeLabel para este producto.';
+  }
+  final companyMode = config.settings.pricesIncludeTax
+      ? 'incluido'
+      : '+ impuesto';
+  return 'Usa ITBIS $rateLabel $companyMode según la empresa.';
+}
+
+class _TaxPreviewStrip extends StatelessWidget {
+  const _TaxPreviewStrip({required this.preview});
+
+  final ProductTaxPreview preview;
+
+  @override
+  Widget build(BuildContext context) {
+    if (preview.exempt) {
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          const _TaxPreviewPill(label: 'Producto exento'),
+          _TaxPreviewPill(
+            label: 'Final ${formatRdCurrencyAccounting(preview.finalAmount)}',
+          ),
+        ],
+      );
+    }
+    final rateLabel = preview.rate > 0
+        ? '${(preview.rate * 100).toStringAsFixed(0)}%'
+        : '0%';
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _TaxPreviewPill(
+          label: preview.taxable
+              ? (preview.priceIncludesTax
+                    ? 'Incluido $rateLabel'
+                    : '+ ITBIS $rateLabel')
+              : 'Exento',
+        ),
+        _TaxPreviewPill(
+          label: 'Base ${formatRdCurrencyAccounting(preview.baseAmount)}',
+        ),
+        _TaxPreviewPill(
+          label: 'ITBIS ${formatRdCurrencyAccounting(preview.taxAmount)}',
+        ),
+        _TaxPreviewPill(
+          label: 'Final ${formatRdCurrencyAccounting(preview.finalAmount)}',
+        ),
+      ],
+    );
+  }
+}
+
+class _TaxPreviewPill extends StatelessWidget {
+  const _TaxPreviewPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: _lightBlueHover,
+        border: Border.all(color: _borderSoft),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        child: Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11),
         ),
       ),
     );

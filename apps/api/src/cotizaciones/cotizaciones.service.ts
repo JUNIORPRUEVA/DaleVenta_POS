@@ -17,8 +17,10 @@ import {
   CompanyManualEntryKind,
   CompanyMemberRole,
   CompanyMemberStatus,
+  ProductTaxTreatment,
   Prisma,
   Role,
+  TaxPriceMode,
 } from "@prisma/client";
 import { RedisService } from "../common/redis/redis.service";
 import { EvolutionWhatsAppService } from "../notifications/evolution-whatsapp.service";
@@ -34,6 +36,7 @@ import {
 } from "./dto/create-cotizacion.dto";
 import { SendCotizacionWhatsappDto } from "./dto/send-cotizacion-whatsapp.dto";
 import { UpdateCotizacionDto } from "./dto/update-cotizacion.dto";
+import { TaxService } from "../tax/tax.service";
 
 type AiRuntimeConfig = {
   apiKey: string;
@@ -73,6 +76,7 @@ export class CotizacionesService {
     private readonly config: ConfigService,
     private readonly redis: RedisService,
     private readonly evolutionWhatsApp: EvolutionWhatsAppService,
+    private readonly taxes: TaxService,
   ) {}
 
   private buildQuoteInclude() {
@@ -625,19 +629,29 @@ export class CotizacionesService {
 
     const customerPhoneNormalized = normalizePhone(customerPhone);
 
-    const includeItbis = dto.includeItbis === true;
-    const itbisRateRaw = dto.itbisRate ?? 0.18;
-    const itbisRate = new Prisma.Decimal(
-      Math.max(0, Math.min(itbisRateRaw, 1)),
-    );
-
     const normalized = await this.normalizeItems(companyId, dto.items);
+    const fiscalSettings = await this.taxes.getCompanyFiscalSettings(companyId);
+    const defaultPriceMode = this.taxes.resolvePriceMode(fiscalSettings);
+    const taxCalculation = this.taxes.calculatorService.calculate({
+      taxEnabled: fiscalSettings.taxEnabled,
+      defaultTaxRate: fiscalSettings.defaultTaxRate,
+      defaultPriceMode,
+      globalDiscountAmount: dto.globalDiscountAmount ?? 0,
+      lines: normalized.map((item) => ({
+        description: item.productNameSnapshot,
+        quantity: item.qty,
+        unitPrice: item.unitPrice,
+        taxTreatment: item.taxTreatment,
+        taxRate: item.taxRate ?? fiscalSettings.defaultTaxRate,
+        priceMode: item.taxPriceMode ?? defaultPriceMode,
+      })),
+    });
 
-    let subtotal = new Prisma.Decimal(0);
+    let rawSubtotal = new Prisma.Decimal(0);
     let subtotalCost = new Prisma.Decimal(0);
     let hasUnknownCost = false;
     for (const line of normalized) {
-      subtotal = subtotal.plus(line.lineTotal);
+      rawSubtotal = rawSubtotal.plus(line.lineTotal);
       if (line.subtotalCost == null) {
         hasUnknownCost = true;
       } else {
@@ -645,18 +659,14 @@ export class CotizacionesService {
       }
     }
 
-    const itbisAmount = includeItbis
-      ? subtotal.mul(itbisRate)
-      : new Prisma.Decimal(0);
-    const grossTotal = subtotal.plus(itbisAmount);
-    const generalDiscountAmountRaw = dto.globalDiscountAmount ?? 0;
-    const generalDiscountAmount = new Prisma.Decimal(
-      Math.max(
-        0,
-        Math.min(generalDiscountAmountRaw, this.toNumber(grossTotal)),
-      ),
-    );
-    const total = grossTotal.minus(generalDiscountAmount);
+    const includeItbis = fiscalSettings.taxEnabled && taxCalculation.taxAmount.gt(0);
+    const itbisRate = new Prisma.Decimal(fiscalSettings.defaultTaxRate);
+    const generalDiscountAmount = taxCalculation.discountAmount;
+    const subtotal = fiscalSettings.taxEnabled
+      ? taxCalculation.taxableBase.plus(taxCalculation.exemptAmount)
+      : rawSubtotal;
+    const itbisAmount = taxCalculation.taxAmount;
+    const total = taxCalculation.total;
     const totalCost = hasUnknownCost ? null : subtotalCost;
     const totalProfit = hasUnknownCost ? null : total.minus(subtotalCost);
 
@@ -682,6 +692,12 @@ export class CotizacionesService {
             note: note.length ? note : null,
             includeItbis,
             itbisRate,
+            fiscalTaxEnabled: fiscalSettings.taxEnabled,
+            fiscalPriceMode: defaultPriceMode,
+            taxableBase: taxCalculation.taxableBase,
+            taxAmount: taxCalculation.taxAmount,
+            exemptAmount: taxCalculation.exemptAmount,
+            discountAmount: taxCalculation.discountAmount,
             globalDiscountAmount: generalDiscountAmount,
             subtotal,
             subtotalCost: totalCost,
@@ -690,7 +706,7 @@ export class CotizacionesService {
             total,
             totalProfit,
             items: {
-              create: normalized.map((item) => ({
+              create: normalized.map((item, index) => ({
                 productId: item.productId,
                 productNameSnapshot: item.productNameSnapshot,
                 productImageSnapshot: item.productImageSnapshot,
@@ -699,8 +715,20 @@ export class CotizacionesService {
                 unitPrice: item.unitPrice,
                 costUnitSnapshot: item.costUnitSnapshot,
                 subtotalCost: item.subtotalCost,
-                lineTotal: item.lineTotal,
-                profit: item.profit,
+                taxTreatment: item.taxTreatment,
+                taxPriceMode: item.taxPriceMode ?? defaultPriceMode,
+                grossAmount: taxCalculation.lines[index]?.grossAmount ?? item.lineTotal,
+                lineDiscountAmount: taxCalculation.lines[index]?.discountAmount ?? new Prisma.Decimal(0),
+                taxableBase: taxCalculation.lines[index]?.taxableBase ?? new Prisma.Decimal(0),
+                taxRate: taxCalculation.lines[index]?.taxRate ?? new Prisma.Decimal(0),
+                taxAmount: taxCalculation.lines[index]?.taxAmount ?? new Prisma.Decimal(0),
+                exemptAmount: taxCalculation.lines[index]?.exemptAmount ?? item.lineTotal,
+                taxIncluded: taxCalculation.lines[index]?.taxIncluded ?? false,
+                taxExempt: taxCalculation.lines[index]?.taxExempt ?? true,
+                lineTotal: taxCalculation.lines[index]?.lineTotal ?? item.lineTotal,
+                profit: item.subtotalCost == null
+                  ? null
+                  : (taxCalculation.lines[index]?.lineTotal ?? item.lineTotal).minus(item.subtotalCost),
               })),
             },
           },
@@ -728,18 +756,20 @@ export class CotizacionesService {
     dto: UpdateCotizacionDto,
   ) {
     const companyId = requireTenant(user);
-    const current = await this.prisma.cotizacion.findFirst({ where: { id, companyId } });
+    const current = await this.prisma.cotizacion.findFirst({
+      where: { id, companyId },
+      include: { items: { orderBy: { createdAt: "asc" } } },
+    });
     if (!current) throw new NotFoundException("Cotización no encontrada");
 
     if (!isAdminLike(user) && current.createdByUserId !== user.id) {
       throw new ForbiddenException("No puedes editar esta cotización");
     }
 
-    const includeItbis = dto.includeItbis ?? current.includeItbis;
-    const itbisRateRaw = dto.itbisRate ?? this.toNumber(current.itbisRate);
-    const itbisRate = new Prisma.Decimal(
-      Math.max(0, Math.min(itbisRateRaw, 1)),
-    );
+    const fiscalSettings = await this.taxes.getCompanyFiscalSettings(companyId);
+    const defaultPriceMode = this.taxes.resolvePriceMode(fiscalSettings);
+    let includeItbis = current.includeItbis;
+    let itbisRate = new Prisma.Decimal(current.itbisRate);
     const currentGeneralDiscountAmount = this.toNumber(
       (
         current as {
@@ -750,6 +780,22 @@ export class CotizacionesService {
 
     const nextItems = dto.items
       ? await this.normalizeItems(companyId, dto.items as CreateCotizacionItemDto[])
+      : null;
+    let taxCalculation = nextItems
+      ? this.taxes.calculatorService.calculate({
+          taxEnabled: fiscalSettings.taxEnabled,
+          defaultTaxRate: fiscalSettings.defaultTaxRate,
+          defaultPriceMode,
+          globalDiscountAmount: dto.globalDiscountAmount ?? currentGeneralDiscountAmount,
+          lines: nextItems.map((item) => ({
+            description: item.productNameSnapshot,
+            quantity: item.qty,
+            unitPrice: item.unitPrice,
+            taxTreatment: item.taxTreatment,
+            taxRate: item.taxRate ?? fiscalSettings.defaultTaxRate,
+            priceMode: item.taxPriceMode ?? defaultPriceMode,
+          })),
+        })
       : null;
 
     let subtotal = new Prisma.Decimal(current.subtotal);
@@ -770,42 +816,48 @@ export class CotizacionesService {
     );
 
     if (nextItems) {
-      subtotal = new Prisma.Decimal(0);
       subtotalCost = new Prisma.Decimal(0);
+      let rawSubtotal = new Prisma.Decimal(0);
       let hasUnknownCost = false;
       for (const line of nextItems) {
-        subtotal = subtotal.plus(line.lineTotal);
+        rawSubtotal = rawSubtotal.plus(line.lineTotal);
         if (line.subtotalCost == null) {
           hasUnknownCost = true;
         } else {
           subtotalCost = subtotalCost.plus(line.subtotalCost);
         }
       }
-      itbisAmount = includeItbis
-        ? subtotal.mul(itbisRate)
-        : new Prisma.Decimal(0);
-      const grossTotal = subtotal.plus(itbisAmount);
-      generalDiscountAmount = new Prisma.Decimal(
-        Math.max(
-          0,
-          Math.min(
-            this.toNumber(generalDiscountAmount),
-            this.toNumber(grossTotal),
-          ),
-        ),
-      );
-      total = grossTotal.minus(generalDiscountAmount);
+      includeItbis = fiscalSettings.taxEnabled && (taxCalculation?.taxAmount.gt(0) ?? false);
+      itbisRate = new Prisma.Decimal(fiscalSettings.defaultTaxRate);
+      subtotal = fiscalSettings.taxEnabled
+        ? (taxCalculation?.taxableBase ?? new Prisma.Decimal(0)).plus(taxCalculation?.exemptAmount ?? new Prisma.Decimal(0))
+        : rawSubtotal;
+      itbisAmount = taxCalculation?.taxAmount ?? new Prisma.Decimal(0);
+      generalDiscountAmount = taxCalculation?.discountAmount ?? new Prisma.Decimal(0);
+      total = taxCalculation?.total ?? new Prisma.Decimal(0);
       totalCost = hasUnknownCost ? null : subtotalCost;
       totalProfit = hasUnknownCost ? null : total.minus(subtotalCost);
     } else if (dto.globalDiscountAmount !== undefined) {
-      const grossTotal = subtotal.plus(itbisAmount);
-      generalDiscountAmount = new Prisma.Decimal(
-        Math.max(
-          0,
-          Math.min(dto.globalDiscountAmount, this.toNumber(grossTotal)),
-        ),
-      );
-      total = grossTotal.minus(generalDiscountAmount);
+      taxCalculation = this.taxes.calculatorService.calculate({
+        taxEnabled: current.fiscalTaxEnabled,
+        defaultTaxRate: current.itbisRate,
+        defaultPriceMode: current.fiscalPriceMode,
+        globalDiscountAmount: dto.globalDiscountAmount,
+        lines: current.items.map((item) => ({
+          description: item.productNameSnapshot,
+          quantity: item.qty,
+          unitPrice: item.unitPrice,
+          taxTreatment: item.taxTreatment,
+          taxRate: item.taxRate,
+          priceMode: item.taxPriceMode,
+        })),
+      });
+      subtotal = current.fiscalTaxEnabled
+        ? taxCalculation.taxableBase.plus(taxCalculation.exemptAmount)
+        : current.items.reduce((sum, item) => sum.plus(item.lineTotal), new Prisma.Decimal(0));
+      itbisAmount = taxCalculation.taxAmount;
+      generalDiscountAmount = taxCalculation.discountAmount;
+      total = taxCalculation.total;
       totalProfit = totalCost == null ? null : total.minus(totalCost);
     }
 
@@ -851,6 +903,12 @@ export class CotizacionesService {
                 : current.note,
             includeItbis,
             itbisRate,
+            fiscalTaxEnabled: nextItems ? fiscalSettings.taxEnabled : current.fiscalTaxEnabled,
+            fiscalPriceMode: nextItems ? defaultPriceMode : current.fiscalPriceMode,
+            taxableBase: taxCalculation?.taxableBase ?? current.taxableBase,
+            taxAmount: taxCalculation?.taxAmount ?? current.taxAmount,
+            exemptAmount: taxCalculation?.exemptAmount ?? current.exemptAmount,
+            discountAmount: taxCalculation?.discountAmount ?? current.discountAmount,
             globalDiscountAmount: generalDiscountAmount,
             subtotal,
             subtotalCost,
@@ -860,7 +918,7 @@ export class CotizacionesService {
             totalProfit,
             items: nextItems
               ? {
-                  create: nextItems.map((item) => ({
+                  create: nextItems.map((item, index) => ({
                     productId: item.productId,
                     productNameSnapshot: item.productNameSnapshot,
                     productImageSnapshot: item.productImageSnapshot,
@@ -869,8 +927,20 @@ export class CotizacionesService {
                     unitPrice: item.unitPrice,
                     costUnitSnapshot: item.costUnitSnapshot,
                     subtotalCost: item.subtotalCost,
-                    lineTotal: item.lineTotal,
-                    profit: item.profit,
+                    taxTreatment: item.taxTreatment,
+                    taxPriceMode: item.taxPriceMode ?? defaultPriceMode,
+                    grossAmount: taxCalculation?.lines[index]?.grossAmount ?? item.lineTotal,
+                    lineDiscountAmount: taxCalculation?.lines[index]?.discountAmount ?? new Prisma.Decimal(0),
+                    taxableBase: taxCalculation?.lines[index]?.taxableBase ?? new Prisma.Decimal(0),
+                    taxRate: taxCalculation?.lines[index]?.taxRate ?? new Prisma.Decimal(0),
+                    taxAmount: taxCalculation?.lines[index]?.taxAmount ?? new Prisma.Decimal(0),
+                    exemptAmount: taxCalculation?.lines[index]?.exemptAmount ?? item.lineTotal,
+                    taxIncluded: taxCalculation?.lines[index]?.taxIncluded ?? false,
+                    taxExempt: taxCalculation?.lines[index]?.taxExempt ?? true,
+                    lineTotal: taxCalculation?.lines[index]?.lineTotal ?? item.lineTotal,
+                    profit: item.subtotalCost == null
+                      ? null
+                      : (taxCalculation?.lines[index]?.lineTotal ?? item.lineTotal).minus(item.subtotalCost),
                   })),
                 }
               : undefined,
@@ -1272,11 +1342,22 @@ export class CotizacionesService {
       nombre: string;
       imagen: string | null;
       costo: Prisma.Decimal;
+      taxTreatment: ProductTaxTreatment;
+      taxRate: Prisma.Decimal | null;
+      taxPriceMode: TaxPriceMode | null;
     }> = [];
     if (productIds.length) {
       products = await this.prisma.product.findMany({
         where: { id: { in: productIds }, companyId },
-        select: { id: true, nombre: true, imagen: true, costo: true },
+        select: {
+          id: true,
+          nombre: true,
+          imagen: true,
+          costo: true,
+          taxTreatment: true,
+          taxRate: true,
+          taxPriceMode: true,
+        },
       });
     }
 
@@ -1295,6 +1376,11 @@ export class CotizacionesService {
 
       const productId = item.productId ?? null;
       const product = productId ? productMap.get(productId) : null;
+      if (productId && !product) {
+        throw new BadRequestException(
+          `Producto inválido en item #${index + 1}`,
+        );
+      }
 
       const productNameSnapshot = product?.nombre ?? item.productName?.trim();
       if (!productNameSnapshot) {
@@ -1330,6 +1416,17 @@ export class CotizacionesService {
         subtotalCost,
         lineTotal,
         profit,
+        taxTreatment:
+          product?.taxTreatment ??
+          (item.taxTreatment as ProductTaxTreatment | undefined) ??
+          ProductTaxTreatment.INHERIT,
+        taxRate:
+          product?.taxRate ??
+          (item.taxRate === undefined ? null : new Prisma.Decimal(item.taxRate)),
+        taxPriceMode:
+          product?.taxPriceMode ??
+          (item.taxPriceMode as TaxPriceMode | undefined) ??
+          null,
       };
     });
   }

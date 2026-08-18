@@ -35,6 +35,9 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
     String? fotoUrl,
     required String categoria,
     String? operationId,
+    String? taxTreatment,
+    double? taxRate,
+    String? taxPriceMode,
     bool skipLoader = false,
   }) async {
     creates += 1;
@@ -63,6 +66,9 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
     String? fotoUrl,
     String? categoria,
     String? operationId,
+    String? taxTreatment,
+    double? taxRate,
+    String? taxPriceMode,
     bool skipLoader = false,
   }) async {
     updates += 1;

@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:daleventa_pos/core/company/company_settings_model.dart';
 import 'package:daleventa_pos/core/models/product_model.dart';
+import 'package:daleventa_pos/core/tax/product_tax_options_provider.dart';
 import 'package:daleventa_pos/features/catalogo/data/catalog_repository.dart';
 import 'package:daleventa_pos/features/products/ui/inventory_module_pages.dart';
 
@@ -15,6 +17,9 @@ class _FakeCatalogRepository extends CatalogRepository {
   int creates = 0;
   int updates = 0;
   int uploads = 0;
+  String? lastTaxTreatment;
+  double? lastTaxRate;
+  String? lastTaxPriceMode;
   Completer<String>? uploadCompleter;
   List<ProductModel> products = [
     _product(id: 'p-1', name: 'Auriculares Pro', category: 'Audio'),
@@ -44,9 +49,15 @@ class _FakeCatalogRepository extends CatalogRepository {
     String? fotoUrl,
     required String categoria,
     String? operationId,
+    String? taxTreatment,
+    double? taxRate,
+    String? taxPriceMode,
     bool skipLoader = false,
   }) async {
     creates += 1;
+    lastTaxTreatment = taxTreatment;
+    lastTaxRate = taxRate;
+    lastTaxPriceMode = taxPriceMode;
     await Future<void>.delayed(const Duration(milliseconds: 20));
     return ProductModel(
       id: 'created-$creates',
@@ -57,6 +68,9 @@ class _FakeCatalogRepository extends CatalogRepository {
       stock: stock,
       categoria: categoria,
       fotoUrl: fotoUrl,
+      taxTreatment: taxTreatment ?? 'INHERIT',
+      taxRate: taxRate,
+      taxPriceMode: taxPriceMode,
     );
   }
 
@@ -71,9 +85,15 @@ class _FakeCatalogRepository extends CatalogRepository {
     String? fotoUrl,
     String? categoria,
     String? operationId,
+    String? taxTreatment,
+    double? taxRate,
+    String? taxPriceMode,
     bool skipLoader = false,
   }) async {
     updates += 1;
+    lastTaxTreatment = taxTreatment;
+    lastTaxRate = taxRate;
+    lastTaxPriceMode = taxPriceMode;
     await Future<void>.delayed(const Duration(milliseconds: 20));
     return ProductModel(
       id: id,
@@ -84,6 +104,9 @@ class _FakeCatalogRepository extends CatalogRepository {
       stock: stock,
       categoria: categoria,
       fotoUrl: fotoUrl,
+      taxTreatment: taxTreatment ?? 'INHERIT',
+      taxRate: taxRate,
+      taxPriceMode: taxPriceMode,
     );
   }
 
@@ -118,11 +141,22 @@ Future<ProductFormResult?> _pumpEditor(
   WidgetTester tester, {
   required _FakeCatalogRepository repo,
   ProductModel? product,
+  ProductTaxUiConfig? taxConfig,
 }) async {
   ProductFormResult? result;
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [catalogRepositoryProvider.overrideWithValue(repo)],
+      overrides: [
+        catalogRepositoryProvider.overrideWithValue(repo),
+        productTaxUiConfigProvider.overrideWith(
+          (ref) async =>
+              taxConfig ??
+              ProductTaxUiConfig(
+                settings: CompanySettings.empty(),
+                activeTaxes: const [],
+              ),
+        ),
+      ],
       child: MaterialApp(
         home: Builder(
           builder: (context) {
@@ -166,7 +200,15 @@ Future<void> _pumpMobileInventory(
 
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [catalogRepositoryProvider.overrideWithValue(repo)],
+      overrides: [
+        catalogRepositoryProvider.overrideWithValue(repo),
+        productTaxUiConfigProvider.overrideWith(
+          (ref) async => ProductTaxUiConfig(
+            settings: CompanySettings.empty(),
+            activeTaxes: const [],
+          ),
+        ),
+      ],
       child: MaterialApp(
         home: InventoryModulePages(initialMobileTab: initialMobileTab),
       ),
@@ -274,6 +316,93 @@ void main() {
     expect(find.text('Producto humo'), findsNothing);
   });
 
+  testWidgets('catálogo muestra badges fiscales comprensibles', (tester) async {
+    final taxConfig = ProductTaxUiConfig(
+      settings: CompanySettings.empty().copyWith(
+        taxEnabled: true,
+        defaultTaxId: 'tax-18',
+        defaultTaxRate: 0.18,
+        pricesIncludeTax: true,
+      ),
+      activeTaxes: const [
+        ProductTaxOption(
+          id: 'tax-18',
+          name: 'ITBIS',
+          rate: 0.18,
+          isDefault: true,
+        ),
+      ],
+    );
+    final products = [
+      ProductModel(
+        id: 'p-included',
+        nombre: 'Incluido',
+        precio: 1180,
+        costo: 700,
+        stock: 1,
+        categoria: 'Fiscal',
+        taxTreatment: 'TAXABLE',
+        taxRate: 0.18,
+        taxPriceMode: 'TAX_INCLUDED',
+      ),
+      ProductModel(
+        id: 'p-added',
+        nombre: 'Agregado',
+        precio: 1000,
+        costo: 600,
+        stock: 1,
+        categoria: 'Fiscal',
+        taxTreatment: 'TAXABLE',
+        taxRate: 0.18,
+        taxPriceMode: 'TAX_ADDED',
+      ),
+      ProductModel(
+        id: 'p-exempt',
+        nombre: 'Exento',
+        precio: 500,
+        costo: 300,
+        stock: 1,
+        categoria: 'Fiscal',
+        taxTreatment: 'EXEMPT',
+      ),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 1100,
+            child: CatalogTab(
+              products: products,
+              loading: false,
+              error: null,
+              onRefresh: () async {},
+              onCreate: () {},
+              onImport: () async {},
+              onExport: () async {},
+              onExportSelection: (_) async {},
+              onPdfSelection: (_) async {},
+              onBulkDelete: (_) async {},
+              onBulkChangeCategory: (_, _) async {},
+              onEdit: (_) {},
+              onSetStock: (_, _) async {},
+              canEditProducts: true,
+              canAddStock: true,
+              showTaxBadges: true,
+              taxConfig: taxConfig,
+              onDelete: (_) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Incl. 18%'), findsOneWidget);
+    expect(find.text('+ 18%'), findsOneWidget);
+    expect(find.text('Exento'), findsWidgets);
+  });
+
   testWidgets(
     'ajustes de stock resetea filtro cuando desaparece la categoría',
     (tester) async {
@@ -353,6 +482,88 @@ void main() {
       );
     },
   );
+
+  testWidgets('formulario guarda producto gravado con tasa activa', (
+    tester,
+  ) async {
+    final repo = _FakeCatalogRepository();
+    final taxConfig = ProductTaxUiConfig(
+      settings: CompanySettings.empty().copyWith(
+        taxEnabled: true,
+        defaultTaxId: 'tax-18',
+        defaultTaxRate: 0.18,
+        pricesIncludeTax: true,
+      ),
+      activeTaxes: const [
+        ProductTaxOption(
+          id: 'tax-18',
+          name: 'ITBIS',
+          rate: 0.18,
+          isDefault: true,
+        ),
+      ],
+    );
+    await _pumpEditor(tester, repo: repo, taxConfig: taxConfig);
+
+    await tester.enterText(find.byType(TextField).at(0), 'Producto fiscal');
+    await tester.enterText(find.byType(TextField).at(1), 'FISC-001');
+    await tester.enterText(find.byType(TextField).at(2), '1180');
+    await tester.enterText(find.byType(TextField).at(3), '700');
+    await tester.enterText(find.byType(TextField).at(4), '3');
+    await tester.enterText(find.byType(TextField).at(5), 'General');
+    await tester.tap(find.text('Predeterminado').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Gravado').last);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('ITBIS'), findsWidgets);
+    await tester.tap(find.text('Crear producto'));
+    await tester.pumpAndSettle();
+
+    expect(repo.creates, 1);
+    expect(repo.lastTaxTreatment, 'TAXABLE');
+    expect(repo.lastTaxRate, 0.18);
+    expect(repo.lastTaxPriceMode, isNull);
+  });
+
+  testWidgets(
+    'formulario oculta sección fiscal cuando impuestos están apagados',
+    (tester) async {
+      final repo = _FakeCatalogRepository();
+      await _pumpEditor(tester, repo: repo);
+
+      expect(find.text('Fiscal'), findsNothing);
+      expect(find.text('Tratamiento'), findsNothing);
+    },
+  );
+
+  testWidgets('predeterminado muestra ayuda de herencia de empresa', (
+    tester,
+  ) async {
+    final repo = _FakeCatalogRepository();
+    final taxConfig = ProductTaxUiConfig(
+      settings: CompanySettings.empty().copyWith(
+        taxEnabled: true,
+        defaultTaxId: 'tax-18',
+        defaultTaxRate: 0.18,
+        pricesIncludeTax: true,
+      ),
+      activeTaxes: const [
+        ProductTaxOption(
+          id: 'tax-18',
+          name: 'ITBIS',
+          rate: 0.18,
+          isDefault: true,
+        ),
+      ],
+    );
+    await _pumpEditor(tester, repo: repo, taxConfig: taxConfig);
+
+    expect(
+      find.text('Usa ITBIS 18% incluido según la empresa.'),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('editar conserva imagen si no se selecciona una nueva', (
     tester,

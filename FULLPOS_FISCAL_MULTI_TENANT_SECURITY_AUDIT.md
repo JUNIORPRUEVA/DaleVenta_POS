@@ -6,6 +6,12 @@ Fecha: 2026-08-18
 
 Revision de aislamiento multiempresa y seguridad fiscal para impuestos, ventas, clientes, productos, NCF, cotizaciones, facturas, tickets, devoluciones y reportes en `apps/api` y `apps/fulltech_app`.
 
+## Nota Fase 6
+
+La prueba de DB vacia con el baseline `20260818190000_phase6_baseline` ya pasa
+con `migrate deploy`. El aislamiento HTTP autenticado multiempresa sigue
+PARTIAL hasta agregar la suite E2E B01/B02/cross-tenant solicitada.
+
 ## Principio Aplicado
 
 Toda entidad fiscal operativa debe pertenecer a una empresa (`companyId`) y toda lectura/escritura backend debe derivar ese `companyId` del token, no del cliente Flutter. El frontend puede sugerir datos fiscales, pero el backend recalcula y decide.

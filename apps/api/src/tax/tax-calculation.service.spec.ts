@@ -85,6 +85,104 @@ describe("TaxCalculationService", () => {
     expect(n(result.total)).toBe("1680.00");
   });
 
+  it("regression lock - included 18% keeps 1180 => base 1000 / tax 180 / total 1180", () => {
+    const result = service.calculate({
+      taxEnabled: true,
+      defaultTaxRate: 0.18,
+      defaultPriceMode: "TAX_INCLUDED",
+      lines: [{ description: "Included", quantity: 1, unitPrice: 1180 }],
+    });
+
+    expect(n(result.taxableBase)).toBe("1000.00");
+    expect(n(result.taxAmount)).toBe("180.00");
+    expect(n(result.total)).toBe("1180.00");
+  });
+
+  it("regression lock - added 18% keeps 1000 => base 1000 / tax 180 / total 1180", () => {
+    const result = service.calculate({
+      taxEnabled: true,
+      defaultTaxRate: 0.18,
+      defaultPriceMode: "TAX_ADDED",
+      lines: [{ description: "Added", quantity: 1, unitPrice: 1000 }],
+    });
+
+    expect(n(result.taxableBase)).toBe("1000.00");
+    expect(n(result.taxAmount)).toBe("180.00");
+    expect(n(result.total)).toBe("1180.00");
+  });
+
+  it("regression lock - exempt keeps 500 => tax 0 / total 500", () => {
+    const result = service.calculate({
+      taxEnabled: true,
+      defaultTaxRate: 0.18,
+      defaultPriceMode: "TAX_INCLUDED",
+      lines: [
+        {
+          description: "Exempt",
+          quantity: 1,
+          unitPrice: 500,
+          taxTreatment: "EXEMPT",
+        },
+      ],
+    });
+
+    expect(n(result.taxableBase)).toBe("0.00");
+    expect(n(result.taxAmount)).toBe("0.00");
+    expect(n(result.exemptAmount)).toBe("500.00");
+    expect(n(result.total)).toBe("500.00");
+  });
+
+  it("regression lock - mixed keeps 1180 included + 500 exempt => total 1680", () => {
+    const result = service.calculate({
+      taxEnabled: true,
+      defaultTaxRate: 0.18,
+      defaultPriceMode: "TAX_INCLUDED",
+      lines: [
+        { description: "Included", quantity: 1, unitPrice: 1180 },
+        {
+          description: "Exempt",
+          quantity: 1,
+          unitPrice: 500,
+          taxTreatment: "EXEMPT",
+        },
+      ],
+    });
+
+    expect(n(result.taxableBase)).toBe("1000.00");
+    expect(n(result.taxAmount)).toBe("180.00");
+    expect(n(result.exemptAmount)).toBe("500.00");
+    expect(n(result.total)).toBe("1680.00");
+  });
+
+  it("multi-company fixture - A no tax, B included and C added stay isolated by settings input", () => {
+    const companyA = service.calculate({
+      taxEnabled: false,
+      lines: [{ description: "A", quantity: 1, unitPrice: 1180 }],
+    });
+    const companyB = service.calculate({
+      taxEnabled: true,
+      defaultTaxRate: 0.18,
+      defaultPriceMode: "TAX_INCLUDED",
+      lines: [{ description: "B", quantity: 1, unitPrice: 1180 }],
+    });
+    const companyC = service.calculate({
+      taxEnabled: true,
+      defaultTaxRate: 0.18,
+      defaultPriceMode: "TAX_ADDED",
+      lines: [{ description: "C", quantity: 1, unitPrice: 1000 }],
+    });
+
+    expect(n(companyA.total)).toBe("1180.00");
+    expect(n(companyA.taxAmount)).toBe("0.00");
+    expect(n(companyA.exemptAmount)).toBe("1180.00");
+    expect(n(companyB.taxableBase)).toBe("1000.00");
+    expect(n(companyB.taxAmount)).toBe("180.00");
+    expect(n(companyB.total)).toBe("1180.00");
+    expect(n(companyC.taxableBase)).toBe("1000.00");
+    expect(n(companyC.taxAmount)).toBe("180.00");
+    expect(n(companyC.total)).toBe("1180.00");
+  });
+
   it("case 6 - handles quantity greater than 1", () => {
     const result = service.calculate({
       taxEnabled: true,
@@ -237,4 +335,3 @@ describe("TaxCalculationService", () => {
     expect(result.lines.some((line) => !line.roundingAdjustment.eq(0))).toBe(true);
   });
 });
-

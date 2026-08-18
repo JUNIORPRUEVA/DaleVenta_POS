@@ -34,6 +34,7 @@ import '../../core/realtime/catalog_realtime_service.dart';
 import '../../core/routing/app_route_observer.dart';
 import '../../core/routing/route_access.dart';
 import '../../core/routing/routes.dart';
+import '../../core/tax/product_tax_options_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
@@ -248,6 +249,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
     _desktopTickets = [initialDraft];
     _activeDesktopTicketId = initialDraft.id;
+    ref.listenManual<AuthState>(authStateProvider, (previous, next) {
+      final previousCompanyId = (previous?.user?.companyId ?? '').trim();
+      final nextCompanyId = (next.user?.companyId ?? '').trim();
+      if (previousCompanyId == nextCompanyId) return;
+      _handleCompanyChanged(nextCompanyId, next.user);
+    });
     WidgetsBinding.instance.addObserver(this);
     _subscribeRealtime();
     _applyInitialClient();
@@ -290,6 +297,31 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _selectedClientId = client.id;
     _selectedClientName = client.nombre;
     _selectedClientPhone = client.telefono;
+  }
+
+  void _handleCompanyChanged(String companyId, UserModel? user) {
+    if (!mounted) return;
+    _sessionCompanyId = companyId;
+    _sessionUserId = user?.id;
+    _sessionUserName = user?.nombreCompleto;
+    final initialDraft = _DesktopTicketDraft.empty(
+      id: _newId(),
+      title: 'Ticket 1',
+      companyId: companyId.isEmpty ? null : companyId,
+      createdByUserId: _sessionUserId,
+      createdByUserName: _sessionUserName,
+    );
+    setState(() {
+      _desktopTickets = [initialDraft];
+      _activeDesktopTicketId = initialDraft.id;
+      _resetEditorState();
+    });
+    ref.invalidate(productTaxUiConfigProvider);
+    ref.invalidate(catalogControllerProvider);
+    ref.invalidate(cotizacionesRepositoryProvider);
+    ref.invalidate(ventasControllerProvider);
+    _schedulePersistEditorDraft(immediate: true);
+    unawaited(_bootstrapCatalog());
   }
 
   void _applyInitialQuotation() {
@@ -5220,6 +5252,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     return ref
         .read(ventasRepositoryProvider)
         .createSale(
+          sourceQuotationId: (_editingId ?? '').trim().isEmpty
+              ? null
+              : _editingId,
           customerId: _selectedClientId,
           note: saleNote.isEmpty ? _note : saleNote,
           paymentMethod: checkout == null

@@ -211,6 +211,9 @@ class ClientesController extends StateNotifier<ClientesState> {
     String? direccion,
     String? locationUrl,
     String? correo,
+    String? taxId,
+    String? businessName,
+    String? taxIdType,
     String? id,
   }) async {
     state = state.copyWith(saving: true, clearActionError: true);
@@ -238,6 +241,11 @@ class ClientesController extends StateNotifier<ClientesState> {
             ? null
             : locationUrl?.trim(),
         correo: (correo ?? '').trim().isEmpty ? null : correo?.trim(),
+        taxId: (taxId ?? '').trim().isEmpty ? null : taxId?.trim(),
+        businessName: (businessName ?? '').trim().isEmpty
+            ? null
+            : businessName?.trim(),
+        taxIdType: (taxIdType ?? '').trim().isEmpty ? null : taxIdType?.trim(),
         createdAt: id == null ? now : null,
         updatedAt: now,
         updatedLocal: true,

@@ -501,6 +501,7 @@ class VentasRepository {
   }
 
   Future<SaleModel?> createSale({
+    String? sourceQuotationId,
     String? customerId,
     String? customerName,
     String? customerPhone,
@@ -519,9 +520,12 @@ class VentasRepository {
       throw ApiException('Agrega al menos un item');
     }
     final normalizedCustomerId = (customerId ?? '').trim();
+    final normalizedSourceQuotationId = (sourceQuotationId ?? '').trim();
     final clientRequestId = 'sale_req_${DateTime.now().microsecondsSinceEpoch}';
     final payload = {
       'clientRequestId': clientRequestId,
+      if (normalizedSourceQuotationId.isNotEmpty)
+        'sourceQuotationId': normalizedSourceQuotationId,
       if (normalizedCustomerId.isNotEmpty) 'customerId': normalizedCustomerId,
       if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
       if ((paymentMethod ?? '').trim().isNotEmpty)
@@ -543,6 +547,7 @@ class VentasRepository {
     try {
       return await _createSaleRemote(
         customerId: customerId,
+        sourceQuotationId: sourceQuotationId,
         note: note,
         paymentMethod: paymentMethod,
         paymentCashAmount: paymentCashAmount,
@@ -593,6 +598,7 @@ class VentasRepository {
 
   Future<SaleModel?> _createSaleRemote({
     String? customerId,
+    String? sourceQuotationId,
     String? note,
     String? paymentMethod,
     double? paymentCashAmount,
@@ -606,11 +612,14 @@ class VentasRepository {
     required List<SaleDraftItem> items,
   }) async {
     final normalizedCustomerId = (customerId ?? '').trim();
+    final normalizedSourceQuotationId = (sourceQuotationId ?? '').trim();
     final res = await _dio.post(
       ApiRoutes.sales,
       data: {
         if ((clientRequestId ?? '').trim().isNotEmpty)
           'clientRequestId': clientRequestId!.trim(),
+        if (normalizedSourceQuotationId.isNotEmpty)
+          'sourceQuotationId': normalizedSourceQuotationId,
         if (normalizedCustomerId.isNotEmpty) 'customerId': normalizedCustomerId,
         if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
         if ((paymentMethod ?? '').trim().isNotEmpty)
@@ -800,11 +809,20 @@ class VentasRepository {
   Future<ClienteModel> createQuickClient({
     required String nombre,
     required String telefono,
+    String? taxId,
+    String? businessName,
   }) async {
     try {
       final res = await _dio.post(
         ApiRoutes.clients,
-        data: {'nombre': nombre.trim(), 'telefono': telefono.trim()},
+        data: {
+          'nombre': nombre.trim(),
+          'telefono': telefono.trim(),
+          if ((taxId ?? '').trim().isNotEmpty) 'taxId': taxId!.trim(),
+          if ((businessName ?? '').trim().isNotEmpty)
+            'businessName': businessName!.trim(),
+          if ((taxId ?? '').trim().isNotEmpty) 'taxIdType': 'RNC',
+        },
       );
       return ClienteModel.fromJson((res.data as Map).cast<String, dynamic>());
     } on DioException catch (e) {

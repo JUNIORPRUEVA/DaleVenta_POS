@@ -20,6 +20,8 @@ import '../../core/realtime/catalog_realtime_service.dart';
 import '../../core/realtime/operations_data_refresh_service.dart';
 import '../../core/routing/app_route_observer.dart';
 import '../../core/routing/routes.dart';
+import '../../core/tax/product_tax_options_provider.dart';
+import '../../core/tax/product_tax_preview_calculator.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -28,11 +30,19 @@ import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/product_network_image.dart';
 import '../../core/widgets/fulltech_dialog.dart';
 import '../../features/account/delete_account_dialog.dart';
+import '../../features/catalogo/application/catalog_controller.dart';
+import '../../features/contabilidad/data/contabilidad_repository.dart';
 import '../cash/cash_dialogs.dart';
 import '../clientes/cliente_model.dart';
 import 'application/ventas_controller.dart';
 import 'data/ventas_repository.dart';
+import 'fiscal_voucher_options.dart';
 import 'sales_models.dart';
+
+final posNcfSequencesProvider =
+    FutureProvider.autoDispose<List<NcfSequenceModel>>((ref) async {
+      return ref.watch(contabilidadRepositoryProvider).listNcfSequences();
+    });
 
 class RegistrarVentaScreen extends ConsumerStatefulWidget {
   const RegistrarVentaScreen({super.key});
@@ -68,6 +78,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   bool _searchOpen = false;
 
   ClienteModel? _selectedClient;
+  String? _selectedFiscalVoucherType;
 
   String _money(double value) => formatRdCurrencyAccounting(value);
 
@@ -123,10 +134,70 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     return values;
   }
 
-  double get _totalSold =>
+  double get _rawCartSubtotal =>
       _cart.fold(0, (sum, item) => sum + item.subtotalSold);
 
   double get _totalUnits => _cart.fold(0, (sum, item) => sum + item.qty);
+
+  _CartTaxSummary _cartTaxSummary(ProductTaxUiConfig? taxConfig) {
+    if (taxConfig?.settings.taxEnabled != true) {
+      return _CartTaxSummary(
+        subtotal: _rawCartSubtotal,
+        taxableBase: 0,
+        taxAmount: 0,
+        exemptAmount: _rawCartSubtotal,
+        total: _rawCartSubtotal,
+        taxEnabled: false,
+      );
+    }
+
+    var taxableBase = 0.0;
+    var taxAmount = 0.0;
+    var exemptAmount = 0.0;
+    var total = 0.0;
+    final includedByRate = <String, ({double rate, double total})>{};
+    for (final item in _cart) {
+      final product = item.product;
+      final preview = ProductTaxPreviewCalculator.calculate(
+        price: item.priceSoldUnit,
+        quantity: item.qty,
+        companyTaxEnabled: true,
+        companyPricesIncludeTax: taxConfig!.settings.pricesIncludeTax,
+        companyDefaultTaxRate: taxConfig.defaultRate,
+        taxTreatment: product?.taxTreatment ?? 'INHERIT',
+        taxRate: product?.taxRate,
+        taxPriceMode: product?.taxPriceMode,
+      );
+      if (preview.taxable && preview.priceIncludesTax) {
+        final key = preview.rate.toStringAsFixed(6);
+        final current = includedByRate[key] ?? (rate: preview.rate, total: 0.0);
+        includedByRate[key] = (
+          rate: current.rate,
+          total: current.total + preview.finalAmount,
+        );
+      } else {
+        taxableBase += preview.baseAmount;
+        taxAmount += preview.taxAmount;
+      }
+      exemptAmount += preview.exemptAmount;
+      total += preview.finalAmount;
+    }
+
+    for (final bucket in includedByRate.values) {
+      final base = _roundMoney(bucket.total / (1 + bucket.rate));
+      taxableBase += base;
+      taxAmount += _roundMoney(bucket.total - base);
+    }
+
+    return _CartTaxSummary(
+      subtotal: _rawCartSubtotal,
+      taxableBase: _roundMoney(taxableBase),
+      taxAmount: _roundMoney(taxAmount),
+      exemptAmount: _roundMoney(exemptAmount),
+      total: _roundMoney(total),
+      taxEnabled: true,
+    );
+  }
 
   bool _hasNoStock(SaleDraftItem item) {
     if (item.isExternal) return false;
@@ -218,6 +289,12 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   @override
   void initState() {
     super.initState();
+    ref.listenManual<AuthState>(authStateProvider, (previous, next) {
+      final previousCompanyId = (previous?.user?.companyId ?? '').trim();
+      final nextCompanyId = (next.user?.companyId ?? '').trim();
+      if (previousCompanyId == nextCompanyId) return;
+      _handleCompanyChanged(nextCompanyId);
+    });
     WidgetsBinding.instance.addObserver(this);
     _subscribeRealtime();
     _startLiveSync();
@@ -225,6 +302,26 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       if (!mounted) return;
       unawaited(_loadProducts(forceRemote: true, silent: true));
     });
+  }
+
+  void _handleCompanyChanged(String _) {
+    if (!mounted) return;
+    setState(() {
+      _cart = const [];
+      _selectedClient = null;
+      _selectedFiscalVoucherType = null;
+      _products = const [];
+      _selectedCategories.clear();
+      _searchCtrl.clear();
+      _noteCtrl.clear();
+      _searchOpen = false;
+    });
+    ref.invalidate(productTaxUiConfigProvider);
+    ref.invalidate(catalogControllerProvider);
+    ref.invalidate(ventasControllerProvider);
+    ref.invalidate(companySettingsProvider);
+    ref.invalidate(posNcfSequencesProvider);
+    unawaited(_loadProducts(forceRemote: true, silent: true));
   }
 
   void _subscribeRealtime() {
@@ -451,6 +548,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           setState(() {
             _cart = [];
             _selectedClient = null;
+            _selectedFiscalVoucherType = null;
             _noteCtrl.clear();
           });
         },
@@ -628,6 +726,31 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     final isCompact = screenWidth < 900;
     final showInlineTotals = screenWidth >= 700 && screenHeight >= 780;
     final maxContentWidth = isWide ? 1180.0 : double.infinity;
+    final taxConfig = ref.watch(productTaxUiConfigProvider).valueOrNull;
+    final cartTaxSummary = _cartTaxSummary(taxConfig);
+    final showFiscalVoucherControl = shouldShowFiscalVoucherControl(
+      taxEnabled: taxConfig?.settings.taxEnabled == true,
+      ncfEnabled: taxConfig?.settings.ncfEnabled == true,
+    );
+    final ncfSequences = showFiscalVoucherControl
+        ? ref.watch(posNcfSequencesProvider)
+        : const AsyncValue<List<NcfSequenceModel>>.data([]);
+    final fiscalVoucherOptions = fiscalVoucherOptionsFromConfiguredTypes(
+      taxEnabled: taxConfig?.settings.taxEnabled == true,
+      ncfEnabled: taxConfig?.settings.ncfEnabled == true,
+      configuredTypes: (ncfSequences.valueOrNull ?? const <NcfSequenceModel>[])
+          .where((sequence) => sequence.active && sequence.remaining > 0)
+          .map((sequence) => sequence.voucherType),
+    );
+    if (ncfSequences.hasValue &&
+        shouldResetFiscalVoucherSelection(
+          selectedType: _selectedFiscalVoucherType,
+          options: fiscalVoucherOptions,
+        )) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _selectedFiscalVoucherType = null);
+      });
+    }
 
     return Scaffold(
       backgroundColor: isWide ? null : AppColors.background,
@@ -804,7 +927,10 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                         children: [
                           SizedBox(
                             height: productHeight,
-                            child: _buildProductGrid(isCompact: isCompact),
+                            child: _buildProductGrid(
+                              isCompact: isCompact,
+                              taxConfig: taxConfig,
+                            ),
                           ),
                           Container(
                             height: dividerHeight,
@@ -821,6 +947,9 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                 child: _buildCartPanel(
                                   isCompact: isCompact,
                                   showInlineTotals: showInlineTotals,
+                                  taxSummary: cartTaxSummary,
+                                  fiscalVoucherOptions: fiscalVoucherOptions,
+                                  fiscalVoucherLoading: ncfSequences.isLoading,
                                 ),
                               ),
                             ),
@@ -838,7 +967,10 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     );
   }
 
-  Widget _buildProductGrid({required bool isCompact}) {
+  Widget _buildProductGrid({
+    required bool isCompact,
+    required ProductTaxUiConfig? taxConfig,
+  }) {
     final visible = _filteredProducts;
 
     if (visible.isEmpty) {
@@ -884,6 +1016,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
             final product = visible[index];
             return _SaleProductGridCard(
               product: product,
+              taxConfig: taxConfig,
               money: _money,
               mobileGrid: mobileGrid,
               compactCard: compactCard,
@@ -961,7 +1094,11 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     );
   }
 
-  Widget _buildMobileCartPanel() {
+  Widget _buildMobileCartPanel({
+    required _CartTaxSummary taxSummary,
+    required List<FiscalVoucherOption> fiscalVoucherOptions,
+    required bool fiscalVoucherLoading,
+  }) {
     final theme = Theme.of(context);
     final hasClient = _selectedClient != null;
     return Container(
@@ -1158,7 +1295,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                     children: [
                       Expanded(
                         child: Text(
-                          'Sub ${_money(_totalSold)}',
+                          'Sub ${_money(taxSummary.subtotal)}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -1177,6 +1314,36 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                       ),
                     ],
                   ),
+                  if (taxSummary.taxEnabled && _cart.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    const _TaxActiveIndicator(),
+                    const SizedBox(height: 2),
+                    _CartFiscalLine(
+                      label: 'Base',
+                      value: _money(taxSummary.taxableBase),
+                    ),
+                    if (taxSummary.exemptAmount > 0)
+                      _CartFiscalLine(
+                        label: 'Exento',
+                        value: _money(taxSummary.exemptAmount),
+                      ),
+                    if (taxSummary.taxAmount > 0)
+                      _CartFiscalLine(
+                        label: 'ITBIS',
+                        value: _money(taxSummary.taxAmount),
+                      ),
+                  ],
+                  if (fiscalVoucherLoading || fiscalVoucherOptions.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: _FiscalVoucherSelectorButton(
+                        selectedType: _selectedFiscalVoucherType,
+                        options: fiscalVoucherOptions,
+                        loading: fiscalVoucherLoading,
+                        onPressed: () =>
+                            _openFiscalVoucherPicker(fiscalVoucherOptions),
+                      ),
+                    ),
                   const SizedBox(height: 3),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -1219,7 +1386,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                             ),
                           ),
                           Text(
-                            _money(_totalSold),
+                            _money(taxSummary.total),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -1259,6 +1426,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                               : () => setState(() {
                                   _cart = [];
                                   _selectedClient = null;
+                                  _selectedFiscalVoucherType = null;
                                   _noteCtrl.clear();
                                 }),
                           icon: const Icon(Icons.delete_sweep_outlined),
@@ -1340,9 +1508,18 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   Widget _buildCartPanel({
     required bool isCompact,
     required bool showInlineTotals,
+    required _CartTaxSummary taxSummary,
+    required List<FiscalVoucherOption> fiscalVoucherOptions,
+    required bool fiscalVoucherLoading,
   }) {
     final isWide = MediaQuery.of(context).size.width >= 1024;
-    if (!isWide) return _buildMobileCartPanel();
+    if (!isWide) {
+      return _buildMobileCartPanel(
+        taxSummary: taxSummary,
+        fiscalVoucherOptions: fiscalVoucherOptions,
+        fiscalVoucherLoading: fiscalVoucherLoading,
+      );
+    }
     final hasClient = _selectedClient != null;
     return Padding(
       padding: EdgeInsets.all(isCompact ? 10 : (isWide ? 8 : 12)),
@@ -1375,7 +1552,12 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                     _SelectedSaleClientHeader(
                       client: _selectedClient!,
                       onTap: _openClientPickerDialog,
-                      onClear: () => setState(() => _selectedClient = null),
+                      onClear: () => setState(() {
+                        _selectedClient = null;
+                        if (_selectedFiscalVoucherType == 'B01') {
+                          _selectedFiscalVoucherType = null;
+                        }
+                      }),
                     ),
                     SizedBox(height: compactVertical ? 4 : 6),
                   ] else
@@ -1550,6 +1732,36 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                   // ── Línea divisoria + Total a Cobrar ──
                   if (_cart.isNotEmpty) ...[
                     const Divider(height: 12, thickness: 1),
+                    if (taxSummary.taxEnabled) ...[
+                      const _TaxActiveIndicator(),
+                      const SizedBox(height: 3),
+                      _CartFiscalLine(
+                        label: 'Base',
+                        value: _money(taxSummary.taxableBase),
+                      ),
+                      if (taxSummary.exemptAmount > 0)
+                        _CartFiscalLine(
+                          label: 'Exento',
+                          value: _money(taxSummary.exemptAmount),
+                        ),
+                      if (taxSummary.taxAmount > 0)
+                        _CartFiscalLine(
+                          label: 'ITBIS',
+                          value: _money(taxSummary.taxAmount),
+                        ),
+                      const SizedBox(height: 2),
+                    ],
+                    if (fiscalVoucherLoading ||
+                        fiscalVoucherOptions.isNotEmpty) ...[
+                      _FiscalVoucherSelectorButton(
+                        selectedType: _selectedFiscalVoucherType,
+                        options: fiscalVoucherOptions,
+                        loading: fiscalVoucherLoading,
+                        onPressed: () =>
+                            _openFiscalVoucherPicker(fiscalVoucherOptions),
+                      ),
+                      const SizedBox(height: 4),
+                    ],
                     Padding(
                       padding: const EdgeInsets.only(bottom: 4),
                       child: Row(
@@ -1564,7 +1776,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                           ),
                           const Spacer(),
                           Text(
-                            _money(_totalSold),
+                            _money(taxSummary.total),
                             style: const TextStyle(
                               fontWeight: FontWeight.w800,
                               fontSize: 15,
@@ -1611,6 +1823,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                           onPressed: () => setState(() {
                             _cart = [];
                             _selectedClient = null;
+                            _selectedFiscalVoucherType = null;
                             _noteCtrl.clear();
                           }),
                           style: OutlinedButton.styleFrom(
@@ -1670,6 +1883,81 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
         _noteCtrl.text = noteEditor.text.trim();
       });
     }
+  }
+
+  Future<void> _openFiscalVoucherPicker(
+    List<FiscalVoucherOption> options,
+  ) async {
+    if (options.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No hay comprobantes fiscales configurados.'),
+        ),
+      );
+      return;
+    }
+
+    final selected = await showModalBottomSheet<String?>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.receipt_long_outlined),
+                title: const Text(fiscalVoucherNoneLabel),
+                selected: _selectedFiscalVoucherType == null,
+                onTap: () => Navigator.of(context).pop(''),
+              ),
+              for (final option in options)
+                ListTile(
+                  leading: const Icon(Icons.description_outlined),
+                  title: Text(option.label),
+                  selected: _selectedFiscalVoucherType == option.type,
+                  onTap: () => Navigator.of(context).pop(option.type),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+    if (!mounted || selected == null) return;
+
+    final normalized = selected.trim().toUpperCase();
+    if (normalized.isEmpty) {
+      setState(() => _selectedFiscalVoucherType = null);
+      return;
+    }
+    if (normalized == 'B01' && !isB01FiscalClientValid(_selectedClientTaxId)) {
+      _showB01ClientRequiredSnackBar();
+      return;
+    }
+    setState(() => _selectedFiscalVoucherType = normalized);
+  }
+
+  String? get _selectedClientTaxId => _selectedClient?.taxId?.trim();
+
+  String? get _selectedClientFiscalName {
+    final businessName = _selectedClient?.businessName?.trim();
+    if (businessName != null && businessName.isNotEmpty) return businessName;
+    final name = _selectedClient?.nombre.trim();
+    return name == null || name.isEmpty ? null : name;
+  }
+
+  void _showB01ClientRequiredSnackBar() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text(
+          'Para emitir un B01 debes seleccionar un cliente con RNC.',
+        ),
+        action: SnackBarAction(
+          label: 'Seleccionar cliente',
+          onPressed: _openClientPickerDialog,
+        ),
+      ),
+    );
   }
 
   Future<void> _openClientPickerDialog() async {
@@ -1742,10 +2030,15 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                               const Divider(height: 1),
                           itemBuilder: (context, index) {
                             final c = rows[index];
+                            final taxId = c.taxId?.trim();
                             return ListTile(
                               dense: true,
                               title: Text(c.nombre),
-                              subtitle: Text(c.telefono),
+                              subtitle: Text(
+                                taxId == null || taxId.isEmpty
+                                    ? c.telefono
+                                    : '${c.telefono} · RNC: $taxId',
+                              ),
                               trailing: TextButton.icon(
                                 onPressed: () {
                                   Navigator.of(context).pop();
@@ -1779,7 +2072,13 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     );
 
     if (selected != null && mounted) {
-      setState(() => _selectedClient = selected);
+      setState(() {
+        _selectedClient = selected;
+        if (_selectedFiscalVoucherType == 'B01' &&
+            !isB01FiscalClientValid(selected.taxId)) {
+          _selectedFiscalVoucherType = null;
+        }
+      });
     }
   }
 
@@ -2073,6 +2372,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   Future<void> _createQuickClient() async {
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
+    final taxIdCtrl = TextEditingController();
+    final businessNameCtrl = TextEditingController();
 
     final ok = await showDialog<bool>(
       context: context,
@@ -2089,6 +2390,23 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
             TextField(
               controller: phoneCtrl,
               decoration: const InputDecoration(labelText: 'Teléfono'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: taxIdCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'RNC / cédula fiscal',
+                hintText: 'Opcional para B01',
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: businessNameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Razón social',
+                hintText: 'Opcional',
+              ),
             ),
           ],
         ),
@@ -2110,7 +2428,12 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     try {
       final created = await ref
           .read(ventasRepositoryProvider)
-          .createQuickClient(nombre: nameCtrl.text, telefono: phoneCtrl.text);
+          .createQuickClient(
+            nombre: nameCtrl.text,
+            telefono: phoneCtrl.text,
+            taxId: taxIdCtrl.text,
+            businessName: businessNameCtrl.text,
+          );
       if (!mounted) return;
       setState(() {
         _selectedClient = created;
@@ -2151,10 +2474,19 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       return;
     }
 
+    if (_selectedFiscalVoucherType == 'B01' &&
+        !isB01FiscalClientValid(_selectedClientTaxId)) {
+      _showB01ClientRequiredSnackBar();
+      return;
+    }
+
+    final taxSummary = _cartTaxSummary(
+      ref.read(productTaxUiConfigProvider).valueOrNull,
+    );
     final payment = await showDialog<_SalePaymentDraft>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => _SalePaymentDialog(total: _totalSold),
+      builder: (context) => _SalePaymentDialog(total: taxSummary.total),
     );
     if (payment == null) return;
 
@@ -2181,6 +2513,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       setState(() {
         _cart = [];
         _selectedClient = null;
+        _selectedFiscalVoucherType = null;
         _noteCtrl.clear();
       });
 
@@ -2233,7 +2566,16 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           paymentMethod: payment.method,
           paymentCashAmount: payment.cashAmount,
           paymentTransferAmount: payment.transferAmount,
-          expectedTotalSold: _totalSold,
+          expectedTotalSold: _cartTaxSummary(
+            ref.read(productTaxUiConfigProvider).valueOrNull,
+          ).total,
+          fiscalVoucherType: _selectedFiscalVoucherType,
+          fiscalCustomerTaxId: _selectedFiscalVoucherType == null
+              ? null
+              : _selectedClientTaxId,
+          fiscalCustomerName: _selectedFiscalVoucherType == null
+              ? null
+              : _selectedClientFiscalName,
           items: _cart,
         );
     ref.read(operationsDataRefreshProvider).refreshSalesAndCash();
@@ -2253,6 +2595,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
 class _SaleProductGridCard extends StatelessWidget {
   const _SaleProductGridCard({
     required this.product,
+    required this.taxConfig,
     required this.money,
     required this.mobileGrid,
     required this.compactCard,
@@ -2260,6 +2603,7 @@ class _SaleProductGridCard extends StatelessWidget {
   });
 
   final ProductModel product;
+  final ProductTaxUiConfig? taxConfig;
   final String Function(double value) money;
   final bool mobileGrid;
   final bool compactCard;
@@ -2274,6 +2618,19 @@ class _SaleProductGridCard extends StatelessWidget {
         : stockValue == stockValue.roundToDouble()
         ? stockValue.toStringAsFixed(0)
         : stockValue.toStringAsFixed(2);
+    final config = taxConfig;
+    final taxPreview = config?.settings.taxEnabled == true
+        ? ProductTaxPreviewCalculator.calculate(
+            price: product.precio,
+            companyTaxEnabled: true,
+            companyPricesIncludeTax: config!.settings.pricesIncludeTax,
+            companyDefaultTaxRate: config.defaultRate,
+            taxTreatment: product.taxTreatment,
+            taxRate: product.taxRate,
+            taxPriceMode: product.taxPriceMode,
+          )
+        : null;
+    final displayPrice = taxPreview?.finalAmount ?? product.precio;
     return InkWell(
       borderRadius: BorderRadius.circular(10),
       onTap: onTap,
@@ -2405,7 +2762,7 @@ class _SaleProductGridCard extends StatelessWidget {
                   ),
                 ),
                 child: Text(
-                  money(product.precio),
+                  money(displayPrice),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -2505,6 +2862,115 @@ class _SalePaymentDraft {
   final String method;
   final double cashAmount;
   final double transferAmount;
+}
+
+class _CartTaxSummary {
+  const _CartTaxSummary({
+    required this.subtotal,
+    required this.taxableBase,
+    required this.taxAmount,
+    required this.exemptAmount,
+    required this.total,
+    required this.taxEnabled,
+  });
+
+  final double subtotal;
+  final double taxableBase;
+  final double taxAmount;
+  final double exemptAmount;
+  final double total;
+  final bool taxEnabled;
+}
+
+double _roundMoney(double value) => (value * 100).round() / 100;
+
+class _CartFiscalLine extends StatelessWidget {
+  const _CartFiscalLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+      fontWeight: FontWeight.w700,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 1),
+      child: Row(
+        children: [
+          Text(label, style: style),
+          const Spacer(),
+          Text(value, style: style),
+        ],
+      ),
+    );
+  }
+}
+
+class _TaxActiveIndicator extends StatelessWidget {
+  const _TaxActiveIndicator();
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.primary;
+    return Row(
+      children: [
+        Icon(Icons.verified_outlined, size: 13, color: color),
+        const SizedBox(width: 4),
+        Text(
+          'Impuestos activos',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: color,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FiscalVoucherSelectorButton extends StatelessWidget {
+  const _FiscalVoucherSelectorButton({
+    required this.selectedType,
+    required this.options,
+    required this.loading,
+    required this.onPressed,
+  });
+
+  final String? selectedType;
+  final List<FiscalVoucherOption> options;
+  final bool loading;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasOptions = options.isNotEmpty;
+    return OutlinedButton.icon(
+      onPressed: loading || !hasOptions ? null : onPressed,
+      icon: loading
+          ? const SizedBox.square(
+              dimension: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.receipt_long_outlined, size: 16),
+      label: Text(
+        'Comprobante: ${fiscalVoucherLabel(selectedType)}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+      ),
+      style: OutlinedButton.styleFrom(
+        alignment: Alignment.centerLeft,
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        textStyle: const TextStyle(fontSize: 11),
+      ),
+    );
+  }
 }
 
 class _SalePaymentDialog extends StatefulWidget {

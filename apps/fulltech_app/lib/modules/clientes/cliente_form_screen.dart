@@ -116,6 +116,8 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
   final _direccionCtrl = TextEditingController();
   final _locationUrlCtrl = TextEditingController();
   final _correoCtrl = TextEditingController();
+  final _taxIdCtrl = TextEditingController();
+  final _businessNameCtrl = TextEditingController();
 
   bool _loadingInitial = false;
   ClienteModel? _cliente;
@@ -135,6 +137,8 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
     _direccionCtrl.dispose();
     _locationUrlCtrl.dispose();
     _correoCtrl.dispose();
+    _taxIdCtrl.dispose();
+    _businessNameCtrl.dispose();
     super.dispose();
   }
 
@@ -153,6 +157,8 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
         _direccionCtrl.text = cliente.direccion ?? '';
         _locationUrlCtrl.text = cliente.locationUrl ?? '';
         _correoCtrl.text = cliente.correo ?? '';
+        _taxIdCtrl.text = cliente.taxId ?? '';
+        _businessNameCtrl.text = cliente.businessName ?? '';
       });
     } catch (_) {
       if (!mounted) return;
@@ -180,6 +186,9 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
             direccion: _direccionCtrl.text,
             locationUrl: normalizeClientLocationUrl(_locationUrlCtrl.text),
             correo: _correoCtrl.text,
+            taxId: _taxIdCtrl.text,
+            businessName: _businessNameCtrl.text,
+            taxIdType: _taxIdCtrl.text.trim().isEmpty ? null : 'RNC',
           );
       if (!mounted) return;
       if (widget.returnSavedClient) {
@@ -457,6 +466,24 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
               }
               return null;
             },
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _taxIdCtrl,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'RNC / cedula fiscal',
+              hintText: 'Opcional para comprobante B01',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _businessNameCtrl,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(
+              labelText: 'Razon social',
+              hintText: 'Opcional',
+            ),
           ),
           const SizedBox(height: 20),
           Row(

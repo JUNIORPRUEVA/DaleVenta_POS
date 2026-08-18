@@ -189,6 +189,10 @@ class TicketBuilder {
                     _lightRule(top: 4, bottom: 4),
                     _customerBlock(data, fonts, metrics),
                   ],
+                  if (_isFiscalTicket(data)) ...[
+                    _lightRule(top: 4, bottom: 4),
+                    _fiscalVoucherBlock(data, fonts, metrics),
+                  ],
                   _lightRule(top: 5, bottom: 4),
                   _itemsBlock(data, fonts, metrics),
                   _totalsBlock(data, fonts, metrics),
@@ -384,6 +388,48 @@ class TicketBuilder {
       children: [
         for (final row in rows)
           _inlineLabelValue(row.label, row.value, fonts, metrics.metaFontSize),
+      ],
+    );
+  }
+
+  pw.Widget _fiscalVoucherBlock(
+    TicketData data,
+    ({pw.Font regular, pw.Font bold}) fonts,
+    _ThermalSalesMetrics metrics,
+  ) {
+    final client = data.client;
+    final rows = <({String label, String value, bool bold})>[
+      (label: '', value: _fiscalSubtitleFor(data), bold: true),
+      (label: 'NCF', value: data.ncf!.trim(), bold: true),
+      if ((client?.name ?? '').trim().isNotEmpty)
+        (label: 'CLIENTE', value: _cleanClientName(client!.name), bold: false),
+      if ((client?.document ?? '').trim().isNotEmpty)
+        (label: 'RNC', value: client!.document.trim(), bold: true),
+    ];
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        for (final row in rows)
+          row.label.isEmpty
+              ? pw.Padding(
+                  padding: const pw.EdgeInsets.only(bottom: 1.5),
+                  child: pw.Text(
+                    _upper(row.value),
+                    style: pw.TextStyle(
+                      font: row.bold ? fonts.bold : fonts.regular,
+                      fontSize: metrics.metaFontSize,
+                      height: 1.05,
+                    ),
+                    maxLines: 1,
+                  ),
+                )
+              : _inlineLabelValue(
+                  row.label,
+                  _upper(row.value),
+                  fonts,
+                  metrics.metaFontSize,
+                  boldValue: row.bold,
+                ),
       ],
     );
   }
@@ -691,7 +737,7 @@ class TicketBuilder {
         value: ReceiptTextUtils.money(data.resolvedSubtotal),
         bold: false,
       ));
-      if (data.taxIncluded && data.itbis > 0) {
+      if (_isFiscalTicket(data) && data.taxIncluded && data.itbis > 0) {
         rows.add((label: 'ITBIS INCLUIDO', value: '', bold: false));
       }
       if (layout.showDiscounts && data.discount > 0) {
@@ -701,17 +747,24 @@ class TicketBuilder {
           bold: false,
         ));
       }
-      if (layout.showItbis && data.itbis > 0) {
+      if (_isFiscalTicket(data) && layout.showItbis && data.itbis > 0) {
+        if (data.taxableBase > 0) {
+          rows.add((
+            label: 'BASE IMP.',
+            value: ReceiptTextUtils.money(data.taxableBase),
+            bold: false,
+          ));
+        }
+        if (data.exemptAmount > 0) {
+          rows.add((
+            label: 'EXENTO',
+            value: ReceiptTextUtils.money(data.exemptAmount),
+            bold: false,
+          ));
+        }
         rows.add((
-          label: 'ITBIS',
+          label: 'ITBIS 18%',
           value: ReceiptTextUtils.money(data.itbis),
-          bold: false,
-        ));
-      }
-      if (data.exemptAmount > 0) {
-        rows.add((
-          label: 'EXENTO',
-          value: ReceiptTextUtils.money(data.exemptAmount),
           bold: false,
         ));
       }
@@ -887,7 +940,8 @@ class TicketBuilder {
         ].where((value) => value.trim().isNotEmpty).length;
     final optionalLines =
         ((data.note ?? '').trim().isNotEmpty ? 28 : 0) +
-        (layout.warrantyPolicy.trim().isNotEmpty ? 32 : 0);
+        (layout.warrantyPolicy.trim().isNotEmpty ? 32 : 0) +
+        (_isFiscalTicket(data) ? 34 : 0);
     final itemRows =
         data.items.length +
         data.items
@@ -968,6 +1022,21 @@ class TicketBuilder {
       TicketType.credit => 'CREDITO',
       TicketType.copy => 'COPIA',
       _ => data.isCopy ? 'COPIA FACTURA' : 'FACTURA',
+    };
+  }
+
+  bool _isFiscalTicket(TicketData data) {
+    final voucher = (data.fiscalVoucherType ?? '').trim().toUpperCase();
+    return (voucher == 'B01' || voucher == 'B02') &&
+        (data.ncf ?? '').trim().isNotEmpty;
+  }
+
+  String _fiscalSubtitleFor(TicketData data) {
+    final voucher = (data.fiscalVoucherType ?? '').trim().toUpperCase();
+    return switch (voucher) {
+      'B01' => 'B01 - CREDITO FISCAL',
+      'B02' => 'B02 - CONSUMIDOR FINAL',
+      _ => '',
     };
   }
 

@@ -8,6 +8,9 @@ class ClienteModel {
   final double? latitude;
   final double? longitude;
   final String? correo;
+  final String? taxId;
+  final String? businessName;
+  final String? taxIdType;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final bool isDeleted;
@@ -24,6 +27,9 @@ class ClienteModel {
     this.latitude,
     this.longitude,
     this.correo,
+    this.taxId,
+    this.businessName,
+    this.taxIdType,
     this.createdAt,
     this.updatedAt,
     this.isDeleted = false,
@@ -67,6 +73,11 @@ class ClienteModel {
           ((map['correo'] ?? map['email']) as String?)?.trim().isEmpty == true
           ? null
           : (map['correo'] ?? map['email']) as String?,
+      taxId: _optionalString(map['taxId'] ?? map['tax_id']),
+      businessName: _optionalString(
+        map['businessName'] ?? map['business_name'],
+      ),
+      taxIdType: _optionalString(map['taxIdType'] ?? map['tax_id_type']),
       createdAt: map['created_at'] != null
           ? DateTime.tryParse(map['created_at'].toString())
           : (map['createdAt'] != null
@@ -97,6 +108,9 @@ class ClienteModel {
       'latitude': latitude,
       'longitude': longitude,
       'correo': correo,
+      'taxId': taxId,
+      'businessName': businessName,
+      'taxIdType': taxIdType,
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
       'is_deleted': isDeleted ? 1 : 0,
@@ -116,6 +130,11 @@ class ClienteModel {
           ? null
           : locationUrl?.trim(),
       'email': correo?.trim().isEmpty == true ? null : correo?.trim(),
+      'taxId': taxId?.trim().isEmpty == true ? null : taxId?.trim(),
+      'businessName': businessName?.trim().isEmpty == true
+          ? null
+          : businessName?.trim(),
+      'taxIdType': taxIdType?.trim().isEmpty == true ? null : taxIdType?.trim(),
     };
   }
 
@@ -129,6 +148,9 @@ class ClienteModel {
     double? latitude,
     double? longitude,
     String? correo,
+    String? taxId,
+    String? businessName,
+    String? taxIdType,
     DateTime? createdAt,
     DateTime? updatedAt,
     bool? isDeleted,
@@ -137,6 +159,9 @@ class ClienteModel {
     bool clearDireccion = false,
     bool clearLocationUrl = false,
     bool clearCorreo = false,
+    bool clearTaxId = false,
+    bool clearBusinessName = false,
+    bool clearTaxIdType = false,
     bool clearSyncStatus = false,
   }) {
     return ClienteModel(
@@ -149,6 +174,11 @@ class ClienteModel {
       latitude: clearLocationUrl ? null : (latitude ?? this.latitude),
       longitude: clearLocationUrl ? null : (longitude ?? this.longitude),
       correo: clearCorreo ? null : (correo ?? this.correo),
+      taxId: clearTaxId ? null : (taxId ?? this.taxId),
+      businessName: clearBusinessName
+          ? null
+          : (businessName ?? this.businessName),
+      taxIdType: clearTaxIdType ? null : (taxIdType ?? this.taxIdType),
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       isDeleted: isDeleted ?? this.isDeleted,
@@ -165,5 +195,10 @@ class ClienteModel {
       return normalized == '1' || normalized == 'true' || normalized == 'yes';
     }
     return false;
+  }
+
+  static String? _optionalString(dynamic value) {
+    final text = value?.toString().trim();
+    return text == null || text.isEmpty ? null : text;
   }
 }

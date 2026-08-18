@@ -301,6 +301,9 @@ class CatalogRepository {
     String? fotoUrl,
     required String categoria,
     String? operationId,
+    String? taxTreatment,
+    double? taxRate,
+    String? taxPriceMode,
     bool skipLoader = false,
   }) async {
     final payload = _productPayload(
@@ -312,6 +315,9 @@ class CatalogRepository {
       fotoUrl: fotoUrl,
       categoria: categoria,
       operationId: operationId,
+      taxTreatment: taxTreatment,
+      taxRate: taxRate,
+      taxPriceMode: taxPriceMode,
     );
     try {
       return await _createProductRemote(
@@ -323,6 +329,9 @@ class CatalogRepository {
         fotoUrl: fotoUrl,
         categoria: categoria,
         operationId: operationId,
+        taxTreatment: taxTreatment,
+        taxRate: taxRate,
+        taxPriceMode: taxPriceMode,
         skipLoader: skipLoader,
       );
     } on DioException catch (e) {
@@ -352,6 +361,9 @@ class CatalogRepository {
             ? null
             : fotoUrl?.trim(),
         categoria: categoria,
+        taxTreatment: taxTreatment ?? 'INHERIT',
+        taxRate: taxRate,
+        taxPriceMode: taxPriceMode,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -367,6 +379,9 @@ class CatalogRepository {
     String? fotoUrl,
     required String categoria,
     String? operationId,
+    String? taxTreatment,
+    double? taxRate,
+    String? taxPriceMode,
     bool skipLoader = false,
   }) async {
     final res = await _dio.post(
@@ -381,6 +396,9 @@ class CatalogRepository {
         fotoUrl: fotoUrl,
         categoria: categoria,
         operationId: operationId,
+        taxTreatment: taxTreatment,
+        taxRate: taxRate,
+        taxPriceMode: taxPriceMode,
       ),
     );
     return ProductModel.fromJson((res.data as Map).cast<String, dynamic>());
@@ -396,6 +414,9 @@ class CatalogRepository {
     String? fotoUrl,
     String? categoria,
     String? operationId,
+    String? taxTreatment,
+    double? taxRate,
+    String? taxPriceMode,
     bool skipLoader = false,
   }) async {
     final payload = _productPayload(
@@ -408,6 +429,9 @@ class CatalogRepository {
       fotoUrl: fotoUrl,
       categoria: categoria,
       operationId: operationId,
+      taxTreatment: taxTreatment,
+      taxRate: taxRate,
+      taxPriceMode: taxPriceMode,
     );
     try {
       return await _updateProductRemote(
@@ -420,6 +444,9 @@ class CatalogRepository {
         fotoUrl: fotoUrl,
         categoria: categoria,
         operationId: operationId,
+        taxTreatment: taxTreatment,
+        taxRate: taxRate,
+        taxPriceMode: taxPriceMode,
         skipLoader: skipLoader,
       );
     } on DioException catch (e) {
@@ -446,6 +473,9 @@ class CatalogRepository {
             ? null
             : fotoUrl?.trim(),
         categoria: categoria,
+        taxTreatment: taxTreatment ?? 'INHERIT',
+        taxRate: taxRate,
+        taxPriceMode: taxPriceMode,
         updatedAt: DateTime.now(),
       );
     }
@@ -461,6 +491,9 @@ class CatalogRepository {
     String? fotoUrl,
     String? categoria,
     String? operationId,
+    String? taxTreatment,
+    double? taxRate,
+    String? taxPriceMode,
     bool skipLoader = false,
   }) async {
     final res = await _dio.patch(
@@ -475,6 +508,9 @@ class CatalogRepository {
         fotoUrl: fotoUrl,
         categoria: categoria,
         operationId: operationId,
+        taxTreatment: taxTreatment,
+        taxRate: taxRate,
+        taxPriceMode: taxPriceMode,
       ),
     );
     return ProductModel.fromJson((res.data as Map).cast<String, dynamic>());
@@ -521,6 +557,8 @@ class CatalogRepository {
   }) {
     final cleanCode = codigo?.trim();
     final safeCode = cleanCode?.isEmpty == true ? null : cleanCode;
+    final cleanTaxTreatment = taxTreatment?.trim();
+    final hasTaxTreatment = cleanTaxTreatment?.isNotEmpty == true;
     return {
       if ((id ?? '').trim().isNotEmpty) 'id': id!.trim(),
       'nombre': nombre,
@@ -535,11 +573,12 @@ class CatalogRepository {
         'operationId': operationId!.trim(),
       if ((fotoUrl ?? '').trim().isNotEmpty) 'fotoUrl': fotoUrl!.trim(),
       'categoria': categoria,
-      if ((taxTreatment ?? '').trim().isNotEmpty)
-        'taxTreatment': taxTreatment!.trim(),
-      if (taxRate != null) 'taxRate': taxRate,
-      if ((taxPriceMode ?? '').trim().isNotEmpty)
-        'taxPriceMode': taxPriceMode!.trim(),
+      if (hasTaxTreatment) 'taxTreatment': cleanTaxTreatment,
+      if (hasTaxTreatment || taxRate != null) 'taxRate': taxRate,
+      if (hasTaxTreatment || (taxPriceMode ?? '').trim().isNotEmpty)
+        'taxPriceMode': (taxPriceMode ?? '').trim().isEmpty
+            ? null
+            : taxPriceMode!.trim(),
     };
   }
 

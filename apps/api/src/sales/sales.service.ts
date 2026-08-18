@@ -19,8 +19,35 @@ import {
   requireTenant,
   type TenantUser,
 } from "../auth/tenant-context";
-import { CreateSaleDto, CreateSaleItemDto } from "./dto/create-sale.dto";
+import {
+  CreateSaleDto,
+  CreateSaleItemDto,
+  CreateSaleReturnDto,
+} from "./dto/create-sale.dto";
 import { CreateSalePdfShareLinkDto } from "./dto/create-sale-pdf-share-link.dto";
+
+type NormalizedSaleItem = {
+  productId: string | null;
+  productNameSnapshot: string;
+  productImageSnapshot: string | null;
+  qty: Prisma.Decimal;
+  priceSoldUnit: Prisma.Decimal;
+  costUnitSnapshot: Prisma.Decimal;
+  subtotalSold: Prisma.Decimal;
+  subtotalCost: Prisma.Decimal;
+  profit: Prisma.Decimal;
+  taxTreatment: "INHERIT" | "TAXABLE" | "EXEMPT";
+  taxRate: Prisma.Decimal | null;
+  taxPriceMode: "NO_TAX" | "TAX_ADDED" | "TAX_INCLUDED" | null;
+  grossAmount?: Prisma.Decimal;
+  lineDiscountAmount?: Prisma.Decimal;
+  taxableBase?: Prisma.Decimal;
+  taxAmount?: Prisma.Decimal;
+  exemptAmount?: Prisma.Decimal;
+  taxIncluded?: boolean;
+  taxExempt?: boolean;
+  lineTotal?: Prisma.Decimal;
+};
 
 @Injectable()
 export class SalesService {
@@ -415,7 +442,19 @@ export class SalesService {
       throw new BadRequestException("La venta requiere al menos 1 item");
     }
 
-    const customerId = dto.customerId?.trim() || null;
+    const sourceQuotationId = dto.sourceQuotationId?.trim() || null;
+    const sourceQuotation = sourceQuotationId
+      ? await this.prisma.cotizacion.findFirst({
+          where: { id: sourceQuotationId, companyId },
+          include: { items: { orderBy: { createdAt: "asc" } } },
+        })
+      : null;
+    if (sourceQuotationId && !sourceQuotation) {
+      throw new BadRequestException("Cotización inválida para esta empresa.");
+    }
+
+    const customerId =
+      dto.customerId?.trim() || sourceQuotation?.customerId || null;
     const clientRequestId = dto.clientRequestId?.trim() || null;
 
     if (clientRequestId) {
@@ -454,9 +493,10 @@ export class SalesService {
 
     const productIds = Array.from(
       new Set(
-        dto.items
-          .map((item) => item.productId)
-          .filter((id): id is string => Boolean(id)),
+        (sourceQuotation
+          ? sourceQuotation.items.map((item) => item.productId)
+          : dto.items.map((item) => item.productId)
+        ).filter((id): id is string => Boolean(id)),
       ),
     );
 
@@ -495,35 +535,89 @@ export class SalesService {
       products.map((product) => [product.id, product]),
     );
 
-    let normalizedItems = dto.items.map((item, index) =>
-      this.normalizeItem(item, index, productMap),
-    );
+    let normalizedItems: NormalizedSaleItem[] = sourceQuotation
+      ? sourceQuotation.items.map((item) => {
+          const qty = new Prisma.Decimal(item.qty);
+          const priceSoldUnit = new Prisma.Decimal(item.unitPrice);
+          const costUnitSnapshot = new Prisma.Decimal(
+            item.costUnitSnapshot ?? 0,
+          );
+          const subtotalCost = item.subtotalCost ?? qty.mul(costUnitSnapshot);
+          const lineTotal = new Prisma.Decimal(item.lineTotal);
+          return {
+            productId: item.productId,
+            productNameSnapshot: item.productNameSnapshot,
+            productImageSnapshot: item.productImageSnapshot,
+            qty,
+            priceSoldUnit,
+            costUnitSnapshot,
+            subtotalSold: lineTotal,
+            subtotalCost,
+            profit: lineTotal.minus(subtotalCost),
+            taxTreatment: item.taxTreatment,
+            taxRate: item.taxRate,
+            taxPriceMode: item.taxPriceMode,
+            grossAmount: item.grossAmount,
+            lineDiscountAmount: item.lineDiscountAmount,
+            taxableBase: item.taxableBase,
+            taxAmount: item.taxAmount,
+            exemptAmount: item.exemptAmount,
+            taxIncluded: item.taxIncluded,
+            taxExempt: item.taxExempt,
+            lineTotal,
+          };
+        })
+      : dto.items.map((item, index) =>
+          this.normalizeItem(item, index, productMap),
+        );
 
     const fiscalSettings = await this.taxes.getCompanyFiscalSettings(companyId);
     const defaultPriceMode = this.taxes.resolvePriceMode(fiscalSettings);
-    const taxCalculation = this.taxes.calculatorService.calculate({
-      taxEnabled: fiscalSettings.taxEnabled,
-      defaultTaxRate: fiscalSettings.defaultTaxRate,
-      defaultPriceMode,
-      globalDiscountAmount: dto.globalDiscountAmount ?? 0,
-      lines: normalizedItems.map((item) => ({
-        description: item.productNameSnapshot,
-        quantity: item.qty,
-        unitPrice: item.priceSoldUnit,
-        taxTreatment: item.taxTreatment,
-        taxRate: item.taxRate ?? fiscalSettings.defaultTaxRate,
-        priceMode: item.taxPriceMode ?? defaultPriceMode,
-      })),
-    });
+    const taxCalculation = sourceQuotation
+      ? {
+          total: new Prisma.Decimal(sourceQuotation.total),
+          taxableBase: new Prisma.Decimal(sourceQuotation.taxableBase),
+          taxAmount: new Prisma.Decimal(sourceQuotation.taxAmount),
+          exemptAmount: new Prisma.Decimal(sourceQuotation.exemptAmount),
+          discountAmount: new Prisma.Decimal(sourceQuotation.discountAmount),
+          lines: normalizedItems.map((item, index) => ({
+            index,
+            grossAmount: new Prisma.Decimal(item.grossAmount ?? 0),
+            discountAmount: new Prisma.Decimal(item.lineDiscountAmount ?? 0),
+            taxableBase: new Prisma.Decimal(item.taxableBase ?? 0),
+            taxRate: new Prisma.Decimal(item.taxRate ?? 0),
+            taxAmount: new Prisma.Decimal(item.taxAmount ?? 0),
+            exemptAmount: new Prisma.Decimal(item.exemptAmount ?? 0),
+            taxIncluded: item.taxIncluded ?? false,
+            taxExempt: item.taxExempt ?? false,
+            lineTotal: new Prisma.Decimal(item.lineTotal ?? item.subtotalSold),
+          })),
+        }
+      : this.taxes.calculatorService.calculate({
+          taxEnabled: fiscalSettings.taxEnabled,
+          defaultTaxRate: fiscalSettings.defaultTaxRate,
+          defaultPriceMode,
+          globalDiscountAmount: dto.globalDiscountAmount ?? 0,
+          lines: normalizedItems.map((item) => ({
+            description: item.productNameSnapshot,
+            quantity: item.qty,
+            unitPrice: item.priceSoldUnit,
+            taxTreatment: item.taxTreatment,
+            taxRate: item.taxRate ?? fiscalSettings.defaultTaxRate,
+            priceMode: item.taxPriceMode ?? defaultPriceMode,
+          })),
+        });
 
-    let totalSold = fiscalSettings.taxEnabled
+    let totalSold = sourceQuotation
+      ? new Prisma.Decimal(sourceQuotation.total)
+      : fiscalSettings.taxEnabled
       ? taxCalculation.total
       : new Prisma.Decimal(0);
     let totalCost = new Prisma.Decimal(0);
     let totalProfit = new Prisma.Decimal(0);
 
     for (const item of normalizedItems) {
-      if (!fiscalSettings.taxEnabled) {
+      if (!sourceQuotation && !fiscalSettings.taxEnabled) {
         totalSold = totalSold.plus(item.subtotalSold);
       }
       totalCost = totalCost.plus(item.subtotalCost);
@@ -539,6 +633,7 @@ export class SalesService {
       expectedTotalSold &&
       expectedTotalSold.greaterThanOrEqualTo(0) &&
       totalSold.greaterThan(0) &&
+      !sourceQuotation &&
       !fiscalSettings.taxEnabled &&
       totalSold.minus(expectedTotalSold).abs().greaterThan(0.009)
     ) {
@@ -572,10 +667,33 @@ export class SalesService {
         totalProfit = totalProfit.plus(item.profit);
       }
     }
+    if (
+      sourceQuotation &&
+      expectedTotalSold &&
+      totalSold.minus(expectedTotalSold).abs().greaterThan(0.009)
+    ) {
+      throw new BadRequestException(
+        "El total esperado no coincide con la cotización fiscal guardada.",
+      );
+    }
 
     totalSold = totalSold.toDecimalPlaces(2);
     totalCost = totalCost.toDecimalPlaces(2);
     totalProfit = totalSold.minus(totalCost).toDecimalPlaces(2);
+    const commercialProfit = totalProfit;
+    const netTaxRevenue = taxCalculation.taxableBase.plus(
+      taxCalculation.exemptAmount,
+    );
+    const netTaxProfit = (sourceQuotation || fiscalSettings.taxEnabled
+      ? netTaxRevenue.minus(totalCost)
+      : totalProfit
+    ).toDecimalPlaces(2);
+    const commercialMargin = totalSold.gt(0)
+      ? commercialProfit.div(totalSold).toDecimalPlaces(4)
+      : new Prisma.Decimal(0);
+    const netTaxMargin = netTaxRevenue.gt(0)
+      ? netTaxProfit.div(netTaxRevenue).toDecimalPlaces(4)
+      : new Prisma.Decimal(0);
 
     const commissionRate = new Prisma.Decimal(0.1);
     const commissionAmount = totalProfit.greaterThan(0)
@@ -666,6 +784,7 @@ export class SalesService {
             userId: user.id,
             companyId,
             clientRequestId,
+            sourceQuotationId,
             customerId,
             cashSessionId: activeSession.id,
             saleDate: new Date(),
@@ -688,8 +807,12 @@ export class SalesService {
                   : "paid"
                 : "none",
             totalSold,
-            fiscalTaxEnabled: fiscalSettings.taxEnabled,
-            fiscalPriceMode: defaultPriceMode,
+            fiscalTaxEnabled: sourceQuotation
+              ? sourceQuotation.fiscalTaxEnabled
+              : fiscalSettings.taxEnabled,
+            fiscalPriceMode: sourceQuotation
+              ? sourceQuotation.fiscalPriceMode
+              : defaultPriceMode,
             taxableBase: taxCalculation.taxableBase,
             taxAmount: taxCalculation.taxAmount,
             exemptAmount: taxCalculation.exemptAmount,
@@ -700,12 +823,27 @@ export class SalesService {
             fiscalCustomerName,
             totalCost,
             totalProfit,
+            commercialProfit,
+            netTaxProfit,
+            commercialMargin,
+            netTaxMargin,
             commissionRate,
             commissionAmount,
             items: {
               create: normalizedItems.map((item, index) => ({
                 ...(() => {
                   const taxLine = taxCalculation.lines[index];
+                  const lineTotal = taxLine?.lineTotal ?? item.subtotalSold;
+                  const itemCommercialProfit = lineTotal.minus(
+                    item.subtotalCost,
+                  );
+                  const itemNetTaxProfit = (
+                    sourceQuotation || fiscalSettings.taxEnabled
+                      ? (taxLine?.taxableBase ?? new Prisma.Decimal(0)).plus(
+                          taxLine?.exemptAmount ?? new Prisma.Decimal(0),
+                        )
+                      : lineTotal
+                  ).minus(item.subtotalCost);
                   return {
                     grossAmount: taxLine?.grossAmount ?? item.subtotalSold,
                     lineDiscountAmount: taxLine?.discountAmount ?? new Prisma.Decimal(0),
@@ -715,8 +853,10 @@ export class SalesService {
                     exemptAmount: taxLine?.exemptAmount ?? item.subtotalSold,
                     taxIncluded: taxLine?.taxIncluded ?? false,
                     taxExempt: taxLine?.taxExempt ?? true,
-                    subtotalSold: taxLine?.lineTotal ?? item.subtotalSold,
-                    profit: (taxLine?.lineTotal ?? item.subtotalSold).minus(item.subtotalCost),
+                    subtotalSold: lineTotal,
+                    profit: itemCommercialProfit,
+                    commercialProfit: itemCommercialProfit,
+                    netTaxProfit: itemNetTaxProfit,
                   };
                 })(),
                 productId: item.productId,
@@ -962,7 +1102,11 @@ export class SalesService {
     return { ok: true };
   }
 
-  async returnSale(requestUser: TenantUser, saleId: string) {
+  async returnSale(
+    requestUser: TenantUser,
+    saleId: string,
+    dto: CreateSaleReturnDto = {},
+  ) {
     const companyId = requireTenant(requestUser);
     const canReturn =
       requestUser.role === Role.ADMIN ||
@@ -988,29 +1132,230 @@ export class SalesService {
       throw new NotFoundException("Venta no encontrada");
     }
 
-    if (!sale || sale.isDeleted) {
+    if (!sale || sale.isDeleted || sale.kind !== "invoice") {
       throw new NotFoundException("Venta no encontrada");
     }
 
     try {
+      const activeSession = await this.prisma.cashSession.findFirst({
+        where: {
+          openedByUserId: requestUser.id,
+          companyId,
+          status: "OPEN",
+          closedAt: null,
+        },
+        orderBy: { openedAt: "desc" },
+      });
+      if (!activeSession) {
+        throw new BadRequestException(
+          "Debes abrir caja antes de registrar una devolución.",
+        );
+      }
+
       const returned = await this.prisma.$transaction(async (tx) => {
-        for (const item of sale!.items) {
-          if (!item.productId) continue;
-          await tx.product.update({
-            where: { id: item.productId },
-            data: { stock: { increment: item.qty } },
+        const originalItems = new Map(sale!.items.map((item) => [item.id, item]));
+        const requestedItems =
+          dto.items && dto.items.length
+            ? dto.items.map((item) => ({
+                saleItemId: item.saleItemId,
+                qty: new Prisma.Decimal(item.qty),
+              }))
+            : sale!.items.map((item) => ({
+                saleItemId: item.id,
+                qty: new Prisma.Decimal(item.qty),
+              }));
+
+        const refundedRows = await tx.saleItem.groupBy({
+          by: ["refundedSaleItemId"],
+          where: {
+            refundedSaleItemId: { in: sale!.items.map((item) => item.id) },
+            sale: {
+              companyId,
+              refundedSaleId: saleId,
+              kind: "refund",
+              isDeleted: false,
+            },
+          },
+          _sum: { qty: true },
+        });
+        const refundedQty = new Map(
+          refundedRows.map((row) => [
+            row.refundedSaleItemId,
+            new Prisma.Decimal(row._sum.qty ?? 0),
+          ]),
+        );
+
+        const refundItems = requestedItems.map((request, index) => {
+          const original = originalItems.get(request.saleItemId);
+          if (!original) {
+            throw new BadRequestException(
+              `Item inválido en devolución #${index + 1}`,
+            );
+          }
+          if (request.qty.lte(0)) {
+            throw new BadRequestException(
+              `Cantidad inválida en devolución #${index + 1}`,
+            );
+          }
+          const alreadyReturned =
+            refundedQty.get(original.id) ?? new Prisma.Decimal(0);
+          const remainingQty = original.qty.minus(alreadyReturned);
+          if (request.qty.greaterThan(remainingQty)) {
+            throw new BadRequestException(
+              `La devolución de ${original.productNameSnapshot} supera la cantidad disponible.`,
+            );
+          }
+          const ratio = request.qty.div(original.qty);
+          const subtotalCost = original.subtotalCost
+            .mul(ratio)
+            .toDecimalPlaces(2)
+            .neg();
+          const lineTotal = original.subtotalSold
+            .mul(ratio)
+            .toDecimalPlaces(2)
+            .neg();
+          const taxableBase = original.taxableBase
+            .mul(ratio)
+            .toDecimalPlaces(2)
+            .neg();
+          const taxAmount = original.taxAmount
+            .mul(ratio)
+            .toDecimalPlaces(2)
+            .neg();
+          const exemptAmount = original.exemptAmount
+            .mul(ratio)
+            .toDecimalPlaces(2)
+            .neg();
+          const lineDiscountAmount = original.lineDiscountAmount
+            .mul(ratio)
+            .toDecimalPlaces(2)
+            .neg();
+          const grossAmount = original.grossAmount
+            .mul(ratio)
+            .toDecimalPlaces(2)
+            .neg();
+          const commercialProfit = lineTotal.minus(subtotalCost);
+          const netTaxProfit = taxableBase.plus(exemptAmount).minus(subtotalCost);
+          return {
+            original,
+            data: {
+              refundedSaleItemId: original.id,
+              productId: original.productId,
+              productNameSnapshot: original.productNameSnapshot,
+              productImageSnapshot: original.productImageSnapshot,
+              qty: request.qty,
+              priceSoldUnit: original.priceSoldUnit,
+              grossAmount,
+              lineDiscountAmount,
+              taxableBase,
+              taxRate: original.taxRate,
+              taxAmount,
+              exemptAmount,
+              taxIncluded: original.taxIncluded,
+              taxExempt: original.taxExempt,
+              costUnitSnapshot: original.costUnitSnapshot,
+              subtotalSold: lineTotal,
+              subtotalCost,
+              profit: commercialProfit,
+              commercialProfit,
+              netTaxProfit,
+            },
+          };
+        });
+
+        for (const item of refundItems) {
+          if (!item.original.productId) continue;
+          await tx.product.updateMany({
+            where: { id: item.original.productId, companyId },
+            data: { stock: { increment: item.data.qty } },
           });
         }
 
-        return tx.sale.update({
-          where: { id: saleId },
+        const totalSold = refundItems
+          .reduce(
+            (sum, item) => sum.plus(item.data.subtotalSold),
+            new Prisma.Decimal(0),
+          )
+          .toDecimalPlaces(2);
+        const totalCost = refundItems
+          .reduce(
+            (sum, item) => sum.plus(item.data.subtotalCost),
+            new Prisma.Decimal(0),
+          )
+          .toDecimalPlaces(2);
+        const taxableBase = refundItems
+          .reduce(
+            (sum, item) => sum.plus(item.data.taxableBase),
+            new Prisma.Decimal(0),
+          )
+          .toDecimalPlaces(2);
+        const taxAmount = refundItems
+          .reduce(
+            (sum, item) => sum.plus(item.data.taxAmount),
+            new Prisma.Decimal(0),
+          )
+          .toDecimalPlaces(2);
+        const exemptAmount = refundItems
+          .reduce(
+            (sum, item) => sum.plus(item.data.exemptAmount),
+            new Prisma.Decimal(0),
+          )
+          .toDecimalPlaces(2);
+        const discountAmount = refundItems
+          .reduce(
+            (sum, item) => sum.plus(item.data.lineDiscountAmount),
+            new Prisma.Decimal(0),
+          )
+          .toDecimalPlaces(2);
+        const totalProfit = totalSold.minus(totalCost).toDecimalPlaces(2);
+        const netTaxRevenue = taxableBase.plus(exemptAmount);
+        const netTaxProfit = netTaxRevenue.minus(totalCost).toDecimalPlaces(2);
+        const commercialMargin = totalSold.abs().gt(0)
+          ? totalProfit.div(totalSold.abs()).toDecimalPlaces(4)
+          : new Prisma.Decimal(0);
+        const netTaxMargin = netTaxRevenue.abs().gt(0)
+          ? netTaxProfit.div(netTaxRevenue.abs()).toDecimalPlaces(4)
+          : new Prisma.Decimal(0);
+
+        return tx.sale.create({
           data: {
-            isDeleted: true,
-            deletedAt: new Date(),
-            deletedById: requestUser.id,
-            note: sale!.note?.trim()
-              ? `${sale!.note}\nDEVOLUCION: venta devuelta desde historial.`
-              : "DEVOLUCION: venta devuelta desde historial.",
+            userId: requestUser.id,
+            companyId,
+            refundedSaleId: saleId,
+            customerId: sale!.customerId,
+            cashSessionId: activeSession.id,
+            saleDate: new Date(),
+            note: dto.reason?.trim() || "DEVOLUCION: venta devuelta desde historial.",
+            paymentMethod: "refund",
+            paymentCashAmount: totalSold,
+            paymentTransferAmount: new Prisma.Decimal(0),
+            creditAmount: new Prisma.Decimal(0),
+            creditPaidAmount: new Prisma.Decimal(0),
+            creditBalance: new Prisma.Decimal(0),
+            creditStatus: "none",
+            kind: "refund",
+            status: "RETURNED",
+            totalSold,
+            fiscalTaxEnabled: sale!.fiscalTaxEnabled,
+            fiscalPriceMode: sale!.fiscalPriceMode,
+            taxableBase,
+            taxAmount,
+            exemptAmount,
+            discountAmount,
+            fiscalVoucherType: sale!.fiscalVoucherType,
+            fiscalCustomerTaxId: sale!.fiscalCustomerTaxId,
+            fiscalCustomerName: sale!.fiscalCustomerName,
+            totalCost,
+            totalProfit,
+            commercialProfit: totalProfit,
+            netTaxProfit,
+            commercialMargin,
+            netTaxMargin,
+            commissionRate: new Prisma.Decimal(0),
+            commissionAmount: new Prisma.Decimal(0),
+            items: {
+              create: refundItems.map((item) => item.data),
+            },
           },
           include: this.saleInclude(),
         });
@@ -1158,7 +1503,7 @@ export class SalesService {
         taxPriceMode: "NO_TAX" | "TAX_ADDED" | "TAX_INCLUDED" | null;
       }
     >,
-  ) {
+  ): NormalizedSaleItem {
     const qty = new Prisma.Decimal(item.qty);
     const priceSoldUnit = new Prisma.Decimal(item.priceSoldUnit);
 

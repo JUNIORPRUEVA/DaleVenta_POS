@@ -20,6 +20,10 @@ class TicketItemData {
     required this.total,
     this.code,
     this.discount = 0,
+    this.taxableBase = 0,
+    this.taxAmount = 0,
+    this.exemptAmount = 0,
+    this.taxExempt = false,
   });
 
   final String name;
@@ -28,6 +32,10 @@ class TicketItemData {
   final double total;
   final String? code;
   final double discount;
+  final double taxableBase;
+  final double taxAmount;
+  final double exemptAmount;
+  final bool taxExempt;
 }
 
 class TicketData {
@@ -96,6 +104,11 @@ class TicketData {
               qty: item.qty,
               unitPrice: item.priceSoldUnit,
               total: item.subtotalSold,
+              taxableBase: item.taxableBase,
+              taxAmount: item.taxAmount,
+              exemptAmount: item.exemptAmount,
+              taxExempt: item.taxExempt,
+              discount: item.lineDiscountAmount,
             ),
           )
           .toList(growable: false),

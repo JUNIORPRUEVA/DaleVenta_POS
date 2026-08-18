@@ -86,8 +86,12 @@ pw.Widget _pageHeader({
   );
   final issuedAt = cotizacion.createdAt;
   final expiresAt = issuedAt.add(const Duration(days: 15));
-  final taxText = cotizacion.includeItbis
-      ? '${(cotizacion.itbisRate * 100).toStringAsFixed(0)}% ITBIS incluido'
+  final taxText = cotizacion.hasFiscalSnapshot && cotizacion.taxAmount > 0
+      ? cotizacion.fiscalPriceMode == 'TAX_ADDED'
+            ? 'ITBIS se agrega al precio'
+            : 'Precios con ITBIS incluido'
+      : cotizacion.includeItbis
+      ? '${(cotizacion.itbisRate * 100).toStringAsFixed(0)}% ITBIS'
       : null;
 
   return _panel(
@@ -148,6 +152,7 @@ pw.Widget _pageHeader({
         pw.SizedBox(
           width: 325,
           child: _personInfoPanel(
+            title: 'DATOS DEL CLIENTE',
             primary: customerName,
             secondary: customerPhone,
           ),
@@ -192,6 +197,10 @@ pw.Widget _detailSection(
   NumberFormat money,
   NumberFormat qtyFmt,
 ) {
+  if (cotizacion.hasFiscalSnapshot) {
+    return _fiscalQuoteDetailSection(cotizacion, money, qtyFmt);
+  }
+
   final tableRows = <pw.TableRow>[
     pw.TableRow(
       decoration: pw.BoxDecoration(color: _headingBlack),
@@ -273,6 +282,136 @@ pw.Widget _detailSection(
   );
 }
 
+pw.Widget _fiscalQuoteDetailSection(
+  CotizacionModel cotizacion,
+  NumberFormat money,
+  NumberFormat qtyFmt,
+) {
+  final modeLabel = cotizacion.fiscalPriceMode == 'TAX_ADDED'
+      ? 'ITBIS se agrega al precio. Importes de línea guardados.'
+      : 'Precios con ITBIS incluido. Importes de línea guardados.';
+  final tableRows = <pw.TableRow>[
+    pw.TableRow(
+      decoration: pw.BoxDecoration(color: _headingBlack),
+      children: [
+        _headerCell('Descripcion', align: pw.TextAlign.left),
+        _headerCell('Cant.'),
+        _headerCell('Base', align: pw.TextAlign.right),
+        _headerCell('ITBIS', align: pw.TextAlign.right),
+        _headerCell('Total', align: pw.TextAlign.right),
+      ],
+    ),
+  ];
+
+  if (cotizacion.items.isEmpty) {
+    tableRows.add(
+      pw.TableRow(
+        children: [
+          _emptyCell('No hay productos registrados en esta cotización.'),
+          _emptyCell(''),
+          _emptyCell(''),
+          _emptyCell(''),
+          _emptyCell(''),
+        ],
+      ),
+    );
+  } else {
+    for (final item in cotizacion.items) {
+      final isExempt = item.taxExempt || item.exemptAmount > 0;
+      final description = item.nombre.trim().isEmpty
+          ? 'Producto sin descripción'
+          : item.nombre.trim();
+      tableRows.add(
+        pw.TableRow(
+          children: [
+            _bodyCell(
+              isExempt ? '$description\nExento' : description,
+              align: pw.TextAlign.left,
+              bold: true,
+            ),
+            _bodyCell(qtyFmt.format(item.qty), align: pw.TextAlign.center),
+            _bodyCell(
+              money.format(
+                item.taxableBase > 0 ? item.taxableBase : item.exemptAmount,
+              ),
+              align: pw.TextAlign.right,
+            ),
+            _bodyCell(money.format(item.taxAmount), align: pw.TextAlign.right),
+            _bodyCell(money.format(item.total), align: pw.TextAlign.right),
+          ],
+        ),
+      );
+      if (item.lineDiscountAmount > 0) {
+        tableRows.add(
+          pw.TableRow(
+            children: [
+              _bodyCell(
+                'Descuento aplicado',
+                align: pw.TextAlign.left,
+                textColor: PdfColor.fromHex('#B42318'),
+              ),
+              _bodyCell(''),
+              _bodyCell(''),
+              _bodyCell(''),
+              _bodyCell(
+                '-${money.format(item.lineDiscountAmount)}',
+                align: pw.TextAlign.right,
+                textColor: PdfColor.fromHex('#B42318'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+  }
+
+  return pw.Container(
+    padding: const pw.EdgeInsets.fromLTRB(0, 10, 0, 10),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Row(
+          children: [
+            pw.Text(
+              'Detalle fiscal de cotización',
+              style: pw.TextStyle(
+                fontSize: 10.5,
+                fontWeight: pw.FontWeight.bold,
+                color: _textPrimary,
+              ),
+            ),
+            pw.Spacer(),
+            pw.Text(
+              modeLabel,
+              style: pw.TextStyle(fontSize: 7.6, color: _textMuted),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 8),
+        pw.Container(
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: _panelBorder, width: 0.45),
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+          ),
+          child: pw.Table(
+            border: pw.TableBorder(
+              horizontalInside: pw.BorderSide(color: _borderColor, width: 0.55),
+            ),
+            columnWidths: const {
+              0: pw.FlexColumnWidth(5.15),
+              1: pw.FlexColumnWidth(0.72),
+              2: pw.FlexColumnWidth(1.42),
+              3: pw.FlexColumnWidth(1.35),
+              4: pw.FlexColumnWidth(1.55),
+            },
+            children: tableRows,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 pw.Widget _bottomSection(CotizacionModel cotizacion, NumberFormat money) {
   final note = cotizacion.note.trim();
   return pw.Row(
@@ -344,20 +483,38 @@ pw.Widget _totalsPanel(CotizacionModel cotizacion, NumberFormat money) {
           ),
         ),
         pw.SizedBox(height: 10),
-        _totalLine('Subtotal', money.format(cotizacion.subtotalBeforeDiscount)),
-        if (cotizacion.hasDiscount)
+        if (cotizacion.hasFiscalSnapshot) ...[
+          if (cotizacion.discountAmount > 0)
+            _totalLine(
+              'Descuento',
+              '-${money.format(cotizacion.discountAmount)}',
+              valueColor: PdfColor.fromHex('#B42318'),
+            ),
+          if (cotizacion.taxableBase > 0)
+            _totalLine('Base imponible', money.format(cotizacion.taxableBase)),
+          if (cotizacion.exemptAmount > 0)
+            _totalLine('Exento', money.format(cotizacion.exemptAmount)),
+          if (cotizacion.itbisAmount > 0)
+            _totalLine('ITBIS', money.format(cotizacion.itbisAmount)),
+        ] else ...[
           _totalLine(
-            'Descuento aplicado',
-            '-${money.format(cotizacion.discountAmount)}',
-            valueColor: PdfColor.fromHex('#B42318'),
+            'Subtotal',
+            money.format(cotizacion.subtotalBeforeDiscount),
           ),
-        if (cotizacion.hasDiscount)
-          _totalLine(
-            'Subtotal con descuento',
-            money.format(cotizacion.subtotal),
-          ),
-        if (cotizacion.includeItbis)
-          _totalLine('ITBIS', money.format(cotizacion.itbisAmount)),
+          if (cotizacion.hasDiscount)
+            _totalLine(
+              'Descuento aplicado',
+              '-${money.format(cotizacion.discountAmount)}',
+              valueColor: PdfColor.fromHex('#B42318'),
+            ),
+          if (cotizacion.hasDiscount)
+            _totalLine(
+              'Subtotal con descuento',
+              money.format(cotizacion.subtotal),
+            ),
+          if (cotizacion.itbisAmount > 0)
+            _totalLine('ITBIS', money.format(cotizacion.itbisAmount)),
+        ],
         pw.Padding(
           padding: const pw.EdgeInsets.symmetric(vertical: 8),
           child: pw.Container(height: 1, color: _softLine),
@@ -372,7 +529,7 @@ pw.Widget _totalsPanel(CotizacionModel cotizacion, NumberFormat money) {
             children: [
               pw.Expanded(
                 child: pw.Text(
-                  'Total general',
+                  'TOTAL COTIZADO',
                   style: pw.TextStyle(
                     fontSize: 10.2,
                     fontWeight: pw.FontWeight.bold,
@@ -610,7 +767,11 @@ pw.Widget _factLine(String label, String value) {
   );
 }
 
-pw.Widget _personInfoPanel({required String primary, String? secondary}) {
+pw.Widget _personInfoPanel({
+  required String primary,
+  String? secondary,
+  String title = 'DATOS',
+}) {
   final phone = (secondary ?? '').trim();
   return pw.Container(
     padding: const pw.EdgeInsets.fromLTRB(14, 11, 14, 11),
@@ -622,6 +783,15 @@ pw.Widget _personInfoPanel({required String primary, String? secondary}) {
     child: pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
+        pw.Text(
+          title,
+          style: pw.TextStyle(
+            fontSize: 7.6,
+            fontWeight: pw.FontWeight.bold,
+            color: _accentBlue,
+          ),
+        ),
+        pw.SizedBox(height: 7),
         _personLine('Nombre', primary, strong: true),
         if (phone.isNotEmpty) ...[
           pw.SizedBox(height: 6),
@@ -681,6 +851,7 @@ pw.Widget _bodyCell(
   String text, {
   pw.TextAlign align = pw.TextAlign.left,
   bool bold = false,
+  PdfColor? textColor,
 }) {
   return pw.Container(
     padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
@@ -694,7 +865,7 @@ pw.Widget _bodyCell(
       textAlign: align,
       style: pw.TextStyle(
         fontSize: 8.1,
-        color: _textPrimary,
+        color: textColor ?? _textPrimary,
         fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
       ),
     ),
