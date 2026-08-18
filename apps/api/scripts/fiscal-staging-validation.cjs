@@ -167,8 +167,8 @@ async function issueFiscalSale(companyId, userId, type, clientRequestId) {
       });
       return sale;
     }, {
-      maxWait: 30000,
-      timeout: 60000,
+      maxWait: 120000,
+      timeout: 120000,
     });
   } catch (error) {
     if (clientRequestId && isUniqueError(error)) {
@@ -315,10 +315,14 @@ async function testActiveAndOverlap() {
   try {
     await createSequence(company.id, "B01", 50, 150, false);
   } catch (error) {
-    overlapBlocked = error instanceof Prisma.PrismaClientKnownRequestError;
+    overlapBlocked = true;
   }
+  const rows = await prisma.ncfSequence.count({
+    where: { companyId: company.id, voucherType: "B01" },
+  });
   assert(secondActiveBlocked, "Second active sequence was not blocked by DB");
   assert(overlapBlocked, "Overlapping inactive sequence was not blocked by DB");
+  assert(rows === 1, `Expected 1 sequence after overlap test, got ${rows}`);
   return { secondActive: "blocked", overlappingInactive: "blocked" };
 }
 

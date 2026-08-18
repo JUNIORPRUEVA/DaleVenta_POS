@@ -12,6 +12,7 @@
     "test:unit": "jest --runInBand --testPathPattern=\\.spec\\.ts$",
     "test:integration": "jest --runInBand --testPathPattern=\\.integration-spec\\.ts$",
     "test:e2e": "jest --runInBand --testPathPattern=\\.e2e-spec\\.ts$",
+    "test:staging:fiscal": "node scripts/fiscal-staging-validation.cjs",
     "test:security": "jest --runInBand --testPathPattern=security",
     "test:tenant": "jest --runInBand --testPathPattern=tenant",
     "test:deletion": "jest --runInBand --testPathPattern=deletion",

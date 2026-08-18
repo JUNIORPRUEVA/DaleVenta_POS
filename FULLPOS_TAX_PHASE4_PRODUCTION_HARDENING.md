@@ -112,3 +112,9 @@ No ejecutadas por falta de DB dev/staging segura:
 ## Recomendacion De Siguiente Paso
 
 Levantar Postgres local con Docker o confirmar una base staging sin datos reales. Luego ejecutar `migrate deploy`, backup previo si aplica, y pruebas de concurrencia/idempotencia contra esa base antes de habilitar B01/B02 a usuarios reales.
+
+## Actualizacion fase 5
+
+Se creo `fullpos_staging` en PostgreSQL remoto y se ejecuto validacion real de constraints/concurrencia/idempotencia. Ver `FULLPOS_TAX_PHASE5_STAGING_VALIDATION.md`.
+
+Nota: `migrate deploy` sigue bloqueado por migraciones historicas no aplicables desde DB vacia; la validacion fiscal se hizo con esquema actual via `db push` sobre staging aislado.
