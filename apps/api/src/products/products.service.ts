@@ -365,6 +365,10 @@ export class ProductsService {
           precio: new Prisma.Decimal(dto.precio),
           costo: new Prisma.Decimal(dto.costo),
           stock: new Prisma.Decimal(dto.stock ?? 0),
+          taxTreatment: dto.taxTreatment ?? "INHERIT",
+          taxRate:
+            dto.taxRate === undefined ? undefined : new Prisma.Decimal(dto.taxRate),
+          taxPriceMode: dto.taxPriceMode ?? undefined,
           imagen: normalizedImagePath,
           imageStorageProvider: imageKey ? "r2" : undefined,
           imageKey: imageKey ?? undefined,
@@ -606,6 +610,10 @@ export class ProductsService {
           dto.costo === undefined ? undefined : new Prisma.Decimal(dto.costo),
         stock:
           dto.stock === undefined ? undefined : new Prisma.Decimal(dto.stock),
+        taxTreatment: dto.taxTreatment,
+        taxRate:
+          dto.taxRate === undefined ? undefined : new Prisma.Decimal(dto.taxRate),
+        taxPriceMode: dto.taxPriceMode,
         imagen: normalizedImagePath,
         imageStorageProvider:
           imageKey === undefined ? undefined : imageKey ? "r2" : null,
@@ -718,6 +726,9 @@ export class ProductsService {
       cantidadDisponible: Number(product.stock ?? 0),
       categoria: product.categoria ?? null,
       categoriaNombre: product.categoria ?? null,
+      taxTreatment: productAny.taxTreatment ?? "INHERIT",
+      taxRate: productAny.taxRate == null ? null : Number(productAny.taxRate),
+      taxPriceMode: productAny.taxPriceMode ?? null,
     };
   }
 

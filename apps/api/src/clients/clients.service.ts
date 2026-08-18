@@ -325,6 +325,9 @@ export class ClientsService {
           email: dto.email,
           direccion: dto.direccion,
           notas: dto.notas,
+          taxId: dto.taxId?.trim() || null,
+          businessName: dto.businessName?.trim() || null,
+          taxIdType: dto.taxIdType?.trim() || null,
           ownerId: user.id,
           companyId,
           phoneNormalized,
@@ -437,6 +440,11 @@ export class ClientsService {
           email: dto.email,
           direccion: dto.direccion,
           notas: dto.notas,
+          taxId: dto.taxId === undefined ? undefined : dto.taxId.trim() || null,
+          businessName:
+            dto.businessName === undefined ? undefined : dto.businessName.trim() || null,
+          taxIdType:
+            dto.taxIdType === undefined ? undefined : dto.taxIdType.trim() || null,
           ...(telefonoWasProvided
             ? { phoneNormalized: phoneNormalized ?? '' }
             : {}),

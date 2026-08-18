@@ -72,6 +72,12 @@ export class SalesController {
     return this.sales.create(user, dto);
   }
 
+  @Post("calculate")
+  calculate(@Req() req: Request, @Body() dto: CreateSaleDto) {
+    const user = req.user as TenantUser;
+    return this.sales.calculate(user, dto);
+  }
+
   @Post("pdf-share-link")
   createPdfShareLink(
     @Req() req: Request,

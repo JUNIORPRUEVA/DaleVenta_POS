@@ -45,6 +45,9 @@ class VentasRepository {
         ),
         creditAmount: _nullableDouble(payload['creditAmount']),
         expectedTotalSold: _nullableDouble(payload['expectedTotalSold']),
+        fiscalVoucherType: payload['fiscalVoucherType']?.toString(),
+        fiscalCustomerTaxId: payload['fiscalCustomerTaxId']?.toString(),
+        fiscalCustomerName: payload['fiscalCustomerName']?.toString(),
         clientRequestId: payload['clientRequestId']?.toString(),
         items: ((payload['items'] as List?) ?? const [])
             .whereType<Map>()
@@ -507,6 +510,9 @@ class VentasRepository {
     double? paymentTransferAmount,
     double? creditAmount,
     double? expectedTotalSold,
+    String? fiscalVoucherType,
+    String? fiscalCustomerTaxId,
+    String? fiscalCustomerName,
     required List<SaleDraftItem> items,
   }) async {
     if (items.isEmpty) {
@@ -525,6 +531,12 @@ class VentasRepository {
         'paymentTransferAmount': paymentTransferAmount,
       if (creditAmount != null) 'creditAmount': creditAmount,
       if (expectedTotalSold != null) 'expectedTotalSold': expectedTotalSold,
+      if ((fiscalVoucherType ?? '').trim().isNotEmpty)
+        'fiscalVoucherType': fiscalVoucherType!.trim().toUpperCase(),
+      if ((fiscalCustomerTaxId ?? '').trim().isNotEmpty)
+        'fiscalCustomerTaxId': fiscalCustomerTaxId!.trim(),
+      if ((fiscalCustomerName ?? '').trim().isNotEmpty)
+        'fiscalCustomerName': fiscalCustomerName!.trim(),
       'items': items.map((item) => item.toPayload()).toList(),
     };
 
@@ -537,6 +549,9 @@ class VentasRepository {
         paymentTransferAmount: paymentTransferAmount,
         creditAmount: creditAmount,
         expectedTotalSold: expectedTotalSold,
+        fiscalVoucherType: fiscalVoucherType,
+        fiscalCustomerTaxId: fiscalCustomerTaxId,
+        fiscalCustomerName: fiscalCustomerName,
         clientRequestId: clientRequestId,
         items: items,
       );
@@ -544,6 +559,12 @@ class VentasRepository {
       if (!_shouldQueueNetworkFailure(e)) {
         throw ApiException(
           _extractMessage(e.response?.data, 'No se pudo guardar la venta'),
+          e.response?.statusCode,
+        );
+      }
+      if ((fiscalVoucherType ?? '').trim().isNotEmpty) {
+        throw ApiException(
+          'La factura fiscal requiere conexión para que el backend asigne el NCF. Mantén el carrito y vuelve a emitir cuando regrese la conexión.',
           e.response?.statusCode,
         );
       }
@@ -578,6 +599,9 @@ class VentasRepository {
     double? paymentTransferAmount,
     double? creditAmount,
     double? expectedTotalSold,
+    String? fiscalVoucherType,
+    String? fiscalCustomerTaxId,
+    String? fiscalCustomerName,
     String? clientRequestId,
     required List<SaleDraftItem> items,
   }) async {
@@ -596,6 +620,12 @@ class VentasRepository {
           'paymentTransferAmount': paymentTransferAmount,
         if (creditAmount != null) 'creditAmount': creditAmount,
         if (expectedTotalSold != null) 'expectedTotalSold': expectedTotalSold,
+        if ((fiscalVoucherType ?? '').trim().isNotEmpty)
+          'fiscalVoucherType': fiscalVoucherType!.trim().toUpperCase(),
+        if ((fiscalCustomerTaxId ?? '').trim().isNotEmpty)
+          'fiscalCustomerTaxId': fiscalCustomerTaxId!.trim(),
+        if ((fiscalCustomerName ?? '').trim().isNotEmpty)
+          'fiscalCustomerName': fiscalCustomerName!.trim(),
         'items': items.map((item) => item.toPayload()).toList(),
       },
     );

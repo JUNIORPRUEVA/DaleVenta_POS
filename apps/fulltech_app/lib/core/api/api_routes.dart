@@ -8,6 +8,10 @@ class ApiRoutes {
   static const accountDeletionPreview = '/auth/account/deletion-preview';
   static const accountDelete = '/auth/account';
   static const settings = '/settings';
+  static const fiscalSettings = '/company/fiscal-settings';
+  static const taxes = '/taxes';
+  static const ncfSequences = '/ncf/sequences';
+  static String ncfSequence(String id) => '/ncf/sequences/$id';
   static const settingsAdminPin = '/settings/admin-pin';
   static const settingsAdminPinVerify = '/settings/admin-pin/verify';
   static const license = '/license';
@@ -187,6 +191,7 @@ class ApiRoutes {
 
   // Ventas
   static const sales = '/sales';
+  static const salesCalculate = '/sales/calculate';
   static const salesInvoices = '/sales/invoices';
   static const salesCredits = '/sales/credits';
   static const salesDebugPurge = '/sales/debug/purge';

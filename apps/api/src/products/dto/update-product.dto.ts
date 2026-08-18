@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, IsString, Min } from "class-validator";
+import { IsIn, IsNumber, IsOptional, IsString, Min } from "class-validator";
 
 export class UpdateProductDto {
   @IsOptional()
@@ -39,6 +39,19 @@ export class UpdateProductDto {
   @IsNumber()
   @Min(0)
   stock?: number;
+
+  @IsOptional()
+  @IsIn(["INHERIT", "TAXABLE", "EXEMPT"])
+  taxTreatment?: "INHERIT" | "TAXABLE" | "EXEMPT";
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  taxRate?: number;
+
+  @IsOptional()
+  @IsIn(["NO_TAX", "TAX_ADDED", "TAX_INCLUDED"])
+  taxPriceMode?: "NO_TAX" | "TAX_ADDED" | "TAX_INCLUDED";
 
   @IsOptional()
   @IsString()

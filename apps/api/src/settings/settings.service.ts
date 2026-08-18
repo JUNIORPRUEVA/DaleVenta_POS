@@ -11,6 +11,7 @@ import * as bcrypt from 'bcryptjs';
 import { isAdminLike, requireTenant, type TenantUser } from '../auth/tenant-context';
 import { PrismaService } from '../prisma/prisma.service';
 import { CatalogRealtimeRelayService } from '../products/catalog-realtime-relay.service';
+import { TaxService } from '../tax/tax.service';
 
 type SettingsPayload = Record<string, unknown>;
 
@@ -20,12 +21,14 @@ export class SettingsService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly realtime: CatalogRealtimeRelayService,
+    private readonly taxes: TaxService,
   ) {}
 
   async getSettings(user: TenantUser) {
     const companyId = requireTenant(user);
     const config = await this.ensureConfig(companyId);
-    return this.toPublicSettings(config);
+    const fiscal = await this.taxes.getCompanyFiscalSettings(companyId);
+    return this.toPublicSettings(config, fiscal);
   }
 
   async updateSettings(user: TenantUser, dto: SettingsPayload) {
@@ -47,16 +50,36 @@ export class SettingsService {
       if (companyName) {
         await tx.company.update({
           where: { id: companyId },
-          data: { name: companyName },
+          data: {
+            name: companyName,
+            ...this.companyFiscalData(dto),
+          },
         });
         changedCompanyName = companyName;
+      } else {
+        const fiscalData = this.companyFiscalData(dto);
+        if (Object.keys(fiscalData).length) {
+          await tx.company.update({
+            where: { id: companyId },
+            data: fiscalData,
+          });
+        }
       }
       return updated;
     });
+    if (dto.taxEnabled === true) {
+      await this.taxes.updateFiscalSettings(user, {
+        taxEnabled: true,
+        defaultTaxRate: this.numberValue(dto, 'defaultTaxRate') ?? undefined,
+        pricesIncludeTax: this.boolValue(dto, 'pricesIncludeTax') ?? undefined,
+        ncfEnabled: this.boolValue(dto, 'ncfEnabled') ?? undefined,
+      });
+    }
     if (changedCompanyName) {
       this.emitCompanyNameUpdated(companyId, changedCompanyName);
     }
-    return this.toPublicSettings(config);
+    const fiscal = await this.taxes.getCompanyFiscalSettings(companyId);
+    return this.toPublicSettings(config, fiscal);
   }
 
   async setAdminPin(user: TenantUser, pin: unknown) {
@@ -170,6 +193,25 @@ export class SettingsService {
     return typeof value === 'boolean' ? value : undefined;
   }
 
+  private numberValue(dto: SettingsPayload, key: string) {
+    const value = dto[key];
+    if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+    return value;
+  }
+
+  private companyFiscalData(dto: SettingsPayload): Prisma.CompanyUncheckedUpdateInput {
+    const data: Prisma.CompanyUncheckedUpdateInput = {};
+    const taxEnabled = this.boolValue(dto, 'taxEnabled');
+    const defaultTaxRate = this.numberValue(dto, 'defaultTaxRate');
+    const pricesIncludeTax = this.boolValue(dto, 'pricesIncludeTax');
+    const ncfEnabled = this.boolValue(dto, 'ncfEnabled');
+    if (taxEnabled !== undefined) data.taxEnabled = taxEnabled;
+    if (defaultTaxRate !== undefined) data.defaultTaxRate = new Prisma.Decimal(defaultTaxRate);
+    if (pricesIncludeTax !== undefined) data.pricesIncludeTax = pricesIncludeTax;
+    if (ncfEnabled !== undefined) data.ncfEnabled = ncfEnabled;
+    return data;
+  }
+
   private settingsData(
     dto: SettingsPayload,
   ): Prisma.AppConfigUncheckedCreateInput &
@@ -242,6 +284,12 @@ export class SettingsService {
     evolutionApiApiKey: string | null;
     whatsappWebhookEnabled: boolean;
     adminAuthorizationPinHash: string | null;
+  }, fiscal: {
+    taxEnabled: boolean;
+    defaultTaxId: string | null;
+    defaultTaxRate: Prisma.Decimal | number | string;
+    pricesIncludeTax: boolean;
+    ncfEnabled: boolean;
   }) {
     return {
       companyName: config.companyName,
@@ -275,6 +323,17 @@ export class SettingsService {
       hasAdminAuthorizationPin: Boolean(config.adminAuthorizationPinHash),
       productsSource: 'LOCAL',
       productsReadOnly: false,
+      taxEnabled: fiscal.taxEnabled,
+      defaultTaxId: fiscal.defaultTaxId,
+      defaultTaxRate: this.toNumber(fiscal.defaultTaxRate),
+      pricesIncludeTax: fiscal.pricesIncludeTax,
+      ncfEnabled: fiscal.ncfEnabled,
     };
+  }
+
+  private toNumber(value: Prisma.Decimal | number | string | null | undefined) {
+    if (value == null) return 0;
+    if (typeof value === 'number') return value;
+    return Number(value);
   }
 }

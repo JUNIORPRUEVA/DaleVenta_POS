@@ -60,6 +60,9 @@ class ProductModel {
   final String? categoria;
   final bool activo;
   final String? imageVersion;
+  final String taxTreatment;
+  final double? taxRate;
+  final String? taxPriceMode;
 
   ProductModel({
     required this.id,
@@ -78,6 +81,9 @@ class ProductModel {
     this.updatedAt,
     this.activo = true,
     this.imageVersion,
+    this.taxTreatment = 'INHERIT',
+    this.taxRate,
+    this.taxPriceMode,
   });
 
   ProductModel copyWith({
@@ -97,6 +103,9 @@ class ProductModel {
     DateTime? updatedAt,
     bool? activo,
     String? imageVersion,
+    String? taxTreatment,
+    double? taxRate,
+    String? taxPriceMode,
   }) {
     return ProductModel(
       id: id ?? this.id,
@@ -115,6 +124,9 @@ class ProductModel {
       updatedAt: updatedAt ?? this.updatedAt,
       activo: activo ?? this.activo,
       imageVersion: imageVersion ?? this.imageVersion,
+      taxTreatment: taxTreatment ?? this.taxTreatment,
+      taxRate: taxRate ?? this.taxRate,
+      taxPriceMode: taxPriceMode ?? this.taxPriceMode,
     );
   }
 
@@ -202,6 +214,9 @@ class ProductModel {
       updatedAt: updatedAt,
       activo: activo,
       imageVersion: imageVersion,
+      taxTreatment: _asNullableString(json['taxTreatment']) ?? 'INHERIT',
+      taxRate: _asNullableDouble(json['taxRate']),
+      taxPriceMode: _asNullableString(json['taxPriceMode']),
     );
   }
 
@@ -226,6 +241,9 @@ class ProductModel {
       'updatedAt': updatedAt?.toIso8601String(),
       'activo': activo,
       'imageVersion': imageVersion,
+      'taxTreatment': taxTreatment,
+      'taxRate': taxRate,
+      'taxPriceMode': taxPriceMode,
     };
   }
 

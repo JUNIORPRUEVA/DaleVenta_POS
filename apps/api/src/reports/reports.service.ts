@@ -121,11 +121,31 @@ export class ReportsService {
           (sum, item) => sum + this.toNumber(item.profit),
           0,
         );
+        const itemTaxableBase = categoryItems.reduce(
+          (sum, item) => sum + this.toNumber((item as any).taxableBase),
+          0,
+        );
+        const itemTaxAmount = categoryItems.reduce(
+          (sum, item) => sum + this.toNumber((item as any).taxAmount),
+          0,
+        );
+        const itemExemptAmount = categoryItems.reduce(
+          (sum, item) => sum + this.toNumber((item as any).exemptAmount),
+          0,
+        );
+        const itemDiscountAmount = categoryItems.reduce(
+          (sum, item) => sum + this.toNumber((item as any).lineDiscountAmount),
+          0,
+        );
         const saleSold = this.toNumber(sale.totalSold);
         const allocation = saleSold > 0 ? itemSold / saleSold : 0;
         acc.totalSold += itemSold;
         acc.totalCost += itemCost;
         acc.totalProfit += itemProfit;
+        acc.taxableBase += itemTaxableBase;
+        acc.taxAmount += itemTaxAmount;
+        acc.exemptAmount += itemExemptAmount;
+        acc.discountAmount += itemDiscountAmount;
         acc.totalCommission +=
           this.toNumber(sale.commissionAmount) * allocation;
         acc.cash += this.toNumber(sale.paymentCashAmount) * allocation;
@@ -139,6 +159,10 @@ export class ReportsService {
         totalCommission: 0,
         cash: 0,
         transfer: 0,
+        taxableBase: 0,
+        taxAmount: 0,
+        exemptAmount: 0,
+        discountAmount: 0,
       },
     );
 
@@ -383,6 +407,10 @@ export class ReportsService {
         totalProfit: totals.totalProfit,
         netProfit,
         totalCommission: totals.totalCommission,
+        taxableBase: totals.taxableBase,
+        taxAmount: totals.taxAmount,
+        exemptAmount: totals.exemptAmount,
+        discountAmount: totals.discountAmount,
         avgTicket: sales.length === 0 ? 0 : totals.totalSold / sales.length,
         totalReturns: returns.count,
         totalExpenses: profitExpenses,

@@ -51,6 +51,22 @@ export class CreateSaleDto {
   note?: string;
 
   @IsOptional()
+  @IsString()
+  fiscalVoucherType?: string;
+
+  @IsOptional()
+  @IsString()
+  ncf?: string;
+
+  @IsOptional()
+  @IsString()
+  fiscalCustomerTaxId?: string;
+
+  @IsOptional()
+  @IsString()
+  fiscalCustomerName?: string;
+
+  @IsOptional()
   @IsIn(["cash", "transfer", "mixed", "credit"])
   paymentMethod?: "cash" | "transfer" | "mixed" | "credit";
 
@@ -77,6 +93,12 @@ export class CreateSaleDto {
   @IsNumber()
   @Min(0)
   expectedTotalSold?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  globalDiscountAmount?: number;
 
   @IsArray()
   @ArrayMinSize(1)

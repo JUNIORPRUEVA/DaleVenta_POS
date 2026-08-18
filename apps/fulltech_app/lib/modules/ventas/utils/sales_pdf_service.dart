@@ -423,7 +423,9 @@ pw.Widget _invoiceBottomSection(SaleModel sale, NumberFormat money) {
 }
 
 pw.Widget _invoiceTotalsPanel(SaleModel sale, NumberFormat money) {
-  final subtotal = sale.items.fold(0.0, (sum, item) => sum + item.subtotalSold);
+  final subtotal = sale.fiscalTaxEnabled && sale.taxableBase > 0
+      ? sale.taxableBase
+      : sale.items.fold(0.0, (sum, item) => sum + item.subtotalSold);
   return _panel(
     padding: const pw.EdgeInsets.fromLTRB(14, 14, 14, 14),
     fillColor: _softFill,
@@ -440,7 +442,20 @@ pw.Widget _invoiceTotalsPanel(SaleModel sale, NumberFormat money) {
           ),
         ),
         pw.SizedBox(height: 10),
-        _pdfTotalLine('Subtotal', money.format(subtotal)),
+        _pdfTotalLine(
+          sale.fiscalTaxEnabled ? 'Base imponible' : 'Subtotal',
+          money.format(subtotal),
+        ),
+        if (sale.fiscalTaxEnabled && sale.fiscalPriceMode == 'TAX_INCLUDED')
+          _pdfTotalLine('ITBIS incluido', ''),
+        if (sale.fiscalTaxEnabled && sale.taxAmount > 0)
+          _pdfTotalLine('ITBIS', money.format(sale.taxAmount)),
+        if (sale.fiscalTaxEnabled && sale.exemptAmount > 0)
+          _pdfTotalLine('Exento', money.format(sale.exemptAmount)),
+        if (sale.discountAmount > 0)
+          _pdfTotalLine('Descuento', '-${money.format(sale.discountAmount)}'),
+        if ((sale.ncf ?? '').trim().isNotEmpty)
+          _pdfTotalLine('NCF', sale.ncf!.trim()),
         pw.Padding(
           padding: const pw.EdgeInsets.symmetric(vertical: 8),
           child: pw.Container(height: 1, color: _softLine),

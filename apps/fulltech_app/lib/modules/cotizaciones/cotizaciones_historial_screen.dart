@@ -269,7 +269,7 @@ class _CotizacionesHistorialScreenState
         'selectedClientPhone': item.customerPhone,
         'note': item.note,
         'includeItbis': item.includeItbis,
-        'fiscalVoucherType': 'B01',
+        'fiscalVoucherType': '',
         'fiscalVoucherNumber': '',
         'fiscalVoucherDueDate': null,
         'fiscalCustomerTaxId': '',

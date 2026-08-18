@@ -195,9 +195,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   bool _includeItbis = false;
   static const double _itbisRate = 0.18;
-  String _fiscalVoucherType = 'B01';
-  String _fiscalVoucherNumber = '';
-  DateTime? _fiscalVoucherDueDate;
   String _fiscalCustomerTaxId = '';
   String _fiscalCustomerName = '';
   double _generalDiscountAmount = 0;
@@ -1069,9 +1066,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       selectedClientPhone: _selectedClientPhone,
       note: _note,
       includeItbis: _includeItbis,
-      fiscalVoucherType: _fiscalVoucherType,
-      fiscalVoucherNumber: _fiscalVoucherNumber,
-      fiscalVoucherDueDate: _fiscalVoucherDueDate,
+      fiscalVoucherType: '',
+      fiscalVoucherNumber: '',
+      fiscalVoucherDueDate: null,
       fiscalCustomerTaxId: _fiscalCustomerTaxId,
       fiscalCustomerName: _fiscalCustomerName,
       globalDiscountAmount: _generalDiscountAmount,
@@ -1112,9 +1109,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _selectedClientPhone = draft.selectedClientPhone;
     _note = draft.note;
     _includeItbis = draft.includeItbis;
-    _fiscalVoucherType = draft.fiscalVoucherType;
-    _fiscalVoucherNumber = draft.fiscalVoucherNumber;
-    _fiscalVoucherDueDate = draft.fiscalVoucherDueDate;
     _fiscalCustomerTaxId = draft.fiscalCustomerTaxId;
     _fiscalCustomerName = draft.fiscalCustomerName;
     _generalDiscountAmount = draft.globalDiscountAmount;
@@ -1135,9 +1129,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _selectedClientPhone = null;
     _note = '';
     _includeItbis = false;
-    _fiscalVoucherType = 'B01';
-    _fiscalVoucherNumber = '';
-    _fiscalVoucherDueDate = null;
     _fiscalCustomerTaxId = '';
     _fiscalCustomerName = '';
     _generalDiscountAmount = 0;
@@ -1173,19 +1164,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         (_selectedClientPhone ?? '').trim().isNotEmpty ||
         _note.trim().isNotEmpty ||
         _includeItbis ||
-        _fiscalVoucherNumber.trim().isNotEmpty ||
         _fiscalCustomerTaxId.trim().isNotEmpty ||
         _fiscalCustomerName.trim().isNotEmpty ||
-        _fiscalVoucherDueDate != null ||
         _generalDiscountAmount != 0 ||
         (_editingId ?? '').trim().isNotEmpty ||
         _selectedCategories.isNotEmpty;
-  }
-
-  bool get _fiscalVoucherRequiresTaxId {
-    return _fiscalVoucherType == 'B01' ||
-        _fiscalVoucherType == 'B14' ||
-        _fiscalVoucherType == 'B15';
   }
 
   bool get _hasFiscalVoucherReady {
@@ -1194,27 +1177,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   String? get _fiscalVoucherValidationMessage {
     if (!_includeItbis) return null;
-    final type = _fiscalVoucherType.trim().toUpperCase();
-    final ncf = _fiscalVoucherNumber.trim().toUpperCase();
-    if (type.isEmpty) return 'Selecciona el tipo de comprobante.';
-    if (ncf.isEmpty) return 'Indica el número de comprobante / NCF.';
-    if (!ncf.startsWith(type)) {
-      return 'El NCF debe iniciar con el tipo seleccionado ($type).';
-    }
-    if (!RegExp(r'^B\d{10}$').hasMatch(ncf)) {
-      return 'El NCF debe tener formato válido, ejemplo B0100000001.';
-    }
-    if (_fiscalVoucherDueDate == null) {
-      return 'Selecciona la fecha de vencimiento del comprobante.';
-    }
-    final today = DateTime.now();
-    final dueDate = DateUtils.dateOnly(_fiscalVoucherDueDate!);
-    if (dueDate.isBefore(DateUtils.dateOnly(today))) {
-      return 'La fecha de vencimiento del comprobante no puede estar vencida.';
-    }
-    if (_fiscalVoucherRequiresTaxId && _fiscalCustomerTaxId.trim().isEmpty) {
-      return 'Indica el RNC o cédula fiscal del cliente.';
-    }
     return null;
   }
 
@@ -1287,52 +1249,16 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _commitEditorChange(() => _setItbisEnabled(true));
   }
 
-  String _fiscalVoucherTypeLabel(String type) {
-    return switch (type) {
-      'B01' => 'B01 - Crédito fiscal',
-      'B02' => 'B02 - Consumidor final',
-      'B14' => 'B14 - Régimen especial',
-      'B15' => 'B15 - Gubernamental',
-      _ => type,
-    };
-  }
-
   List<String> _fiscalSaleNoteLines() {
     if (!_includeItbis) return const [];
-    final date = _fiscalVoucherDueDate;
     return [
-      'Factura con valor fiscal',
-      'Tipo comprobante: ${_fiscalVoucherTypeLabel(_fiscalVoucherType)}',
-      'NCF: ${_fiscalVoucherNumber.trim()}',
-      if (date != null)
-        'Vencimiento NCF: ${DateFormat('dd/MM/yyyy').format(date)}',
+      'Cotización con ITBIS informativo',
       if (_fiscalCustomerTaxId.trim().isNotEmpty)
         'RNC/Cédula: ${_fiscalCustomerTaxId.trim()}',
       if (_fiscalCustomerName.trim().isNotEmpty)
         'Razón social: ${_fiscalCustomerName.trim()}',
       'ITBIS ${(_itbisRate * 100).toStringAsFixed(0)}%: ${_money(_itbisAmount)}',
     ];
-  }
-
-  Future<void> _pickFiscalVoucherDueDate() async {
-    final now = DateTime.now();
-    final today = DateUtils.dateOnly(now);
-    final currentDueDate = _fiscalVoucherDueDate == null
-        ? null
-        : DateUtils.dateOnly(_fiscalVoucherDueDate!);
-    final selected = await showDatePicker(
-      context: context,
-      initialDate: currentDueDate == null || currentDueDate.isBefore(today)
-          ? today.add(const Duration(days: 30))
-          : currentDueDate,
-      firstDate: today,
-      lastDate: DateTime(now.year + 10),
-      helpText: 'Vencimiento del comprobante',
-      cancelText: 'Cancelar',
-      confirmText: 'Aplicar',
-    );
-    if (selected == null || !mounted) return;
-    _commitEditorChange(() => _fiscalVoucherDueDate = selected);
   }
 
   void _commitEditorChange(VoidCallback changes) {
@@ -1997,25 +1923,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     const Divider(height: 1),
                     Expanded(
                       child: _DesktopFiscalInvoicePanel(
-                        voucherType: _fiscalVoucherType,
-                        voucherNumber: _fiscalVoucherNumber,
-                        dueDate: _fiscalVoucherDueDate,
                         customerTaxId: _fiscalCustomerTaxId,
                         customerName: _fiscalCustomerName,
-                        requiresTaxId: _fiscalVoucherRequiresTaxId,
-                        onTypeChanged: (value) => _commitEditorChange(
-                          () => _fiscalVoucherType = value,
-                        ),
-                        onVoucherNumberChanged: (value) => _commitEditorChange(
-                          () => _fiscalVoucherNumber = value,
-                        ),
                         onCustomerTaxIdChanged: (value) => _commitEditorChange(
                           () => _fiscalCustomerTaxId = value,
                         ),
                         onCustomerNameChanged: (value) => _commitEditorChange(
                           () => _fiscalCustomerName = value,
                         ),
-                        onPickDueDate: _pickFiscalVoucherDueDate,
                       ),
                     ),
                     Padding(
@@ -5084,7 +4999,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         title: 'Comprobante requerido',
         message:
             _fiscalVoucherValidationMessage ??
-            'Completa el tipo, NCF, vencimiento y datos fiscales antes de cobrar con ITBIS.',
+            'Revisa los datos fiscales informativos antes de cobrar con ITBIS.',
         icon: Icons.fact_check_outlined,
         accent: const Color(0xFFF59E0B),
       );
@@ -6426,21 +6341,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                             curve: Curves.easeOutCubic,
                             opacity: _includeItbis && !overlayOpen ? 1 : 0,
                             child: _DesktopFiscalInvoicePanel(
-                              voucherType: _fiscalVoucherType,
-                              voucherNumber: _fiscalVoucherNumber,
-                              dueDate: _fiscalVoucherDueDate,
                               customerTaxId: _fiscalCustomerTaxId,
                               customerName: _fiscalCustomerName,
-                              requiresTaxId: _fiscalVoucherRequiresTaxId,
-                              onTypeChanged: (value) => _commitEditorChange(
-                                () => _fiscalVoucherType = value,
-                              ),
-                              onVoucherNumberChanged: (value) =>
-                                  _commitEditorChange(
-                                    () => _fiscalVoucherNumber = value
-                                        .trim()
-                                        .toUpperCase(),
-                                  ),
                               onCustomerTaxIdChanged: (value) =>
                                   _commitEditorChange(
                                     () => _fiscalCustomerTaxId = value,
@@ -6449,7 +6351,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                   _commitEditorChange(
                                     () => _fiscalCustomerName = value,
                                   ),
-                              onPickDueDate: _pickFiscalVoucherDueDate,
                             ),
                           ),
                         ),
@@ -13085,9 +12986,9 @@ class _DesktopQuotePanel extends StatelessWidget {
                           icon: Icons.receipt_long_outlined,
                           label: 'ITBIS',
                           value: includeItbis,
-                          helpTitle: 'ITBIS y factura fiscal',
+                          helpTitle: 'ITBIS en cotización',
                           helpMessage:
-                              'Al activar este switch se muestra el panel de factura fiscal en el lado izquierdo. Ahí se configura el tipo de comprobante, NCF, vencimiento, RNC o cédula y razón social del cliente. Cuando termines, toca de nuevo el switch ITBIS para ocultar ese panel.',
+                              'Al activar este switch se muestra el panel de datos fiscales informativos. El NCF se asigna únicamente al emitir la venta desde el backend.',
                           onTap: () => onToggleItbis(!includeItbis),
                         ),
                         const SizedBox(width: 6),
@@ -13127,30 +13028,16 @@ class _DesktopQuotePanel extends StatelessWidget {
 
 class _DesktopFiscalInvoicePanel extends StatefulWidget {
   const _DesktopFiscalInvoicePanel({
-    required this.voucherType,
-    required this.voucherNumber,
-    required this.dueDate,
     required this.customerTaxId,
     required this.customerName,
-    required this.requiresTaxId,
-    required this.onTypeChanged,
-    required this.onVoucherNumberChanged,
     required this.onCustomerTaxIdChanged,
     required this.onCustomerNameChanged,
-    required this.onPickDueDate,
   });
 
-  final String voucherType;
-  final String voucherNumber;
-  final DateTime? dueDate;
   final String customerTaxId;
   final String customerName;
-  final bool requiresTaxId;
-  final ValueChanged<String> onTypeChanged;
-  final ValueChanged<String> onVoucherNumberChanged;
   final ValueChanged<String> onCustomerTaxIdChanged;
   final ValueChanged<String> onCustomerNameChanged;
-  final VoidCallback onPickDueDate;
 
   @override
   State<_DesktopFiscalInvoicePanel> createState() =>
@@ -13159,14 +13046,12 @@ class _DesktopFiscalInvoicePanel extends StatefulWidget {
 
 class _DesktopFiscalInvoicePanelState
     extends State<_DesktopFiscalInvoicePanel> {
-  late final TextEditingController _voucherCtrl;
   late final TextEditingController _taxIdCtrl;
   late final TextEditingController _customerNameCtrl;
 
   @override
   void initState() {
     super.initState();
-    _voucherCtrl = TextEditingController(text: widget.voucherNumber);
     _taxIdCtrl = TextEditingController(text: widget.customerTaxId);
     _customerNameCtrl = TextEditingController(text: widget.customerName);
   }
@@ -13174,7 +13059,6 @@ class _DesktopFiscalInvoicePanelState
   @override
   void didUpdateWidget(covariant _DesktopFiscalInvoicePanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _syncController(_voucherCtrl, widget.voucherNumber);
     _syncController(_taxIdCtrl, widget.customerTaxId);
     _syncController(_customerNameCtrl, widget.customerName);
   }
@@ -13187,7 +13071,6 @@ class _DesktopFiscalInvoicePanelState
 
   @override
   void dispose() {
-    _voucherCtrl.dispose();
     _taxIdCtrl.dispose();
     _customerNameCtrl.dispose();
     super.dispose();
@@ -13195,9 +13078,6 @@ class _DesktopFiscalInvoicePanelState
 
   @override
   Widget build(BuildContext context) {
-    final dueDateText = widget.dueDate == null
-        ? 'Seleccionar fecha'
-        : DateFormat('dd/MM/yyyy').format(widget.dueDate!);
     final border = Border.all(color: const Color(0xFFD3E0E7), width: 1.1);
 
     return Container(
@@ -13245,7 +13125,7 @@ class _DesktopFiscalInvoicePanelState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Factura fiscal',
+                          'Datos fiscales',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w900,
@@ -13254,7 +13134,7 @@ class _DesktopFiscalInvoicePanelState
                         ),
                         SizedBox(height: 2),
                         Text(
-                          'Datos del comprobante',
+                          'La cotización no emite NCF',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
@@ -13278,63 +13158,12 @@ class _DesktopFiscalInvoicePanelState
                 ),
                 child: ListView(
                   children: [
-                    DropdownButtonFormField<String>(
-                      initialValue: widget.voucherType,
-                      decoration: const InputDecoration(
-                        labelText: 'Tipo de comprobante',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'B01',
-                          child: Text('B01 - Crédito fiscal'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'B02',
-                          child: Text('B02 - Consumidor final'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'B14',
-                          child: Text('B14 - Régimen especial'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'B15',
-                          child: Text('B15 - Gubernamental'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) widget.onTypeChanged(value);
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _voucherCtrl,
-                      onChanged: widget.onVoucherNumberChanged,
-                      textCapitalization: TextCapitalization.characters,
-                      decoration: const InputDecoration(
-                        labelText: 'Número de comprobante / NCF',
-                        hintText: 'Ej. B0100000001',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: widget.onPickDueDate,
-                      icon: const Icon(Icons.event_outlined, size: 18),
-                      label: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(dueDateText),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        alignment: Alignment.centerLeft,
-                        foregroundColor: const Color(0xFF132337),
-                        side: const BorderSide(color: Color(0xFFD3E0E7)),
-                        minimumSize: const Size.fromHeight(46),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                    const Text(
+                      'El NCF se asigna únicamente al convertir y emitir la venta desde el backend.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF647985),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -13342,11 +13171,9 @@ class _DesktopFiscalInvoicePanelState
                       controller: _taxIdCtrl,
                       onChanged: widget.onCustomerTaxIdChanged,
                       keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: widget.requiresTaxId
-                            ? 'RNC / Cédula fiscal'
-                            : 'RNC / Cédula (opcional)',
-                        border: const OutlineInputBorder(),
+                      decoration: const InputDecoration(
+                        labelText: 'RNC / Cédula (opcional)',
+                        border: OutlineInputBorder(),
                         isDense: true,
                       ),
                     ),
@@ -13360,17 +13187,6 @@ class _DesktopFiscalInvoicePanelState
                         isDense: true,
                       ),
                     ),
-                    if (widget.requiresTaxId) ...[
-                      const SizedBox(height: 10),
-                      const Text(
-                        'Este tipo de comprobante requiere RNC o cédula fiscal del cliente.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF647985),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
@@ -15598,7 +15414,7 @@ class _DesktopTicketDraft {
       selectedClientPhone: null,
       note: '',
       includeItbis: false,
-      fiscalVoucherType: 'B01',
+      fiscalVoucherType: '',
       fiscalVoucherNumber: '',
       fiscalVoucherDueDate: null,
       fiscalCustomerTaxId: '',
@@ -15746,7 +15562,7 @@ class _DesktopTicketDraft {
       selectedClientPhone: map['selectedClientPhone']?.toString(),
       note: (map['note'] ?? '').toString(),
       includeItbis: map['includeItbis'] == true,
-      fiscalVoucherType: (map['fiscalVoucherType'] ?? 'B01').toString(),
+      fiscalVoucherType: (map['fiscalVoucherType'] ?? '').toString(),
       fiscalVoucherNumber: (map['fiscalVoucherNumber'] ?? '').toString(),
       fiscalVoucherDueDate: DateTime.tryParse(
         (map['fiscalVoucherDueDate'] ?? '').toString(),

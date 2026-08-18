@@ -21,7 +21,9 @@ class InvoiceLetterPdf {
     final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$ ');
     final date = DateFormat('dd/MM/yyyy HH:mm');
     final color = PdfColor.fromInt(brandColorArgb);
-    final subtotal = items.fold(0.0, (sum, item) => sum + item.subtotalSold);
+    final subtotal = sale.fiscalTaxEnabled && sale.taxableBase > 0
+        ? sale.taxableBase
+        : items.fold(0.0, (sum, item) => sum + item.subtotalSold);
 
     doc.addPage(
       pw.MultiPage(
@@ -65,6 +67,10 @@ class InvoiceLetterPdf {
                     ),
                   ),
                   pw.Text('No. ${_number(sale.id)}'),
+                  if ((sale.fiscalVoucherType ?? '').trim().isNotEmpty)
+                    pw.Text('Comprobante: ${sale.fiscalVoucherType}'),
+                  if ((sale.ncf ?? '').trim().isNotEmpty)
+                    pw.Text('NCF: ${sale.ncf}'),
                   pw.Text(date.format(sale.saleDate ?? DateTime.now())),
                   if ((cashierName ?? sale.userName ?? '').trim().isNotEmpty)
                     pw.Text('Cajero: ${(cashierName ?? sale.userName)!}'),
@@ -80,7 +86,11 @@ class InvoiceLetterPdf {
               borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
             ),
             child: pw.Text(
-              'Cliente: ${sale.customerName ?? 'Consumidor Final'}',
+              [
+                'Cliente: ${sale.fiscalCustomerName ?? sale.customerName ?? 'Consumidor Final'}',
+                if ((sale.fiscalCustomerTaxId ?? '').trim().isNotEmpty)
+                  'RNC/Cedula: ${sale.fiscalCustomerTaxId}',
+              ].join('\n'),
             ),
           ),
           pw.SizedBox(height: 16),
@@ -110,7 +120,18 @@ class InvoiceLetterPdf {
               width: 260,
               child: pw.Column(
                 children: [
-                  _total('Subtotal', money.format(subtotal)),
+                  _total(
+                    sale.fiscalTaxEnabled ? 'Base imponible' : 'Subtotal',
+                    money.format(subtotal),
+                  ),
+                  if (sale.fiscalTaxEnabled && sale.fiscalPriceMode == 'TAX_INCLUDED')
+                    _total('ITBIS incluido', ''),
+                  if (sale.fiscalTaxEnabled && sale.taxAmount > 0)
+                    _total('ITBIS', money.format(sale.taxAmount)),
+                  if (sale.fiscalTaxEnabled && sale.exemptAmount > 0)
+                    _total('Exento', money.format(sale.exemptAmount)),
+                  if (sale.discountAmount > 0)
+                    _total('Descuento', '-${money.format(sale.discountAmount)}'),
                   pw.Divider(),
                   _total(
                     'Total factura',

@@ -24,6 +24,7 @@ import { ReportsModule } from './reports/reports.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { SettingsModule } from './settings/settings.module';
 import { LicenseModule } from './license/license.module';
+import { TaxModule } from './tax/tax.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { LicenseModule } from './license/license.module';
     ReportsModule,
     PurchasesModule,
     SettingsModule,
+    TaxModule,
   ]
 })
 export class AppModule {}

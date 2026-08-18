@@ -1712,6 +1712,9 @@ class _CompanySettingsEditorState
   Uint8List? _logoBytes;
   bool _saving = false;
   bool _showAdvancedCompany = false;
+  bool _taxEnabled = false;
+  bool _pricesIncludeTax = false;
+  bool _ncfEnabled = false;
 
   @override
   void initState() {
@@ -1773,6 +1776,9 @@ class _CompanySettingsEditorState
     _bankName.text = firstBank.bankName;
     _logoBase64 = _normalizeLogoBase64(settings.logoBase64);
     _logoBytes = _decodeLogoBytes(_logoBase64);
+    _taxEnabled = settings.taxEnabled;
+    _pricesIncludeTax = settings.pricesIncludeTax;
+    _ncfEnabled = settings.ncfEnabled;
   }
 
   String? _normalizeLogoBase64(String? value) {
@@ -1938,6 +1944,14 @@ class _CompanySettingsEditorState
               legalRepresentativeCivilStatus: _legalCivilStatus.text.trim(),
               logoBase64: _logoBase64,
               clearLogo: _logoBase64 == null,
+              taxEnabled: _taxEnabled,
+              defaultTaxRate: _taxEnabled
+                  ? (widget.settings.defaultTaxRate > 0
+                        ? widget.settings.defaultTaxRate
+                        : 0.18)
+                  : widget.settings.defaultTaxRate,
+              pricesIncludeTax: _pricesIncludeTax,
+              ncfEnabled: _ncfEnabled,
               bankAccounts: [
                 if (_bankAlias.text.trim().isNotEmpty ||
                     _bankType.text.trim().isNotEmpty ||
@@ -2037,6 +2051,24 @@ class _CompanySettingsEditorState
               maxLines: 2,
             ),
           ],
+        ),
+        const SizedBox(height: 12),
+        _FiscalSettingsPanel(
+          taxEnabled: _taxEnabled,
+          pricesIncludeTax: _pricesIncludeTax,
+          ncfEnabled: _ncfEnabled,
+          defaultTaxRate:
+              widget.settings.defaultTaxRate > 0
+                  ? widget.settings.defaultTaxRate
+                  : 0.18,
+          onTaxEnabledChanged: (value) => setState(() {
+            _taxEnabled = value;
+            if (!value) _ncfEnabled = false;
+          }),
+          onPricesIncludeTaxChanged: (value) =>
+              setState(() => _pricesIncludeTax = value),
+          onNcfEnabledChanged: (value) =>
+              setState(() => _ncfEnabled = value),
         ),
         const SizedBox(height: 10),
         Align(
@@ -2150,6 +2182,81 @@ class _CompanySettingsEditorState
         labelText: label,
         border: const OutlineInputBorder(),
         isDense: true,
+      ),
+    );
+  }
+}
+
+class _FiscalSettingsPanel extends StatelessWidget {
+  const _FiscalSettingsPanel({
+    required this.taxEnabled,
+    required this.pricesIncludeTax,
+    required this.ncfEnabled,
+    required this.defaultTaxRate,
+    required this.onTaxEnabledChanged,
+    required this.onPricesIncludeTaxChanged,
+    required this.onNcfEnabledChanged,
+  });
+
+  final bool taxEnabled;
+  final bool pricesIncludeTax;
+  final bool ncfEnabled;
+  final double defaultTaxRate;
+  final ValueChanged<bool> onTaxEnabledChanged;
+  final ValueChanged<bool> onPricesIncludeTaxChanged;
+  final ValueChanged<bool> onNcfEnabledChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final rateLabel = '${(defaultTaxRate * 100).toStringAsFixed(0)}%';
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDDE7EE)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Impuestos y comprobantes', style: _titleStyle(15)),
+            const SizedBox(height: 6),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Utilizar impuestos'),
+              subtitle: const Text(
+                'Las ventas anteriores no serán modificadas.',
+              ),
+              value: taxEnabled,
+              onChanged: onTaxEnabledChanged,
+            ),
+            if (taxEnabled) ...[
+              const Divider(height: 16),
+              Text('Impuesto predeterminado: ITBIS $rateLabel'),
+              const SizedBox(height: 10),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(
+                    value: true,
+                    label: Text('Precio incluye impuesto'),
+                  ),
+                  ButtonSegment(value: false, label: Text('Precio + impuesto')),
+                ],
+                selected: {pricesIncludeTax},
+                onSelectionChanged: (values) =>
+                    onPricesIncludeTaxChanged(values.first),
+              ),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Utilizar comprobantes fiscales'),
+                value: ncfEnabled,
+                onChanged: onNcfEnabledChanged,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

@@ -166,6 +166,9 @@ class TicketRenderer {
     add(sep);
     if (layout.showSubtotalItbisTotal) {
       addMoneyLine('Subtotal', data.resolvedSubtotal);
+      if (data.taxIncluded && data.itbis > 0) {
+        add('ITBIS incluido');
+      }
       if (layout.showDiscounts && data.discount > 0) {
         add(
           ReceiptTextUtils.leftRight(
@@ -178,6 +181,15 @@ class TicketRenderer {
       if (layout.showItbis && data.itbis > 0) {
         addMoneyLine('ITBIS', data.itbis);
       }
+      if (data.exemptAmount > 0) {
+        addMoneyLine('Exento', data.exemptAmount);
+      }
+    }
+    if ((data.ncf ?? '').trim().isNotEmpty) {
+      add('NCF: ${data.ncf!.trim()}');
+    }
+    if ((data.client?.document ?? '').trim().isNotEmpty) {
+      add('RNC cliente: ${data.client!.document.trim()}');
     }
     addMoneyLine('TOTAL', data.total);
     if (layout.showPaymentMethod &&

@@ -228,6 +228,11 @@ class CompanySettingsRepository {
         'evolutionApiBaseUrl': settings.evolutionApiBaseUrl,
         'evolutionApiInstanceName': settings.evolutionApiInstanceName,
         'whatsappWebhookEnabled': settings.whatsappWebhookEnabled,
+        'taxEnabled': settings.taxEnabled,
+        'defaultTaxId': settings.defaultTaxId,
+        'defaultTaxRate': settings.defaultTaxRate,
+        'pricesIncludeTax': settings.pricesIncludeTax,
+        'ncfEnabled': settings.ncfEnabled,
       };
       if (settings.openAiApiKey.trim().isNotEmpty) {
         payload['openAiApiKey'] = settings.openAiApiKey.trim();

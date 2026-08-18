@@ -72,6 +72,11 @@ class CompanySettings {
   final String productsSource;
   final bool productsReadOnly;
   final bool hasAdminAuthorizationPin;
+  final bool taxEnabled;
+  final String? defaultTaxId;
+  final double defaultTaxRate;
+  final bool pricesIncludeTax;
+  final bool ncfEnabled;
 
   const CompanySettings({
     required this.companyName,
@@ -103,6 +108,11 @@ class CompanySettings {
     this.productsSource = 'LOCAL',
     this.productsReadOnly = false,
     this.hasAdminAuthorizationPin = false,
+    this.taxEnabled = false,
+    this.defaultTaxId,
+    this.defaultTaxRate = 0,
+    this.pricesIncludeTax = false,
+    this.ncfEnabled = false,
   });
 
   factory CompanySettings.empty() {
@@ -136,6 +146,11 @@ class CompanySettings {
       productsSource: 'LOCAL',
       productsReadOnly: false,
       hasAdminAuthorizationPin: false,
+      taxEnabled: false,
+      defaultTaxId: null,
+      defaultTaxRate: 0,
+      pricesIncludeTax: false,
+      ncfEnabled: false,
     );
   }
 
@@ -169,6 +184,11 @@ class CompanySettings {
     String? productsSource,
     bool? productsReadOnly,
     bool? hasAdminAuthorizationPin,
+    bool? taxEnabled,
+    String? defaultTaxId,
+    double? defaultTaxRate,
+    bool? pricesIncludeTax,
+    bool? ncfEnabled,
     bool clearLogo = false,
   }) {
     return CompanySettings(
@@ -210,6 +230,11 @@ class CompanySettings {
       productsReadOnly: productsReadOnly ?? this.productsReadOnly,
       hasAdminAuthorizationPin:
           hasAdminAuthorizationPin ?? this.hasAdminAuthorizationPin,
+      taxEnabled: taxEnabled ?? this.taxEnabled,
+      defaultTaxId: defaultTaxId ?? this.defaultTaxId,
+      defaultTaxRate: defaultTaxRate ?? this.defaultTaxRate,
+      pricesIncludeTax: pricesIncludeTax ?? this.pricesIncludeTax,
+      ncfEnabled: ncfEnabled ?? this.ncfEnabled,
     );
   }
 
@@ -243,6 +268,11 @@ class CompanySettings {
     'productsSource': productsSource,
     'productsReadOnly': productsReadOnly,
     'hasAdminAuthorizationPin': hasAdminAuthorizationPin,
+    'taxEnabled': taxEnabled,
+    'defaultTaxId': defaultTaxId,
+    'defaultTaxRate': defaultTaxRate,
+    'pricesIncludeTax': pricesIncludeTax,
+    'ncfEnabled': ncfEnabled,
   };
 
   factory CompanySettings.fromMap(Map<String, dynamic> map) {
@@ -290,6 +320,17 @@ class CompanySettings {
       productsSource: (map['productsSource'] ?? 'LOCAL').toString(),
       productsReadOnly: map['productsReadOnly'] == true,
       hasAdminAuthorizationPin: map['hasAdminAuthorizationPin'] == true,
+      taxEnabled: map['taxEnabled'] == true,
+      defaultTaxId: map['defaultTaxId']?.toString(),
+      defaultTaxRate: _double(map['defaultTaxRate']),
+      pricesIncludeTax: map['pricesIncludeTax'] == true,
+      ncfEnabled: map['ncfEnabled'] == true,
     );
   }
+}
+
+double _double(dynamic value) {
+  if (value is num) return value.toDouble();
+  if (value == null) return 0;
+  return double.tryParse(value.toString()) ?? 0;
 }

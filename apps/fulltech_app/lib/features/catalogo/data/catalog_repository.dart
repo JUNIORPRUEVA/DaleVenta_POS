@@ -515,6 +515,9 @@ class CatalogRepository {
     String? fotoUrl,
     String? categoria,
     String? operationId,
+    String? taxTreatment,
+    double? taxRate,
+    String? taxPriceMode,
   }) {
     final cleanCode = codigo?.trim();
     final safeCode = cleanCode?.isEmpty == true ? null : cleanCode;
@@ -532,6 +535,11 @@ class CatalogRepository {
         'operationId': operationId!.trim(),
       if ((fotoUrl ?? '').trim().isNotEmpty) 'fotoUrl': fotoUrl!.trim(),
       'categoria': categoria,
+      if ((taxTreatment ?? '').trim().isNotEmpty)
+        'taxTreatment': taxTreatment!.trim(),
+      if (taxRate != null) 'taxRate': taxRate,
+      if ((taxPriceMode ?? '').trim().isNotEmpty)
+        'taxPriceMode': taxPriceMode!.trim(),
     };
   }
 

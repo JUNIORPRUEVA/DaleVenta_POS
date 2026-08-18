@@ -43,6 +43,11 @@ class TicketData {
     this.subtotal,
     this.discount = 0,
     this.itbis = 0,
+    this.taxableBase = 0,
+    this.exemptAmount = 0,
+    this.taxIncluded = false,
+    this.ncf,
+    this.fiscalVoucherType,
     this.note,
     this.isCopy = false,
     this.customLines,
@@ -59,6 +64,11 @@ class TicketData {
   final double? subtotal;
   final double discount;
   final double itbis;
+  final double taxableBase;
+  final double exemptAmount;
+  final bool taxIncluded;
+  final String? ncf;
+  final String? fiscalVoucherType;
   final String? note;
   final bool isCopy;
   final List<String>? customLines;
@@ -90,13 +100,20 @@ class TicketData {
           )
           .toList(growable: false),
       total: sale.totalSold,
-      subtotal: saleItems.fold<double>(
-        0,
-        (sum, item) => sum + item.subtotalSold,
-      ),
+      subtotal: sale.fiscalTaxEnabled && sale.taxableBase > 0
+          ? sale.taxableBase
+          : saleItems.fold<double>(0, (sum, item) => sum + item.subtotalSold),
+      itbis: sale.taxAmount,
+      taxableBase: sale.taxableBase,
+      exemptAmount: sale.exemptAmount,
+      discount: sale.discountAmount,
+      taxIncluded: sale.fiscalPriceMode == 'TAX_INCLUDED',
+      ncf: sale.ncf,
+      fiscalVoucherType: sale.fiscalVoucherType,
       client: ClientInfo(
         name: sale.customerName ?? 'Consumidor Final',
         phone: sale.customerPhone ?? '',
+        document: sale.fiscalCustomerTaxId ?? '',
       ),
       cashierName: cashierName.isEmpty ? 'Cajero' : cashierName,
       note: sale.note,

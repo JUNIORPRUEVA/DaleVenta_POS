@@ -19,5 +19,16 @@ export class CreateClientDto extends ClientLocationFieldsDto {
   @IsOptional()
   @IsString()
   notas?: string;
-}
 
+  @IsOptional()
+  @IsString()
+  taxId?: string;
+
+  @IsOptional()
+  @IsString()
+  businessName?: string;
+
+  @IsOptional()
+  @IsString()
+  taxIdType?: string;
+}

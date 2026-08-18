@@ -12,6 +12,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { PrismaService } from "../prisma/prisma.service";
 import { CatalogRealtimeRelayService } from "../products/catalog-realtime-relay.service";
+import { TaxService } from "../tax/tax.service";
+import { NcfService } from "../tax/ncf.service";
 import {
   isAdminLike,
   requireTenant,
@@ -26,6 +28,8 @@ export class SalesService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly realtime: CatalogRealtimeRelayService,
+    private readonly taxes: TaxService,
+    private readonly ncf: NcfService,
   ) {}
 
   private saleInclude() {
@@ -35,6 +39,9 @@ export class SalesService {
           id: true,
           nombre: true,
           telefono: true,
+          taxId: true,
+          businessName: true,
+          taxIdType: true,
         },
       },
       user: {
@@ -49,6 +56,9 @@ export class SalesService {
           product: {
             select: {
               categoria: true,
+              taxTreatment: true,
+              taxRate: true,
+              taxPriceMode: true,
             },
           },
         },
@@ -416,14 +426,27 @@ export class SalesService {
       if (existing) return existing;
     }
 
+    let customerFiscalSnapshot: {
+      nombre: string;
+      taxId: string | null;
+      businessName: string | null;
+      direccion: string | null;
+    } | null = null;
     if (customerId) {
       try {
         const customer = await this.prisma.client.findFirst({
           where: { id: customerId, companyId, isDeleted: false },
+          select: {
+            nombre: true,
+            taxId: true,
+            businessName: true,
+            direccion: true,
+          },
         });
         if (!customer) {
           throw new BadRequestException("Cliente inválido");
         }
+        customerFiscalSnapshot = customer;
       } catch (error) {
         if (!this.isSchemaMismatch(error)) throw error;
       }
@@ -443,6 +466,9 @@ export class SalesService {
       imagen: string | null;
       costo: Prisma.Decimal;
       stock: Prisma.Decimal;
+      taxTreatment: "INHERIT" | "TAXABLE" | "EXEMPT";
+      taxRate: Prisma.Decimal | null;
+      taxPriceMode: "NO_TAX" | "TAX_ADDED" | "TAX_INCLUDED" | null;
     }> = [];
     if (productIds.length) {
       try {
@@ -454,6 +480,9 @@ export class SalesService {
             imagen: true,
             costo: true,
             stock: true,
+            taxTreatment: true,
+            taxRate: true,
+            taxPriceMode: true,
           },
         });
       } catch (error) {
@@ -470,15 +499,36 @@ export class SalesService {
       this.normalizeItem(item, index, productMap),
     );
 
-    let totalSold = new Prisma.Decimal(0);
+    const fiscalSettings = await this.taxes.getCompanyFiscalSettings(companyId);
+    const defaultPriceMode = this.taxes.resolvePriceMode(fiscalSettings);
+    const taxCalculation = this.taxes.calculatorService.calculate({
+      taxEnabled: fiscalSettings.taxEnabled,
+      defaultTaxRate: fiscalSettings.defaultTaxRate,
+      defaultPriceMode,
+      globalDiscountAmount: dto.globalDiscountAmount ?? 0,
+      lines: normalizedItems.map((item) => ({
+        description: item.productNameSnapshot,
+        quantity: item.qty,
+        unitPrice: item.priceSoldUnit,
+        taxTreatment: item.taxTreatment,
+        taxRate: item.taxRate ?? fiscalSettings.defaultTaxRate,
+        priceMode: item.taxPriceMode ?? defaultPriceMode,
+      })),
+    });
+
+    let totalSold = fiscalSettings.taxEnabled
+      ? taxCalculation.total
+      : new Prisma.Decimal(0);
     let totalCost = new Prisma.Decimal(0);
     let totalProfit = new Prisma.Decimal(0);
 
     for (const item of normalizedItems) {
-      totalSold = totalSold.plus(item.subtotalSold);
+      if (!fiscalSettings.taxEnabled) {
+        totalSold = totalSold.plus(item.subtotalSold);
+      }
       totalCost = totalCost.plus(item.subtotalCost);
-      totalProfit = totalProfit.plus(item.profit);
     }
+    totalProfit = totalSold.minus(totalCost);
 
     const expectedTotalSold =
       dto.expectedTotalSold === undefined || dto.expectedTotalSold === null
@@ -489,6 +539,7 @@ export class SalesService {
       expectedTotalSold &&
       expectedTotalSold.greaterThanOrEqualTo(0) &&
       totalSold.greaterThan(0) &&
+      !fiscalSettings.taxEnabled &&
       totalSold.minus(expectedTotalSold).abs().greaterThan(0.009)
     ) {
       let remainingSold = expectedTotalSold;
@@ -543,6 +594,34 @@ export class SalesService {
       throw new BadRequestException("Debes abrir caja antes de facturar.");
     }
 
+    const requestedVoucherType = dto.fiscalVoucherType?.trim()
+      ? this.ncf.normalizeType(dto.fiscalVoucherType)
+      : null;
+    const fiscalCustomerTaxId =
+      dto.fiscalCustomerTaxId?.trim() ||
+      customerFiscalSnapshot?.taxId?.trim() ||
+      null;
+    const fiscalCustomerName =
+      dto.fiscalCustomerName?.trim() ||
+      customerFiscalSnapshot?.businessName?.trim() ||
+      customerFiscalSnapshot?.nombre?.trim() ||
+      null;
+
+    if (requestedVoucherType && !fiscalSettings.ncfEnabled) {
+      throw new BadRequestException("Los comprobantes fiscales no están activados para esta empresa.");
+    }
+
+    if (fiscalSettings.ncfEnabled && requestedVoucherType) {
+      this.taxes.calculatorService.validateFiscalCustomer({
+        voucherType: requestedVoucherType,
+        customerTaxId: fiscalCustomerTaxId,
+        customerBusinessName: fiscalCustomerName,
+      });
+      if (requestedVoucherType === "B02") {
+        // B02 is allowed for final consumers; customer fiscal data is optional.
+      }
+    }
+
     const payment = this.normalizeSalePayment(dto, totalSold);
     const {
       paymentMethod,
@@ -574,6 +653,14 @@ export class SalesService {
           }
         }
 
+        const reservedNcf = requestedVoucherType
+          ? await this.ncf.reserveNextNcf(tx, {
+              companyId,
+              userId: user.id,
+              voucherType: requestedVoucherType,
+            })
+          : null;
+
         const sale = await tx.sale.create({
           data: {
             userId: user.id,
@@ -601,21 +688,44 @@ export class SalesService {
                   : "paid"
                 : "none",
             totalSold,
+            fiscalTaxEnabled: fiscalSettings.taxEnabled,
+            fiscalPriceMode: defaultPriceMode,
+            taxableBase: taxCalculation.taxableBase,
+            taxAmount: taxCalculation.taxAmount,
+            exemptAmount: taxCalculation.exemptAmount,
+            discountAmount: taxCalculation.discountAmount,
+            fiscalVoucherType: requestedVoucherType,
+            ncf: reservedNcf?.ncf ?? null,
+            fiscalCustomerTaxId,
+            fiscalCustomerName,
             totalCost,
             totalProfit,
             commissionRate,
             commissionAmount,
             items: {
-              create: normalizedItems.map((item) => ({
+              create: normalizedItems.map((item, index) => ({
+                ...(() => {
+                  const taxLine = taxCalculation.lines[index];
+                  return {
+                    grossAmount: taxLine?.grossAmount ?? item.subtotalSold,
+                    lineDiscountAmount: taxLine?.discountAmount ?? new Prisma.Decimal(0),
+                    taxableBase: taxLine?.taxableBase ?? new Prisma.Decimal(0),
+                    taxRate: taxLine?.taxRate ?? new Prisma.Decimal(0),
+                    taxAmount: taxLine?.taxAmount ?? new Prisma.Decimal(0),
+                    exemptAmount: taxLine?.exemptAmount ?? item.subtotalSold,
+                    taxIncluded: taxLine?.taxIncluded ?? false,
+                    taxExempt: taxLine?.taxExempt ?? true,
+                    subtotalSold: taxLine?.lineTotal ?? item.subtotalSold,
+                    profit: (taxLine?.lineTotal ?? item.subtotalSold).minus(item.subtotalCost),
+                  };
+                })(),
                 productId: item.productId,
                 productNameSnapshot: item.productNameSnapshot,
                 productImageSnapshot: item.productImageSnapshot,
                 qty: item.qty,
                 priceSoldUnit: item.priceSoldUnit,
                 costUnitSnapshot: item.costUnitSnapshot,
-                subtotalSold: item.subtotalSold,
                 subtotalCost: item.subtotalCost,
-                profit: item.profit,
               })),
             },
           },
@@ -638,6 +748,17 @@ export class SalesService {
           });
         }
 
+        if (reservedNcf) {
+          await this.ncf.markIssued(tx, {
+            companyId,
+            sequenceId: reservedNcf.sequenceId,
+            saleId: sale.id,
+            userId: user.id,
+            ncf: reservedNcf.ncf,
+            type: reservedNcf.type,
+          });
+        }
+
         return sale;
       });
       this.emitSaleEvent(companyId, "sale.created", sale.id, {
@@ -647,11 +768,100 @@ export class SalesService {
       });
       return sale;
     } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002" &&
+        clientRequestId
+      ) {
+        const existing = await this.prisma.sale.findFirst({
+          where: { companyId, clientRequestId },
+          include: this.saleInclude(),
+        });
+        if (existing) return existing;
+        throw new BadRequestException(
+          "No se pudo registrar la venta porque ya existe una solicitud fiscal con el mismo identificador.",
+        );
+      }
       if (!this.isSchemaMismatch(error)) throw error;
       throw new BadRequestException(
         "El módulo de ventas no está sincronizado con la base de datos.",
       );
     }
+  }
+
+  async calculate(user: TenantUser, dto: CreateSaleDto) {
+    const companyId = requireTenant(user);
+    if (!dto.items.length) {
+      throw new BadRequestException("La venta requiere al menos 1 item");
+    }
+
+    const productIds = Array.from(
+      new Set(
+        dto.items
+          .map((item) => item.productId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
+    const products = productIds.length
+      ? await this.prisma.product.findMany({
+          where: { id: { in: productIds }, companyId },
+          select: {
+            id: true,
+            nombre: true,
+            imagen: true,
+            costo: true,
+            stock: true,
+            taxTreatment: true,
+            taxRate: true,
+            taxPriceMode: true,
+          },
+        })
+      : [];
+    const productMap = new Map(products.map((product) => [product.id, product]));
+    const normalizedItems = dto.items.map((item, index) =>
+      this.normalizeItem(item, index, productMap),
+    );
+    const fiscalSettings = await this.taxes.getCompanyFiscalSettings(companyId);
+    const defaultPriceMode = this.taxes.resolvePriceMode(fiscalSettings);
+    const calculation = this.taxes.calculatorService.calculate({
+      taxEnabled: fiscalSettings.taxEnabled,
+      defaultTaxRate: fiscalSettings.defaultTaxRate,
+      defaultPriceMode,
+      globalDiscountAmount: dto.globalDiscountAmount ?? 0,
+      lines: normalizedItems.map((item) => ({
+        description: item.productNameSnapshot,
+        quantity: item.qty,
+        unitPrice: item.priceSoldUnit,
+        taxTreatment: item.taxTreatment,
+        taxRate: item.taxRate ?? fiscalSettings.defaultTaxRate,
+        priceMode: item.taxPriceMode ?? defaultPriceMode,
+      })),
+    });
+    return {
+      taxEnabled: fiscalSettings.taxEnabled,
+      priceMode: defaultPriceMode,
+      subtotal: this.toNumber(calculation.subtotal),
+      taxableBase: this.toNumber(calculation.taxableBase),
+      exemptAmount: this.toNumber(calculation.exemptAmount),
+      taxAmount: this.toNumber(calculation.taxAmount),
+      discountTotal: this.toNumber(calculation.discountAmount),
+      grandTotal: this.toNumber(calculation.total),
+      lines: calculation.lines.map((line) => ({
+        index: line.index,
+        description: line.description,
+        quantity: this.toNumber(line.quantity),
+        unitPrice: this.toNumber(line.unitPrice),
+        grossAmount: this.toNumber(line.grossAmount),
+        discount: this.toNumber(line.discountAmount),
+        taxableBase: this.toNumber(line.taxableBase),
+        taxRate: this.toNumber(line.taxRate),
+        tax: this.toNumber(line.taxAmount),
+        exemptAmount: this.toNumber(line.exemptAmount),
+        total: this.toNumber(line.lineTotal),
+        taxIncluded: line.taxIncluded,
+        taxExempt: line.taxExempt,
+      })),
+    };
   }
 
   async createInvoicePdfShareLink(
@@ -943,6 +1153,9 @@ export class SalesService {
         imagen: string | null;
         costo: Prisma.Decimal;
         stock: Prisma.Decimal;
+        taxTreatment: "INHERIT" | "TAXABLE" | "EXEMPT";
+        taxRate: Prisma.Decimal | null;
+        taxPriceMode: "NO_TAX" | "TAX_ADDED" | "TAX_INCLUDED" | null;
       }
     >,
   ) {
@@ -980,6 +1193,9 @@ export class SalesService {
         subtotalSold,
         subtotalCost,
         profit,
+        taxTreatment: product.taxTreatment,
+        taxRate: product.taxRate,
+        taxPriceMode: product.taxPriceMode,
       };
     }
 
@@ -1015,6 +1231,9 @@ export class SalesService {
       subtotalSold,
       subtotalCost,
       profit,
+      taxTreatment: "INHERIT" as const,
+      taxRate: null,
+      taxPriceMode: null,
     };
   }
 

@@ -122,6 +122,14 @@ class SaleItemModel {
   final double subtotalCost;
   final double profit;
   final String? category;
+  final double grossAmount;
+  final double lineDiscountAmount;
+  final double taxableBase;
+  final double taxRate;
+  final double taxAmount;
+  final double exemptAmount;
+  final bool taxIncluded;
+  final bool taxExempt;
 
   const SaleItemModel({
     required this.id,
@@ -135,6 +143,14 @@ class SaleItemModel {
     required this.subtotalCost,
     required this.profit,
     required this.category,
+    this.grossAmount = 0,
+    this.lineDiscountAmount = 0,
+    this.taxableBase = 0,
+    this.taxRate = 0,
+    this.taxAmount = 0,
+    this.exemptAmount = 0,
+    this.taxIncluded = false,
+    this.taxExempt = true,
   });
 
   factory SaleItemModel.fromJson(Map<String, dynamic> json) {
@@ -162,6 +178,14 @@ class SaleItemModel {
       subtotalCost: _toDouble(json['subtotalCost']),
       profit: _toDouble(json['profit']),
       category: category?.trim().isEmpty ?? true ? null : category!.trim(),
+      grossAmount: _toDouble(json['grossAmount']),
+      lineDiscountAmount: _toDouble(json['lineDiscountAmount']),
+      taxableBase: _toDouble(json['taxableBase']),
+      taxRate: _toDouble(json['taxRate']),
+      taxAmount: _toDouble(json['taxAmount']),
+      exemptAmount: _toDouble(json['exemptAmount']),
+      taxIncluded: json['taxIncluded'] == true,
+      taxExempt: json['taxExempt'] != false,
     );
   }
 
@@ -190,6 +214,16 @@ class SaleModel {
   final String creditStatus;
   final bool isDeleted;
   final DateTime? deletedAt;
+  final bool fiscalTaxEnabled;
+  final String fiscalPriceMode;
+  final double taxableBase;
+  final double taxAmount;
+  final double exemptAmount;
+  final double discountAmount;
+  final String? fiscalVoucherType;
+  final String? ncf;
+  final String? fiscalCustomerTaxId;
+  final String? fiscalCustomerName;
   final List<SaleItemModel> items;
 
   const SaleModel({
@@ -214,6 +248,16 @@ class SaleModel {
     required this.creditStatus,
     required this.isDeleted,
     required this.deletedAt,
+    this.fiscalTaxEnabled = false,
+    this.fiscalPriceMode = 'NO_TAX',
+    this.taxableBase = 0,
+    this.taxAmount = 0,
+    this.exemptAmount = 0,
+    this.discountAmount = 0,
+    this.fiscalVoucherType,
+    this.ncf,
+    this.fiscalCustomerTaxId,
+    this.fiscalCustomerName,
     required this.items,
   });
 
@@ -269,6 +313,16 @@ class SaleModel {
       deletedAt: json['deletedAt'] != null
           ? DateTime.tryParse(json['deletedAt'].toString())
           : null,
+      fiscalTaxEnabled: json['fiscalTaxEnabled'] == true,
+      fiscalPriceMode: (json['fiscalPriceMode'] ?? 'NO_TAX').toString(),
+      taxableBase: _toDouble(json['taxableBase']),
+      taxAmount: _toDouble(json['taxAmount']),
+      exemptAmount: _toDouble(json['exemptAmount']),
+      discountAmount: _toDouble(json['discountAmount']),
+      fiscalVoucherType: json['fiscalVoucherType']?.toString(),
+      ncf: json['ncf']?.toString(),
+      fiscalCustomerTaxId: json['fiscalCustomerTaxId']?.toString(),
+      fiscalCustomerName: json['fiscalCustomerName']?.toString(),
       items: rawItems
           .whereType<Map>()
           .map((item) => SaleItemModel.fromJson(item.cast<String, dynamic>()))
@@ -331,6 +385,9 @@ class SaleDraftItem {
       'qty': qty,
       'priceSoldUnit': priceSoldUnit,
       if (productId == null) 'costUnitSnapshot': costUnitSnapshot,
+      if (product != null) 'taxTreatment': product!.taxTreatment,
+      if (product?.taxRate != null) 'taxRate': product!.taxRate,
+      if (product?.taxPriceMode != null) 'taxPriceMode': product!.taxPriceMode,
     };
   }
 

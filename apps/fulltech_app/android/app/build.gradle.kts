@@ -30,6 +30,12 @@ android {
         versionName = flutter.versionName
     }
 
+    packaging {
+        jniLibs {
+            pickFirsts.add("lib/**/libsqlite3.so")
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.

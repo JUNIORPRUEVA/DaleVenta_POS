@@ -691,6 +691,9 @@ class TicketBuilder {
         value: ReceiptTextUtils.money(data.resolvedSubtotal),
         bold: false,
       ));
+      if (data.taxIncluded && data.itbis > 0) {
+        rows.add((label: 'ITBIS INCLUIDO', value: '', bold: false));
+      }
       if (layout.showDiscounts && data.discount > 0) {
         rows.add((
           label: 'DESCUENTO',
@@ -702,6 +705,13 @@ class TicketBuilder {
         rows.add((
           label: 'ITBIS',
           value: ReceiptTextUtils.money(data.itbis),
+          bold: false,
+        ));
+      }
+      if (data.exemptAmount > 0) {
+        rows.add((
+          label: 'EXENTO',
+          value: ReceiptTextUtils.money(data.exemptAmount),
           bold: false,
         ));
       }
