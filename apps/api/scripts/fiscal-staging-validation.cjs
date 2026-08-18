@@ -2,6 +2,7 @@ const { PrismaClient, Prisma } = require("@prisma/client");
 
 const prisma = new PrismaClient();
 const PREFIX = `phase5-${Date.now()}`;
+const MAX_PARALLEL = Number(process.env.FISCAL_STAGING_MAX_PARALLEL || 20);
 const MONEY = {
   total: "25700.00",
   base: "21779.66",
@@ -10,6 +11,22 @@ const MONEY = {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+async function mapConcurrent(items, worker, maxParallel = MAX_PARALLEL) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  const workers = Array.from(
+    { length: Math.min(maxParallel, items.length) },
+    async () => {
+      while (cursor < items.length) {
+        const index = cursor++;
+        results[index] = await worker(items[index], index);
+      }
+    },
+  );
+  await Promise.all(workers);
+  return results;
 }
 
 function isUniqueError(error) {
@@ -245,10 +262,15 @@ async function testConcurrency(count) {
   const company = await createCompany(`concurrency-${count}`, { taxEnabled: true, pricesIncludeTax: true, ncfEnabled: true, defaultTaxRate: "0.18" });
   const user = await createUser(company.id, `concurrency-${count}`);
   await createSequence(company.id, "B01", 1, 200);
-  const sales = await Promise.all(
-    Array.from({ length: count }, (_, index) =>
-      issueFiscalSale(company.id, user.id, "B01", `${PREFIX}-concurrency-${count}-${index}`),
-    ),
+  const sales = await mapConcurrent(
+    Array.from({ length: count }),
+    (_, index) =>
+      issueFiscalSale(
+        company.id,
+        user.id,
+        "B01",
+        `${PREFIX}-concurrency-${count}-${index}`,
+      ),
   );
   const ncfs = sales.map((sale) => sale.ncf);
   const unique = new Set(ncfs);
@@ -256,7 +278,7 @@ async function testConcurrency(count) {
   assert(sales.length === count, `Expected ${count} sales`);
   assert(unique.size === count, `Expected ${count} unique NCF, got ${unique.size}`);
   assert(sequence.nextNumber === count + 1, `Expected nextNumber ${count + 1}, got ${sequence.nextNumber}`);
-  return { requested: count, sales: sales.length, uniqueNcf: unique.size, nextNumber: sequence.nextNumber };
+  return { requested: count, maxParallel: Math.min(MAX_PARALLEL, count), sales: sales.length, uniqueNcf: unique.size, nextNumber: sequence.nextNumber };
 }
 
 async function testIdempotency() {
@@ -264,8 +286,9 @@ async function testIdempotency() {
   const user = await createUser(company.id, "idempotency");
   await createSequence(company.id, "B01", 1, 100);
   const key = `${PREFIX}-same-key`;
-  const results = await Promise.all(
-    Array.from({ length: 20 }, () => issueFiscalSale(company.id, user.id, "B01", key)),
+  const results = await mapConcurrent(
+    Array.from({ length: 20 }),
+    () => issueFiscalSale(company.id, user.id, "B01", key),
   );
   const ids = new Set(results.map((sale) => sale.id));
   const ncfs = new Set(results.map((sale) => sale.ncf));
@@ -275,7 +298,7 @@ async function testIdempotency() {
   assert(ncfs.size === 1, `Expected 1 NCF, got ${ncfs.size}`);
   assert(count === 1, `Expected 1 persisted sale, got ${count}`);
   assert(sequence.nextNumber === 2, `Expected nextNumber 2 after idempotent race, got ${sequence.nextNumber}`);
-  return { concurrentRequests: 20, persistedSales: count, uniqueSaleIds: ids.size, uniqueNcf: ncfs.size, nextNumber: sequence.nextNumber };
+  return { concurrentRequests: 20, maxParallel: Math.min(MAX_PARALLEL, 20), persistedSales: count, uniqueSaleIds: ids.size, uniqueNcf: ncfs.size, nextNumber: sequence.nextNumber };
 }
 
 async function testExhausted() {

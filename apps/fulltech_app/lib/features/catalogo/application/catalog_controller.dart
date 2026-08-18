@@ -61,6 +61,9 @@ class CatalogImportDraft {
     required this.stock,
     required this.categoria,
     this.fotoUrl,
+    this.taxTreatment,
+    this.taxRate,
+    this.taxPriceMode,
   });
 
   final String nombre;
@@ -70,6 +73,9 @@ class CatalogImportDraft {
   final double stock;
   final String categoria;
   final String? fotoUrl;
+  final String? taxTreatment;
+  final double? taxRate;
+  final String? taxPriceMode;
 }
 
 class CatalogImportProgress {
@@ -409,6 +415,9 @@ class CatalogController extends StateNotifier<CatalogState> {
             stock: draft.stock,
             categoria: draft.categoria,
             fotoUrl: fotoUrl ?? existing.fotoUrl,
+            taxTreatment: draft.taxTreatment,
+            taxRate: draft.taxRate,
+            taxPriceMode: draft.taxPriceMode,
             operationId: _newProductOperationId(
               'import-update-${updatedCount + 1}',
               productId: existing.id,
@@ -444,6 +453,9 @@ class CatalogController extends StateNotifier<CatalogState> {
             stock: draft.stock,
             categoria: draft.categoria,
             fotoUrl: fotoUrl,
+            taxTreatment: draft.taxTreatment,
+            taxRate: draft.taxRate,
+            taxPriceMode: draft.taxPriceMode,
             operationId: _newProductOperationId('import-create-${index + 1}'),
           );
           final createdCode = _normalizeImportCode(created.codigo);

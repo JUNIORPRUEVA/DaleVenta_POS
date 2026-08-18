@@ -16,6 +16,9 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
   int updates = 0;
   int deletes = 0;
   bool failDelete = false;
+  String? lastTaxTreatment;
+  double? lastTaxRate;
+  String? lastTaxPriceMode;
 
   @override
   Future<List<ProductModel>> fetchProducts({
@@ -41,6 +44,9 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
     bool skipLoader = false,
   }) async {
     creates += 1;
+    lastTaxTreatment = taxTreatment;
+    lastTaxRate = taxRate;
+    lastTaxPriceMode = taxPriceMode;
     final product = ProductModel(
       id: 'created-$creates',
       nombre: nombre,
@@ -50,6 +56,9 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
       stock: stock,
       categoria: categoria,
       fotoUrl: fotoUrl,
+      taxTreatment: taxTreatment ?? 'INHERIT',
+      taxRate: taxRate,
+      taxPriceMode: taxPriceMode,
     );
     products = [product, ...products];
     return product;
@@ -72,6 +81,9 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
     bool skipLoader = false,
   }) async {
     updates += 1;
+    lastTaxTreatment = taxTreatment;
+    lastTaxRate = taxRate;
+    lastTaxPriceMode = taxPriceMode;
     final product = ProductModel(
       id: id,
       nombre: nombre,
@@ -81,6 +93,9 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
       stock: stock,
       categoria: categoria,
       fotoUrl: fotoUrl,
+      taxTreatment: taxTreatment ?? 'INHERIT',
+      taxRate: taxRate,
+      taxPriceMode: taxPriceMode,
     );
     products = [
       for (final item in products)
@@ -201,6 +216,63 @@ void main() {
       expect(repo.updates, 0);
     },
   );
+
+  test('importación legacy sin columnas fiscales conserva predeterminado', () async {
+    final repo = _ImportFakeCatalogRepository([]);
+    final container = ProviderContainer(
+      overrides: [catalogRepositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+
+    final controller = container.read(catalogControllerProvider.notifier);
+    await controller.load();
+
+    final result = await controller.importProducts(const [
+      CatalogImportDraft(
+        nombre: 'Producto legacy',
+        codigo: 'LEG-001',
+        precio: 100,
+        costo: 50,
+        stock: 2,
+        categoria: 'General',
+      ),
+    ]);
+
+    expect(result.created, 1);
+    expect(repo.lastTaxTreatment, isNull);
+    expect(repo.products.single.taxTreatment, 'INHERIT');
+  });
+
+  test('importación fiscal pasa tratamiento tasa y modo al repository', () async {
+    final repo = _ImportFakeCatalogRepository([]);
+    final container = ProviderContainer(
+      overrides: [catalogRepositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+
+    final controller = container.read(catalogControllerProvider.notifier);
+    await controller.load();
+
+    final result = await controller.importProducts(const [
+      CatalogImportDraft(
+        nombre: 'Producto gravado',
+        codigo: 'FIS-001',
+        precio: 1180,
+        costo: 600,
+        stock: 1,
+        categoria: 'Fiscal',
+        taxTreatment: 'TAXABLE',
+        taxRate: 0.18,
+        taxPriceMode: 'TAX_INCLUDED',
+      ),
+    ]);
+
+    expect(result.created, 1);
+    expect(repo.lastTaxTreatment, 'TAXABLE');
+    expect(repo.lastTaxRate, 0.18);
+    expect(repo.lastTaxPriceMode, 'TAX_INCLUDED');
+    expect(repo.products.single.taxTreatment, 'TAXABLE');
+  });
 
   test('eliminación optimista quita producto al instante', () async {
     final repo = _ImportFakeCatalogRepository([

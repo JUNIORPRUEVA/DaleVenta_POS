@@ -70,6 +70,65 @@ String _csvNumber(num? value) {
   return number.toStringAsFixed(2);
 }
 
+String _normalizeCsvHeader(String value) {
+  return value
+      .replaceAll('\ufeff', '')
+      .trim()
+      .toLowerCase()
+      .replaceAll('á', 'a')
+      .replaceAll('é', 'e')
+      .replaceAll('í', 'i')
+      .replaceAll('ó', 'o')
+      .replaceAll('ú', 'u');
+}
+
+String _fiscalTreatmentLabel(String value) {
+  switch (value.trim().toUpperCase()) {
+    case 'TAXABLE':
+      return 'Gravado';
+    case 'EXEMPT':
+      return 'Exento';
+    default:
+      return 'Predeterminado';
+  }
+}
+
+String _fiscalPriceModeLabel(String? value) {
+  switch ((value ?? '').trim().toUpperCase()) {
+    case 'TAX_INCLUDED':
+      return 'ITBIS incluido';
+    case 'TAX_ADDED':
+      return '+ ITBIS';
+    case 'NO_TAX':
+      return 'Sin ITBIS';
+    default:
+      return 'Predeterminado empresa';
+  }
+}
+
+String? _parseFiscalTreatment(String value) {
+  final normalized = _normalizeCsvHeader(value);
+  if (normalized.isEmpty || normalized == 'predeterminado') return 'INHERIT';
+  if (normalized == 'gravado' || normalized == 'taxable') return 'TAXABLE';
+  if (normalized == 'exento' || normalized == 'exempt') return 'EXEMPT';
+  return null;
+}
+
+String? _parseFiscalPriceMode(String value) {
+  final normalized = _normalizeCsvHeader(value);
+  if (normalized.isEmpty || normalized == 'predeterminado empresa') return null;
+  if (normalized == 'itbis incluido' || normalized == 'tax included') {
+    return 'TAX_INCLUDED';
+  }
+  if (normalized == '+ itbis' ||
+      normalized == 'mas itbis' ||
+      normalized == 'tax added') {
+    return 'TAX_ADDED';
+  }
+  if (normalized == 'sin itbis' || normalized == 'no tax') return 'NO_TAX';
+  return null;
+}
+
 String _buildCatalogCsv(List<ProductModel> products) {
   const headers = [
     'codigo',
@@ -80,6 +139,9 @@ String _buildCatalogCsv(List<ProductModel> products) {
     'stock',
     'descripcion',
     'fotoUrl',
+    'tratamiento fiscal',
+    'tasa itbis',
+    'modo precio fiscal',
   ];
   final lines = <String>[
     headers.map(_csvCell).join(';'),
@@ -96,6 +158,9 @@ String _buildCatalogCsv(List<ProductModel> products) {
             product.fotoUrl ??
             product.originalFotoUrl ??
             '',
+        _fiscalTreatmentLabel(product.taxTreatment),
+        product.taxRate == null ? '' : _csvNumber(product.taxRate),
+        _fiscalPriceModeLabel(product.taxPriceMode),
       ].map(_csvCell).join(';'),
   ];
   return '\ufeff${lines.join('\r\n')}';
@@ -1055,6 +1120,18 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
     final categoryIndex = hasHeader
         ? indexOf(['categoria', 'category', 'familia'], 4)
         : 4;
+    final taxTreatmentIndex = hasHeader
+        ? indexOf(['tratamiento fiscal', 'tax treatment', 'taxTreatment'], -1)
+        : -1;
+    final taxRateIndex = hasHeader
+        ? indexOf(['tasa itbis', 'tasa', 'tax rate', 'taxRate'], -1)
+        : -1;
+    final taxPriceModeIndex = hasHeader
+        ? indexOf(
+            ['modo precio fiscal', 'modo precio', 'tax price mode', 'taxPriceMode'],
+            -1,
+          )
+        : -1;
 
     final dataLines = hasHeader ? lines.skip(1) : lines;
     final drafts = <CatalogImportDraft>[];
@@ -1071,6 +1148,9 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
       final categoria = cell(categoryIndex).isEmpty
           ? 'Sin categoría'
           : cell(categoryIndex);
+      final taxTreatment = _parseFiscalTreatment(cell(taxTreatmentIndex));
+      final taxRate = _parseCatalogNumber(cell(taxRateIndex));
+      final taxPriceMode = _parseFiscalPriceMode(cell(taxPriceModeIndex));
 
       if (nombre.isEmpty || precio == null || costo == null) continue;
       drafts.add(
@@ -1081,22 +1161,13 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
           costo: costo,
           stock: stock,
           categoria: categoria,
+          taxTreatment: taxTreatment,
+          taxRate: taxRate,
+          taxPriceMode: taxPriceMode,
         ),
       );
     }
     return drafts;
-  }
-
-  String _normalizeCsvHeader(String value) {
-    return value
-        .replaceAll('\ufeff', '')
-        .trim()
-        .toLowerCase()
-        .replaceAll('á', 'a')
-        .replaceAll('é', 'e')
-        .replaceAll('í', 'i')
-        .replaceAll('ó', 'o')
-        .replaceAll('ú', 'u');
   }
 
   List<String> _parseCsvLine(String line) {
