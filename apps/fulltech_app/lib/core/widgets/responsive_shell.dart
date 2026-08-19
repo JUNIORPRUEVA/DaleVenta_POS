@@ -88,9 +88,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     _lastAuthorizationCleanupLocation = location;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref
-          .read(adminAuthorizationProvider.notifier)
-          .clearIfInvalidForLocation(location);
+      ref.read(adminAuthorizationProvider.notifier).clearIfExpired();
     });
   }
 

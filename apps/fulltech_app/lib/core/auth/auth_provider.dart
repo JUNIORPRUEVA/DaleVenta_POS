@@ -310,6 +310,16 @@ class AuthController extends StateNotifier<AuthState> {
     );
   }
 
+  Future<UserModel?> refreshCurrentUser({bool silent = true}) async {
+    if (!state.isAuthenticated) return null;
+    final user = await ref
+        .read(authRepositoryProvider)
+        .getMeOrNull(silent: silent, allowCachedFallback: false);
+    if (user == null || !mounted) return null;
+    setUser(user);
+    return user;
+  }
+
   Future<AccountDeletionResult> deleteAccount({
     required String password,
     String? confirmationPhrase,

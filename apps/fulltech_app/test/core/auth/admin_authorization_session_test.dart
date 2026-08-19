@@ -28,10 +28,49 @@ void main() {
     );
 
     expect(controller.isAuthorizedForRoute('/users/abc/permissions'), isTrue);
-    expect(controller.isAuthorizedForRoute('/users/abc/permissions?x=1'), isTrue);
+    expect(
+      controller.isAuthorizedForRoute('/users/abc/permissions?x=1'),
+      isTrue,
+    );
     expect(controller.isAuthorizedForRoute('/users'), isFalse);
 
     controller.clearIfInvalidForLocation('/users');
     expect(controller.isAuthorizedForRoute('/users/abc/permissions'), isFalse);
+  });
+
+  test('route authorization is available immediately after granting', () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final controller = container.read(adminAuthorizationProvider.notifier);
+    controller.authorizeRoute(
+      const Duration(minutes: 10),
+      'token-route',
+      '/ventas/lista',
+    );
+
+    expect(controller.isAuthorizedForRoute('/ventas/lista'), isTrue);
+    expect(
+      container
+          .read(adminAuthorizationProvider)
+          .isAuthorizedForRoute('/ventas/lista'),
+      isTrue,
+    );
+  });
+
+  test('router refresh on the previous route does not consume route grant', () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final controller = container.read(adminAuthorizationProvider.notifier);
+    controller.authorizeRoute(
+      const Duration(minutes: 10),
+      'token-route',
+      '/ventas/lista',
+    );
+
+    controller.clearIfExpired();
+
+    expect(controller.isAuthorizedForRoute('/ventas/lista'), isTrue);
   });
 }

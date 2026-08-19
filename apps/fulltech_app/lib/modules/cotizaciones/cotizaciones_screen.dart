@@ -609,7 +609,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _clearDesktopShellFooter();
     _persistEditorDraftTimer?.cancel();
     _persistEditorDraftTimer = null;
-    _writeActiveDesktopDraft();
+    _writeActiveDesktopDraft(readTaxProvider: false);
     unawaited(_persistEditorDraft());
     WidgetsBinding.instance.removeObserver(this);
     if (_routeObserverSubscribed) {
@@ -1147,6 +1147,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     required String id,
     required String title,
     _DesktopTicketDraft? base,
+    bool? includeItbis,
   }) {
     return _DesktopTicketDraft(
       id: id,
@@ -1162,7 +1163,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       selectedClientName: _selectedClientName,
       selectedClientPhone: _selectedClientPhone,
       note: _note,
-      includeItbis: _quoteTaxEnabled,
+      includeItbis: includeItbis ?? _quoteTaxEnabled,
       fiscalVoucherType: '',
       fiscalVoucherNumber: '',
       fiscalVoucherDueDate: null,
@@ -1184,7 +1185,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     return null;
   }
 
-  void _writeActiveDesktopDraft() {
+  void _writeActiveDesktopDraft({bool readTaxProvider = true}) {
     final activeId = _activeDesktopTicketId;
     if (activeId == null || _desktopTickets.isEmpty) return;
     final index = _desktopTickets.indexWhere((ticket) => ticket.id == activeId);
@@ -1194,6 +1195,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       id: current.id,
       title: current.title,
       base: current,
+      includeItbis: readTaxProvider ? null : current.includeItbis,
     );
   }
 

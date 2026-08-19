@@ -69,8 +69,9 @@ final dioProvider = Provider<Dio>((ref) {
         final token = controller.tokenForRequest(options.uri.toString());
         if (token != null && token.isNotEmpty) {
           options.headers['x-admin-authorization'] = token;
-          options.extra['__admin_authorization_single_use'] =
-              ref.read(adminAuthorizationProvider).singleUse;
+          options.extra['__admin_authorization_single_use'] = ref
+              .read(adminAuthorizationProvider)
+              .singleUse;
         }
         handler.next(options);
       },
@@ -514,7 +515,10 @@ class AuthRepository {
     }
   }
 
-  Future<UserModel?> getMeOrNull({bool silent = false}) async {
+  Future<UserModel?> getMeOrNull({
+    bool silent = false,
+    bool allowCachedFallback = true,
+  }) async {
     // Widget tests (smoke test) should not block on secure storage/network.
     // Those calls can hang in tests and leave pending timeout timers.
     // Note: `bool.fromEnvironment('FLUTTER_TEST')` would require --dart-define;
@@ -557,11 +561,14 @@ class AuthRepository {
           return null;
         }
 
+        if (!allowCachedFallback) return null;
         return await _storage.getUserSnapshot();
       } on TimeoutException {
+        if (!allowCachedFallback) return null;
         return await _storage.getUserSnapshot();
       }
     } catch (_) {
+      if (!allowCachedFallback) return null;
       return await _storage.getUserSnapshot();
     }
   }

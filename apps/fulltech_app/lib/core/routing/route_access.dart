@@ -1,5 +1,6 @@
 import '../auth/app_permissions.dart';
 import '../auth/app_role.dart';
+import '../models/user_model.dart';
 import 'routes.dart';
 
 /// Maps routes to the permission required to access them.
@@ -157,6 +158,23 @@ class RouteAccess {
       return Routes.ventasLista;
     }
     if (hasPermission(role, AppPermission.viewCatalog)) {
+      return Routes.catalogo;
+    }
+
+    return Routes.profile;
+  }
+
+  static String defaultHomeForUser(UserModel? user) {
+    if (hasUserPermission(user, AppPermission.viewQuotes)) {
+      return Routes.cotizaciones;
+    }
+    if (hasUserPermission(user, AppPermission.viewClients)) {
+      return Routes.clientes;
+    }
+    if (hasUserPermission(user, AppPermission.viewSales)) {
+      return Routes.ventasLista;
+    }
+    if (hasUserPermission(user, AppPermission.viewCatalog)) {
       return Routes.catalogo;
     }
 

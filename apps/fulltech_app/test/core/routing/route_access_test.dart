@@ -1,6 +1,7 @@
 import 'package:daleventa_pos/core/auth/app_permissions.dart';
 import 'package:daleventa_pos/core/routing/route_access.dart';
 import 'package:daleventa_pos/core/routing/routes.dart';
+import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -29,12 +30,31 @@ void main() {
 
     test('keeps permission checks when location has query parameters', () {
       expect(
-        RouteAccess.permissionForLocation('${Routes.configuracion}?tab=empresa'),
+        RouteAccess.permissionForLocation(
+          '${Routes.configuracion}?tab=empresa',
+        ),
         AppPermission.manageSettings,
       );
       expect(
         RouteAccess.permissionForLocation('${Routes.apps}?source=menu'),
         AppPermission.manageSettings,
+      );
+    });
+
+    test('default home uses effective user permission overrides', () {
+      final cashierWithoutQuotes = UserModel(
+        id: 'employee-a',
+        email: 'employee-a@test.local',
+        nombreCompleto: 'Employee A',
+        telefono: '',
+        role: 'CAJERO',
+        companyId: 'company-a',
+        userPermissions: const {'viewQuotes': false, 'viewClients': true},
+      );
+
+      expect(
+        RouteAccess.defaultHomeForUser(cashierWithoutQuotes),
+        Routes.clientes,
       );
     });
   });

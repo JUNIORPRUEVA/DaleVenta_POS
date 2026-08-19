@@ -94,7 +94,8 @@ class AdminAuthorizationController
     _scheduleExpiry(capped);
   }
 
-  bool isAuthorizedForRoute(String location) => state.isAuthorizedForRoute(location);
+  bool isAuthorizedForRoute(String location) =>
+      state.isAuthorizedForRoute(location);
 
   String? tokenForRequest(String location) {
     return state.canAttachToRequest(location) ? state.token : null;
@@ -113,6 +114,13 @@ class AdminAuthorizationController
     }
     if (state.scope == AdminAuthorizationScope.route &&
         !state.isAuthorizedForRoute(location)) {
+      clear();
+    }
+  }
+
+  void clearIfExpired() {
+    if (!state.isAuthorized &&
+        (state.token != null || state.authorizedUntil != null)) {
       clear();
     }
   }

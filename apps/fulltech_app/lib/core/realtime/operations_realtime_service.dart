@@ -80,6 +80,24 @@ class CashRealtimeMessage {
   final String? businessDate;
 }
 
+class PermissionsRealtimeMessage {
+  const PermissionsRealtimeMessage({
+    required this.eventId,
+    required this.type,
+    required this.companyId,
+    required this.userId,
+    this.version,
+    this.updatedAt,
+  });
+
+  final String eventId;
+  final String type;
+  final String companyId;
+  final String userId;
+  final int? version;
+  final DateTime? updatedAt;
+}
+
 class OperationsRealtimeService {
   OperationsRealtimeService(this._storage);
 
@@ -96,6 +114,8 @@ class OperationsRealtimeService {
       StreamController<SalesRealtimeMessage>.broadcast();
   final StreamController<CashRealtimeMessage> _cashController =
       StreamController<CashRealtimeMessage>.broadcast();
+  final StreamController<PermissionsRealtimeMessage> _permissionsController =
+      StreamController<PermissionsRealtimeMessage>.broadcast();
   final Set<String> _seenEventIds = <String>{};
 
   io.Socket? _socket;
@@ -106,6 +126,8 @@ class OperationsRealtimeService {
   Stream<LicenseRealtimeMessage> get licenseStream => _licenseController.stream;
   Stream<SalesRealtimeMessage> get salesStream => _salesController.stream;
   Stream<CashRealtimeMessage> get cashStream => _cashController.stream;
+  Stream<PermissionsRealtimeMessage> get permissionsStream =>
+      _permissionsController.stream;
 
   /// Register a callback for incoming WhatsApp CRM messages.
   void onWhatsappMessage(void Function(Map<String, dynamic> data) callback) {
@@ -140,6 +162,23 @@ class OperationsRealtimeService {
           .setAuth({'token': token})
           .build(),
     );
+
+    socket.onConnect((_) {
+      final user = authState.user;
+      final companyId = user?.companyId?.trim() ?? '';
+      final userId = user?.id.trim() ?? '';
+      if (companyId.isEmpty || userId.isEmpty) return;
+      _permissionsController.add(
+        PermissionsRealtimeMessage(
+          eventId:
+              'permissions_socket_connect_${DateTime.now().microsecondsSinceEpoch}',
+          type: 'permissions.reconnect',
+          companyId: companyId,
+          userId: userId,
+          updatedAt: DateTime.now(),
+        ),
+      );
+    });
 
     socket.on('service.event', (data) {
       if (data is! Map) return;
@@ -299,6 +338,33 @@ class OperationsRealtimeService {
           type: payload['type']?.toString() ?? 'cash.updated',
           sessionId: _trimmedOrNull(payload['sessionId']),
           businessDate: _trimmedOrNull(payload['businessDate']),
+        ),
+      );
+    });
+
+    socket.on('permissions.updated', (data) {
+      if (data is! Map) return;
+      final payload = Map<String, dynamic>.from(data);
+      final eventId = payload['eventId']?.toString() ?? '';
+      if (eventId.isNotEmpty && !_seenEventIds.add(eventId)) {
+        return;
+      }
+      if (_seenEventIds.length > 300) {
+        _seenEventIds.remove(_seenEventIds.first);
+      }
+
+      final companyId = payload['companyId']?.toString().trim() ?? '';
+      final userId = payload['userId']?.toString().trim() ?? '';
+      if (companyId.isEmpty || userId.isEmpty) return;
+
+      _permissionsController.add(
+        PermissionsRealtimeMessage(
+          eventId: eventId,
+          type: payload['type']?.toString() ?? 'permissions.updated',
+          companyId: companyId,
+          userId: userId,
+          version: (payload['version'] as num?)?.toInt(),
+          updatedAt: DateTime.tryParse(payload['updatedAt']?.toString() ?? ''),
         ),
       );
     });

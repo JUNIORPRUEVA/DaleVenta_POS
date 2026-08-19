@@ -259,6 +259,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     final authState = ref.read(authStateProvider);
     if (authState.isAuthenticated) {
       unawaited(ref.read(operationsRealtimeServiceProvider).connect(authState));
+      unawaited(
+        ref.read(authStateProvider.notifier).refreshCurrentUser(silent: true),
+      );
       unawaited(_checkLicenseNow());
     }
   }

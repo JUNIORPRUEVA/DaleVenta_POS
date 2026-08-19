@@ -36,7 +36,6 @@ import '../ai_assistant/presentation/ai_screen.dart';
 import '../auth/admin_authorization_session.dart';
 import '../auth/auth_provider.dart';
 import '../auth/app_permissions.dart';
-import '../auth/app_role.dart';
 import 'app_route_observer.dart';
 import 'route_access.dart';
 import 'routes.dart';
@@ -89,9 +88,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         redirect: (context, state) {
           final auth = ref.read(authStateProvider);
           if (!auth.isAuthenticated) return Routes.login;
-          return RouteAccess.defaultHomeForRole(
-            auth.user?.appRole ?? AppRole.unknown,
-          );
+          return RouteAccess.defaultHomeForUser(auth.user);
         },
       ),
       GoRoute(
@@ -131,9 +128,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: Routes.configuracion,
-            redirect: (context, state) => _isDesktopSettingsLayout(context)
-                ? Routes.cotizaciones
-                : null,
+            redirect: (context, state) =>
+                _isDesktopSettingsLayout(context) ? Routes.cotizaciones : null,
             builder: (context, state) => const AccountSettingsScreen(),
           ),
           GoRoute(
@@ -142,8 +138,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: Routes.configuracionImpresora,
-            redirect: (context, state) =>
-                kIsWeb ? Routes.cotizaciones : null,
+            redirect: (context, state) => kIsWeb ? Routes.cotizaciones : null,
             builder: (context, state) => const AccountPrinterSettingsScreen(),
           ),
           GoRoute(
@@ -324,12 +319,9 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final auth = ref.read(authStateProvider);
       final isAuth = auth.isAuthenticated;
-      final role = auth.user?.appRole ?? AppRole.unknown;
       final loc = state.uri.toString();
       final path = state.uri.path;
-      ref
-          .read(adminAuthorizationProvider.notifier)
-          .clearIfInvalidForLocation(loc);
+      ref.read(adminAuthorizationProvider.notifier).clearIfExpired();
       final isAuthRoute =
           path == Routes.login ||
           path == Routes.register ||
@@ -337,7 +329,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isSplashRoute = path == Routes.splash;
 
       String defaultAuthedRoute() {
-        return RouteAccess.defaultHomeForRole(role);
+        return RouteAccess.defaultHomeForUser(auth.user);
       }
 
       if (!auth.initialized || auth.restoringSession) {
@@ -362,7 +354,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             .read(adminAuthorizationProvider.notifier)
             .isAuthorizedForRoute(loc);
         if (adminOverride) return null;
-        final fallback = RouteAccess.defaultHomeForRole(role);
+        final fallback = RouteAccess.defaultHomeForUser(auth.user);
         if (path != fallback) {
           return fallback;
         }
