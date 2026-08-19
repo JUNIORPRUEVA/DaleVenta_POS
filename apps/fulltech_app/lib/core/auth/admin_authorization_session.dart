@@ -10,6 +10,7 @@ class AdminAuthorizationState {
   const AdminAuthorizationState({
     this.authorizedUntil,
     this.token,
+    this.delegationScope,
     this.scope = AdminAuthorizationScope.action,
     this.routePath,
     this.singleUse = true,
@@ -17,6 +18,7 @@ class AdminAuthorizationState {
 
   final DateTime? authorizedUntil;
   final String? token;
+  final String? delegationScope;
   final AdminAuthorizationScope scope;
   final String? routePath;
   final bool singleUse;
@@ -39,8 +41,15 @@ class AdminAuthorizationState {
 
   bool canAttachToRequest(String location) {
     if (!isAuthorized) return false;
+    final apiPath = _normalizePath(location);
+    final delegated = delegationScope;
+    if (delegated == null || delegated.isEmpty) {
+      if (scope == AdminAuthorizationScope.action) return true;
+      return isAuthorizedForRoute(location);
+    }
+    if (!_scopeAllowsApiPath(delegated, apiPath)) return false;
     if (scope == AdminAuthorizationScope.action) return true;
-    return isAuthorizedForRoute(location);
+    return true;
   }
 }
 
@@ -67,26 +76,37 @@ class AdminAuthorizationController
   bool get isAuthorized => state.isAuthorized;
   bool get hasActionAuthorization => state.isActionAuthorization;
 
-  void authorizeFor(Duration duration, String token) {
-    authorizeAction(duration, token);
+  void authorizeFor(Duration duration, String token, {String? delegationScope}) {
+    authorizeAction(duration, token, delegationScope: delegationScope);
   }
 
-  void authorizeAction(Duration duration, String token) {
+  void authorizeAction(
+    Duration duration,
+    String token, {
+    String? delegationScope,
+  }) {
     final capped = _capDuration(duration);
     state = AdminAuthorizationState(
       authorizedUntil: DateTime.now().add(capped),
       token: token,
+      delegationScope: delegationScope,
       scope: AdminAuthorizationScope.action,
       singleUse: true,
     );
     _scheduleExpiry(capped);
   }
 
-  void authorizeRoute(Duration duration, String token, String location) {
+  void authorizeRoute(
+    Duration duration,
+    String token,
+    String location, {
+    String? delegationScope,
+  }) {
     final capped = _capDuration(duration);
     state = AdminAuthorizationState(
       authorizedUntil: DateTime.now().add(capped),
       token: token,
+      delegationScope: delegationScope,
       scope: AdminAuthorizationScope.route,
       routePath: _normalizePath(location),
       singleUse: false,
@@ -157,4 +177,18 @@ String _normalizePath(String location) {
   final trimmed = location.trim();
   if (trimmed.isEmpty) return trimmed;
   return Uri.tryParse(trimmed)?.path ?? trimmed.split('?').first;
+}
+
+bool _scopeAllowsApiPath(String scope, String path) {
+  switch (scope) {
+    case 'company.settings':
+      return path == '/settings' ||
+          path == '/company/fiscal-settings' ||
+          path == '/taxes' ||
+          path.startsWith('/taxes/') ||
+          path == '/ncf/sequences' ||
+          path.startsWith('/ncf/sequences/');
+    default:
+      return false;
+  }
 }

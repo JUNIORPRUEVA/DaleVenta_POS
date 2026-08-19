@@ -9,7 +9,7 @@ import { Prisma, Role } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import * as bcrypt from 'bcryptjs';
 import {
-  isAdminLike,
+  isAdminLikeForScope,
   requireTenant,
   type TenantUser,
 } from '../auth/tenant-context';
@@ -129,6 +129,7 @@ export class SettingsService {
   async verifyAdminPin(user: TenantUser, pin: unknown) {
     const companyId = requireTenant(user);
     const normalizedPin = this.normalizePin(pin);
+    const scopes = this.normalizeDelegatedScopes((user as any).requestedScopes);
     const config = await this.prisma.appConfig.findUnique({
       where: { companyId },
       select: { adminAuthorizationPinHash: true },
@@ -149,6 +150,7 @@ export class SettingsService {
         sub: user.id,
         companyId,
         tokenType: 'admin-authorization',
+        scopes,
       },
       { expiresIn: expiresInSeconds },
     );
@@ -156,15 +158,29 @@ export class SettingsService {
       ok: true,
       expiresInSeconds,
       adminAuthorizationToken,
+      scopes,
     };
   }
 
   private requireAdmin(user: TenantUser) {
-    if (!isAdminLike(user)) {
+    if (!isAdminLikeForScope(user, 'company.settings')) {
       throw new ForbiddenException(
         'Solo un administrador puede cambiar esta configuración',
       );
     }
+  }
+
+  private normalizeDelegatedScopes(value: unknown) {
+    const raw = Array.isArray(value) ? value : [value];
+    const scopes = new Set<string>();
+    for (const item of raw) {
+      const scope = `${item ?? ''}`.trim();
+      if (scope === 'company.settings' || scope === 'billing.configuration') {
+        scopes.add(scope === 'billing.configuration' ? 'company.settings' : scope);
+      }
+    }
+    if (scopes.size === 0) scopes.add('company.settings');
+    return [...scopes];
   }
 
   private normalizePin(pin: unknown) {

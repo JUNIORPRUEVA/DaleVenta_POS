@@ -612,7 +612,7 @@ class AuthRepository {
         // Si expira, intenta refresh y reintenta
         if (e.response?.statusCode == 401) {
           final refreshed = await _refreshAndSave(silent: silent);
-          if (refreshed) {
+          if (refreshed == _RefreshSessionResult.success) {
             final res = await _dio
                 .get(
                   ApiRoutes.usersMe,
@@ -632,7 +632,13 @@ class AuthRepository {
             return user;
           }
 
-          await _safeClearTokens();
+          if (refreshed == _RefreshSessionResult.invalid) {
+            await _safeClearTokens();
+          }
+          if (refreshed == _RefreshSessionResult.failed &&
+              allowCachedFallback) {
+            return await _storage.getUserSnapshot();
+          }
           return null;
         }
 
@@ -688,9 +694,11 @@ class AuthRepository {
     }
   }
 
-  Future<bool> _refreshAndSave({bool silent = false}) async {
+  Future<_RefreshSessionResult> _refreshAndSave({bool silent = false}) async {
     final refresh = await _storage.getRefreshToken();
-    if (refresh == null || refresh.isEmpty) return false;
+    if (refresh == null || refresh.isEmpty) {
+      return _RefreshSessionResult.invalid;
+    }
     try {
       final res = await _dio.post(
         ApiRoutes.refresh,
@@ -704,14 +712,24 @@ class AuthRepository {
           access,
           (newRefresh != null && newRefresh.isNotEmpty) ? newRefresh : refresh,
         );
-        return true;
+        return _RefreshSessionResult.success;
       }
+    } on DioException catch (error) {
+      final status = error.response?.statusCode ?? 0;
+      if (status == 400 || status == 401 || status == 403) {
+        return _RefreshSessionResult.invalid;
+      }
+      return _RefreshSessionResult.failed;
+    } on TimeoutException {
+      return _RefreshSessionResult.failed;
     } catch (_) {
-      return false;
+      return _RefreshSessionResult.failed;
     }
-    return false;
+    return _RefreshSessionResult.failed;
   }
 }
+
+enum _RefreshSessionResult { success, invalid, failed }
 
 class AccountDeletionPreview {
   const AccountDeletionPreview({

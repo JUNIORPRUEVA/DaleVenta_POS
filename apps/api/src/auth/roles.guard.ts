@@ -43,6 +43,7 @@ export class RolesGuard implements CanActivate {
           role?: Role | string;
           companyId?: string | null;
           adminAuthorized?: boolean;
+          authorizedScopes?: string[];
           authorizedPermissions?: string[];
         }
       | undefined;
@@ -65,13 +66,13 @@ export class RolesGuard implements CanActivate {
     if (role === Role.ADMIN) {
       return true;
     }
-    if (adminAuthorized) {
-      return true;
-    }
     if (requiredPermissions?.length) {
       const granted = await this.hasAnyUserPermission(user, requiredPermissions);
       if (granted) {
         this.markPermissionAuthorization(user, requiredPermissions);
+        return true;
+      }
+      if (adminAuthorized && this.hasDelegatedPermission(user, requiredPermissions)) {
         return true;
       }
     }
@@ -164,12 +165,24 @@ export class RolesGuard implements CanActivate {
         sub?: string;
         companyId?: string;
         tokenType?: string;
+        scopes?: unknown;
       };
-      return (
-        payload.tokenType === "admin-authorization" &&
-        payload.sub === user.id &&
-        payload.companyId === user.companyId
-      );
+      if (
+        payload.tokenType !== "admin-authorization" ||
+        payload.sub !== user.id ||
+        payload.companyId !== user.companyId
+      ) {
+        return false;
+      }
+      const scopes = Array.isArray(payload.scopes)
+        ? payload.scopes
+            .filter((scope): scope is string => typeof scope === "string")
+            .map((scope) => scope.trim())
+            .filter(Boolean)
+        : [];
+      if (scopes.length === 0) return false;
+      if (user) user.authorizedScopes = scopes;
+      return true;
     } catch {
       return false;
     }
@@ -177,10 +190,26 @@ export class RolesGuard implements CanActivate {
 
   private markAdminAuthorization(
     request: Record<string, unknown>,
-    user?: { adminAuthorized?: boolean },
+    user?: { adminAuthorized?: boolean; authorizedScopes?: string[] },
   ) {
     if (user) user.adminAuthorized = true;
     request.adminAuthorized = true;
+    request.adminAuthorizationScopes = user?.authorizedScopes ?? [];
+  }
+
+  private hasDelegatedPermission(
+    user: { authorizedScopes?: string[] } | undefined,
+    permissions: string[],
+  ) {
+    const scopes = new Set(user?.authorizedScopes ?? []);
+    return permissions.some((permission) => {
+      switch (permission.trim()) {
+        case "manageSettings":
+          return scopes.has("company.settings");
+        default:
+          return false;
+      }
+    });
   }
 
   private markPermissionAuthorization(

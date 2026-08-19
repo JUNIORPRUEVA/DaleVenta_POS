@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_routes.dart';
+import '../auth/admin_authorization_session.dart';
 import '../auth/app_role.dart';
 import '../auth/auth_provider.dart';
 import '../auth/auth_repository.dart';
@@ -17,12 +18,15 @@ final companySettingsRepositoryProvider = Provider<CompanySettingsRepository>((
   ref,
 ) {
   final user = ref.watch(authStateProvider).user;
+  final adminAuthorization = ref.watch(adminAuthorizationProvider);
   final repository = CompanySettingsRepository(
     ref.watch(dioProvider),
     ref.read(syncQueueServiceProvider.notifier),
     cacheScope: _companySettingsCacheScope(user),
     canWriteSettings:
-        user?.appRole == AppRole.admin || user?.appRole == AppRole.asistente,
+        user?.appRole == AppRole.admin ||
+        user?.appRole == AppRole.asistente ||
+        adminAuthorization.isAuthorized,
   );
   repository.registerSyncHandlers();
   return repository;
@@ -343,13 +347,18 @@ class CompanySettingsRepository {
 
   Future<AdminAuthorizationVerification> verifyAdminAuthorizationPin(
     String pin,
+    {String? scope}
   ) async {
     try {
       final res = await _dio
           .post(
             ApiRoutes.settingsAdminPinVerify,
             options: Options(extra: const {'skipLoader': true}),
-            data: {'pin': pin},
+            data: {
+              'pin': pin,
+              if (scope != null && scope.trim().isNotEmpty)
+                'scope': scope.trim(),
+            },
           )
           .timeout(_settingsTimeout);
       final data = _normalizeMap(

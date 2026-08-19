@@ -26,7 +26,12 @@ export class SettingsController {
   }
 
   @Post('admin-pin/verify')
-  verifyAdminPin(@Req() req: Request, @Body() dto: { pin?: unknown }) {
-    return this.settings.verifyAdminPin(req.user as TenantUser, dto.pin);
+  verifyAdminPin(
+    @Req() req: Request,
+    @Body() dto: { pin?: unknown; scope?: unknown; scopes?: unknown },
+  ) {
+    const user = req.user as TenantUser & { requestedScopes?: unknown };
+    user.requestedScopes = dto.scopes ?? dto.scope;
+    return this.settings.verifyAdminPin(user, dto.pin);
   }
 }

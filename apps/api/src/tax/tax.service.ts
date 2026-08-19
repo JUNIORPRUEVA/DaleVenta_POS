@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { isAdminLike, requireTenant, type TenantUser } from "../auth/tenant-context";
+import { isAdminLikeForScope, requireTenant, type TenantUser } from "../auth/tenant-context";
 import { PrismaService } from "../prisma/prisma.service";
 import { TaxCalculationService, type TaxPriceMode } from "./tax-calculation.service";
 import { UpdateFiscalSettingsDto, UpsertTaxDto } from "./tax.dto";
@@ -208,7 +208,7 @@ export class TaxService {
   }
 
   private requireAdmin(user: TenantUser) {
-    if (!isAdminLike(user)) {
+    if (!isAdminLikeForScope(user, "company.settings")) {
       throw new ForbiddenException("Solo un administrador puede cambiar configuracion fiscal");
     }
   }
@@ -232,4 +232,3 @@ export class TaxService {
     } satisfies Prisma.CompanySelect;
   }
 }
-

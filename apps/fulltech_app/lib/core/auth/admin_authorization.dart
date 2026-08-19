@@ -15,6 +15,7 @@ Future<bool> ensureAdminAuthorization(
   AppPermission? permission,
   String reason = 'Autorizar acción administrativa',
   String? routeLocation,
+  String? delegationScope,
   bool forceAdminAuthorization = false,
 }) async {
   final user = ref.read(authStateProvider).user;
@@ -31,12 +32,18 @@ Future<bool> ensureAdminAuthorization(
       controller.isAuthorizedForRoute(routeLocation)) {
     return true;
   }
+  final effectiveScope =
+      delegationScope ?? _delegationScopeForPermission(permission);
 
   final granted = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
     builder: (dialogContext) =>
-        _AdminAuthorizationDialog(reason: reason, routeLocation: routeLocation),
+        _AdminAuthorizationDialog(
+          reason: reason,
+          routeLocation: routeLocation,
+          delegationScope: effectiveScope,
+        ),
   );
   return granted == true;
 }
@@ -53,10 +60,15 @@ bool hasPermissionOrAdminAuthorization(
 }
 
 class _AdminAuthorizationDialog extends ConsumerStatefulWidget {
-  const _AdminAuthorizationDialog({required this.reason, this.routeLocation});
+  const _AdminAuthorizationDialog({
+    required this.reason,
+    this.routeLocation,
+    this.delegationScope,
+  });
 
   final String reason;
   final String? routeLocation;
+  final String? delegationScope;
 
   @override
   ConsumerState<_AdminAuthorizationDialog> createState() =>
@@ -88,16 +100,24 @@ class _AdminAuthorizationDialogState
     try {
       final repository = ref.read(companySettingsRepositoryProvider);
       final controller = ref.read(adminAuthorizationProvider.notifier);
-      final duration = await repository.verifyAdminAuthorizationPin(value);
+      final duration = await repository.verifyAdminAuthorizationPin(
+        value,
+        scope: widget.delegationScope,
+      );
       if (!mounted) return;
       final routeLocation = widget.routeLocation;
       if (routeLocation == null || routeLocation.trim().isEmpty) {
-        controller.authorizeAction(duration.duration, duration.token);
+        controller.authorizeAction(
+          duration.duration,
+          duration.token,
+          delegationScope: widget.delegationScope,
+        );
       } else {
         controller.authorizeRoute(
           duration.duration,
           duration.token,
           routeLocation,
+          delegationScope: widget.delegationScope,
         );
       }
       Navigator.of(context).pop(true);
@@ -216,5 +236,14 @@ class _AdminAuthorizationDialogState
         ),
       ),
     );
+  }
+}
+
+String? _delegationScopeForPermission(AppPermission? permission) {
+  switch (permission) {
+    case AppPermission.manageSettings:
+      return 'company.settings';
+    default:
+      return null;
   }
 }

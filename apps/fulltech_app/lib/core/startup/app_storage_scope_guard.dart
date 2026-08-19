@@ -3,7 +3,6 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/env.dart';
-import '../auth/token_storage.dart';
 import '../cache/fulltech_cache_manager.dart';
 import '../debug/trace_log.dart';
 import '../offline/offline_store.dart';
@@ -35,7 +34,6 @@ class AppStorageScopeGuard {
       if (previous != null) {
         await OfflineStore.instance.clearAll();
         await FulltechImageCacheManager.clear();
-        await TokenStorage().clearTokens();
       }
       await prefs.setString(_scopeKey, current);
     } catch (error, stackTrace) {
