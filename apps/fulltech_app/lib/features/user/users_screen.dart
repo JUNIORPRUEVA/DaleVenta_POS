@@ -554,6 +554,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
   }
 
   Future<void> _showAdminPinDialog(BuildContext context, WidgetRef ref) async {
+    final settingsRepository = ref.read(companySettingsRepositoryProvider);
     final pinCtrl = TextEditingController();
     final confirmCtrl = TextEditingController();
     bool saving = false;
@@ -583,9 +584,8 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
 
               setDialogState(() => saving = true);
               try {
-                await ref
-                    .read(companySettingsRepositoryProvider)
-                    .setAdminAuthorizationPin(pin);
+                await settingsRepository.setAdminAuthorizationPin(pin);
+                if (!mounted) return;
                 ref.invalidate(companySettingsProvider);
                 if (!dialogContext.mounted) return;
                 Navigator.of(dialogContext).pop();

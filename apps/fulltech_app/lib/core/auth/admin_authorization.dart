@@ -86,10 +86,10 @@ class _AdminAuthorizationDialogState
       _error = null;
     });
     try {
-      final duration = await ref
-          .read(companySettingsRepositoryProvider)
-          .verifyAdminAuthorizationPin(value);
+      final repository = ref.read(companySettingsRepositoryProvider);
       final controller = ref.read(adminAuthorizationProvider.notifier);
+      final duration = await repository.verifyAdminAuthorizationPin(value);
+      if (!mounted) return;
       final routeLocation = widget.routeLocation;
       if (routeLocation == null || routeLocation.trim().isEmpty) {
         controller.authorizeAction(duration.duration, duration.token);
@@ -100,7 +100,7 @@ class _AdminAuthorizationDialogState
           routeLocation,
         );
       }
-      if (mounted) Navigator.of(context).pop(true);
+      Navigator.of(context).pop(true);
     } catch (error) {
       if (!mounted) return;
       setState(() {

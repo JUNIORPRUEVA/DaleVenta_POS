@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/auth/admin_authorization.dart';
 import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
+import '../../core/auth/auth_repository.dart';
 import '../../core/cache/fulltech_cache_manager.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/errors/api_exception.dart';
@@ -1931,7 +1932,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       return;
     }
     if (normalized == 'B01' && !isB01FiscalClientValid(_selectedClientTaxId)) {
-      _showB01ClientRequiredSnackBar();
+      await _showB01ClientRequiredDialog();
       return;
     }
     setState(() => _selectedFiscalVoucherType = normalized);
@@ -1946,18 +1947,29 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     return name == null || name.isEmpty ? null : name;
   }
 
-  void _showB01ClientRequiredSnackBar() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+  Future<void> _showB01ClientRequiredDialog() async {
+    final shouldSelectClient = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Datos fiscales requeridos'),
         content: const Text(
           'Para emitir un B01 debes seleccionar un cliente con RNC.',
         ),
-        action: SnackBarAction(
-          label: 'Seleccionar cliente',
-          onPressed: _openClientPickerDialog,
-        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Seleccionar cliente'),
+          ),
+        ],
       ),
     );
+    if (shouldSelectClient == true && mounted) {
+      await _openClientPickerDialog();
+    }
   }
 
   Future<void> _openClientPickerDialog() async {
@@ -2476,7 +2488,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
 
     if (_selectedFiscalVoucherType == 'B01' &&
         !isB01FiscalClientValid(_selectedClientTaxId)) {
-      _showB01ClientRequiredSnackBar();
+      await _showB01ClientRequiredDialog();
       return;
     }
 
@@ -4026,8 +4038,9 @@ class _SalesCompanyAccountMenu extends ConsumerWidget {
               danger: true,
             ),
             onTap: () {
+              final authController = ref.read(authStateProvider.notifier);
               Future<void>.delayed(Duration.zero, () async {
-                await ref.read(authStateProvider.notifier).logout();
+                await authController.logout();
                 if (context.mounted) context.go(Routes.login);
               });
             },
@@ -4040,8 +4053,16 @@ class _SalesCompanyAccountMenu extends ConsumerWidget {
               danger: true,
             ),
             onTap: () {
+              final authRepository = ref.read(authRepositoryProvider);
+              final authController = ref.read(authStateProvider.notifier);
               Future<void>.delayed(Duration.zero, () {
-                if (context.mounted) showDeleteAccountDialog(context, ref);
+                if (context.mounted) {
+                  showDeleteAccountDialogWithDependencies(
+                    context,
+                    authRepository: authRepository,
+                    authController: authController,
+                  );
+                }
               });
             },
           ),

@@ -230,14 +230,17 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _checkLicenseNow() async {
-    if (!mounted || !ref.read(authStateProvider).isAuthenticated) return;
+    if (!mounted) return;
+    final authState = ref.read(authStateProvider);
+    if (!authState.isAuthenticated) return;
+    final licenseRepository = ref.read(licenseRepositoryProvider);
+    final authSessionEvents = ref.read(authSessionEventsProvider);
     try {
-      final license = await ref.read(licenseRepositoryProvider).getLicense();
+      final license = await licenseRepository.getLicense();
+      if (!mounted) return;
       ref.invalidate(licenseStatusProvider);
       if (!license.isUsable) {
-        ref
-            .read(authSessionEventsProvider)
-            .requestUnauthorizedLogout(reason: 'license_expired');
+        authSessionEvents.requestUnauthorizedLogout(reason: 'license_expired');
       }
     } catch (_) {
       // 401/403 responses are handled by AuthInterceptor. Temporary network

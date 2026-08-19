@@ -23,18 +23,17 @@ class CashBoxScreen extends ConsumerWidget {
   static const _line = Color(0xFFD4E3ED);
 
   Future<void> _openCash(BuildContext context, WidgetRef ref) async {
+    final controller = ref.read(activeCashSessionControllerProvider.notifier);
     try {
       final opened = await showOpenCashDialog(
         context,
         onOpenShift: (amount) async {
-          await ref
-              .read(activeCashSessionControllerProvider.notifier)
-              .open(amount);
+          await controller.open(amount);
         },
       );
       if (!context.mounted) return;
       if (opened == true) {
-        await ref.read(activeCashSessionControllerProvider.notifier).refresh();
+        await controller.refresh();
         if (!context.mounted) return;
         showCashToast(context, 'Caja abierta');
       }
@@ -51,21 +50,21 @@ class CashBoxScreen extends ConsumerWidget {
   }
 
   Future<void> _closeCash(BuildContext context, WidgetRef ref) async {
+    final repository = ref.read(cashRepositoryProvider);
+    final controller = ref.read(activeCashSessionControllerProvider.notifier);
     try {
-      final currentSummary = await ref.read(cashRepositoryProvider).summary();
+      final currentSummary = await repository.summary();
       if (!context.mounted) return;
       final result = await showCloseShiftDialog(
         context,
         expectedCash: currentSummary.expectedCash,
         onCloseShift: (amount) {
-          return ref
-              .read(activeCashSessionControllerProvider.notifier)
-              .close(amount);
+          return controller.close(amount);
         },
       );
       if (!context.mounted) return;
       if (result?.success != true) return;
-      await ref.read(activeCashSessionControllerProvider.notifier).refresh();
+      await controller.refresh();
       if (!context.mounted) return;
       final printResult = result?.printResult;
       final message = printResult == null
@@ -87,10 +86,9 @@ class CashBoxScreen extends ConsumerWidget {
   }
 
   Future<void> _printCurrentCash(BuildContext context, WidgetRef ref) async {
+    final controller = ref.read(activeCashSessionControllerProvider.notifier);
     try {
-      final result = await ref
-          .read(activeCashSessionControllerProvider.notifier)
-          .printCurrent();
+      final result = await controller.printCurrent();
       if (!context.mounted) return;
       showCashToast(
         context,
@@ -114,17 +112,16 @@ class CashBoxScreen extends ConsumerWidget {
     WidgetRef ref,
     String type,
   ) async {
+    final controller = ref.read(activeCashSessionControllerProvider.notifier);
     final input = await showCashMovementDialog(context, type: type);
     if (input == null) return;
-    await ref
-        .read(activeCashSessionControllerProvider.notifier)
-        .addMovement(
-          type: type,
-          amount: input.amount,
-          reason: input.reason,
-          movementType: input.movementType,
-          affectsProfit: input.affectsProfit,
-        );
+    await controller.addMovement(
+      type: type,
+      amount: input.amount,
+      reason: input.reason,
+      movementType: input.movementType,
+      affectsProfit: input.affectsProfit,
+    );
     if (!context.mounted) return;
     showCashToast(context, 'Movimiento guardado');
   }

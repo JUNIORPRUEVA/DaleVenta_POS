@@ -13,6 +13,7 @@ import '../../core/app_update/app_update_models.dart';
 import '../../core/auth/admin_authorization.dart';
 import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
+import '../../core/auth/auth_repository.dart';
 import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/license/license_repository.dart';
@@ -597,9 +598,10 @@ class _SettingsCompanyAccountMenu extends ConsumerWidget {
   }
 
   void _logout(BuildContext menuContext, BuildContext context, WidgetRef ref) {
+    final authController = ref.read(authStateProvider.notifier);
     Navigator.of(menuContext).pop();
     Future<void>.delayed(const Duration(milliseconds: 80), () async {
-      await ref.read(authStateProvider.notifier).logout();
+      await authController.logout();
       if (context.mounted) context.go(Routes.login);
     });
   }
@@ -724,9 +726,17 @@ class _SettingsCompanyAccountMenu extends ConsumerWidget {
               label: 'Eliminar mi cuenta',
               danger: true,
               onTap: () {
+                final authRepository = ref.read(authRepositoryProvider);
+                final authController = ref.read(authStateProvider.notifier);
                 Navigator.of(menuContext).pop();
                 Future<void>.delayed(const Duration(milliseconds: 80), () {
-                  if (context.mounted) showDeleteAccountDialog(context, ref);
+                  if (context.mounted) {
+                    showDeleteAccountDialogWithDependencies(
+                      context,
+                      authRepository: authRepository,
+                      authController: authController,
+                    );
+                  }
                 });
               },
               helpText:
@@ -1911,6 +1921,7 @@ class _CompanySettingsEditorState
   }
 
   Future<void> _save() async {
+    final settingsRepository = ref.read(companySettingsRepositoryProvider);
     final authorized = await ensureAdminAuthorization(
       context,
       ref,
@@ -1920,55 +1931,55 @@ class _CompanySettingsEditorState
     );
     if (!authorized || !mounted) return;
 
+    final settingsDraft = widget.settings.copyWith(
+      companyName: _name.text.trim(),
+      rnc: _rnc.text.trim(),
+      phone: _phone.text.trim(),
+      phonePreferential: _phonePreferential.text.trim(),
+      address: _address.text.trim(),
+      description: _description.text.trim(),
+      businessHours: _businessHours.text.trim(),
+      websiteUrl: _website.text.trim(),
+      instagramUrl: _instagram.text.trim(),
+      facebookUrl: _facebook.text.trim(),
+      gpsLocationUrl: _gpsLocation.text.trim(),
+      legalRepresentativeName: _legalName.text.trim(),
+      legalRepresentativeCedula: _legalCedula.text.trim(),
+      legalRepresentativeRole: _legalRole.text.trim(),
+      legalRepresentativeNationality: _legalNationality.text.trim(),
+      legalRepresentativeCivilStatus: _legalCivilStatus.text.trim(),
+      logoBase64: _logoBase64,
+      clearLogo: _logoBase64 == null,
+      taxEnabled: _taxEnabled,
+      defaultTaxRate: _taxEnabled
+          ? (widget.settings.defaultTaxRate > 0
+                ? widget.settings.defaultTaxRate
+                : 0.18)
+          : widget.settings.defaultTaxRate,
+      pricesIncludeTax: _pricesIncludeTax,
+      ncfEnabled: _ncfEnabled,
+      bankAccounts: [
+        if (_bankAlias.text.trim().isNotEmpty ||
+            _bankType.text.trim().isNotEmpty ||
+            _bankNumber.text.trim().isNotEmpty ||
+            _bankName.text.trim().isNotEmpty)
+          BankAccountEntry(
+            name: _bankAlias.text.trim(),
+            type: _bankType.text.trim(),
+            accountNumber: _bankNumber.text.trim(),
+            bankName: _bankName.text.trim(),
+          ),
+      ],
+    );
+
     setState(() => _saving = true);
     try {
-      final queued = await ref
-          .read(companySettingsRepositoryProvider)
-          .saveSettingsOrQueue(
-            widget.settings.copyWith(
-              companyName: _name.text.trim(),
-              rnc: _rnc.text.trim(),
-              phone: _phone.text.trim(),
-              phonePreferential: _phonePreferential.text.trim(),
-              address: _address.text.trim(),
-              description: _description.text.trim(),
-              businessHours: _businessHours.text.trim(),
-              websiteUrl: _website.text.trim(),
-              instagramUrl: _instagram.text.trim(),
-              facebookUrl: _facebook.text.trim(),
-              gpsLocationUrl: _gpsLocation.text.trim(),
-              legalRepresentativeName: _legalName.text.trim(),
-              legalRepresentativeCedula: _legalCedula.text.trim(),
-              legalRepresentativeRole: _legalRole.text.trim(),
-              legalRepresentativeNationality: _legalNationality.text.trim(),
-              legalRepresentativeCivilStatus: _legalCivilStatus.text.trim(),
-              logoBase64: _logoBase64,
-              clearLogo: _logoBase64 == null,
-              taxEnabled: _taxEnabled,
-              defaultTaxRate: _taxEnabled
-                  ? (widget.settings.defaultTaxRate > 0
-                        ? widget.settings.defaultTaxRate
-                        : 0.18)
-                  : widget.settings.defaultTaxRate,
-              pricesIncludeTax: _pricesIncludeTax,
-              ncfEnabled: _ncfEnabled,
-              bankAccounts: [
-                if (_bankAlias.text.trim().isNotEmpty ||
-                    _bankType.text.trim().isNotEmpty ||
-                    _bankNumber.text.trim().isNotEmpty ||
-                    _bankName.text.trim().isNotEmpty)
-                  BankAccountEntry(
-                    name: _bankAlias.text.trim(),
-                    type: _bankType.text.trim(),
-                    accountNumber: _bankNumber.text.trim(),
-                    bankName: _bankName.text.trim(),
-                  ),
-              ],
-            ),
-          );
+      final queued = await settingsRepository.saveSettingsOrQueue(
+        settingsDraft,
+      );
+      if (!mounted) return;
       ref.invalidate(companySettingsProvider);
       ref.invalidate(licenseStatusProvider);
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -2057,18 +2068,16 @@ class _CompanySettingsEditorState
           taxEnabled: _taxEnabled,
           pricesIncludeTax: _pricesIncludeTax,
           ncfEnabled: _ncfEnabled,
-          defaultTaxRate:
-              widget.settings.defaultTaxRate > 0
-                  ? widget.settings.defaultTaxRate
-                  : 0.18,
+          defaultTaxRate: widget.settings.defaultTaxRate > 0
+              ? widget.settings.defaultTaxRate
+              : 0.18,
           onTaxEnabledChanged: (value) => setState(() {
             _taxEnabled = value;
             if (!value) _ncfEnabled = false;
           }),
           onPricesIncludeTaxChanged: (value) =>
               setState(() => _pricesIncludeTax = value),
-          onNcfEnabledChanged: (value) =>
-              setState(() => _ncfEnabled = value),
+          onNcfEnabledChanged: (value) => setState(() => _ncfEnabled = value),
         ),
         const SizedBox(height: 10),
         Align(
@@ -2467,17 +2476,18 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
   }
 
   Future<void> _loadLastBackup() async {
-    final path = await ref.read(cloudBackupServiceProvider).lastBackupZipPath();
+    if (!mounted) return;
+    final backupService = ref.read(cloudBackupServiceProvider);
+    final path = await backupService.lastBackupZipPath();
     if (!mounted) return;
     setState(() => _lastZipPath = path);
   }
 
   Future<void> _createBackup() async {
+    final backupService = ref.read(cloudBackupServiceProvider);
     setState(() => _running = true);
     try {
-      final result = await ref
-          .read(cloudBackupServiceProvider)
-          .createCloudBackup();
+      final result = await backupService.createCloudBackup();
       if (!mounted) return;
       setState(() => _result = result);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2508,10 +2518,10 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
     );
     final path = picked?.files.single.path;
     if (path == null) return;
+    if (!mounted) return;
+    final backupService = ref.read(cloudBackupServiceProvider);
     try {
-      final inspection = await ref
-          .read(cloudBackupServiceProvider)
-          .inspectBackupZip(path);
+      final inspection = await backupService.inspectBackupZip(path);
       if (!mounted) return;
       setState(() => _inspection = inspection);
       ScaffoldMessenger.of(context).showSnackBar(

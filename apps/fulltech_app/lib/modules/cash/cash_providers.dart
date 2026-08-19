@@ -42,33 +42,40 @@ class ActiveCashSessionController
   Future<void> refresh() async {
     debugPrint('[CashController] refresh start');
     state = const AsyncLoading();
-    state = await AsyncValue.guard(() async {
+    final nextState = await AsyncValue.guard(() async {
       final gate = await ref.read(cashRepositoryProvider).state();
       debugPrint(
         '[CashController] currentShift=${gate.activeSession?.shiftId}',
       );
+      if (!mounted) return gate.activeSession;
       ref.invalidate(cashGateStateProvider);
       ref.invalidate(cashSummaryProvider);
       ref.invalidate(cashMovementsProvider);
       debugPrint('[CashController] refresh complete');
       return gate.activeSession;
     });
+    if (!mounted) return;
+    state = nextState;
   }
 
   Future<void> open(double openingAmount, {String? note}) async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(() async {
+    final nextState = await AsyncValue.guard(() async {
       final session = await ref
           .read(cashRepositoryProvider)
           .openSession(openingAmount: openingAmount, note: note);
+      if (!mounted) return session;
       ref.invalidate(cashGateStateProvider);
       ref.invalidate(cashSummaryProvider);
       return session;
     });
+    if (!mounted) return;
+    state = nextState;
   }
 
   Future<PrintTicketResult?> close(double closingAmount, {String? note}) async {
     final repo = ref.read(cashRepositoryProvider);
+    final printer = ref.read(cashCloseTicketPrinterProvider);
     final stateBeforeClose = await repo.state();
     final summaryBeforeClose = await repo.summary();
     final movementsBeforeClose = await repo.movements();
@@ -82,11 +89,13 @@ class ActiveCashSessionController
     );
 
     await repo.closeSession(closingAmount: closingAmount, note: note);
-    return ref.read(cashCloseTicketPrinterProvider).printCloseTicket(snapshot);
+    if (!mounted) return null;
+    return printer.printCloseTicket(snapshot);
   }
 
   Future<PrintTicketResult> printCurrent() async {
     final repo = ref.read(cashRepositoryProvider);
+    final printer = ref.read(cashCloseTicketPrinterProvider);
     final state = await repo.state();
     final summary = await repo.summary();
     final movements = await repo.movements();
@@ -98,9 +107,7 @@ class ActiveCashSessionController
       note: 'Impresión previa del turno activo',
       capturedAt: DateTime.now(),
     );
-    return ref
-        .read(cashCloseTicketPrinterProvider)
-        .printCloseTicket(snapshot, automatic: false);
+    return printer.printCloseTicket(snapshot, automatic: false);
   }
 
   Future<void> addMovement({
@@ -110,15 +117,15 @@ class ActiveCashSessionController
     String movementType = 'expense',
     bool? affectsProfit,
   }) async {
-    await ref
-        .read(cashRepositoryProvider)
-        .addMovement(
-          type: type,
-          amount: amount,
-          reason: reason,
-          movementType: movementType,
-          affectsProfit: affectsProfit,
-        );
+    final repo = ref.read(cashRepositoryProvider);
+    await repo.addMovement(
+      type: type,
+      amount: amount,
+      reason: reason,
+      movementType: movementType,
+      affectsProfit: affectsProfit,
+    );
+    if (!mounted) return;
     ref.invalidate(cashSummaryProvider);
     ref.invalidate(cashMovementsProvider);
   }

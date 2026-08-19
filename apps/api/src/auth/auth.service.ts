@@ -48,7 +48,7 @@ export class AuthService {
       sub: user.id,
       companyId: session.activeCompany?.id ?? user.companyId,
       email: user.email,
-      role: session.legacyRole,
+      role: session.effectiveRole,
       memberRole: session.activeMembership?.role ?? null,
       sessionId: sessionRecord.sessionId,
       tokenType: "access",
@@ -114,7 +114,7 @@ export class AuthService {
       sub: user.id,
       companyId: session.activeCompany?.id ?? user.companyId,
       email: user.email,
-      role: session.legacyRole,
+      role: session.effectiveRole,
       memberRole: session.activeMembership?.role ?? null,
       sessionId: nextSessionRecord.sessionId,
       tokenType: "access",
@@ -730,7 +730,9 @@ export class AuthService {
             companyId: activeMembership.company.id,
           }
         : null,
-      legacyRole: this.normalizeLegacyRole(user.role),
+      effectiveRole: activeMembership
+        ? this.mapMemberRoleToLegacyRole(activeMembership.role)
+        : this.normalizeLegacyRole(user.role),
     };
   }
 
@@ -747,7 +749,7 @@ export class AuthService {
     return {
       id: user.id,
       email: user.email,
-      role: session.legacyRole,
+      role: session.effectiveRole,
       companyRole: session.activeMembership?.role ?? null,
       companyId: session.activeCompany?.id ?? user.companyId ?? null,
       company: session.activeCompany,

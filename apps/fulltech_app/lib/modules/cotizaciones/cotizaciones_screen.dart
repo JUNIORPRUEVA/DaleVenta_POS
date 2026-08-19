@@ -18,6 +18,7 @@ import '../../core/auth/admin_authorization.dart';
 import '../../core/auth/admin_authorization_session.dart';
 import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
+import '../../core/auth/auth_repository.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/cache/fulltech_cache_manager.dart';
 import '../../core/cache/local_json_cache.dart';
@@ -6285,10 +6286,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   500.0,
                   550.0,
                 );
-                final fiscalPaneWidth = (constraints.maxWidth * 0.22).clamp(
-                  340.0,
-                  390.0,
-                );
                 final sidePaneWidth = quotePaneWidth;
                 final catalogOverlayWidth =
                     constraints.maxWidth - sidePaneWidth;
@@ -6401,39 +6398,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                           ),
                         ),
                       ],
-                    ),
-                    Positioned(
-                      left: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: fiscalPaneWidth,
-                      child: IgnorePointer(
-                        ignoring: !_quoteTaxEnabled || overlayOpen,
-                        child: AnimatedSlide(
-                          duration: const Duration(milliseconds: 260),
-                          curve: Curves.easeOutCubic,
-                          offset: _quoteTaxEnabled && !overlayOpen
-                              ? Offset.zero
-                              : const Offset(-1.04, 0),
-                          child: AnimatedOpacity(
-                            duration: const Duration(milliseconds: 180),
-                            curve: Curves.easeOutCubic,
-                            opacity: _quoteTaxEnabled && !overlayOpen ? 1 : 0,
-                            child: _DesktopFiscalInvoicePanel(
-                              customerTaxId: _fiscalCustomerTaxId,
-                              customerName: _fiscalCustomerName,
-                              onCustomerTaxIdChanged: (value) =>
-                                  _commitEditorChange(
-                                    () => _fiscalCustomerTaxId = value,
-                                  ),
-                              onCustomerNameChanged: (value) =>
-                                  _commitEditorChange(
-                                    () => _fiscalCustomerName = value,
-                                  ),
-                            ),
-                          ),
-                        ),
-                      ),
                     ),
                     Positioned(
                       left: 0,
@@ -7753,47 +7717,45 @@ class _CompanyAccountMenu extends ConsumerWidget {
     _runAfterMenuCloses(action);
   }
 
-  void _activateProtectedRoute(
+  Future<void> _activateProtectedRoute(
     BuildContext context,
     WidgetRef ref,
     BuildContext menuContext, {
     required String route,
     required String label,
-  }) {
+  }) async {
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: RouteAccess.permissionForLocation(route),
+      reason: 'Entrar a $label',
+      routeLocation: route,
+    );
+    if (!allowed || !context.mounted || !menuContext.mounted) return;
     Navigator.of(menuContext).pop();
-    _runAfterMenuCloses(() async {
-      if (!context.mounted) return;
-      final allowed = await ensureAdminAuthorization(
-        context,
-        ref,
-        permission: RouteAccess.permissionForLocation(route),
-        reason: 'Entrar a $label',
-        routeLocation: route,
-      );
-      if (!allowed || !context.mounted) return;
-      context.go(route);
+    _runAfterMenuCloses(() {
+      if (context.mounted) context.go(route);
     });
   }
 
-  void _activateProtectedPanel(
+  Future<void> _activateProtectedPanel(
     BuildContext context,
     WidgetRef ref,
     BuildContext menuContext, {
     required AppPermission permission,
     required String label,
     required Widget child,
-  }) {
+  }) async {
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: permission,
+      reason: 'Abrir $label',
+    );
+    if (!allowed || !context.mounted || !menuContext.mounted) return;
     Navigator.of(menuContext).pop();
-    _runAfterMenuCloses(() async {
-      if (!context.mounted) return;
-      final allowed = await ensureAdminAuthorization(
-        context,
-        ref,
-        permission: permission,
-        reason: 'Abrir $label',
-      );
-      if (!allowed || !context.mounted) return;
-      _openSidePanel(context, child);
+    _runAfterMenuCloses(() {
+      if (context.mounted) _openSidePanel(context, child);
     });
   }
 
@@ -7826,8 +7788,9 @@ class _CompanyAccountMenu extends ConsumerWidget {
   }
 
   void _logout(BuildContext context, WidgetRef ref) {
+    final authController = ref.read(authStateProvider.notifier);
     _runAfterMenuCloses(() async {
-      await ref.read(authStateProvider.notifier).logout();
+      await authController.logout();
       if (context.mounted) context.go(Routes.login);
     });
   }
@@ -8001,9 +7964,17 @@ class _CompanyAccountMenu extends ConsumerWidget {
               label: 'Eliminar mi cuenta',
               danger: true,
               onTap: () {
+                final authRepository = ref.read(authRepositoryProvider);
+                final authController = ref.read(authStateProvider.notifier);
                 Navigator.of(menuContext).pop();
                 _runAfterMenuCloses(() {
-                  if (context.mounted) showDeleteAccountDialog(context, ref);
+                  if (context.mounted) {
+                    showDeleteAccountDialogWithDependencies(
+                      context,
+                      authRepository: authRepository,
+                      authController: authController,
+                    );
+                  }
                 });
               },
               helpText:
@@ -8023,6 +7994,9 @@ class _CompanyAccountMenu extends ConsumerWidget {
     );
   }
 }
+
+@visibleForTesting
+Widget buildCompanyAccountMenuForTesting() => const _CompanyAccountMenu();
 
 String _compactCompanyDisplayName(String value) {
   final normalized = value.trim().replaceAll(RegExp(r'\s+'), ' ');

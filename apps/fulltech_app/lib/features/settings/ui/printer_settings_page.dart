@@ -60,21 +60,20 @@ class _WindowsPrinterSettingsViewState
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _load();
+    });
   }
 
   Future<void> _load() async {
+    final settingsRepository = ref.read(printerSettingsRepositoryProvider);
+    final ticketPrinter = ref.read(unifiedTicketPrinterProvider);
     setState(() => _loading = true);
     try {
-      final settings = await ref
-          .read(printerSettingsRepositoryProvider)
-          .getOrCreate();
-      final printers = await ref
-          .read(unifiedTicketPrinterProvider)
-          .getAvailablePrinters();
-      final preview = await ref
-          .read(unifiedTicketPrinterProvider)
-          .generatePreviewText();
+      final settings = await settingsRepository.getOrCreate();
+      final printers = await ticketPrinter.getAvailablePrinters();
+      final preview = await ticketPrinter.generatePreviewText();
       if (!mounted) return;
       setState(() {
         _settings = settings;
@@ -87,16 +86,17 @@ class _WindowsPrinterSettingsViewState
   }
 
   Future<void> _save(PrinterSettingsModel settings) async {
+    final settingsRepository = ref.read(printerSettingsRepositoryProvider);
+    final ticketPrinter = ref.read(unifiedTicketPrinterProvider);
     _saveDebounce?.cancel();
     setState(() {
       _settings = settings;
       _saving = true;
     });
-    await ref.read(printerSettingsRepositoryProvider).updateSettings(settings);
+    await settingsRepository.updateSettings(settings);
+    if (!mounted) return;
     ref.invalidate(printerSettingsProvider);
-    final preview = await ref
-        .read(unifiedTicketPrinterProvider)
-        .generatePreviewText();
+    final preview = await ticketPrinter.generatePreviewText();
     if (!mounted) return;
     setState(() {
       _preview = preview;
@@ -114,10 +114,9 @@ class _WindowsPrinterSettingsViewState
   }
 
   Future<void> _test() async {
+    final ticketPrinter = ref.read(unifiedTicketPrinterProvider);
     setState(() => _testing = true);
-    final result = await ref
-        .read(unifiedTicketPrinterProvider)
-        .printTestTicket();
+    final result = await ticketPrinter.printTestTicket();
     if (!mounted) return;
     setState(() => _testing = false);
     ScaffoldMessenger.of(
@@ -126,10 +125,9 @@ class _WindowsPrinterSettingsViewState
   }
 
   Future<void> _ruler() async {
+    final ticketPrinter = ref.read(unifiedTicketPrinterProvider);
     setState(() => _testing = true);
-    final result = await ref
-        .read(unifiedTicketPrinterProvider)
-        .printWidthRulerTest();
+    final result = await ticketPrinter.printWidthRulerTest();
     if (!mounted) return;
     setState(() => _testing = false);
     ScaffoldMessenger.of(
@@ -546,7 +544,9 @@ class _MobilePrinterSettingsViewState
   }
 
   Future<void> _save(MobilePrinterSettingsModel settings) async {
-    await ref.read(mobilePrinterSettingsRepositoryProvider).update(settings);
+    final repository = ref.read(mobilePrinterSettingsRepositoryProvider);
+    await repository.update(settings);
+    if (!mounted) return;
     ref.invalidate(mobilePrinterSettingsProvider);
   }
 
@@ -571,16 +571,18 @@ class _MobilePrinterSettingsViewState
   }
 
   Future<void> _testPrint() async {
+    final settingsRepository = ref.read(
+      mobilePrinterSettingsRepositoryProvider,
+    );
+    final companyInfoRepository = ref.read(companyInfoRepositoryProvider);
+    final windowsSettingsRepository = ref.read(
+      printerSettingsRepositoryProvider,
+    );
+    final printService = ref.read(mobilePrintServiceProvider);
     await _run(() async {
-      final settings = await ref
-          .read(mobilePrinterSettingsRepositoryProvider)
-          .getOrCreate();
-      final company = await ref
-          .read(companyInfoRepositoryProvider)
-          .getCurrentCompanyInfo();
-      final windowsSettings = await ref
-          .read(printerSettingsRepositoryProvider)
-          .getOrCreate();
+      final settings = await settingsRepository.getOrCreate();
+      final company = await companyInfoRepository.getCurrentCompanyInfo();
+      final windowsSettings = await windowsSettingsRepository.getOrCreate();
       final layout = TicketLayoutConfig.fromPrinterSettings(
         windowsSettings.copyWith(
           paperWidthMm: settings.paperWidthMm,
@@ -591,21 +593,17 @@ class _MobilePrinterSettingsViewState
       final builder = TicketBuilder(layout: layout, company: company);
       final ticket = TicketData.demo();
       final pdf = await builder.buildPdf(ticket);
-      return ref
-          .read(mobilePrintServiceProvider)
-          .printRaw(
-            lines: builder.buildLines(ticket),
-            pdfBytes: pdf,
-            documentName: 'Ticket de prueba',
-          );
+      return printService.printRaw(
+        lines: builder.buildLines(ticket),
+        pdfBytes: pdf,
+        documentName: 'Ticket de prueba',
+      );
     });
   }
 
   Future<void> _testNetwork(MobilePrinterSettingsModel settings) {
-    return _run(
-      () =>
-          ref.read(mobilePrintServiceProvider).testNetworkConnection(settings),
-    );
+    final printService = ref.read(mobilePrintServiceProvider);
+    return _run(() => printService.testNetworkConnection(settings));
   }
 
   String _statusText(MobilePrinterConnectionStatus status) {
@@ -669,8 +667,8 @@ class _MobilePrinterSettingsViewState
   }
 
   Future<void> _autoConnectBluetooth(MobilePrinterSettingsModel settings) {
+    final service = ref.read(mobilePrintServiceProvider);
     return _run(() async {
-      final service = ref.read(mobilePrintServiceProvider);
       final result = await service.autoConnectBluetoothPrinter(settings);
       final printers = await service.discoverBluetoothPrinters();
       if (mounted) {
@@ -688,6 +686,8 @@ class _MobilePrinterSettingsViewState
     BluetoothInfo printer,
   ) async {
     if (_busy) return;
+    final repository = ref.read(mobilePrinterSettingsRepositoryProvider);
+    final service = ref.read(mobilePrintServiceProvider);
     final selected = settings.copyWith(
       connectionType: MobilePrinterConnectionType.bluetooth,
       printerName: printer.name.trim().isEmpty
@@ -705,25 +705,17 @@ class _MobilePrinterSettingsViewState
     );
     setState(() => _busy = true);
     try {
-      await ref
-          .read(mobilePrinterSettingsRepositoryProvider)
-          .update(
-            selected.copyWith(
-              lastStatus: MobilePrinterConnectionStatus.connecting,
-            ),
-          );
-      final result = await ref
-          .read(mobilePrintServiceProvider)
-          .testBluetoothConnection(selected);
+      await repository.update(
+        selected.copyWith(lastStatus: MobilePrinterConnectionStatus.connecting),
+      );
+      final result = await service.testBluetoothConnection(selected);
       if (!result.success) {
-        await ref
-            .read(mobilePrinterSettingsRepositoryProvider)
-            .update(
-              settings.copyWith(
-                lastStatus: MobilePrinterConnectionStatus.error,
-                lastError: result.message,
-              ),
-            );
+        await repository.update(
+          settings.copyWith(
+            lastStatus: MobilePrinterConnectionStatus.error,
+            lastError: result.message,
+          ),
+        );
       }
       if (mounted) {
         ScaffoldMessenger.of(

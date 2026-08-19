@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_routes.dart';
+import '../auth/app_role.dart';
 import '../auth/auth_provider.dart';
 import '../auth/auth_repository.dart';
 import '../cache/local_json_cache.dart';
@@ -20,6 +21,8 @@ final companySettingsRepositoryProvider = Provider<CompanySettingsRepository>((
     ref.watch(dioProvider),
     ref.read(syncQueueServiceProvider.notifier),
     cacheScope: user?.companyId ?? user?.email ?? user?.id,
+    canWriteSettings:
+        user?.appRole == AppRole.admin || user?.appRole == AppRole.asistente,
   );
   repository.registerSyncHandlers();
   return repository;
@@ -48,11 +51,17 @@ class CompanySettingsRepository {
   final LocalJsonCache _cache = LocalJsonCache();
   final SyncQueueService _syncQueue;
   final String? _cacheScope;
+  final bool _canWriteSettings;
 
   bool _handlersRegistered = false;
 
-  CompanySettingsRepository(this._dio, this._syncQueue, {String? cacheScope})
-    : _cacheScope = _normalizeCacheScope(cacheScope);
+  CompanySettingsRepository(
+    this._dio,
+    this._syncQueue, {
+    String? cacheScope,
+    bool canWriteSettings = true,
+  }) : _cacheScope = _normalizeCacheScope(cacheScope),
+       _canWriteSettings = canWriteSettings;
 
   static String? _normalizeCacheScope(String? value) {
     final clean = value?.trim().toLowerCase();
@@ -67,6 +76,13 @@ class CompanySettingsRepository {
     if (_handlersRegistered) return;
     _handlersRegistered = true;
     _syncQueue.registerHandler(_saveSyncType, (payload) async {
+      if (!_canWriteSettings) {
+        TraceLog.log(
+          'company_settings',
+          'discarded stale settings.save for non-admin session',
+        );
+        return;
+      }
       final settings = CompanySettings.fromMap(
         ((payload['settings'] as Map?) ?? const <String, dynamic>{})
             .cast<String, dynamic>(),
@@ -133,14 +149,11 @@ class CompanySettingsRepository {
         _scopedCacheKey,
         maxAge: const Duration(days: 14),
       );
-      if (cached == null && _scopedCacheKey != _cacheKey) {
+      if (cached == null && _scopedCacheKey == _cacheKey) {
         cached = await _cache.readMap(
           _cacheKey,
           maxAge: const Duration(days: 14),
         );
-        if (cached != null) {
-          await _cache.writeMap(_scopedCacheKey, cached);
-        }
       }
       if (cached == null) return null;
       return CompanySettings.fromMap(cached);
@@ -267,6 +280,12 @@ class CompanySettingsRepository {
   }
 
   Future<bool> saveSettingsOrQueue(CompanySettings settings) async {
+    if (!_canWriteSettings) {
+      throw ApiException(
+        'Solo un administrador puede cambiar la configuración de empresa.',
+        403,
+      );
+    }
     await _cache.writeMap(_scopedCacheKey, settings.toMap());
     try {
       await _saveSettingsRemote(settings);
@@ -274,9 +293,9 @@ class CompanySettingsRepository {
     } on ApiException catch (e) {
       if (!_shouldQueueSync(e)) rethrow;
       await _syncQueue.enqueue(
-        id: _saveSyncType,
+        id: '$_saveSyncType:$_scopedCacheKey',
         type: _saveSyncType,
-        scope: 'global',
+        scope: _scopedCacheKey,
         payload: {'settings': settings.toMap()},
       );
       return true;

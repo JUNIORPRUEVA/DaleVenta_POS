@@ -11,11 +11,23 @@ Future<void> showDeleteAccountDialog(
   BuildContext context,
   WidgetRef ref,
 ) async {
+  final authRepository = ref.read(authRepositoryProvider);
+  final authController = ref.read(authStateProvider.notifier);
+  return showDeleteAccountDialogWithDependencies(
+    context,
+    authRepository: authRepository,
+    authController: authController,
+  );
+}
+
+Future<void> showDeleteAccountDialogWithDependencies(
+  BuildContext context, {
+  required AuthRepository authRepository,
+  required AuthController authController,
+}) async {
   AccountDeletionPreview preview;
   try {
-    preview = await ref
-        .read(authRepositoryProvider)
-        .getAccountDeletionPreview();
+    preview = await authRepository.getAccountDeletionPreview();
   } catch (error) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -29,22 +41,29 @@ Future<void> showDeleteAccountDialog(
     context: context,
     barrierDismissible: false,
     barrierColor: Colors.black.withValues(alpha: 0.58),
-    builder: (_) => _DeleteAccountDangerDialog(preview: preview),
+    builder: (_) => _DeleteAccountDangerDialog(
+      preview: preview,
+      authController: authController,
+    ),
   );
 }
 
-class _DeleteAccountDangerDialog extends ConsumerStatefulWidget {
-  const _DeleteAccountDangerDialog({required this.preview});
+class _DeleteAccountDangerDialog extends StatefulWidget {
+  const _DeleteAccountDangerDialog({
+    required this.preview,
+    required this.authController,
+  });
 
   final AccountDeletionPreview preview;
+  final AuthController authController;
 
   @override
-  ConsumerState<_DeleteAccountDangerDialog> createState() =>
+  State<_DeleteAccountDangerDialog> createState() =>
       _DeleteAccountDangerDialogState();
 }
 
 class _DeleteAccountDangerDialogState
-    extends ConsumerState<_DeleteAccountDangerDialog> {
+    extends State<_DeleteAccountDangerDialog> {
   final _password = TextEditingController();
   final _phrase = TextEditingController();
   bool _submitting = false;
@@ -65,14 +84,12 @@ class _DeleteAccountDangerDialogState
     });
 
     try {
-      final result = await ref
-          .read(authStateProvider.notifier)
-          .deleteAccount(
-            password: _password.text,
-            confirmationPhrase: widget.preview.requiresCompanyConfirmationPhrase
-                ? _phrase.text
-                : null,
-          );
+      final result = await widget.authController.deleteAccount(
+        password: _password.text,
+        confirmationPhrase: widget.preview.requiresCompanyConfirmationPhrase
+            ? _phrase.text
+            : null,
+      );
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(

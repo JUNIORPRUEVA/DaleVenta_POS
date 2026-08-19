@@ -34,18 +34,17 @@ class CashTurnMenuButton extends ConsumerWidget {
   }
 
   Future<void> _openCash(BuildContext context, WidgetRef ref) async {
+    final controller = ref.read(activeCashSessionControllerProvider.notifier);
     try {
       final opened = await showOpenCashDialog(
         context,
         onOpenShift: (amount) async {
-          await ref
-              .read(activeCashSessionControllerProvider.notifier)
-              .open(amount);
+          await controller.open(amount);
         },
       );
       if (!context.mounted) return;
       if (opened == true) {
-        await ref.read(activeCashSessionControllerProvider.notifier).refresh();
+        await controller.refresh();
         if (!context.mounted) return;
         showCashToast(context, 'Caja abierta');
       }
@@ -62,21 +61,21 @@ class CashTurnMenuButton extends ConsumerWidget {
   }
 
   Future<void> _closeCash(BuildContext context, WidgetRef ref) async {
+    final repository = ref.read(cashRepositoryProvider);
+    final controller = ref.read(activeCashSessionControllerProvider.notifier);
     try {
-      final summary = await ref.read(cashRepositoryProvider).summary();
+      final summary = await repository.summary();
       if (!context.mounted) return;
       final result = await showCloseShiftDialog(
         context,
         expectedCash: summary.expectedCash,
         onCloseShift: (amount) {
-          return ref
-              .read(activeCashSessionControllerProvider.notifier)
-              .close(amount);
+          return controller.close(amount);
         },
       );
       if (!context.mounted) return;
       if (result?.success != true) return;
-      await ref.read(activeCashSessionControllerProvider.notifier).refresh();
+      await controller.refresh();
       if (!context.mounted) return;
       final printResult = result?.printResult;
       final message = printResult == null
@@ -98,12 +97,14 @@ class CashTurnMenuButton extends ConsumerWidget {
   }
 
   Future<void> _showCurrentTurn(BuildContext context, WidgetRef ref) async {
-    final summary = await ref.read(cashRepositoryProvider).summary();
+    final repository = ref.read(cashRepositoryProvider);
+    final active = ref.read(activeCashSessionControllerProvider).valueOrNull;
+    final summary = await repository.summary();
     if (!context.mounted) return;
     final action = await showDialog<String>(
       context: context,
       builder: (dialogContext) => _CurrentTurnDialog(
-        active: ref.read(activeCashSessionControllerProvider).valueOrNull,
+        active: active,
         summary: summary,
         onCloseTurn: () {
           Navigator.of(dialogContext).pop('close');
@@ -123,7 +124,9 @@ class CashTurnMenuButton extends ConsumerWidget {
   }
 
   Future<void> _showHistory(BuildContext context, WidgetRef ref) async {
-    final rows = await ref.read(cashRepositoryProvider).closedSessions();
+    final repository = ref.read(cashRepositoryProvider);
+    final printer = ref.read(cashCloseTicketPrinterProvider);
+    final rows = await repository.closedSessions();
     if (!context.mounted) return;
     final rootContext = context;
     await showDialog<void>(
@@ -131,9 +134,7 @@ class CashTurnMenuButton extends ConsumerWidget {
       builder: (dialogContext) => _TurnHistoryDialog(
         rows: rows,
         onPrint: (row) async {
-          final result = await ref
-              .read(cashCloseTicketPrinterProvider)
-              .printHistoryTicket(row);
+          final result = await printer.printHistoryTicket(row);
           if (!rootContext.mounted) return;
           showCashToast(
             rootContext,
@@ -1454,10 +1455,9 @@ class _HistoryTurnCardState extends ConsumerState<_HistoryTurnCard> {
   CashSessionDetailModel? _detail;
 
   Future<void> _loadDetail() async {
+    final repository = ref.read(cashRepositoryProvider);
     try {
-      final detail = await ref
-          .read(cashRepositoryProvider)
-          .sessionDetail(widget.row.id);
+      final detail = await repository.sessionDetail(widget.row.id);
       if (!mounted) return;
       setState(() {
         _detail = detail;

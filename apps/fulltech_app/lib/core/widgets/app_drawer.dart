@@ -385,24 +385,24 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
 
   Future<void> _closeTurnFromDrawer(BuildContext context) async {
     final rootContext = Navigator.of(context, rootNavigator: true).context;
+    final repository = ref.read(cashRepositoryProvider);
+    final controller = ref.read(activeCashSessionControllerProvider.notifier);
     Navigator.pop(context);
     await Future<void>.delayed(Duration.zero);
     if (!rootContext.mounted) return;
 
     try {
-      final summary = await ref.read(cashRepositoryProvider).summary();
+      final summary = await repository.summary();
       if (!rootContext.mounted) return;
       final result = await showCloseShiftDialog(
         rootContext,
         expectedCash: summary.expectedCash,
         onCloseShift: (amount) {
-          return ref
-              .read(activeCashSessionControllerProvider.notifier)
-              .close(amount);
+          return controller.close(amount);
         },
       );
       if (!rootContext.mounted || result?.success != true) return;
-      await ref.read(activeCashSessionControllerProvider.notifier).refresh();
+      await controller.refresh();
       if (!rootContext.mounted) return;
       final printResult = result?.printResult;
       final message = printResult == null

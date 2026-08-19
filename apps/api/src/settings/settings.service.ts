@@ -35,8 +35,20 @@ export class SettingsService {
     this.requireAdmin(user);
     const companyId = requireTenant(user);
     const data = this.settingsData(dto);
+    if (
+      Object.prototype.hasOwnProperty.call(dto, 'companyName') &&
+      (data.companyName ?? '').trim().length === 0
+    ) {
+      throw new BadRequestException('El nombre de la empresa es obligatorio');
+    }
     let changedCompanyName: string | null = null;
+    let previousCompanyName: string | null = null;
     const config = await this.prisma.$transaction(async (tx) => {
+      const currentCompany = await tx.company.findUnique({
+        where: { id: companyId },
+        select: { name: true },
+      });
+      previousCompanyName = currentCompany?.name?.trim() ?? null;
       const updated = await tx.appConfig.upsert({
         where: { companyId },
         create: {
@@ -56,6 +68,14 @@ export class SettingsService {
           },
         });
         changedCompanyName = companyName;
+        if (previousCompanyName !== companyName) {
+          await this.writeCompanySettingsAuditLog(tx, {
+            companyId,
+            user,
+            previousCompanyName,
+            nextCompanyName: companyName,
+          });
+        }
       } else {
         const fiscalData = this.companyFiscalData(dto);
         if (Object.keys(fiscalData).length) {
@@ -172,7 +192,7 @@ export class SettingsService {
       select: { name: true },
     });
     const companyName = company?.name?.trim() ?? '';
-    return this.prisma.appConfig.upsert({
+    const config = await this.prisma.appConfig.upsert({
       where: { companyId },
       create: {
         id: `company_${companyId}`,
@@ -180,6 +200,32 @@ export class SettingsService {
         companyName,
       },
       update: {},
+    });
+    return {
+      ...config,
+      companyName,
+    };
+  }
+
+  private async writeCompanySettingsAuditLog(
+    tx: Prisma.TransactionClient,
+    input: {
+      companyId: string;
+      user: TenantUser;
+      previousCompanyName: string | null;
+      nextCompanyName: string;
+    },
+  ) {
+    await tx.companyLicenseAuditLog.create({
+      data: {
+        companyId: input.companyId,
+        actorId: input.user.id,
+        actorEmail: null,
+        action: 'settings.company_name_update',
+        reason: 'company_settings',
+        before: { companyName: input.previousCompanyName ?? '' },
+        after: { companyName: input.nextCompanyName },
+      },
     });
   }
 
