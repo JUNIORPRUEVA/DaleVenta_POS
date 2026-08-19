@@ -32,9 +32,11 @@ class AppStorageScopeGuard {
             : 'storage scope changed; clearing local session/cache',
       );
 
-      await OfflineStore.instance.clearAll();
-      await FulltechImageCacheManager.clear();
-      await TokenStorage().clearTokens();
+      if (previous != null) {
+        await OfflineStore.instance.clearAll();
+        await FulltechImageCacheManager.clear();
+        await TokenStorage().clearTokens();
+      }
       await prefs.setString(_scopeKey, current);
     } catch (error, stackTrace) {
       TraceLog.log(

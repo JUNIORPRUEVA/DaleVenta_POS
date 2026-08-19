@@ -913,9 +913,20 @@ class OfflineStore {
           .map((row) => row.cast<String, dynamic>())
           .toList(growable: false),
       'inventoryIntents': inventoryIntents
-          .map((row) => jsonDecode((row['payload'] ?? '{}').toString()))
-          .whereType<Map>()
-          .map((row) => row.cast<String, dynamic>())
+          .map((row) {
+            final decoded = jsonDecode((row['payload'] ?? '{}').toString());
+            final payload = decoded is Map
+                ? decoded.cast<String, dynamic>()
+                : <String, dynamic>{};
+            return {
+              ...payload,
+              'id': row['id']?.toString(),
+              'productId': row['product_id']?.toString(),
+              'quantityDelta': _asDouble(row['quantity_delta']),
+              'idempotencyKey': row['idempotency_key']?.toString(),
+              'status': row['status']?.toString(),
+            };
+          })
           .toList(growable: false),
     };
   }

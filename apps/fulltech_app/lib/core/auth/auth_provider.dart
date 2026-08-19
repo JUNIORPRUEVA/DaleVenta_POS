@@ -217,6 +217,17 @@ class AuthController extends StateNotifier<AuthState> {
           );
           break;
         case SessionVerificationStatus.deferred:
+          if (result.user == null) {
+            state = AuthState(
+              initialized: true,
+              isAuthenticated: false,
+              user: null,
+              loading: false,
+              restoringSession: false,
+              hasSessionHint: false,
+            );
+            break;
+          }
           _markSessionHealthy();
           state = state.copyWith(
             initialized: true,
@@ -232,7 +243,7 @@ class AuthController extends StateNotifier<AuthState> {
       if (!mounted) return;
       state = state.copyWith(
         initialized: true,
-        isAuthenticated: state.hasSessionHint,
+        isAuthenticated: state.hasSessionHint && state.user != null,
         loading: false,
         restoringSession: false,
       );

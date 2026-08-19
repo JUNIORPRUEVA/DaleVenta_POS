@@ -20,9 +20,10 @@ final appBootstrapStatusProvider = Provider<AppBootstrapStatus>((ref) {
   final user = auth.user;
   final userId = user?.id.trim() ?? '';
   final companyId = user?.companyId?.trim() ?? '';
-  if (auth.restoringSession || userId.isEmpty || companyId.isEmpty) {
+  if (auth.restoringSession) {
     return AppBootstrapStatus.authenticatedLoadingCompany;
   }
+  if (userId.isEmpty || companyId.isEmpty) return AppBootstrapStatus.error;
 
   final company = ref.watch(companySettingsProvider);
   return company.when(
@@ -52,7 +53,10 @@ final appBootstrapStatusProvider = Provider<AppBootstrapStatus>((ref) {
         error: error,
         stackTrace: stackTrace,
       );
-      return AppBootstrapStatus.error;
+      final snapshotCompanyName = user?.companyName?.trim() ?? '';
+      return snapshotCompanyName.isNotEmpty
+          ? AppBootstrapStatus.ready
+          : AppBootstrapStatus.error;
     },
   );
 });

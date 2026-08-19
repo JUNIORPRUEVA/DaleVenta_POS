@@ -74,7 +74,7 @@ void main() {
     },
   );
 
-  test('authenticated session without companyId never becomes app ready', () {
+  test('authenticated session without companyId becomes bootstrap error', () {
     final container = ProviderContainer(
       overrides: [
         authStateProvider.overrideWith(
@@ -98,9 +98,68 @@ void main() {
 
     expect(
       container.read(appBootstrapStatusProvider),
+      AppBootstrapStatus.error,
+    );
+  });
+
+  test('restoring session still waits before identity is verified', () {
+    final container = ProviderContainer(
+      overrides: [
+        authStateProvider.overrideWith(
+          (ref) => _FixedAuthController(
+            ref,
+            AuthState(
+              initialized: true,
+              isAuthenticated: true,
+              user: _user(companyId: ''),
+              restoringSession: true,
+              hasSessionHint: true,
+            ),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    expect(
+      container.read(appBootstrapStatusProvider),
       AppBootstrapStatus.authenticatedLoadingCompany,
     );
   });
+
+  test(
+    'company settings error can continue with resolved user company name',
+    () async {
+      final container = ProviderContainer(
+        overrides: [
+          authStateProvider.overrideWith(
+            (ref) => _FixedAuthController(
+              ref,
+              AuthState(
+                initialized: true,
+                isAuthenticated: true,
+                user: _user(companyName: 'FULLTECH, SRL'),
+                hasSessionHint: true,
+              ),
+            ),
+          ),
+          companySettingsProvider.overrideWith(
+            (ref) async => throw StateError('settings unavailable'),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(companySettingsProvider.future).catchError((_) {
+        return CompanySettings.empty();
+      });
+
+      expect(
+        container.read(appBootstrapStatusProvider),
+        AppBootstrapStatus.ready,
+      );
+    },
+  );
 
   test('logout state resets bootstrap to unauthenticated', () {
     final container = ProviderContainer(

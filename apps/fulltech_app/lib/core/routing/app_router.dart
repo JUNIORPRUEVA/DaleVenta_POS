@@ -340,11 +340,14 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       final bootstrappingAuthenticatedSession =
           bootstrap == AppBootstrapStatus.initializing ||
-          bootstrap == AppBootstrapStatus.authenticatedLoadingCompany ||
-          bootstrap == AppBootstrapStatus.error;
+          bootstrap == AppBootstrapStatus.authenticatedLoadingCompany;
 
       if (bootstrappingAuthenticatedSession) {
         return isSplashRoute ? null : Routes.splash;
+      }
+
+      if (bootstrap == AppBootstrapStatus.error) {
+        return path == Routes.login ? null : Routes.login;
       }
 
       if (isSplashRoute) {

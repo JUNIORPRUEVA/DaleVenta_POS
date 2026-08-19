@@ -4,14 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:validators/validators.dart' as validators;
 
-import '../../../core/auth/app_role.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/errors/api_exception.dart';
-import '../../../core/routing/route_access.dart';
 import '../../../core/utils/app_feedback.dart';
 import '../../../core/utils/safe_url_launcher.dart';
 import '../../../core/widgets/primary_button.dart';
@@ -169,15 +166,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           .read(authStateProvider.notifier)
           .login(_emailCtrl.text, _passwordCtrl.text);
       await _persistRememberedCredentials();
-      if (!mounted) return;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        context.go(
-          RouteAccess.defaultHomeForRole(
-            ref.read(authStateProvider).user?.appRole ?? AppRole.unknown,
-          ),
-        );
-      });
       return;
     } on ApiException catch (e) {
       if (mounted) {
@@ -272,143 +260,148 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         child: Form(
                           key: _formKey,
                           child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Text(
-                                'Bienvenido a FullPOS Cloud',
-                                style: Theme.of(context).textTheme.headlineSmall
-                                    ?.copyWith(
-                                      color: Colors.black87,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Bienvenido a FullPOS Cloud',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .headlineSmall
+                                        ?.copyWith(
+                                          color: Colors.black87,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  const Text(
+                                    'Inicia sesion para continuar.',
+                                    style: TextStyle(color: Colors.black87),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 6),
-                              const Text(
-                                'Inicia sesion para continuar.',
-                                style: TextStyle(color: Colors.black87),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          TextFormField(
-                            controller: _emailCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Email corporativo',
-                              prefixIcon: Icon(Icons.alternate_email),
-                            ),
-                            keyboardType: TextInputType.emailAddress,
-                            textInputAction: TextInputAction.next,
-                            onFieldSubmitted: (_) =>
-                                FocusScope.of(context).nextFocus(),
-                            validator: (v) {
-                              final value = v?.trim() ?? '';
-                              if (value.isEmpty) return 'Ingresa tu email';
-                              if (!validators.isEmail(value)) {
-                                return 'Email invalido';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _passwordCtrl,
-                            decoration: InputDecoration(
-                              labelText: 'Contrasena',
-                              prefixIcon: const Icon(Icons.lock_outline),
-                              suffixIcon: IconButton(
-                                tooltip: _obscurePassword
-                                    ? 'Mostrar contrasena'
-                                    : 'Ocultar contrasena',
-                                onPressed: () {
-                                  setState(() {
-                                    _obscurePassword = !_obscurePassword;
-                                  });
-                                },
-                                icon: Icon(
-                                  _obscurePassword
-                                      ? Icons.visibility_outlined
-                                      : Icons.visibility_off_outlined,
+                              const SizedBox(height: 20),
+                              TextFormField(
+                                controller: _emailCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'Email corporativo',
+                                  prefixIcon: Icon(Icons.alternate_email),
                                 ),
-                              ),
-                            ),
-                            obscureText: _obscurePassword,
-                            textInputAction: TextInputAction.done,
-                            onFieldSubmitted: (_) {
-                              if (!loading) unawaited(_submit());
-                            },
-                            validator: (v) => (v == null || v.isEmpty)
-                                ? 'Ingresa tu contrasena'
-                                : null,
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Switch(
-                                value: _rememberMe,
-                                onChanged: (value) {
-                                  setState(() => _rememberMe = value);
+                                keyboardType: TextInputType.emailAddress,
+                                textInputAction: TextInputAction.next,
+                                onFieldSubmitted: (_) =>
+                                    FocusScope.of(context).nextFocus(),
+                                validator: (v) {
+                                  final value = v?.trim() ?? '';
+                                  if (value.isEmpty) return 'Ingresa tu email';
+                                  if (!validators.isEmail(value)) {
+                                    return 'Email invalido';
+                                  }
+                                  return null;
                                 },
-                                activeThumbColor: Theme.of(
-                                  context,
-                                ).colorScheme.primary,
                               ),
-                              const SizedBox(width: 8),
-                              const Expanded(
-                                child: Text(
-                                  'Recordar contrasena',
-                                  style: TextStyle(
-                                    color: Colors.black87,
-                                    fontWeight: FontWeight.w600,
+                              const SizedBox(height: 12),
+                              TextFormField(
+                                controller: _passwordCtrl,
+                                decoration: InputDecoration(
+                                  labelText: 'Contrasena',
+                                  prefixIcon: const Icon(Icons.lock_outline),
+                                  suffixIcon: IconButton(
+                                    tooltip: _obscurePassword
+                                        ? 'Mostrar contrasena'
+                                        : 'Ocultar contrasena',
+                                    onPressed: () {
+                                      setState(() {
+                                        _obscurePassword = !_obscurePassword;
+                                      });
+                                    },
+                                    icon: Icon(
+                                      _obscurePassword
+                                          ? Icons.visibility_outlined
+                                          : Icons.visibility_off_outlined,
+                                    ),
+                                  ),
+                                ),
+                                obscureText: _obscurePassword,
+                                textInputAction: TextInputAction.done,
+                                onFieldSubmitted: (_) {
+                                  if (!loading) unawaited(_submit());
+                                },
+                                validator: (v) => (v == null || v.isEmpty)
+                                    ? 'Ingresa tu contrasena'
+                                    : null,
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Switch(
+                                    value: _rememberMe,
+                                    onChanged: (value) {
+                                      setState(() => _rememberMe = value);
+                                    },
+                                    activeThumbColor: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Expanded(
+                                    child: Text(
+                                      'Recordar contrasena',
+                                      style: TextStyle(
+                                        color: Colors.black87,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (_notice != null) ...[
+                                const SizedBox(height: 12),
+                                _LoginNoticeCard(data: _notice!),
+                              ],
+                              const SizedBox(height: 16),
+                              PrimaryButton(
+                                label: 'Iniciar sesion',
+                                loading: loading,
+                                onPressed: _submit,
+                              ),
+                              const SizedBox(height: 12),
+                              OutlinedButton.icon(
+                                onPressed: loading
+                                    ? null
+                                    : () => Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const RegisterScreen(),
+                                        ),
+                                      ),
+                                icon: const Icon(Icons.storefront_rounded),
+                                label: const Text('Crear mi negocio'),
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size.fromHeight(48),
+                                  foregroundColor: const Color(0xFF123A75),
+                                  side: const BorderSide(
+                                    color: Color(0xFFCFE0FF),
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  textStyle: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0,
                                   ),
                                 ),
                               ),
+                              const SizedBox(height: 8),
+                              TextButton(
+                                onPressed: loading ? null : () {},
+                                child: const Text('¿Olvidaste tu contraseña?'),
+                              ),
                             ],
                           ),
-                          if (_notice != null) ...[
-                            const SizedBox(height: 12),
-                            _LoginNoticeCard(data: _notice!),
-                          ],
-                          const SizedBox(height: 16),
-                          PrimaryButton(
-                            label: 'Iniciar sesion',
-                            loading: loading,
-                            onPressed: _submit,
-                          ),
-                          const SizedBox(height: 12),
-                          OutlinedButton.icon(
-                            onPressed: loading
-                                ? null
-                                : () => Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => const RegisterScreen(),
-                                    ),
-                                  ),
-                            icon: const Icon(Icons.storefront_rounded),
-                            label: const Text('Crear mi negocio'),
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size.fromHeight(48),
-                              foregroundColor: const Color(0xFF123A75),
-                              side: const BorderSide(color: Color(0xFFCFE0FF)),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              textStyle: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextButton(
-                            onPressed: loading ? null : () {},
-                            child: const Text('¿Olvidaste tu contraseña?'),
-                          ),
-                        ],
-                      ),
                         ),
                       ),
                     ),

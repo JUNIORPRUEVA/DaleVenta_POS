@@ -351,6 +351,38 @@ class AuthRepository {
     return UserModel.fromJson(normalized);
   }
 
+  UserModel _mergeLoginFallbackIdentity(UserModel user, dynamic loginData) {
+    final fallback = _userFromLoginResponse(loginData);
+    if (fallback == null) return user;
+    final merged = user.toJson();
+    if ((user.companyId ?? '').trim().isEmpty &&
+        (fallback.companyId ?? '').trim().isNotEmpty) {
+      merged['companyId'] = fallback.companyId;
+    }
+    if ((user.companyName ?? '').trim().isEmpty &&
+        (fallback.companyName ?? '').trim().isNotEmpty) {
+      merged['companyName'] = fallback.companyName;
+    }
+    if ((user.companySlug ?? '').trim().isEmpty &&
+        (fallback.companySlug ?? '').trim().isNotEmpty) {
+      merged['companySlug'] = fallback.companySlug;
+    }
+    return UserModel.fromJson(merged);
+  }
+
+  Future<void> _assertUsableAuthenticatedUser(UserModel user) async {
+    final userId = user.id.trim();
+    final companyId = user.companyId?.trim() ?? '';
+    if (userId.isNotEmpty && companyId.isNotEmpty) return;
+    await _safeClearTokens();
+    throw const ApiException.detailed(
+      message:
+          'Tu usuario no tiene una empresa activa asignada. Contacta al administrador antes de iniciar sesion.',
+      type: ApiErrorType.forbidden,
+      displayCode: 'AUTH_COMPANY_REQUIRED',
+    );
+  }
+
   Future<void> _safeClearTokens() async {
     try {
       await _storage.clearTokens().timeout(_storageTimeout);
@@ -416,24 +448,30 @@ class AuthRepository {
               ),
             )
             .timeout(_loginTimeout);
-        final user = UserModel.fromJson(
-          (me.data as Map).cast<String, dynamic>(),
+        final user = _mergeLoginFallbackIdentity(
+          UserModel.fromJson((me.data as Map).cast<String, dynamic>()),
+          res.data,
         );
+        await _assertUsableAuthenticatedUser(user);
         await _storage.saveUserSnapshot(user);
         return user;
       } on DioException {
         final fallbackUser = _userFromLoginResponse(res.data);
         if (fallbackUser != null) {
+          await _assertUsableAuthenticatedUser(fallbackUser);
           await _storage.saveUserSnapshot(fallbackUser);
           return fallbackUser;
         }
+        await _safeClearTokens();
         rethrow;
       } on TimeoutException {
         final fallbackUser = _userFromLoginResponse(res.data);
         if (fallbackUser != null) {
+          await _assertUsableAuthenticatedUser(fallbackUser);
           await _storage.saveUserSnapshot(fallbackUser);
           return fallbackUser;
         }
+        await _safeClearTokens();
         rethrow;
       }
     } on TimeoutException {
@@ -465,8 +503,10 @@ class AuthRepository {
       }
       final fallbackUser = _userFromLoginResponse(res.data);
       if (fallbackUser == null) {
+        await _safeClearTokens();
         throw ApiException('No se recibio la sesion creada');
       }
+      await _assertUsableAuthenticatedUser(fallbackUser);
       await _storage.saveUserSnapshot(fallbackUser);
       return fallbackUser;
     } on TimeoutException {

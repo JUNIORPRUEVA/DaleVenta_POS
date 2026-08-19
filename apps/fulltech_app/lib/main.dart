@@ -68,7 +68,9 @@ Future<void> main() async {
       }
       _configureImageCacheForPlatform();
       _initializeSqlite();
+      await prepareAppFirstFrame();
       await AppStorageScopeGuard.ensureCurrentScope();
+      final authLaunchSnapshot = await loadAuthLaunchSnapshot();
 
       FlutterError.onError = (details) {
         FlutterError.presentError(details);
@@ -90,7 +92,14 @@ Future<void> main() async {
         ),
       );
 
-      runApp(const ProviderScope(child: AppBootstrap()));
+      runApp(
+        ProviderScope(
+          overrides: [
+            authLaunchSnapshotProvider.overrideWithValue(authLaunchSnapshot),
+          ],
+          child: const AppBootstrap(),
+        ),
+      );
     },
     (error, stack) {
       AppErrorReporter.instance.record(error, stack, context: 'Zone');

@@ -214,6 +214,11 @@ class CompanySettingsRepository {
       return await getSettingsRemoteAndCache();
     } catch (error, stackTrace) {
       _traceProtectedError('settings load failed', error, stackTrace);
+      if (error is ApiException &&
+          (error.type == ApiErrorType.unauthorized ||
+              error.type == ApiErrorType.forbidden)) {
+        rethrow;
+      }
       final cached = await getCachedSettings();
       if (cached != null) return cached;
       return CompanySettings.empty();
@@ -293,12 +298,13 @@ class CompanySettingsRepository {
         403,
       );
     }
-    await _cache.writeMap(_scopedCacheKey, settings.toMap());
     try {
       await _saveSettingsRemote(settings);
+      await _cache.writeMap(_scopedCacheKey, settings.toMap());
       return false;
     } on ApiException catch (e) {
       if (!_shouldQueueSync(e)) rethrow;
+      await _cache.writeMap(_scopedCacheKey, settings.toMap());
       await _syncQueue.enqueue(
         id: '$_saveSyncType:$_scopedCacheKey',
         type: _saveSyncType,

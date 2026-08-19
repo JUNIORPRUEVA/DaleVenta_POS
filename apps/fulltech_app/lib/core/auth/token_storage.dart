@@ -227,7 +227,7 @@ class TokenStorage {
   }
 
   Future<TokenStorageLaunchSnapshot> readFastLaunchSnapshot({
-    Duration timeout = const Duration(milliseconds: 180),
+    Duration timeout = const Duration(milliseconds: 650),
   }) async {
     if ((_memoryAccessToken?.isNotEmpty ?? false) &&
         _memoryUserSnapshot != null) {
@@ -252,19 +252,37 @@ class TokenStorage {
         _memoryUserSnapshot = user;
       }
 
-      return TokenStorageLaunchSnapshot(
-        hasSessionHint: accessToken != null && accessToken.isNotEmpty,
-        user: user,
-      );
+      if (accessToken != null && accessToken.isNotEmpty) {
+        return TokenStorageLaunchSnapshot(hasSessionHint: true, user: user);
+      }
     } catch (e, st) {
       TraceLog.log(
         'TokenStorage',
-        'readFastLaunchSnapshot() fallback to empty',
+        'readFastLaunchSnapshot() prefs fallback',
         error: e,
         stackTrace: st,
       );
-      return const TokenStorageLaunchSnapshot.empty();
     }
+
+    final secureToken = await _readSecure(_accessTokenKey);
+    final secureUser = await _restoreUserSnapshot(
+      await _readSecure(_userSnapshotKey),
+      seq: TraceLog.nextSeq(),
+      source: 'secure-launch',
+    );
+    if (secureToken != null && secureToken.isNotEmpty) {
+      _memoryAccessToken = secureToken;
+      if (secureUser != null) {
+        _memoryUserSnapshot = secureUser;
+      }
+      unawaited(_writePrefValue(_accessTokenKey, secureToken));
+      if (secureUser != null) {
+        unawaited(saveUserSnapshot(secureUser));
+      }
+      return TokenStorageLaunchSnapshot(hasSessionHint: true, user: secureUser);
+    }
+
+    return const TokenStorageLaunchSnapshot.empty();
   }
 
   Future<void> clearTokens() async {
