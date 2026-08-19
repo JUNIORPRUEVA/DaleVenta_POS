@@ -38,12 +38,11 @@ Future<bool> ensureAdminAuthorization(
   final granted = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
-    builder: (dialogContext) =>
-        _AdminAuthorizationDialog(
-          reason: reason,
-          routeLocation: routeLocation,
-          delegationScope: effectiveScope,
-        ),
+    builder: (dialogContext) => _AdminAuthorizationDialog(
+      reason: reason,
+      routeLocation: routeLocation,
+      delegationScope: effectiveScope,
+    ),
   );
   return granted == true;
 }

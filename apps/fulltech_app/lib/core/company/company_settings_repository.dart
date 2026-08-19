@@ -26,7 +26,8 @@ final companySettingsRepositoryProvider = Provider<CompanySettingsRepository>((
     canWriteSettings:
         user?.appRole == AppRole.admin ||
         user?.appRole == AppRole.asistente ||
-        adminAuthorization.isAuthorized,
+        (adminAuthorization.isAuthorized &&
+            adminAuthorization.delegationScope == 'company.settings'),
   );
   repository.registerSyncHandlers();
   return repository;
@@ -346,9 +347,9 @@ class CompanySettingsRepository {
   }
 
   Future<AdminAuthorizationVerification> verifyAdminAuthorizationPin(
-    String pin,
-    {String? scope}
-  ) async {
+    String pin, {
+    String? scope,
+  }) async {
     try {
       final res = await _dio
           .post(

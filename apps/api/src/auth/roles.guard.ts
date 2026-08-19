@@ -67,12 +67,18 @@ export class RolesGuard implements CanActivate {
       return true;
     }
     if (requiredPermissions?.length) {
-      const granted = await this.hasAnyUserPermission(user, requiredPermissions);
+      const granted = await this.hasAnyUserPermission(
+        user,
+        requiredPermissions,
+      );
       if (granted) {
         this.markPermissionAuthorization(user, requiredPermissions);
         return true;
       }
-      if (adminAuthorized && this.hasDelegatedPermission(user, requiredPermissions)) {
+      if (
+        adminAuthorized &&
+        this.hasDelegatedPermission(user, requiredPermissions)
+      ) {
         return true;
       }
     }
@@ -150,7 +156,11 @@ export class RolesGuard implements CanActivate {
 
   private hasValidAdminAuthorization(
     request: { headers?: Record<string, unknown> },
-    user?: { id?: string; companyId?: string | null },
+    user?: {
+      id?: string;
+      companyId?: string | null;
+      authorizedScopes?: string[];
+    },
   ) {
     const raw = request.headers?.["x-admin-authorization"];
     const token = Array.isArray(raw) ? raw[0] : raw;
@@ -213,9 +223,7 @@ export class RolesGuard implements CanActivate {
   }
 
   private markPermissionAuthorization(
-    user:
-      | { authorizedPermissions?: string[] }
-      | undefined,
+    user: { authorizedPermissions?: string[] } | undefined,
     permissions: string[],
   ) {
     if (!user) return;

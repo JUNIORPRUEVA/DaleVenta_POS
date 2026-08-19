@@ -3,19 +3,20 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { Prisma, Role } from '@prisma/client';
-import { randomUUID } from 'node:crypto';
-import * as bcrypt from 'bcryptjs';
+} from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { Prisma, Role } from "@prisma/client";
+import { randomUUID } from "node:crypto";
+import * as bcrypt from "bcryptjs";
 import {
   isAdminLikeForScope,
+  isAdminLike,
   requireTenant,
   type TenantUser,
-} from '../auth/tenant-context';
-import { PrismaService } from '../prisma/prisma.service';
-import { CatalogRealtimeRelayService } from '../products/catalog-realtime-relay.service';
-import { TaxService } from '../tax/tax.service';
+} from "../auth/tenant-context";
+import { PrismaService } from "../prisma/prisma.service";
+import { CatalogRealtimeRelayService } from "../products/catalog-realtime-relay.service";
+import { TaxService } from "../tax/tax.service";
 
 type SettingsPayload = Record<string, unknown>;
 
@@ -40,10 +41,10 @@ export class SettingsService {
     const companyId = requireTenant(user);
     const data = this.settingsData(dto);
     if (
-      Object.prototype.hasOwnProperty.call(dto, 'companyName') &&
-      (data.companyName ?? '').trim().length === 0
+      Object.prototype.hasOwnProperty.call(dto, "companyName") &&
+      (data.companyName ?? "").trim().length === 0
     ) {
-      throw new BadRequestException('El nombre de la empresa es obligatorio');
+      throw new BadRequestException("El nombre de la empresa es obligatorio");
     }
     let changedCompanyName: string | null = null;
     let previousCompanyName: string | null = null;
@@ -93,10 +94,10 @@ export class SettingsService {
     });
     if (this.hasFiscalSettingsData(dto)) {
       await this.taxes.updateFiscalSettings(user, {
-        taxEnabled: this.boolValue(dto, 'taxEnabled') ?? undefined,
-        defaultTaxRate: this.numberValue(dto, 'defaultTaxRate') ?? undefined,
-        pricesIncludeTax: this.boolValue(dto, 'pricesIncludeTax') ?? undefined,
-        ncfEnabled: this.boolValue(dto, 'ncfEnabled') ?? undefined,
+        taxEnabled: this.boolValue(dto, "taxEnabled") ?? undefined,
+        defaultTaxRate: this.numberValue(dto, "defaultTaxRate") ?? undefined,
+        pricesIncludeTax: this.boolValue(dto, "pricesIncludeTax") ?? undefined,
+        ncfEnabled: this.boolValue(dto, "ncfEnabled") ?? undefined,
       });
     }
     if (changedCompanyName) {
@@ -107,7 +108,7 @@ export class SettingsService {
   }
 
   async setAdminPin(user: TenantUser, pin: unknown) {
-    this.requireAdmin(user);
+    this.requirePermanentAdmin(user);
     const companyId = requireTenant(user);
     const normalizedPin = this.normalizePin(pin);
     const adminAuthorizationPinHash = await bcrypt.hash(normalizedPin, 10);
@@ -134,22 +135,22 @@ export class SettingsService {
       where: { companyId },
       select: { adminAuthorizationPinHash: true },
     });
-    const hash = config?.adminAuthorizationPinHash ?? '';
+    const hash = config?.adminAuthorizationPinHash ?? "";
     if (!hash) {
       throw new NotFoundException(
-        'La empresa no tiene PIN administrativo configurado',
+        "La empresa no tiene PIN administrativo configurado",
       );
     }
     const ok = await bcrypt.compare(normalizedPin, hash);
     if (!ok) {
-      throw new ForbiddenException('PIN administrativo inválido');
+      throw new ForbiddenException("PIN administrativo inválido");
     }
     const expiresInSeconds = 600;
     const adminAuthorizationToken = await this.jwt.signAsync(
       {
         sub: user.id,
         companyId,
-        tokenType: 'admin-authorization',
+        tokenType: "admin-authorization",
         scopes,
       },
       { expiresIn: expiresInSeconds },
@@ -163,9 +164,17 @@ export class SettingsService {
   }
 
   private requireAdmin(user: TenantUser) {
-    if (!isAdminLikeForScope(user, 'company.settings')) {
+    if (!isAdminLikeForScope(user, "company.settings")) {
       throw new ForbiddenException(
-        'Solo un administrador puede cambiar esta configuración',
+        "Solo un administrador puede cambiar esta configuración",
+      );
+    }
+  }
+
+  private requirePermanentAdmin(user: TenantUser) {
+    if (!isAdminLike(user)) {
+      throw new ForbiddenException(
+        "Solo un administrador puede cambiar esta configuración",
       );
     }
   }
@@ -174,29 +183,31 @@ export class SettingsService {
     const raw = Array.isArray(value) ? value : [value];
     const scopes = new Set<string>();
     for (const item of raw) {
-      const scope = `${item ?? ''}`.trim();
-      if (scope === 'company.settings' || scope === 'billing.configuration') {
-        scopes.add(scope === 'billing.configuration' ? 'company.settings' : scope);
+      const scope = `${item ?? ""}`.trim();
+      if (scope === "company.settings" || scope === "billing.configuration") {
+        scopes.add(
+          scope === "billing.configuration" ? "company.settings" : scope,
+        );
       }
     }
-    if (scopes.size === 0) scopes.add('company.settings');
+    if (scopes.size === 0) scopes.add("company.settings");
     return [...scopes];
   }
 
   private normalizePin(pin: unknown) {
-    const value = `${pin ?? ''}`.trim();
+    const value = `${pin ?? ""}`.trim();
     if (!/^\d{4}$/.test(value)) {
       throw new BadRequestException(
-        'El PIN administrativo debe tener 4 dígitos',
+        "El PIN administrativo debe tener 4 dígitos",
       );
     }
     return value;
   }
 
   private emitCompanyNameUpdated(companyId: string, companyName: string) {
-    this.realtime.emitCompany(companyId, 'license.event', {
+    this.realtime.emitCompany(companyId, "license.event", {
       eventId: `settings_${Date.now()}_${randomUUID().slice(0, 8)}`,
-      type: 'license.company_name_updated',
+      type: "license.company_name_updated",
       companyId,
       companyName,
       account: {
@@ -211,7 +222,7 @@ export class SettingsService {
       where: { id: companyId },
       select: { name: true },
     });
-    const companyName = company?.name?.trim() ?? '';
+    const companyName = company?.name?.trim() ?? "";
     const config = await this.prisma.appConfig.upsert({
       where: { companyId },
       create: {
@@ -241,9 +252,9 @@ export class SettingsService {
         companyId: input.companyId,
         actorId: input.user.id,
         actorEmail: null,
-        action: 'settings.company_name_update',
-        reason: 'company_settings',
-        before: { companyName: input.previousCompanyName ?? '' },
+        action: "settings.company_name_update",
+        reason: "company_settings",
+        before: { companyName: input.previousCompanyName ?? "" },
         after: { companyName: input.nextCompanyName },
       },
     });
@@ -251,27 +262,27 @@ export class SettingsService {
 
   private stringValue(dto: SettingsPayload, key: string) {
     const value = dto[key];
-    return typeof value === 'string' ? value.trim() : undefined;
+    return typeof value === "string" ? value.trim() : undefined;
   }
 
   private boolValue(dto: SettingsPayload, key: string) {
     const value = dto[key];
-    return typeof value === 'boolean' ? value : undefined;
+    return typeof value === "boolean" ? value : undefined;
   }
 
   private numberValue(dto: SettingsPayload, key: string) {
     const value = dto[key];
-    if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+    if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
     return value;
   }
 
   private hasFiscalSettingsData(dto: SettingsPayload) {
     return [
-      'taxEnabled',
-      'defaultTaxId',
-      'defaultTaxRate',
-      'pricesIncludeTax',
-      'ncfEnabled',
+      "taxEnabled",
+      "defaultTaxId",
+      "defaultTaxRate",
+      "pricesIncludeTax",
+      "ncfEnabled",
     ].some((key) => Object.prototype.hasOwnProperty.call(dto, key));
   }
 
@@ -279,10 +290,10 @@ export class SettingsService {
     dto: SettingsPayload,
   ): Prisma.CompanyUncheckedUpdateInput {
     const data: Prisma.CompanyUncheckedUpdateInput = {};
-    const taxEnabled = this.boolValue(dto, 'taxEnabled');
-    const defaultTaxRate = this.numberValue(dto, 'defaultTaxRate');
-    const pricesIncludeTax = this.boolValue(dto, 'pricesIncludeTax');
-    const ncfEnabled = this.boolValue(dto, 'ncfEnabled');
+    const taxEnabled = this.boolValue(dto, "taxEnabled");
+    const defaultTaxRate = this.numberValue(dto, "defaultTaxRate");
+    const pricesIncludeTax = this.boolValue(dto, "pricesIncludeTax");
+    const ncfEnabled = this.boolValue(dto, "ncfEnabled");
     if (taxEnabled !== undefined) data.taxEnabled = taxEnabled;
     if (defaultTaxRate !== undefined)
       data.defaultTaxRate = new Prisma.Decimal(defaultTaxRate);
@@ -300,41 +311,41 @@ export class SettingsService {
       ? (dto.bankAccounts as Prisma.InputJsonValue)
       : undefined;
     return {
-      companyName: this.stringValue(dto, 'companyName'),
-      rnc: this.stringValue(dto, 'rnc'),
-      phone: this.stringValue(dto, 'phone'),
-      phonePreferential: this.stringValue(dto, 'phonePreferential'),
-      address: this.stringValue(dto, 'address'),
-      description: this.stringValue(dto, 'description'),
-      instagramUrl: this.stringValue(dto, 'instagramUrl'),
-      facebookUrl: this.stringValue(dto, 'facebookUrl'),
-      websiteUrl: this.stringValue(dto, 'websiteUrl'),
-      gpsLocationUrl: this.stringValue(dto, 'gpsLocationUrl'),
-      businessHours: this.stringValue(dto, 'businessHours'),
+      companyName: this.stringValue(dto, "companyName"),
+      rnc: this.stringValue(dto, "rnc"),
+      phone: this.stringValue(dto, "phone"),
+      phonePreferential: this.stringValue(dto, "phonePreferential"),
+      address: this.stringValue(dto, "address"),
+      description: this.stringValue(dto, "description"),
+      instagramUrl: this.stringValue(dto, "instagramUrl"),
+      facebookUrl: this.stringValue(dto, "facebookUrl"),
+      websiteUrl: this.stringValue(dto, "websiteUrl"),
+      gpsLocationUrl: this.stringValue(dto, "gpsLocationUrl"),
+      businessHours: this.stringValue(dto, "businessHours"),
       bankAccounts,
-      legalRepresentativeName: this.stringValue(dto, 'legalRepresentativeName'),
+      legalRepresentativeName: this.stringValue(dto, "legalRepresentativeName"),
       legalRepresentativeCedula: this.stringValue(
         dto,
-        'legalRepresentativeCedula',
+        "legalRepresentativeCedula",
       ),
-      legalRepresentativeRole: this.stringValue(dto, 'legalRepresentativeRole'),
+      legalRepresentativeRole: this.stringValue(dto, "legalRepresentativeRole"),
       legalRepresentativeNationality: this.stringValue(
         dto,
-        'legalRepresentativeNationality',
+        "legalRepresentativeNationality",
       ),
       legalRepresentativeCivilStatus: this.stringValue(
         dto,
-        'legalRepresentativeCivilStatus',
+        "legalRepresentativeCivilStatus",
       ),
-      logoBase64: this.stringValue(dto, 'logoBase64'),
-      openAiApiKey: this.stringValue(dto, 'openAiApiKey'),
-      evolutionApiBaseUrl: this.stringValue(dto, 'evolutionApiBaseUrl'),
+      logoBase64: this.stringValue(dto, "logoBase64"),
+      openAiApiKey: this.stringValue(dto, "openAiApiKey"),
+      evolutionApiBaseUrl: this.stringValue(dto, "evolutionApiBaseUrl"),
       evolutionApiInstanceName: this.stringValue(
         dto,
-        'evolutionApiInstanceName',
+        "evolutionApiInstanceName",
       ),
-      evolutionApiApiKey: this.stringValue(dto, 'evolutionApiApiKey'),
-      whatsappWebhookEnabled: this.boolValue(dto, 'whatsappWebhookEnabled'),
+      evolutionApiApiKey: this.stringValue(dto, "evolutionApiApiKey"),
+      whatsappWebhookEnabled: this.boolValue(dto, "whatsappWebhookEnabled"),
     };
   }
 
@@ -395,16 +406,16 @@ export class SettingsService {
       legalRepresentativeNationality: config.legalRepresentativeNationality,
       legalRepresentativeCivilStatus: config.legalRepresentativeCivilStatus,
       logoBase64: config.logoBase64,
-      openAiApiKey: '',
+      openAiApiKey: "",
       openAiModel: config.openAiModel,
       hasOpenAiApiKey: Boolean(config.openAiApiKey),
       evolutionApiBaseUrl: config.evolutionApiBaseUrl,
       evolutionApiInstanceName: config.evolutionApiInstanceName,
-      evolutionApiApiKey: '',
+      evolutionApiApiKey: "",
       hasEvolutionApiApiKey: Boolean(config.evolutionApiApiKey),
       whatsappWebhookEnabled: config.whatsappWebhookEnabled,
       hasAdminAuthorizationPin: Boolean(config.adminAuthorizationPinHash),
-      productsSource: 'LOCAL',
+      productsSource: "LOCAL",
       productsReadOnly: false,
       taxEnabled: fiscal.taxEnabled,
       defaultTaxId: fiscal.defaultTaxId,
@@ -416,7 +427,7 @@ export class SettingsService {
 
   private toNumber(value: Prisma.Decimal | number | string | null | undefined) {
     if (value == null) return 0;
-    if (typeof value === 'number') return value;
+    if (typeof value === "number") return value;
     return Number(value);
   }
 }

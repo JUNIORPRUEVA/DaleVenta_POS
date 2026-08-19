@@ -274,6 +274,42 @@ void main() {
   );
 
   test(
+    'admin PIN verification requests scoped company settings capability',
+    () async {
+      Map<String, dynamic>? verifyPayload;
+      final dio = Dio()
+        ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
+          verifyPayload = (options.data as Map).cast<String, dynamic>();
+          return ResponseBody.fromString(
+            jsonEncode({
+              'ok': true,
+              'expiresInSeconds': 600,
+              'adminAuthorizationToken': 'delegated-token',
+              'scopes': ['company.settings'],
+            }),
+            200,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        });
+      final repository = CompanySettingsRepository(
+        dio,
+        SyncQueueService(OfflineStore.instance),
+      );
+
+      final verification = await repository.verifyAdminAuthorizationPin(
+        '1234',
+        scope: 'company.settings',
+      );
+
+      expect(verifyPayload, containsPair('pin', '1234'));
+      expect(verifyPayload, containsPair('scope', 'company.settings'));
+      expect(verification.token, 'delegated-token');
+    },
+  );
+
+  test(
     'non-admin sync handler discards stale settings.save without PATCH',
     () async {
       var patchCount = 0;

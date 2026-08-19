@@ -1,14 +1,18 @@
-import { ForbiddenException } from '@nestjs/common';
-import { Role } from '@prisma/client';
-import { PERMISSIONS_KEY, ROLES_KEY } from './roles.decorator';
-import { RolesGuard } from './roles.guard';
+import { ForbiddenException } from "@nestjs/common";
+import { Role } from "@prisma/client";
+import jwt from "jsonwebtoken";
+import { PERMISSIONS_KEY, ROLES_KEY } from "./roles.decorator";
+import { RolesGuard } from "./roles.guard";
 
-function contextFor(user: { id: string; role: Role; companyId: string }) {
+function contextFor(
+  user: { id: string; role: Role; companyId: string },
+  headers: Record<string, unknown> = {},
+) {
   return {
     getHandler: jest.fn(),
     getClass: jest.fn(),
     switchToHttp: () => ({
-      getRequest: () => ({ user, headers: {} }),
+      getRequest: () => ({ user, headers }),
     }),
   } as any;
 }
@@ -29,7 +33,7 @@ function guardWith({
       return undefined;
     }),
   };
-  const config = { get: jest.fn().mockReturnValue('test-secret') };
+  const config = { get: jest.fn().mockReturnValue("test-secret") };
   const prisma = {
     user: {
       findFirst: jest.fn().mockResolvedValue({
@@ -44,17 +48,17 @@ function guardWith({
   };
 }
 
-describe('RolesGuard dynamic permissions', () => {
-  it('allows a non-role user when the endpoint permission is granted', async () => {
+describe("RolesGuard dynamic permissions", () => {
+  it("allows a non-role user when the endpoint permission is granted", async () => {
     const { guard, prisma } = guardWith({
       roles: [Role.ADMIN, Role.ASISTENTE],
-      permissions: ['viewClients'],
+      permissions: ["viewClients"],
       userPermissions: { viewClients: true },
     });
 
     await expect(
       guard.canActivate(
-        contextFor({ id: 'user-1', role: Role.CAJERO, companyId: 'company-1' }),
+        contextFor({ id: "user-1", role: Role.CAJERO, companyId: "company-1" }),
       ),
     ).resolves.toBe(true);
     expect(prisma.user.findFirst).toHaveBeenCalledWith(
@@ -64,16 +68,70 @@ describe('RolesGuard dynamic permissions', () => {
     );
   });
 
-  it('keeps denying a non-role user when the endpoint permission is missing', async () => {
+  it("keeps denying a non-role user when the endpoint permission is missing", async () => {
     const { guard } = guardWith({
       roles: [Role.ADMIN, Role.ASISTENTE],
-      permissions: ['viewClients'],
+      permissions: ["viewClients"],
       userPermissions: { viewClients: false },
     });
 
     await expect(
       guard.canActivate(
-        contextFor({ id: 'user-1', role: Role.CAJERO, companyId: 'company-1' }),
+        contextFor({ id: "user-1", role: Role.CAJERO, companyId: "company-1" }),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("allows only the permission covered by a delegated admin scope", async () => {
+    const { guard } = guardWith({
+      roles: [Role.ADMIN],
+      permissions: ["manageSettings"],
+      userPermissions: {},
+    });
+    const token = jwt.sign(
+      {
+        sub: "user-1",
+        companyId: "company-1",
+        tokenType: "admin-authorization",
+        scopes: ["company.settings"],
+      },
+      "test-secret",
+      { expiresIn: "10m" },
+    );
+
+    await expect(
+      guard.canActivate(
+        contextFor(
+          { id: "user-1", role: Role.CAJERO, companyId: "company-1" },
+          { "x-admin-authorization": token },
+        ),
+      ),
+    ).resolves.toBe(true);
+  });
+
+  it("denies delegated admin tokens when scope does not cover the permission", async () => {
+    const { guard } = guardWith({
+      roles: [Role.ADMIN],
+      permissions: ["manageUsers"],
+      userPermissions: {},
+    });
+    const token = jwt.sign(
+      {
+        sub: "user-1",
+        companyId: "company-1",
+        tokenType: "admin-authorization",
+        scopes: ["company.settings"],
+      },
+      "test-secret",
+      { expiresIn: "10m" },
+    );
+
+    await expect(
+      guard.canActivate(
+        contextFor(
+          { id: "user-1", role: Role.CAJERO, companyId: "company-1" },
+          { "x-admin-authorization": token },
+        ),
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });

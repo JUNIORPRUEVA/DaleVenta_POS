@@ -76,7 +76,11 @@ class AdminAuthorizationController
   bool get isAuthorized => state.isAuthorized;
   bool get hasActionAuthorization => state.isActionAuthorization;
 
-  void authorizeFor(Duration duration, String token, {String? delegationScope}) {
+  void authorizeFor(
+    Duration duration,
+    String token, {
+    String? delegationScope,
+  }) {
     authorizeAction(duration, token, delegationScope: delegationScope);
   }
 

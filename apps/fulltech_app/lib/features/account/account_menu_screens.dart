@@ -1938,7 +1938,7 @@ class _CompanySettingsEditorState
       ref,
       permission: AppPermission.manageSettings,
       reason: 'Guardar información de la empresa',
-      forceAdminAuthorization: true,
+      routeLocation: Routes.configuracionEmpresa,
     );
     if (!authorized || !mounted) return;
     final settingsRepository = ref.read(companySettingsRepositoryProvider);
