@@ -166,6 +166,7 @@ export class RolesGuard implements CanActivate {
       companyId?: string | null;
       sessionId?: string | null;
       authorizedScopes?: string[];
+      authorizedPermissions?: string[];
     },
     permissions: string[] = [],
   ) {
@@ -228,8 +229,6 @@ export class RolesGuard implements CanActivate {
             consumedByPath: this.requestPath(request),
           },
         });
-        },
-      });
       if (consumed.count !== 1) return false;
 
       user.authorizedScopes = scopes;

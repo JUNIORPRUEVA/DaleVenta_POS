@@ -65,6 +65,7 @@ Future<TokenStorageLaunchSnapshot> loadAuthLaunchSnapshot() {
 class AuthController extends StateNotifier<AuthState> {
   final Ref ref;
   late final AuthSessionEvents _sessionEvents;
+  Future<void>? _verifySessionFuture;
 
   AuthController(this.ref)
     : super(_buildInitialAuthState(ref.read(authLaunchSnapshotProvider))) {
@@ -164,7 +165,7 @@ class AuthController extends StateNotifier<AuthState> {
         seq: seq,
       );
 
-      unawaited(_verifySession());
+      unawaited(verifySessionInBackground());
     } catch (_) {
       if (!mounted) return;
       state = AuthState(
@@ -217,25 +218,27 @@ class AuthController extends StateNotifier<AuthState> {
           );
           break;
         case SessionVerificationStatus.deferred:
-          if (result.user == null) {
-            state = AuthState(
+          final user = result.user ?? state.user;
+          final canKeepSession = user != null || state.hasSessionHint;
+          if (canKeepSession) {
+            _markSessionHealthy();
+            state = state.copyWith(
               initialized: true,
-              isAuthenticated: false,
-              user: null,
+              isAuthenticated: true,
+              user: user,
               loading: false,
               restoringSession: false,
-              hasSessionHint: false,
+              hasSessionHint: true,
             );
             break;
           }
-          _markSessionHealthy();
-          state = state.copyWith(
+          state = AuthState(
             initialized: true,
-            isAuthenticated: true,
-            user: result.user,
+            isAuthenticated: false,
+            user: null,
             loading: false,
             restoringSession: false,
-            hasSessionHint: true,
+            hasSessionHint: false,
           );
           break;
       }
@@ -339,10 +342,17 @@ class AuthController extends StateNotifier<AuthState> {
     if (!state.isAuthenticated) return null;
     final user = await ref
         .read(authRepositoryProvider)
-        .getMeOrNull(silent: silent, allowCachedFallback: false);
+        .getMeOrNull(silent: silent, allowCachedFallback: true);
     if (user == null || !mounted) return null;
     setUser(user);
     return user;
+  }
+
+  Future<void> verifySessionInBackground() {
+    _verifySessionFuture ??= _verifySession().whenComplete(() {
+      _verifySessionFuture = null;
+    });
+    return _verifySessionFuture!;
   }
 
   Future<AccountDeletionResult> deleteAccount({

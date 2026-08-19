@@ -133,6 +133,7 @@ class AuthRepository {
   static const Duration _loginTimeout = Duration(seconds: 25);
   static const Duration _bootstrapTimeout = Duration(seconds: 12);
   static const Duration _storageTimeout = Duration(seconds: 3);
+  Future<_RefreshSessionResult>? _refreshFuture;
 
   AuthRepository({required Dio dio, required TokenStorage storage})
     : _dio = dio,
@@ -679,7 +680,8 @@ class AuthRepository {
         return SessionVerificationResult.deferred(user: hydrated.user);
       }
 
-      return const SessionVerificationResult.deferred();
+      final snapshot = await _storage.getUserSnapshot().timeout(_storageTimeout);
+      return SessionVerificationResult.deferred(user: snapshot);
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
         await _safeClearTokens();
@@ -695,6 +697,15 @@ class AuthRepository {
   }
 
   Future<_RefreshSessionResult> _refreshAndSave({bool silent = false}) async {
+    _refreshFuture ??= _performRefreshAndSave(silent: silent).whenComplete(() {
+      _refreshFuture = null;
+    });
+    return _refreshFuture!;
+  }
+
+  Future<_RefreshSessionResult> _performRefreshAndSave({
+    required bool silent,
+  }) async {
     final refresh = await _storage.getRefreshToken();
     if (refresh == null || refresh.isEmpty) {
       return _RefreshSessionResult.invalid;

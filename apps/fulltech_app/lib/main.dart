@@ -68,9 +68,7 @@ Future<void> main() async {
       }
       _configureImageCacheForPlatform();
       _initializeSqlite();
-      await prepareAppFirstFrame();
-      await AppStorageScopeGuard.ensureCurrentScope();
-      final authLaunchSnapshot = await loadAuthLaunchSnapshot();
+      final authLaunchSnapshotFuture = loadAuthLaunchSnapshot();
 
       FlutterError.onError = (details) {
         FlutterError.presentError(details);
@@ -86,11 +84,14 @@ Future<void> main() async {
         return true;
       };
 
+      final authLaunchSnapshot = await authLaunchSnapshotFuture;
+
       unawaited(
         ensureContabilidadLocale(
           locale: PlatformDispatcher.instance.locale.toString(),
         ),
       );
+      unawaited(_runStartupPrerequisitesInBackground());
 
       runApp(
         ProviderScope(
@@ -105,6 +106,11 @@ Future<void> main() async {
       AppErrorReporter.instance.record(error, stack, context: 'Zone');
     },
   );
+}
+
+Future<void> _runStartupPrerequisitesInBackground() async {
+  await prepareAppFirstFrame();
+  await AppStorageScopeGuard.ensureCurrentScope();
 }
 
 void _configureImageCacheForPlatform() {
@@ -268,9 +274,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     final authState = ref.read(authStateProvider);
     if (authState.isAuthenticated) {
       unawaited(ref.read(operationsRealtimeServiceProvider).connect(authState));
-      unawaited(
-        ref.read(authStateProvider.notifier).refreshCurrentUser(silent: true),
-      );
+      unawaited(ref.read(authStateProvider.notifier).verifySessionInBackground());
       unawaited(_checkLicenseNow());
     }
   }
