@@ -16,7 +16,10 @@ describe('SettingsService company master data protection', () => {
       prisma,
       {} as any,
       { emitCompany: jest.fn() } as any,
-      { getCompanyFiscalSettings: jest.fn().mockResolvedValue(fiscal), updateFiscalSettings: jest.fn() } as any,
+      {
+        getCompanyFiscalSettings: jest.fn().mockResolvedValue(fiscal),
+        updateFiscalSettings: jest.fn(),
+      } as any,
     );
   }
 
@@ -167,5 +170,103 @@ describe('SettingsService company master data protection', () => {
         }),
       }),
     );
+  });
+
+  it('persists fiscal false values through the fiscal settings service', async () => {
+    let fiscalState = {
+      taxEnabled: true,
+      defaultTaxId: 'tax-18',
+      defaultTaxRate: 0.18,
+      pricesIncludeTax: true,
+      ncfEnabled: true,
+    };
+    const taxes = {
+      getCompanyFiscalSettings: jest.fn(async () => fiscalState),
+      updateFiscalSettings: jest.fn(async (_user, dto) => {
+        fiscalState = { ...fiscalState, ...dto };
+        return fiscalState;
+      }),
+    };
+    const tx = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({ name: 'FullPOS Cloud' }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      appConfig: {
+        upsert: jest.fn().mockResolvedValue({
+          companyName: 'FullPOS Cloud',
+          rnc: '',
+          phone: '',
+          phonePreferential: '',
+          address: '',
+          description: '',
+          instagramUrl: '',
+          facebookUrl: '',
+          websiteUrl: '',
+          gpsLocationUrl: '',
+          businessHours: '',
+          bankAccounts: [],
+          legalRepresentativeName: '',
+          legalRepresentativeCedula: '',
+          legalRepresentativeRole: '',
+          legalRepresentativeNationality: '',
+          legalRepresentativeCivilStatus: '',
+          logoBase64: null,
+          openAiApiKey: null,
+          openAiModel: 'gpt-4o-mini',
+          evolutionApiBaseUrl: '',
+          evolutionApiInstanceName: '',
+          evolutionApiApiKey: null,
+          whatsappWebhookEnabled: false,
+          adminAuthorizationPinHash: null,
+        }),
+      },
+      companyLicenseAuditLog: {
+        create: jest.fn().mockResolvedValue({}),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback) => callback(tx)),
+    };
+    const service = new SettingsService(
+      prisma as any,
+      {} as any,
+      { emitCompany: jest.fn() } as any,
+      taxes as any,
+    );
+
+    const response = await service.updateSettings(
+      { id: 'admin-a', role: Role.ADMIN, companyId: 'company-a' },
+      {
+        companyName: 'FullPOS Cloud',
+        taxEnabled: false,
+        pricesIncludeTax: false,
+        ncfEnabled: false,
+        defaultTaxRate: 0.18,
+      },
+    );
+
+    expect(taxes.updateFiscalSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ companyId: 'company-a' }),
+      {
+        taxEnabled: false,
+        defaultTaxRate: 0.18,
+        pricesIncludeTax: false,
+        ncfEnabled: false,
+      },
+    );
+    expect(tx.company.update).toHaveBeenCalledWith({
+      where: { id: 'company-a' },
+      data: {
+        name: 'FullPOS Cloud',
+        taxEnabled: false,
+        defaultTaxRate: expect.anything(),
+        pricesIncludeTax: false,
+        ncfEnabled: false,
+      },
+    });
+    expect(response.taxEnabled).toBe(false);
+    expect(response.pricesIncludeTax).toBe(false);
+    expect(response.ncfEnabled).toBe(false);
   });
 });

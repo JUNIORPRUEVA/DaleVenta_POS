@@ -20,6 +20,7 @@ import '../../core/license/license_repository.dart';
 import '../../core/routing/app_navigator.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/tax/product_tax_options_provider.dart';
 import '../../core/utils/local_file_bytes.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -609,10 +610,10 @@ class _SettingsCompanyAccountMenu extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final company = ref.watch(companySettingsProvider);
-    final companyName = company.maybeWhen(
-      data: (settings) => _compactSettingsCompanyName(settings.companyName),
-      orElse: () => 'Empresa',
-    );
+    final settings = company.valueOrNull;
+    final companyName = settings == null
+        ? ''
+        : _compactSettingsCompanyName(settings.companyName);
     final logoBase64 = company.maybeWhen(
       data: (settings) => settings.logoBase64?.trim(),
       orElse: () => null,
@@ -744,12 +745,23 @@ class _SettingsCompanyAccountMenu extends ConsumerWidget {
             ),
           ),
         ],
-        child: _SettingsCompanyButton(
-          label: companyName,
-          logoBase64: logoBase64,
-        ),
+        child: companyName.isEmpty
+            ? const _SettingsCompanyButtonPlaceholder()
+            : _SettingsCompanyButton(
+                label: companyName,
+                logoBase64: logoBase64,
+              ),
       ),
     );
+  }
+}
+
+class _SettingsCompanyButtonPlaceholder extends StatelessWidget {
+  const _SettingsCompanyButtonPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(width: 132, height: 40);
   }
 }
 
@@ -1005,7 +1017,7 @@ class _SettingsCompanyMenuActionState
 
 String _compactSettingsCompanyName(String value) {
   final normalized = value.trim().replaceAll(RegExp(r'\s+'), ' ');
-  if (normalized.isEmpty) return 'Empresa';
+  if (normalized.isEmpty) return '';
   if (normalized.length <= 18) return normalized;
   final firstSegment = normalized.split(' ').first.trim();
   if (firstSegment.length >= 3) return firstSegment;
@@ -1979,6 +1991,7 @@ class _CompanySettingsEditorState
       );
       if (!mounted) return;
       ref.invalidate(companySettingsProvider);
+      ref.invalidate(productTaxUiConfigProvider);
       ref.invalidate(licenseStatusProvider);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

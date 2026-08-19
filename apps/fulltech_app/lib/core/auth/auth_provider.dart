@@ -88,7 +88,7 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> _logoutForUnauthorized() async {
     _sessionEvents.markLogoutHandled();
     final storage = ref.read(tokenStorageProvider);
-    await ref.read(offlineStoreProvider).clearAll();
+    await ref.read(offlineStoreProvider).clearAll(includePendingActions: false);
     await FulltechImageCacheManager.clear();
     await storage.clearTokens();
     if (!mounted) return;
@@ -152,6 +152,11 @@ class AuthController extends StateNotifier<AuthState> {
         hasSessionHint: true,
       );
       _markSessionHealthy();
+      TraceLog.log(
+        'Auth',
+        'AUTH_SESSION_RESTORED userId=${hydrated.user?.id ?? ''} companyId=${hydrated.user?.companyId ?? ''}',
+        seq: seq,
+      );
       sw.stop();
       TraceLog.log(
         'Auth',
@@ -187,6 +192,11 @@ class AuthController extends StateNotifier<AuthState> {
       switch (result.status) {
         case SessionVerificationStatus.authenticated:
           _markSessionHealthy();
+          TraceLog.log(
+            'Auth',
+            'USER_RESOLVED userId=${result.user?.id ?? ''} companyId=${result.user?.companyId ?? ''}',
+            seq: seq,
+          );
           state = AuthState(
             initialized: true,
             isAuthenticated: true,
@@ -243,6 +253,10 @@ class AuthController extends StateNotifier<AuthState> {
     try {
       final user = await repo.login(email, password);
       _markSessionHealthy();
+      TraceLog.log(
+        'Auth',
+        'USER_RESOLVED userId=${user.id} companyId=${user.companyId ?? ''}',
+      );
       state = AuthState(
         initialized: true,
         isAuthenticated: true,
@@ -297,7 +311,7 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> logout() async {
     _markSessionHealthy();
     final storage = ref.read(tokenStorageProvider);
-    await ref.read(offlineStoreProvider).clearAll();
+    await ref.read(offlineStoreProvider).clearAll(includePendingActions: false);
     await FulltechImageCacheManager.clear();
     await storage.clearTokens();
     state = AuthState(

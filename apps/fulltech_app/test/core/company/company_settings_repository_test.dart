@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -133,10 +134,73 @@ void main() {
   });
 
   test(
+    'tax and NCF false values survive save payload and fresh reload',
+    () async {
+      var serverSettings = CompanySettings.empty().copyWith(
+        companyName: 'FullPOS Cloud',
+        taxEnabled: true,
+        pricesIncludeTax: true,
+        ncfEnabled: true,
+        defaultTaxRate: 0.18,
+      );
+      Map<String, dynamic>? patchPayload;
+      final dio = Dio()
+        ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
+          if (options.method.toUpperCase() == 'PATCH') {
+            patchPayload = (options.data as Map).cast<String, dynamic>();
+            serverSettings = CompanySettings.fromMap({
+              ...serverSettings.toMap(),
+              ...patchPayload!,
+            });
+            return ResponseBody.fromString(
+              jsonEncode(serverSettings.toMap()),
+              200,
+              headers: {
+                Headers.contentTypeHeader: [Headers.jsonContentType],
+              },
+            );
+          }
+          return ResponseBody.fromString(
+            jsonEncode(serverSettings.toMap()),
+            200,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        });
+      final repository = CompanySettingsRepository(
+        dio,
+        SyncQueueService(OfflineStore.instance),
+        cacheScope: 'company-a',
+      );
+
+      await repository.saveSettingsOrQueue(
+        serverSettings.copyWith(
+          taxEnabled: false,
+          pricesIncludeTax: false,
+          ncfEnabled: false,
+        ),
+      );
+      final reloaded = await repository.getSettingsRemoteAndCache();
+
+      expect(patchPayload, containsPair('taxEnabled', false));
+      expect(patchPayload, containsPair('pricesIncludeTax', false));
+      expect(patchPayload, containsPair('ncfEnabled', false));
+      expect(reloaded.taxEnabled, isFalse);
+      expect(reloaded.pricesIncludeTax, isFalse);
+      expect(reloaded.ncfEnabled, isFalse);
+    },
+  );
+
+  test(
     'non-admin sync handler discards stale settings.save without PATCH',
     () async {
       var patchCount = 0;
-      final syncQueue = SyncQueueService(OfflineStore.instance);
+      final syncQueue = SyncQueueService(
+        OfflineStore.instance,
+        scopeResolver: () async =>
+            const OfflineSyncScope(companyId: 'company-a'),
+      );
       final dio = Dio()
         ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
           if (options.method.toUpperCase() == 'PATCH') patchCount++;
@@ -159,6 +223,7 @@ void main() {
         id: 'settings.save:legacy',
         type: 'settings.save',
         scope: 'global',
+        companyId: 'company-a',
         payload: {
           'settings': CompanySettings.empty()
               .copyWith(companyName: 'Nombre Viejo')

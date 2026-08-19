@@ -181,6 +181,8 @@ class ClientesRepository {
         id: '$_upsertSyncType:${cliente.id}',
         type: _upsertSyncType,
         scope: ownerId,
+        entityType: 'client',
+        entityId: cliente.id,
         payload: {'ownerId': ownerId, 'cliente': cliente.toJson()},
       );
       return cliente.copyWith(syncStatus: 'pending', updatedLocal: true);
@@ -199,6 +201,8 @@ class ClientesRepository {
         id: '$_deleteSyncType:$id',
         type: _deleteSyncType,
         scope: ownerId,
+        entityType: 'client',
+        entityId: id,
         payload: {'ownerId': ownerId, 'id': id},
       );
     }

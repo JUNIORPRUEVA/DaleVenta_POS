@@ -5,9 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
+import '../../../core/auth/token_storage.dart';
 import '../../../core/cache/local_json_cache.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/models/product_model.dart';
+import '../../../core/offline/offline_store.dart';
+import '../../../core/offline/pending_sync_action.dart';
 import '../../../core/offline/sync_queue_service.dart';
 import '../../clientes/cliente_model.dart';
 import '../sales_models.dart';
@@ -25,6 +28,8 @@ class VentasRepository {
   final Dio _dio;
   final SyncQueueService _syncQueue;
   final LocalJsonCache _cache = LocalJsonCache();
+  final OfflineStore _offlineStore = OfflineStore.instance;
+  final TokenStorage _tokenStorage = TokenStorage();
   static const String _createSaleSyncType = 'sales.create';
   static const String _creditsCacheKey = 'sales.credits.v1';
   bool _handlersRegistered = false;
@@ -35,7 +40,7 @@ class VentasRepository {
     if (_handlersRegistered) return;
     _handlersRegistered = true;
     _syncQueue.registerHandler(_createSaleSyncType, (payload) async {
-      await _createSaleRemote(
+      final sale = await _createSaleRemote(
         customerId: payload['customerId']?.toString(),
         note: payload['note']?.toString(),
         paymentMethod: payload['paymentMethod']?.toString(),
@@ -56,6 +61,18 @@ class VentasRepository {
             )
             .toList(growable: false),
       );
+      final clientRequestId = payload['clientRequestId']?.toString().trim();
+      final user = await _tokenStorage.getUserSnapshot();
+      final companyId = user?.companyId?.trim();
+      if (sale != null &&
+          (clientRequestId ?? '').isNotEmpty &&
+          (companyId ?? '').isNotEmpty) {
+        await _offlineStore.markOfflineSaleSynced(
+          companyId: companyId!,
+          clientRequestId: clientRequestId!,
+          serverSaleId: sale.id,
+        );
+      }
     });
   }
 
@@ -573,13 +590,51 @@ class VentasRepository {
           e.response?.statusCode,
         );
       }
-      final localId = 'local_sale_${DateTime.now().microsecondsSinceEpoch}';
-      await _syncQueue.enqueue(
+      final user = await _tokenStorage.getUserSnapshot();
+      final companyId = user?.companyId?.trim();
+      final userId = user?.id.trim();
+      if ((companyId ?? '').isEmpty || (userId ?? '').isEmpty) {
+        throw ApiException(
+          'No se pudo guardar la venta offline porque la sesión local no tiene empresa/usuario confiable.',
+          e.response?.statusCode,
+        );
+      }
+      final localId = 'local_$clientRequestId';
+      final occurredAt = DateTime.now().toUtc();
+      final pendingAction = PendingSyncAction(
         id: '$_createSaleSyncType:$localId',
         type: _createSaleSyncType,
         scope: 'sales',
+        companyId: companyId,
+        userId: userId,
+        entityType: 'sale',
+        entityId: localId,
+        idempotencyKey: clientRequestId,
         payload: payload,
+        status: 'pending',
+        attempts: 0,
+        createdAt: occurredAt,
+        updatedAt: occurredAt,
       );
+      final itemPayloads = items.map((item) => item.toPayload()).toList();
+      await _offlineStore.saveOfflineSaleAtomically(
+        localSaleId: localId,
+        companyId: companyId!,
+        userId: userId!,
+        clientRequestId: clientRequestId,
+        salePayload: payload,
+        itemPayloads: itemPayloads,
+        paymentPayload: {
+          'paymentMethod': paymentMethod ?? 'cash',
+          'paymentCashAmount': paymentCashAmount ?? expectedTotalSold ?? 0,
+          'paymentTransferAmount': paymentTransferAmount ?? 0,
+          'creditAmount': creditAmount ?? 0,
+        },
+        pendingAction: pendingAction,
+        totalSold: expectedTotalSold ?? _sumItems(items),
+        saleOccurredAt: occurredAt,
+      );
+      await _syncQueue.refreshStats();
       return _optimisticSale(
         id: localId,
         customerId: normalizedCustomerId.isEmpty ? null : normalizedCustomerId,
@@ -875,6 +930,10 @@ class VentasRepository {
   String _cacheKeyPart(String? value) {
     final normalized = (value ?? '').trim();
     return normalized.isEmpty ? 'all' : normalized;
+  }
+
+  double _sumItems(List<SaleDraftItem> items) {
+    return items.fold<double>(0, (sum, item) => sum + item.subtotalSold);
   }
 }
 

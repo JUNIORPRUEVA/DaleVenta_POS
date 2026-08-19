@@ -251,6 +251,28 @@ String buildProductThumbnailUrl({
   return uri.replace(query: query).toString();
 }
 
+String buildProductImageCacheKey(String imageUrl) {
+  final value = imageUrl.trim();
+  if (value.isEmpty) return '';
+
+  final uri = Uri.tryParse(value);
+  final objectKey = _extractR2ObjectKey(value);
+  final version = uri?.queryParameters['v']?.trim() ?? '';
+  final width = uri?.queryParameters['w']?.trim() ?? '';
+  final height = uri?.queryParameters['h']?.trim() ?? '';
+  final source = objectKey ?? uri?.replace(fragment: '').toString() ?? value;
+  final parts = <String>[
+    source,
+    if (version.isNotEmpty) 'v=$version',
+    if (width.isNotEmpty) 'w=$width',
+    if (height.isNotEmpty) 'h=$height',
+  ].join('|');
+  final safe = parts
+      .replaceAll(RegExp(r'[^A-Za-z0-9._=-]+'), '_')
+      .replaceAll(RegExp(r'_+'), '_');
+  return 'product-image:${safe.length > 220 ? safe.substring(0, 220) : safe}';
+}
+
 void debugLogProductImageResolution({
   required String productId,
   required String productName,

@@ -3964,10 +3964,10 @@ class _SalesCompanyAccountMenu extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final company = ref.watch(companySettingsProvider);
-    final companyName = company.maybeWhen(
-      data: (settings) => _compactSalesCompanyName(settings.companyName),
-      orElse: () => 'Empresa',
-    );
+    final settings = company.valueOrNull;
+    final companyName = settings == null
+        ? ''
+        : _compactSalesCompanyName(settings.companyName);
     final logoBase64 = company.maybeWhen(
       data: (settings) => settings.logoBase64?.trim(),
       orElse: () => null,
@@ -4067,7 +4067,9 @@ class _SalesCompanyAccountMenu extends ConsumerWidget {
             },
           ),
         ],
-        child: _SalesCompanyButton(label: companyName, logoBase64: logoBase64),
+        child: companyName.isEmpty
+            ? const _SalesCompanyButtonPlaceholder()
+            : _SalesCompanyButton(label: companyName, logoBase64: logoBase64),
       ),
     );
   }
@@ -4076,6 +4078,15 @@ class _SalesCompanyAccountMenu extends ConsumerWidget {
     Future<void>.delayed(Duration.zero, () {
       if (context.mounted) context.go(route);
     });
+  }
+}
+
+class _SalesCompanyButtonPlaceholder extends StatelessWidget {
+  const _SalesCompanyButtonPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(width: 96, height: 40);
   }
 }
 
@@ -4246,7 +4257,7 @@ class _SalesCompanyMenuRow extends StatelessWidget {
 
 String _compactSalesCompanyName(String value) {
   final normalized = value.trim().replaceAll(RegExp(r'\s+'), ' ').toUpperCase();
-  if (normalized.isEmpty) return 'Empresa';
+  if (normalized.isEmpty) return '';
   if (normalized.length <= 18) return normalized;
   final firstSegment = normalized.split(' ').first.trim();
   if (firstSegment.length >= 3) return firstSegment;

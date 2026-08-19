@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/auth/app_bootstrap_status.dart';
 import '../../core/auth/auth_provider.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -41,6 +42,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authStateProvider);
+    final bootstrap = ref.watch(appBootstrapStatusProvider);
     final size = MediaQuery.sizeOf(context);
     final compact = size.width < 560 || size.height < 680;
     final logoSize = compact ? 116.0 : 146.0;
@@ -120,8 +122,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          auth.restoringSession
-                              ? 'Restaurando sesión'
+                          bootstrap ==
+                                      AppBootstrapStatus
+                                          .authenticatedLoadingCompany ||
+                                  auth.restoringSession
+                              ? 'Preparando tu empresa'
                               : 'Preparando tu punto de venta',
                           textAlign: TextAlign.center,
                           style: const TextStyle(

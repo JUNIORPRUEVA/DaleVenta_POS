@@ -346,6 +346,8 @@ class CatalogRepository {
         id: queueId,
         type: _createSyncType,
         scope: await _syncScope(),
+        entityType: 'product',
+        idempotencyKey: operationId,
         payload: payload,
       );
       return ProductModel(
@@ -459,6 +461,9 @@ class CatalogRepository {
         id: '$_updateSyncType:$id',
         type: _updateSyncType,
         scope: await _syncScope(),
+        entityType: 'product',
+        entityId: id,
+        idempotencyKey: operationId,
         payload: payload,
       );
       return ProductModel(
@@ -529,6 +534,8 @@ class CatalogRepository {
         id: '$_deleteSyncType:$id',
         type: _deleteSyncType,
         scope: await _syncScope(),
+        entityType: 'product',
+        entityId: id,
         payload: {'id': id},
       );
     }

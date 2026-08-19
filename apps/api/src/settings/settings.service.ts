@@ -8,7 +8,11 @@ import { JwtService } from '@nestjs/jwt';
 import { Prisma, Role } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import * as bcrypt from 'bcryptjs';
-import { isAdminLike, requireTenant, type TenantUser } from '../auth/tenant-context';
+import {
+  isAdminLike,
+  requireTenant,
+  type TenantUser,
+} from '../auth/tenant-context';
 import { PrismaService } from '../prisma/prisma.service';
 import { CatalogRealtimeRelayService } from '../products/catalog-realtime-relay.service';
 import { TaxService } from '../tax/tax.service';
@@ -87,9 +91,9 @@ export class SettingsService {
       }
       return updated;
     });
-    if (dto.taxEnabled === true) {
+    if (this.hasFiscalSettingsData(dto)) {
       await this.taxes.updateFiscalSettings(user, {
-        taxEnabled: true,
+        taxEnabled: this.boolValue(dto, 'taxEnabled') ?? undefined,
         defaultTaxRate: this.numberValue(dto, 'defaultTaxRate') ?? undefined,
         pricesIncludeTax: this.boolValue(dto, 'pricesIncludeTax') ?? undefined,
         ncfEnabled: this.boolValue(dto, 'ncfEnabled') ?? undefined,
@@ -245,15 +249,29 @@ export class SettingsService {
     return value;
   }
 
-  private companyFiscalData(dto: SettingsPayload): Prisma.CompanyUncheckedUpdateInput {
+  private hasFiscalSettingsData(dto: SettingsPayload) {
+    return [
+      'taxEnabled',
+      'defaultTaxId',
+      'defaultTaxRate',
+      'pricesIncludeTax',
+      'ncfEnabled',
+    ].some((key) => Object.prototype.hasOwnProperty.call(dto, key));
+  }
+
+  private companyFiscalData(
+    dto: SettingsPayload,
+  ): Prisma.CompanyUncheckedUpdateInput {
     const data: Prisma.CompanyUncheckedUpdateInput = {};
     const taxEnabled = this.boolValue(dto, 'taxEnabled');
     const defaultTaxRate = this.numberValue(dto, 'defaultTaxRate');
     const pricesIncludeTax = this.boolValue(dto, 'pricesIncludeTax');
     const ncfEnabled = this.boolValue(dto, 'ncfEnabled');
     if (taxEnabled !== undefined) data.taxEnabled = taxEnabled;
-    if (defaultTaxRate !== undefined) data.defaultTaxRate = new Prisma.Decimal(defaultTaxRate);
-    if (pricesIncludeTax !== undefined) data.pricesIncludeTax = pricesIncludeTax;
+    if (defaultTaxRate !== undefined)
+      data.defaultTaxRate = new Prisma.Decimal(defaultTaxRate);
+    if (pricesIncludeTax !== undefined)
+      data.pricesIncludeTax = pricesIncludeTax;
     if (ncfEnabled !== undefined) data.ncfEnabled = ncfEnabled;
     return data;
   }
@@ -304,39 +322,42 @@ export class SettingsService {
     };
   }
 
-  private toPublicSettings(config: {
-    companyName: string;
-    rnc: string;
-    phone: string;
-    phonePreferential: string;
-    address: string;
-    description: string;
-    instagramUrl: string;
-    facebookUrl: string;
-    websiteUrl: string;
-    gpsLocationUrl: string;
-    businessHours: string;
-    bankAccounts: Prisma.JsonValue;
-    legalRepresentativeName: string;
-    legalRepresentativeCedula: string;
-    legalRepresentativeRole: string;
-    legalRepresentativeNationality: string;
-    legalRepresentativeCivilStatus: string;
-    logoBase64: string | null;
-    openAiApiKey: string | null;
-    openAiModel: string;
-    evolutionApiBaseUrl: string;
-    evolutionApiInstanceName: string;
-    evolutionApiApiKey: string | null;
-    whatsappWebhookEnabled: boolean;
-    adminAuthorizationPinHash: string | null;
-  }, fiscal: {
-    taxEnabled: boolean;
-    defaultTaxId: string | null;
-    defaultTaxRate: Prisma.Decimal | number | string;
-    pricesIncludeTax: boolean;
-    ncfEnabled: boolean;
-  }) {
+  private toPublicSettings(
+    config: {
+      companyName: string;
+      rnc: string;
+      phone: string;
+      phonePreferential: string;
+      address: string;
+      description: string;
+      instagramUrl: string;
+      facebookUrl: string;
+      websiteUrl: string;
+      gpsLocationUrl: string;
+      businessHours: string;
+      bankAccounts: Prisma.JsonValue;
+      legalRepresentativeName: string;
+      legalRepresentativeCedula: string;
+      legalRepresentativeRole: string;
+      legalRepresentativeNationality: string;
+      legalRepresentativeCivilStatus: string;
+      logoBase64: string | null;
+      openAiApiKey: string | null;
+      openAiModel: string;
+      evolutionApiBaseUrl: string;
+      evolutionApiInstanceName: string;
+      evolutionApiApiKey: string | null;
+      whatsappWebhookEnabled: boolean;
+      adminAuthorizationPinHash: string | null;
+    },
+    fiscal: {
+      taxEnabled: boolean;
+      defaultTaxId: string | null;
+      defaultTaxRate: Prisma.Decimal | number | string;
+      pricesIncludeTax: boolean;
+      ncfEnabled: boolean;
+    },
+  ) {
     return {
       companyName: config.companyName,
       rnc: config.rnc,

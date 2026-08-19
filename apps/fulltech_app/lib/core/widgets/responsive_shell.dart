@@ -1724,7 +1724,7 @@ class _SidebarLicenseSummary extends ConsumerWidget {
         final users = '${value.users}/${value.maxUsers} usuarios';
         final products = '${value.products}/${value.maxProducts} productos';
         final company = value.companyName.trim().isEmpty
-            ? 'Empresa'
+            ? 'Empresa no resuelta'
             : value.companyName.trim();
         tooltip = '$company · $status · $days · $users · $products';
         final accent = value.isUsable

@@ -208,6 +208,94 @@ describe("Fiscal authenticated HTTP E2E", () => {
       .expect(403);
   });
 
+  it("persists tax and NCF settings across /settings save, DB read and fresh GET", async () => {
+    const adminA = await registerCompany("settings-roundtrip");
+
+    await request(app.getHttpServer())
+      .patch("/settings")
+      .set("Authorization", `Bearer ${adminA.token}`)
+      .send({
+        taxEnabled: true,
+        defaultTaxRate: 0.18,
+        pricesIncludeTax: true,
+        ncfEnabled: true,
+      })
+      .expect(200);
+
+    const dbOn = await prisma.company.findUniqueOrThrow({
+      where: { id: adminA.companyId },
+      select: {
+        taxEnabled: true,
+        pricesIncludeTax: true,
+        ncfEnabled: true,
+      },
+    });
+    expect(dbOn).toEqual({
+      taxEnabled: true,
+      pricesIncludeTax: true,
+      ncfEnabled: true,
+    });
+
+    await request(app.getHttpServer())
+      .patch("/settings")
+      .set("Authorization", `Bearer ${adminA.token}`)
+      .send({
+        taxEnabled: false,
+        pricesIncludeTax: false,
+        ncfEnabled: false,
+      })
+      .expect(200);
+
+    const dbOff = await prisma.company.findUniqueOrThrow({
+      where: { id: adminA.companyId },
+      select: {
+        taxEnabled: true,
+        pricesIncludeTax: true,
+        ncfEnabled: true,
+      },
+    });
+    expect(dbOff).toEqual({
+      taxEnabled: false,
+      pricesIncludeTax: false,
+      ncfEnabled: false,
+    });
+
+    const getOff = await request(app.getHttpServer())
+      .get("/settings")
+      .set("Authorization", `Bearer ${adminA.token}`)
+      .expect(200);
+    expect(getOff.body).toEqual(
+      expect.objectContaining({
+        taxEnabled: false,
+        pricesIncludeTax: false,
+        ncfEnabled: false,
+      }),
+    );
+
+    await request(app.getHttpServer())
+      .patch("/settings")
+      .set("Authorization", `Bearer ${adminA.token}`)
+      .send({
+        taxEnabled: true,
+        defaultTaxRate: 0.18,
+        pricesIncludeTax: true,
+        ncfEnabled: true,
+      })
+      .expect(200);
+
+    const getOn = await request(app.getHttpServer())
+      .get("/settings")
+      .set("Authorization", `Bearer ${adminA.token}`)
+      .expect(200);
+    expect(getOn.body).toEqual(
+      expect.objectContaining({
+        taxEnabled: true,
+        pricesIncludeTax: true,
+        ncfEnabled: true,
+      }),
+    );
+  }, 60000);
+
   it("keeps quote snapshots through B01 conversion and prevents duplicate NCF", async () => {
     const adminA = await registerCompany("quote-a");
     await openCashSession(adminA.companyId, adminA.userId);
@@ -304,7 +392,12 @@ describe("Fiscal authenticated HTTP E2E", () => {
         customerId: client.body.id,
         expectedTotalSold: 1180,
         items: [
-          { productName: "Stale", qty: 1, priceSoldUnit: 1, costUnitSnapshot: 0 },
+          {
+            productName: "Stale",
+            qty: 1,
+            priceSoldUnit: 1,
+            costUnitSnapshot: 0,
+          },
         ],
       })
       .expect(201);
@@ -318,7 +411,12 @@ describe("Fiscal authenticated HTTP E2E", () => {
         customerId: client.body.id,
         expectedTotalSold: 1180,
         items: [
-          { productName: "Stale", qty: 1, priceSoldUnit: 1, costUnitSnapshot: 0 },
+          {
+            productName: "Stale",
+            qty: 1,
+            priceSoldUnit: 1,
+            costUnitSnapshot: 0,
+          },
         ],
       })
       .expect(201);
@@ -373,7 +471,12 @@ describe("Fiscal authenticated HTTP E2E", () => {
       .send({
         clientRequestId: "sale-a-10000",
         items: [
-          { productName: "A", qty: 1, priceSoldUnit: 10000, costUnitSnapshot: 6000 },
+          {
+            productName: "A",
+            qty: 1,
+            priceSoldUnit: 10000,
+            costUnitSnapshot: 6000,
+          },
         ],
       })
       .expect(201);
@@ -383,7 +486,12 @@ describe("Fiscal authenticated HTTP E2E", () => {
       .send({
         clientRequestId: "sale-b-20000",
         items: [
-          { productName: "B", qty: 1, priceSoldUnit: 20000, costUnitSnapshot: 12000 },
+          {
+            productName: "B",
+            qty: 1,
+            priceSoldUnit: 20000,
+            costUnitSnapshot: 12000,
+          },
         ],
       })
       .expect(201);
@@ -396,14 +504,95 @@ describe("Fiscal authenticated HTTP E2E", () => {
 
     const reportA = await request(app.getHttpServer())
       .get("/reports/sales-overview")
+      .query({ from: "2020-01-01", to: "2099-12-31" })
       .set("Authorization", `Bearer ${adminA.token}`)
       .expect(200);
     const reportB = await request(app.getHttpServer())
       .get("/reports/sales-overview")
+      .query({ from: "2020-01-01", to: "2099-12-31" })
       .set("Authorization", `Bearer ${adminB.token}`)
       .expect(200);
     expect(Number(reportA.body.kpis.totalSold)).toBeCloseTo(10000, 2);
     expect(Number(reportB.body.kpis.totalSold)).toBeCloseTo(20000, 2);
+  }, 60000);
+
+  it("keeps sale, payment fields, stock and price snapshot idempotent after response loss retry", async () => {
+    const adminA = await registerCompany("offline-idempotency");
+    await openCashSession(adminA.companyId, adminA.userId);
+
+    const product = await request(app.getHttpServer())
+      .post("/products")
+      .set("Authorization", `Bearer ${adminA.token}`)
+      .send({
+        nombre: "Producto offline retry",
+        categoria: "POS",
+        precio: 150,
+        costo: 40,
+        stock: 10,
+      })
+      .expect(201);
+
+    const payload = {
+      clientRequestId: "offline-sale-response-lost-1",
+      paymentMethod: "cash",
+      paymentCashAmount: 200,
+      items: [
+        {
+          productId: product.body.id,
+          productName: "Producto offline retry",
+          qty: 2,
+          priceSoldUnit: 100,
+          costUnitSnapshot: 40,
+        },
+      ],
+    };
+
+    const first = await request(app.getHttpServer())
+      .post("/sales")
+      .set("Authorization", `Bearer ${adminA.token}`)
+      .send(payload)
+      .expect(201);
+
+    await prisma.product.update({
+      where: { id: product.body.id },
+      data: { precio: 150 },
+    });
+
+    const retry = await request(app.getHttpServer())
+      .post("/sales")
+      .set("Authorization", `Bearer ${adminA.token}`)
+      .send({
+        ...payload,
+        paymentCashAmount: 9999,
+        items: [
+          {
+            ...payload.items[0],
+            priceSoldUnit: 150,
+          },
+        ],
+      })
+      .expect(201);
+
+    expect(retry.body.id).toBe(first.body.id);
+
+    const sales = await prisma.sale.findMany({
+      where: {
+        companyId: adminA.companyId,
+        clientRequestId: payload.clientRequestId,
+      },
+      include: { items: true },
+    });
+    const currentProduct = await prisma.product.findFirstOrThrow({
+      where: { id: product.body.id, companyId: adminA.companyId },
+    });
+
+    expect(sales).toHaveLength(1);
+    expect(sales[0].items).toHaveLength(1);
+    expect(Number(sales[0].paymentCashAmount)).toBeCloseTo(200, 2);
+    expect(Number(sales[0].totalSold)).toBeCloseTo(200, 2);
+    expect(Number(sales[0].items[0].priceSoldUnit)).toBeCloseTo(100, 2);
+    expect(Number(sales[0].items[0].qty)).toBeCloseTo(2, 3);
+    expect(Number(currentProduct.stock)).toBeCloseTo(8, 3);
   }, 60000);
 
   it("validates B01 failure without fiscal customer, B02, refunds and over-refund", async () => {
@@ -452,7 +641,12 @@ describe("Fiscal authenticated HTTP E2E", () => {
       .send({
         fiscalVoucherType: "B01",
         items: [
-          { productName: "Fiscal", qty: 1, priceSoldUnit: 1180, costUnitSnapshot: 600 },
+          {
+            productName: "Fiscal",
+            qty: 1,
+            priceSoldUnit: 1180,
+            costUnitSnapshot: 600,
+          },
         ],
       })
       .expect(400);
@@ -467,7 +661,12 @@ describe("Fiscal authenticated HTTP E2E", () => {
       .send({
         fiscalVoucherType: "B02",
         items: [
-          { productName: "Final", qty: 1, priceSoldUnit: 1180, costUnitSnapshot: 600 },
+          {
+            productName: "Final",
+            qty: 1,
+            priceSoldUnit: 1180,
+            costUnitSnapshot: 600,
+          },
         ],
       })
       .expect(201);

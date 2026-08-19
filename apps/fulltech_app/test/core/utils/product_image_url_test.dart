@@ -91,8 +91,10 @@ void main() {
       final uri = Uri.parse(result);
 
       expect(uri.path, '/media/object');
-      expect(uri.queryParameters['key'],
-          'uploads/companies/company-1/products/images/demo.jpg');
+      expect(
+        uri.queryParameters['key'],
+        'uploads/companies/company-1/products/images/demo.jpg',
+      );
       expect(uri.queryParameters['v'], '123');
       expect(uri.queryParameters['w'], '320');
       expect(uri.queryParameters['h'], '280');
@@ -159,6 +161,24 @@ void main() {
       );
 
       expect(result, isEmpty);
+    });
+  });
+
+  group('buildProductImageCacheKey', () {
+    test('separates tenants and versions for media object URLs', () {
+      final first = buildProductImageCacheKey(
+        'https://api.example.com/media/object?key=uploads%2Fcompanies%2Fcompany-1%2Fproducts%2Fimages%2Fdemo.jpg&v=1&w=320&h=320',
+      );
+      final otherCompany = buildProductImageCacheKey(
+        'https://api.example.com/media/object?key=uploads%2Fcompanies%2Fcompany-2%2Fproducts%2Fimages%2Fdemo.jpg&v=1&w=320&h=320',
+      );
+      final otherVersion = buildProductImageCacheKey(
+        'https://api.example.com/media/object?key=uploads%2Fcompanies%2Fcompany-1%2Fproducts%2Fimages%2Fdemo.jpg&v=2&w=320&h=320',
+      );
+
+      expect(first, startsWith('product-image:'));
+      expect(first, isNot(otherCompany));
+      expect(first, isNot(otherVersion));
     });
   });
 }

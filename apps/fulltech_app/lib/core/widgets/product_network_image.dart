@@ -51,6 +51,7 @@ class ProductNetworkImage extends StatelessWidget {
       width: thumbnailSize,
       height: thumbnailSize,
     );
+    final cacheKey = buildProductImageCacheKey(effectiveUrl);
     final shouldSendAuth = !kIsWeb && _shouldSendAuthHeader(sourceUrl);
 
     if (kIsWeb) {
@@ -61,8 +62,8 @@ class ProductNetworkImage extends StatelessWidget {
               width: thumbnailSize,
               height: thumbnailSize,
             );
-      final fallbackEffectiveUrl = productEffectiveUrl.isEmpty ||
-              productEffectiveUrl == effectiveUrl
+      final fallbackEffectiveUrl =
+          productEffectiveUrl.isEmpty || productEffectiveUrl == effectiveUrl
           ? ''
           : productEffectiveUrl;
       return _WebProductImage(
@@ -93,7 +94,7 @@ class ProductNetworkImage extends StatelessWidget {
           key: ValueKey('$effectiveUrl:${token?.isNotEmpty ?? false}'),
           imageUrl: effectiveUrl,
           httpHeaders: headers,
-          cacheKey: effectiveUrl,
+          cacheKey: cacheKey.isEmpty ? effectiveUrl : cacheKey,
           cacheManager: FulltechImageCacheManager.instance,
           fit: fit,
           width: width,

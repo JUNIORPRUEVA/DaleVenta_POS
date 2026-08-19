@@ -5672,6 +5672,8 @@ class _CompactProductInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final fiscalUiEnabled =
+        showTaxBadge && taxConfig?.settings.taxEnabled == true;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.center,
@@ -5701,7 +5703,7 @@ class _CompactProductInfo extends StatelessWidget {
             letterSpacing: 0,
           ),
         ),
-        if (showTaxBadge && taxConfig != null) ...[
+        if (fiscalUiEnabled && taxConfig != null) ...[
           const SizedBox(height: 5),
           _ProductTaxBadge(product: product, config: taxConfig!),
         ],
@@ -6098,7 +6100,8 @@ class _PriceWithTaxBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final config = taxConfig;
-    final preview = config == null
+    final fiscalUiEnabled = showTaxBadge && config?.settings.taxEnabled == true;
+    final preview = !fiscalUiEnabled || config == null
         ? null
         : ProductTaxPreviewCalculator.calculate(
             price: product.precio,
@@ -6114,7 +6117,7 @@ class _PriceWithTaxBadge extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         _MoneyText(preview?.finalAmount ?? product.precio),
-        if (showTaxBadge && config != null) ...[
+        if (fiscalUiEnabled && config != null) ...[
           const SizedBox(height: 4),
           _ProductTaxBadge(product: product, config: config),
         ],

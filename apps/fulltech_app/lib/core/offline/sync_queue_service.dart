@@ -1,13 +1,37 @@
 import 'dart:async';
+import 'dart:math';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/token_storage.dart';
 import '../debug/app_error_reporter.dart';
 import '../debug/trace_log.dart';
+import '../errors/api_exception.dart';
 import 'offline_store.dart';
 import 'pending_sync_action.dart';
 
 typedef SyncQueueHandler = Future<void> Function(Map<String, dynamic> payload);
+typedef SyncScopeResolver = Future<OfflineSyncScope?> Function();
+
+class OfflineSyncScope {
+  final String? companyId;
+  final String? userId;
+
+  const OfflineSyncScope({this.companyId, this.userId});
+
+  bool get hasTenant => (companyId ?? '').trim().isNotEmpty;
+  bool get hasUser => (userId ?? '').trim().isNotEmpty;
+
+  OfflineSyncScope normalized() {
+    String? clean(String? value) {
+      final text = value?.trim() ?? '';
+      return text.isEmpty ? null : text;
+    }
+
+    return OfflineSyncScope(companyId: clean(companyId), userId: clean(userId));
+  }
+}
 
 class SyncQueueState {
   final int pendingCount;
@@ -52,7 +76,14 @@ final offlineStoreProvider = Provider<OfflineStore>((ref) {
 
 final syncQueueServiceProvider =
     StateNotifierProvider<SyncQueueService, SyncQueueState>((ref) {
-      final service = SyncQueueService(ref.read(offlineStoreProvider));
+      final storage = TokenStorage();
+      final service = SyncQueueService(
+        ref.read(offlineStoreProvider),
+        scopeResolver: () async {
+          final user = await storage.getUserSnapshot();
+          return OfflineSyncScope(companyId: user?.companyId, userId: user?.id);
+        },
+      );
       return service;
     });
 
@@ -63,14 +94,19 @@ final syncQueueBootstrapProvider = Provider<void>((ref) {
 });
 
 class SyncQueueService extends StateNotifier<SyncQueueState> {
-  SyncQueueService(this._store) : super(const SyncQueueState());
+  SyncQueueService(this._store, {SyncScopeResolver? scopeResolver})
+    : _scopeResolver = scopeResolver,
+      super(const SyncQueueState());
 
   final OfflineStore _store;
+  final SyncScopeResolver? _scopeResolver;
   final Map<String, SyncQueueHandler> _handlers = {};
+  static const Duration staleSyncingAge = Duration(minutes: 2);
 
   Timer? _timer;
   bool _started = false;
   bool _processing = false;
+  final Random _jitter = Random();
 
   void _patchState(SyncQueueState Function(SyncQueueState current) update) {
     if (!mounted) return;
@@ -97,12 +133,31 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
     required String type,
     required String scope,
     required Map<String, dynamic> payload,
+    String? companyId,
+    String? userId,
+    String? terminalId,
+    String? entityType,
+    String? entityId,
+    String? idempotencyKey,
   }) async {
+    final activeScope = await _resolveScope();
+    final resolvedCompanyId = _clean(companyId) ?? activeScope?.companyId;
+    final resolvedUserId = _clean(userId) ?? activeScope?.userId;
+    final resolvedIdempotencyKey =
+        _clean(idempotencyKey) ??
+        _clean(payload['operationId']?.toString()) ??
+        _clean(payload['clientRequestId']?.toString());
     await _store.putPendingAction(
       PendingSyncAction(
         id: id,
         type: type,
         scope: scope,
+        companyId: resolvedCompanyId,
+        userId: resolvedUserId,
+        terminalId: _clean(terminalId),
+        entityType: _clean(entityType),
+        entityId: _clean(entityId) ?? _clean(payload['id']?.toString()),
+        idempotencyKey: resolvedIdempotencyKey,
         payload: payload,
         status: 'pending',
         attempts: 0,
@@ -122,7 +177,13 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
 
   Future<void> refreshStats() async {
     try {
-      final stats = await _store.pendingActionStats();
+      final scope = await _resolveScope();
+      final stats = scope == null || !scope.hasTenant
+          ? {'pending': 0, 'syncing': 0, 'error': 0}
+          : await _store.pendingActionStats(
+              companyId: scope.companyId,
+              userId: scope.userId,
+            );
       _patchState(
         (current) => current.copyWith(
           pendingCount: stats['pending'] ?? 0,
@@ -163,16 +224,42 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
     );
 
     try {
-      final actions = await _store.listPendingActions(limit: 40);
+      final scope = await _resolveScope();
+      if (scope == null || !scope.hasTenant) {
+        TraceLog.log('sync_queue', 'process skipped without tenant scope');
+        return;
+      }
+      await _store.recoverStaleSyncingActions(
+        olderThan: staleSyncingAge,
+        companyId: scope.companyId,
+        userId: scope.userId,
+      );
+
+      final actions = await _store.listPendingActions(
+        limit: 40,
+        companyId: scope.companyId,
+        userId: scope.userId,
+        dueOnly: true,
+      );
       for (final action in actions) {
         final handler = _handlers[action.type];
         if (handler == null) continue;
+        if (action.permanent ||
+            action.status == 'failed' ||
+            action.status == 'conflict' ||
+            action.status == 'auth_blocked' ||
+            action.status == 'tenant_mismatch') {
+          continue;
+        }
 
+        final now = DateTime.now().toUtc();
         final syncing = action.copyWith(
           status: 'syncing',
           attempts: action.attempts + 1,
-          updatedAt: DateTime.now().toUtc(),
+          lastAttemptAt: now,
+          updatedAt: now,
           clearError: true,
+          clearNextAttemptAt: true,
         );
         await _store.updatePendingAction(syncing);
         await refreshStats();
@@ -188,16 +275,23 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
             (current) => current.copyWith(lastSyncedAt: DateTime.now().toUtc()),
           );
         } catch (error, stackTrace) {
+          final permanent = _isPermanentFailure(error);
+          final status = _failureStatus(error, permanent: permanent);
+          final nextAttemptAt = permanent
+              ? null
+              : DateTime.now().toUtc().add(_backoffFor(syncing.attempts));
           TraceLog.log(
             'sync_queue',
-            'sync error type=${action.type} id=${action.id}',
+            'sync $status type=${action.type} id=${action.id} attempts=${syncing.attempts}',
             error: error,
             stackTrace: stackTrace,
           );
           await _store.updatePendingAction(
             syncing.copyWith(
-              status: 'error',
+              status: status,
               error: '$error',
+              nextAttemptAt: nextAttemptAt,
+              permanent: permanent,
               updatedAt: DateTime.now().toUtc(),
             ),
           );
@@ -231,6 +325,81 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
       _patchState((current) => current.copyWith(isProcessing: false));
       await refreshStats();
     }
+  }
+
+  Future<OfflineSyncScope?> _resolveScope() async {
+    try {
+      return (await _scopeResolver?.call())?.normalized();
+    } catch (error, stackTrace) {
+      TraceLog.log(
+        'sync_queue',
+        'scope resolver failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return null;
+    }
+  }
+
+  Duration _backoffFor(int attempts) {
+    const schedule = <Duration>[
+      Duration(seconds: 5),
+      Duration(seconds: 15),
+      Duration(seconds: 30),
+      Duration(minutes: 1),
+      Duration(minutes: 5),
+      Duration(minutes: 15),
+    ];
+    final index = (attempts - 1).clamp(0, schedule.length - 1);
+    final base = schedule[index];
+    return base + Duration(milliseconds: _jitter.nextInt(3000));
+  }
+
+  bool _isPermanentFailure(Object error) {
+    if (error is ApiException) {
+      if (error.retryable || error.isNetworkError) return false;
+      return error.type == ApiErrorType.badRequest ||
+          error.type == ApiErrorType.unauthorized ||
+          error.type == ApiErrorType.forbidden ||
+          error.type == ApiErrorType.notFound ||
+          error.type == ApiErrorType.conflict;
+    }
+    if (error is DioException) {
+      final status = error.response?.statusCode;
+      if (status == null) return false;
+      return status == 400 ||
+          status == 401 ||
+          status == 403 ||
+          status == 404 ||
+          status == 409 ||
+          status == 422;
+    }
+    return false;
+  }
+
+  bool _isConflictFailure(Object error) {
+    if (error is ApiException) return error.type == ApiErrorType.conflict;
+    if (error is DioException) return error.response?.statusCode == 409;
+    return false;
+  }
+
+  String _failureStatus(Object error, {required bool permanent}) {
+    if (_isConflictFailure(error)) return 'conflict';
+    if (error is ApiException &&
+        (error.type == ApiErrorType.unauthorized ||
+            error.type == ApiErrorType.forbidden)) {
+      return 'auth_blocked';
+    }
+    if (error is DioException) {
+      final status = error.response?.statusCode;
+      if (status == 401 || status == 403) return 'auth_blocked';
+    }
+    return permanent ? 'failed' : 'error';
+  }
+
+  String? _clean(String? value) {
+    final text = value?.trim() ?? '';
+    return text.isEmpty ? null : text;
   }
 
   @override

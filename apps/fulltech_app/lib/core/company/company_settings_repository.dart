@@ -20,7 +20,7 @@ final companySettingsRepositoryProvider = Provider<CompanySettingsRepository>((
   final repository = CompanySettingsRepository(
     ref.watch(dioProvider),
     ref.read(syncQueueServiceProvider.notifier),
-    cacheScope: user?.companyId ?? user?.email ?? user?.id,
+    cacheScope: _companySettingsCacheScope(user),
     canWriteSettings:
         user?.appRole == AppRole.admin || user?.appRole == AppRole.asistente,
   );
@@ -31,6 +31,13 @@ final companySettingsRepositoryProvider = Provider<CompanySettingsRepository>((
 final companySettingsProvider = FutureProvider<CompanySettings>((ref) async {
   return ref.watch(companySettingsRepositoryProvider).getSettings();
 });
+
+String? _companySettingsCacheScope(dynamic user) {
+  final companyId = user?.companyId?.toString().trim();
+  final userId = user?.id?.toString().trim();
+  if ((companyId ?? '').isEmpty || (userId ?? '').isEmpty) return null;
+  return 'company:$companyId:user:$userId';
+}
 
 class AdminAuthorizationVerification {
   const AdminAuthorizationVerification({

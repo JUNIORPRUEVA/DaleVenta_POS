@@ -102,7 +102,20 @@ final dioProvider = Provider<Dio>((ref) {
     LoadingInterceptor(ref.read(appLoadingProvider.notifier)),
   );
   api.dio.interceptors.add(ApiDiagnosticsInterceptor());
-  api.dio.interceptors.add(ApiOfflineCacheInterceptor(store: offlineStore));
+  api.dio.interceptors.add(
+    ApiOfflineCacheInterceptor(
+      store: offlineStore,
+      scopeResolver: () async {
+        final user = await storage.getUserSnapshot();
+        final companyId = user?.companyId?.trim();
+        final userId = user?.id.trim();
+        if ((companyId ?? '').isEmpty || (userId ?? '').isEmpty) {
+          return 'public';
+        }
+        return 'company:$companyId:user:$userId';
+      },
+    ),
+  );
   api.dio.interceptors.add(ApiRetryInterceptor(dio: api.dio));
   return api.dio;
 });
@@ -395,7 +408,14 @@ class AuthRepository {
         await _storage.saveTokens(access, refresh);
       }
       try {
-        final me = await _dio.get(ApiRoutes.usersMe).timeout(_loginTimeout);
+        final me = await _dio
+            .get(
+              ApiRoutes.usersMe,
+              options: Options(
+                extra: const {'disableOfflineCache': true, 'skipLoader': true},
+              ),
+            )
+            .timeout(_loginTimeout);
         final user = UserModel.fromJson(
           (me.data as Map).cast<String, dynamic>(),
         );
@@ -532,7 +552,16 @@ class AuthRepository {
       if (token == null) return null;
       try {
         final res = await _dio
-            .get(ApiRoutes.usersMe, options: Options(extra: {'silent': silent}))
+            .get(
+              ApiRoutes.usersMe,
+              options: Options(
+                extra: {
+                  'silent': silent,
+                  'disableOfflineCache': true,
+                  'skipLoader': true,
+                },
+              ),
+            )
             .timeout(_bootstrapTimeout);
         final user = UserModel.fromJson(
           (res.data as Map).cast<String, dynamic>(),
@@ -547,7 +576,13 @@ class AuthRepository {
             final res = await _dio
                 .get(
                   ApiRoutes.usersMe,
-                  options: Options(extra: {'silent': silent}),
+                  options: Options(
+                    extra: {
+                      'silent': silent,
+                      'disableOfflineCache': true,
+                      'skipLoader': true,
+                    },
+                  ),
                 )
                 .timeout(_bootstrapTimeout);
             final user = UserModel.fromJson(

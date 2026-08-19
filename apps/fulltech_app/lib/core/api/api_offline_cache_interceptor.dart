@@ -5,14 +5,21 @@ import 'package:dio/dio.dart';
 import '../debug/trace_log.dart';
 import '../offline/offline_store.dart';
 
+typedef OfflineCacheScopeResolver = Future<String> Function();
+
 class ApiOfflineCacheInterceptor extends Interceptor {
-  ApiOfflineCacheInterceptor({required OfflineStore store}) : _store = store;
+  ApiOfflineCacheInterceptor({
+    required OfflineStore store,
+    OfflineCacheScopeResolver? scopeResolver,
+  }) : _store = store,
+       _scopeResolver = scopeResolver;
 
   static const Duration defaultMaxAge = Duration(days: 7);
   static const String cacheHitExtraKey = '__offline_cache_hit';
   static const String cacheKeyExtraKey = '__offline_cache_key';
 
   final OfflineStore _store;
+  final OfflineCacheScopeResolver? _scopeResolver;
 
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) async {
@@ -59,7 +66,7 @@ class ApiOfflineCacheInterceptor extends Interceptor {
         extra: {
           ...options.extra,
           cacheHitExtraKey: true,
-          cacheKeyExtraKey: _cacheKey(options),
+          cacheKeyExtraKey: await _cacheKey(options),
         },
       ),
     );
@@ -95,7 +102,7 @@ class ApiOfflineCacheInterceptor extends Interceptor {
     if (!_isJsonSerializable(data)) return;
 
     try {
-      await _store.writeCacheEntry(_cacheKey(response.requestOptions), {
+      await _store.writeCacheEntry(await _cacheKey(response.requestOptions), {
         'data': data,
         'statusCode': response.statusCode ?? 200,
         'headers': response.headers.map,
@@ -116,7 +123,10 @@ class ApiOfflineCacheInterceptor extends Interceptor {
         ? options.extra['offlineCacheMaxAge'] as Duration
         : defaultMaxAge;
     try {
-      return await _store.readCacheEntry(_cacheKey(options), maxAge: maxAge);
+      return await _store.readCacheEntry(
+        await _cacheKey(options),
+        maxAge: maxAge,
+      );
     } catch (error, stackTrace) {
       TraceLog.log(
         'offline_cache',
@@ -137,9 +147,28 @@ class ApiOfflineCacheInterceptor extends Interceptor {
     }
   }
 
-  String _cacheKey(RequestOptions options) {
+  Future<String> _cacheKey(RequestOptions options) async {
     final method = options.method.toUpperCase();
     final uri = options.uri.replace(fragment: '').toString();
-    return 'http-cache:$method:$uri';
+    final explicitScope = options.extra['offlineCacheScope']?.toString().trim();
+    final resolvedScope = explicitScope != null && explicitScope.isNotEmpty
+        ? explicitScope
+        : await _resolveScope();
+    return 'http-cache:v2:$resolvedScope:$method:$uri';
+  }
+
+  Future<String> _resolveScope() async {
+    try {
+      final scope = (await _scopeResolver?.call())?.trim() ?? '';
+      if (scope.isNotEmpty) return scope;
+    } catch (error, stackTrace) {
+      TraceLog.log(
+        'offline_cache',
+        'scope resolver failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+    return 'public';
   }
 }

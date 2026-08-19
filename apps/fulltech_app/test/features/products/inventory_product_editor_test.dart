@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:daleventa_pos/core/company/company_settings_model.dart';
 import 'package:daleventa_pos/core/models/product_model.dart';
 import 'package:daleventa_pos/core/tax/product_tax_options_provider.dart';
+import 'package:daleventa_pos/core/utils/money_formatters.dart';
 import 'package:daleventa_pos/features/catalogo/data/catalog_repository.dart';
 import 'package:daleventa_pos/features/products/ui/inventory_module_pages.dart';
 
@@ -402,6 +403,167 @@ void main() {
     expect(find.text('+ 18%'), findsOneWidget);
     expect(find.text('Exento'), findsWidgets);
   });
+
+  testWidgets(
+    'catálogo oculta badges fiscales cuando impuestos de empresa están apagados',
+    (tester) async {
+      final taxConfig = ProductTaxUiConfig(
+        settings: CompanySettings.empty().copyWith(
+          taxEnabled: false,
+          defaultTaxRate: 0.18,
+          pricesIncludeTax: true,
+        ),
+        activeTaxes: const [],
+      );
+      final products = [
+        ProductModel(
+          id: 'p-tax-off',
+          nombre: 'Producto fiscal guardado',
+          precio: 1180,
+          costo: 700,
+          stock: 1,
+          categoria: 'Fiscal',
+          taxTreatment: 'TAXABLE',
+          taxRate: 0.18,
+          taxPriceMode: 'TAX_INCLUDED',
+        ),
+      ];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 1100,
+              child: CatalogTab(
+                products: products,
+                loading: false,
+                error: null,
+                onRefresh: () async {},
+                onCreate: () {},
+                onImport: () async {},
+                onExport: () async {},
+                onExportSelection: (_) async {},
+                onPdfSelection: (_) async {},
+                onBulkDelete: (_) async {},
+                onBulkChangeCategory: (_, _) async {},
+                onEdit: (_) {},
+                onSetStock: (_, _) async {},
+                canEditProducts: true,
+                canAddStock: true,
+                showTaxBadges: true,
+                taxConfig: taxConfig,
+                onDelete: (_) async {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Incl. 18%'), findsNothing);
+      expect(find.text('+ 18%'), findsNothing);
+      expect(find.text('Exento'), findsNothing);
+      expect(find.text(formatRdCurrencyAccounting(1180)), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'catálogo refresca badges al cambiar de empresa fiscal a normal',
+    (tester) async {
+      var taxEnabled = true;
+      final products = [
+        ProductModel(
+          id: 'p-switch',
+          nombre: 'Producto cambio empresa',
+          precio: 1180,
+          costo: 700,
+          stock: 1,
+          categoria: 'Fiscal',
+          taxTreatment: 'TAXABLE',
+          taxRate: 0.18,
+          taxPriceMode: 'TAX_INCLUDED',
+        ),
+      ];
+
+      ProductTaxUiConfig config() => ProductTaxUiConfig(
+        settings: CompanySettings.empty().copyWith(
+          taxEnabled: taxEnabled,
+          defaultTaxRate: 0.18,
+          pricesIncludeTax: true,
+        ),
+        activeTaxes: taxEnabled
+            ? const [
+                ProductTaxOption(
+                  id: 'tax-18',
+                  name: 'ITBIS',
+                  rate: 0.18,
+                  isDefault: true,
+                ),
+              ]
+            : const [],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StatefulBuilder(
+            builder: (context, setHostState) {
+              return Scaffold(
+                body: Column(
+                  children: [
+                    ElevatedButton(
+                      onPressed: () => setHostState(() => taxEnabled = false),
+                      child: const Text('Empresa normal'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => setHostState(() => taxEnabled = true),
+                      child: const Text('Empresa fiscal'),
+                    ),
+                    Expanded(
+                      child: SizedBox(
+                        width: 1100,
+                        child: CatalogTab(
+                          products: products,
+                          loading: false,
+                          error: null,
+                          onRefresh: () async {},
+                          onCreate: () {},
+                          onImport: () async {},
+                          onExport: () async {},
+                          onExportSelection: (_) async {},
+                          onPdfSelection: (_) async {},
+                          onBulkDelete: (_) async {},
+                          onBulkChangeCategory: (_, _) async {},
+                          onEdit: (_) {},
+                          onSetStock: (_, _) async {},
+                          canEditProducts: true,
+                          canAddStock: true,
+                          showTaxBadges: taxEnabled,
+                          taxConfig: config(),
+                          onDelete: (_) async {},
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Incl. 18%'), findsOneWidget);
+
+      await tester.tap(find.text('Empresa normal'));
+      await tester.pumpAndSettle();
+      expect(find.text('Incl. 18%'), findsNothing);
+      expect(find.text('Exento'), findsNothing);
+
+      await tester.tap(find.text('Empresa fiscal'));
+      await tester.pumpAndSettle();
+      expect(find.text('Incl. 18%'), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'ajustes de stock resetea filtro cuando desaparece la categoría',

@@ -1933,6 +1933,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Future<void> _openMobileFiscalInvoicePanel({bool authorized = false}) async {
+    if (!_quoteTaxEnabled) return;
     if (!authorized) {
       final allowed = await _ensureFiscalInvoicePermission();
       if (!allowed || !mounted) return;

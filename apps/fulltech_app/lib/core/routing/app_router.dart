@@ -34,6 +34,7 @@ import '../../modules/ventas/sales_credit_screen.dart';
 import '../../modules/compras/compras_screen.dart';
 import '../ai_assistant/presentation/ai_screen.dart';
 import '../auth/admin_authorization_session.dart';
+import '../auth/app_bootstrap_status.dart';
 import '../auth/auth_provider.dart';
 import '../auth/app_permissions.dart';
 import 'app_route_observer.dart';
@@ -47,6 +48,10 @@ final _routerRefreshProvider = Provider<_RouterRefreshNotifier>((ref) {
   final notifier = _RouterRefreshNotifier();
   ref.listen<AuthState>(
     authStateProvider,
+    (previous, next) => notifier.refresh(),
+  );
+  ref.listen<AppBootstrapStatus>(
+    appBootstrapStatusProvider,
     (previous, next) => notifier.refresh(),
   );
   ref.listen<AdminAuthorizationState>(
@@ -318,6 +323,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     ],
     redirect: (context, state) {
       final auth = ref.read(authStateProvider);
+      final bootstrap = ref.read(appBootstrapStatusProvider);
       final isAuth = auth.isAuthenticated;
       final loc = state.uri.toString();
       final path = state.uri.path;
@@ -332,12 +338,19 @@ final routerProvider = Provider<GoRouter>((ref) {
         return RouteAccess.defaultHomeForUser(auth.user);
       }
 
-      if (!auth.initialized || auth.restoringSession) {
+      final bootstrappingAuthenticatedSession =
+          bootstrap == AppBootstrapStatus.initializing ||
+          bootstrap == AppBootstrapStatus.authenticatedLoadingCompany ||
+          bootstrap == AppBootstrapStatus.error;
+
+      if (bootstrappingAuthenticatedSession) {
         return isSplashRoute ? null : Routes.splash;
       }
 
       if (isSplashRoute) {
-        return isAuth ? defaultAuthedRoute() : Routes.landing;
+        return bootstrap == AppBootstrapStatus.ready
+            ? defaultAuthedRoute()
+            : Routes.landing;
       }
 
       if (!isAuth) {
