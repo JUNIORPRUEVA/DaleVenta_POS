@@ -327,7 +327,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isAuth = auth.isAuthenticated;
       final loc = state.uri.toString();
       final path = state.uri.path;
-      ref.read(adminAuthorizationProvider.notifier).clearIfExpired();
+      final adminAuthorization = ref.read(adminAuthorizationProvider.notifier);
+      adminAuthorization.clearIfExpired();
+      adminAuthorization.clearIfRouteScopeExited(loc);
       final isAuthRoute =
           path == Routes.login ||
           path == Routes.register ||
@@ -366,10 +368,11 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       final required = RouteAccess.permissionForLocation(loc);
       if (required != null && !hasUserPermission(auth.user, required)) {
-        final adminOverride = ref
-            .read(adminAuthorizationProvider.notifier)
-            .isAuthorizedForRoute(loc);
-        if (adminOverride) return null;
+        final adminOverride = adminAuthorization.isAuthorizedForRoute(loc);
+        if (adminOverride) {
+          adminAuthorization.markRouteEntered(loc);
+          return null;
+        }
         final fallback = RouteAccess.defaultHomeForUser(auth.user);
         if (path != fallback) {
           return fallback;

@@ -27,6 +27,7 @@ final companySettingsRepositoryProvider = Provider<CompanySettingsRepository>((
         user?.appRole == AppRole.admin ||
         user?.appRole == AppRole.asistente ||
         (adminAuthorization.isAuthorized &&
+            adminAuthorization.belongsTo(user?.id, user?.companyId) &&
             adminAuthorization.delegationScope == 'company.settings'),
   );
   repository.registerSyncHandlers();

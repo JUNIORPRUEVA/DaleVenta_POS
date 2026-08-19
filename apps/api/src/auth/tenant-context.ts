@@ -5,6 +5,7 @@ export type TenantUser = {
   id: string;
   role: Role | string;
   companyId?: string | null;
+  sessionId?: string | null;
   adminAuthorized?: boolean;
   authorizedScopes?: string[];
   authorizedPermissions?: string[];

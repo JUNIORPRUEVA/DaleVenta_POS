@@ -5,7 +5,7 @@ import { PERMISSIONS_KEY, ROLES_KEY } from "./roles.decorator";
 import { RolesGuard } from "./roles.guard";
 
 function contextFor(
-  user: { id: string; role: Role; companyId: string },
+  user: { id: string; role: Role; companyId: string; sessionId?: string },
   headers: Record<string, unknown> = {},
 ) {
   return {
@@ -21,10 +21,12 @@ function guardWith({
   roles,
   permissions,
   userPermissions,
+  capabilityConsumeCount = 1,
 }: {
   roles: Role[];
   permissions: string[];
   userPermissions?: Record<string, boolean>;
+  capabilityConsumeCount?: number;
 }) {
   const reflector = {
     getAllAndOverride: jest.fn((key: string) => {
@@ -40,12 +42,36 @@ function guardWith({
         userPermissions: userPermissions ?? {},
       }),
     },
+    adminAuthorizationCapability: {
+      updateMany: jest.fn().mockResolvedValue({ count: capabilityConsumeCount }),
+    },
   };
 
   return {
     guard: new RolesGuard(reflector as any, config as any, prisma as any),
     prisma,
   };
+}
+
+function adminToken({
+  userId = "user-1",
+  companyId = "company-1",
+  sessionId = "session-1",
+  jti = "11111111-1111-4111-8111-111111111111",
+  scopes = ["company.settings"],
+} = {}) {
+  return jwt.sign(
+    {
+      sub: userId,
+      companyId,
+      sessionId,
+      jti,
+      tokenType: "admin-authorization",
+      scopes,
+    },
+    "test-secret",
+    { expiresIn: "10m" },
+  );
 }
 
 describe("RolesGuard dynamic permissions", () => {
@@ -88,21 +114,17 @@ describe("RolesGuard dynamic permissions", () => {
       permissions: ["manageSettings"],
       userPermissions: {},
     });
-    const token = jwt.sign(
-      {
-        sub: "user-1",
-        companyId: "company-1",
-        tokenType: "admin-authorization",
-        scopes: ["company.settings"],
-      },
-      "test-secret",
-      { expiresIn: "10m" },
-    );
+    const token = adminToken();
 
     await expect(
       guard.canActivate(
         contextFor(
-          { id: "user-1", role: Role.CAJERO, companyId: "company-1" },
+          {
+            id: "user-1",
+            role: Role.CAJERO,
+            companyId: "company-1",
+            sessionId: "session-1",
+          },
           { "x-admin-authorization": token },
         ),
       ),
@@ -115,24 +137,97 @@ describe("RolesGuard dynamic permissions", () => {
       permissions: ["manageUsers"],
       userPermissions: {},
     });
-    const token = jwt.sign(
-      {
-        sub: "user-1",
-        companyId: "company-1",
-        tokenType: "admin-authorization",
-        scopes: ["company.settings"],
-      },
-      "test-secret",
-      { expiresIn: "10m" },
-    );
+    const token = adminToken();
 
     await expect(
       guard.canActivate(
         contextFor(
-          { id: "user-1", role: Role.CAJERO, companyId: "company-1" },
+          {
+            id: "user-1",
+            role: Role.CAJERO,
+            companyId: "company-1",
+            sessionId: "session-1",
+          },
           { "x-admin-authorization": token },
         ),
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("denies reused delegated admin capabilities", async () => {
+    const { guard } = guardWith({
+      roles: [Role.ADMIN],
+      permissions: ["manageSettings"],
+      userPermissions: {},
+      capabilityConsumeCount: 0,
+    });
+
+    await expect(
+      guard.canActivate(
+        contextFor(
+          {
+            id: "user-1",
+            role: Role.CAJERO,
+            companyId: "company-1",
+            sessionId: "session-1",
+          },
+          { "x-admin-authorization": adminToken() },
+        ),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("denies company A capability in company B", async () => {
+    const { guard, prisma } = guardWith({
+      roles: [Role.ADMIN],
+      permissions: ["manageSettings"],
+      userPermissions: {},
+    });
+
+    await expect(
+      guard.canActivate(
+        contextFor(
+          {
+            id: "user-1",
+            role: Role.CAJERO,
+            companyId: "company-b",
+            sessionId: "session-1",
+          },
+          {
+            "x-admin-authorization": adminToken({
+              companyId: "company-a",
+            }),
+          },
+        ),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.adminAuthorizationCapability.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("denies employee A capability for employee B", async () => {
+    const { guard, prisma } = guardWith({
+      roles: [Role.ADMIN],
+      permissions: ["manageSettings"],
+      userPermissions: {},
+    });
+
+    await expect(
+      guard.canActivate(
+        contextFor(
+          {
+            id: "employee-b",
+            role: Role.CAJERO,
+            companyId: "company-1",
+            sessionId: "session-1",
+          },
+          {
+            "x-admin-authorization": adminToken({
+              userId: "employee-a",
+            }),
+          },
+        ),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.adminAuthorizationCapability.updateMany).not.toHaveBeenCalled();
   });
 });

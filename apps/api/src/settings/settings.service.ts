@@ -129,6 +129,10 @@ export class SettingsService {
 
   async verifyAdminPin(user: TenantUser, pin: unknown) {
     const companyId = requireTenant(user);
+    const sessionId = `${user.sessionId ?? ""}`.trim();
+    if (!sessionId) {
+      throw new ForbiddenException("Sesión inválida para autorización");
+    }
     const normalizedPin = this.normalizePin(pin);
     const scopes = this.normalizeDelegatedScopes((user as any).requestedScopes);
     const config = await this.prisma.appConfig.findUnique({
@@ -146,10 +150,24 @@ export class SettingsService {
       throw new ForbiddenException("PIN administrativo inválido");
     }
     const expiresInSeconds = 600;
+    const jti = randomUUID();
+    const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
+    await this.prisma.adminAuthorizationCapability.create({
+      data: {
+        jti,
+        companyId,
+        userId: user.id,
+        sessionId,
+        scopes,
+        expiresAt,
+      },
+    });
     const adminAuthorizationToken = await this.jwt.signAsync(
       {
         sub: user.id,
         companyId,
+        sessionId,
+        jti,
         tokenType: "admin-authorization",
         scopes,
       },
