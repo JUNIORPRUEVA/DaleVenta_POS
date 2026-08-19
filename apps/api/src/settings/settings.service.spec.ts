@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { Role } from "@prisma/client";
+import * as bcrypt from "bcryptjs";
 import { SettingsService } from "./settings.service";
 
 describe("SettingsService company master data protection", () => {
@@ -14,7 +15,9 @@ describe("SettingsService company master data protection", () => {
   function buildService(prisma: any) {
     return new SettingsService(
       prisma,
-      {} as any,
+      {
+        signAsync: jest.fn().mockResolvedValue("admin-token"),
+      } as any,
       { emitCompany: jest.fn() } as any,
       {
         getCompanyFiscalSettings: jest.fn().mockResolvedValue(fiscal),
@@ -339,6 +342,70 @@ describe("SettingsService company master data protection", () => {
         authorizedScopes: ["company.settings"],
       }),
       expect.objectContaining({ taxEnabled: false, ncfEnabled: false }),
+    );
+  });
+
+  it("issues admin PIN capabilities scoped to user company and session", async () => {
+    const prisma = {
+      appConfig: {
+        findUnique: jest.fn().mockResolvedValue({
+          adminAuthorizationPinHash:
+            "$2a$10$eImiTXuWVxfM37uY4JANjQ==invalid-test-hash",
+        }),
+      },
+      adminAuthorizationCapability: {
+        create: jest.fn(),
+      },
+    };
+    const jwt = {
+      signAsync: jest.fn().mockResolvedValue("admin-token"),
+    };
+    const service = new SettingsService(
+      prisma as any,
+      jwt as any,
+      { emitCompany: jest.fn() } as any,
+      {
+        getCompanyFiscalSettings: jest.fn().mockResolvedValue(fiscal),
+        updateFiscalSettings: jest.fn(),
+      } as any,
+    );
+
+    jest.spyOn(bcrypt, "compare").mockResolvedValueOnce(true);
+
+    const result = await service.verifyAdminPin(
+      {
+        id: "employee-a",
+        role: Role.CAJERO,
+        companyId: "company-a",
+        sessionId: "session-a",
+        requestedScopes: ["company.settings"],
+      } as any,
+      "1234",
+    );
+
+    expect(result.adminAuthorizationToken).toBe("admin-token");
+    expect(prisma.adminAuthorizationCapability.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          companyId: "company-a",
+          userId: "employee-a",
+          sessionId: "session-a",
+          scopes: ["company.settings"],
+          jti: expect.any(String),
+          expiresAt: expect.any(Date),
+        }),
+      }),
+    );
+    expect(jwt.signAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sub: "employee-a",
+        companyId: "company-a",
+        sessionId: "session-a",
+        jti: expect.any(String),
+        tokenType: "admin-authorization",
+        scopes: ["company.settings"],
+      }),
+      { expiresIn: 600 },
     );
   });
 });

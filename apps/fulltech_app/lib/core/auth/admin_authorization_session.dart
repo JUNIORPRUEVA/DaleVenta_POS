@@ -90,8 +90,9 @@ class AdminAuthorizationController
   final Ref _ref;
   Timer? _expiryTimer;
 
-  bool get isAuthorized => state.isAuthorized;
-  bool get hasActionAuthorization => state.isActionAuthorization;
+  bool get isAuthorized => _belongsToCurrentSession() && state.isAuthorized;
+  bool get hasActionAuthorization =>
+      _belongsToCurrentSession() && state.isActionAuthorization;
 
   void authorizeFor(
     Duration duration,

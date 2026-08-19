@@ -72,7 +72,13 @@ export class RolesGuard implements CanActivate {
         this.markPermissionAuthorization(user, requiredPermissions);
         return true;
       }
-      if (await this.consumeDelegatedAdminAuthorization(request, user, requiredPermissions)) {
+      if (
+        await this.consumeDelegatedAdminAuthorization(
+          request,
+          user,
+          requiredPermissions,
+        )
+      ) {
         return true;
       }
     }
@@ -206,19 +212,22 @@ export class RolesGuard implements CanActivate {
       if (scopes.length === 0) return false;
       if (!this.scopesCoverPermissions(scopes, permissions)) return false;
 
-      const consumed = await this.prisma.adminAuthorizationCapability.updateMany({
-        where: {
-          jti: payload.jti,
-          userId: user.id,
-          companyId,
-          sessionId,
-          consumedAt: null,
-          revokedAt: null,
-          expiresAt: { gt: new Date() },
-        },
-        data: {
-          consumedAt: new Date(),
-          consumedByPath: this.requestPath(request),
+      const consumed =
+        await this.prisma.adminAuthorizationCapability.updateMany({
+          where: {
+            jti: payload.jti,
+            userId: user.id,
+            companyId,
+            sessionId,
+            consumedAt: null,
+            revokedAt: null,
+            expiresAt: { gt: new Date() },
+          },
+          data: {
+            consumedAt: new Date(),
+            consumedByPath: this.requestPath(request),
+          },
+        });
         },
       });
       if (consumed.count !== 1) return false;

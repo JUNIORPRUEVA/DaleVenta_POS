@@ -1,5 +1,5 @@
 CREATE TABLE "admin_authorization_capabilities" (
-    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "id" UUID NOT NULL,
     "jti" UUID NOT NULL,
     "company_id" UUID NOT NULL,
     "user_id" UUID NOT NULL,
