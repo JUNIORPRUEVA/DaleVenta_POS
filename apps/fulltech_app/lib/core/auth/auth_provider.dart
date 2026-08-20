@@ -191,20 +191,25 @@ class AuthController extends StateNotifier<AuthState> {
 
       switch (result.status) {
         case SessionVerificationStatus.authenticated:
+          final resolvedUser = result.user;
+          if (resolvedUser == null) {
+            state = AuthState(
+              initialized: true,
+              isAuthenticated: false,
+              user: null,
+              loading: false,
+              restoringSession: false,
+              hasSessionHint: false,
+            );
+            break;
+          }
           _markSessionHealthy();
           TraceLog.log(
             'Auth',
-            'USER_RESOLVED userId=${result.user?.id ?? ''} companyId=${result.user?.companyId ?? ''}',
+            'USER_RESOLVED userId=${resolvedUser.id} companyId=${resolvedUser.companyId ?? ''}',
             seq: seq,
           );
-          state = AuthState(
-            initialized: true,
-            isAuthenticated: true,
-            user: result.user,
-            loading: false,
-            restoringSession: false,
-            hasSessionHint: true,
-          );
+          setUser(resolvedUser, persistSnapshot: false);
           break;
         case SessionVerificationStatus.invalid:
           state = AuthState(
@@ -218,24 +223,28 @@ class AuthController extends StateNotifier<AuthState> {
           break;
         case SessionVerificationStatus.deferred:
           _markSessionHealthy();
-          state = state.copyWith(
-            initialized: true,
-            isAuthenticated: true,
-            user: result.user,
-            loading: false,
-            restoringSession: false,
-            hasSessionHint: true,
-          );
+          if (state.restoringSession || state.loading || !state.hasSessionHint) {
+            state = state.copyWith(
+              initialized: true,
+              isAuthenticated: true,
+              user: result.user,
+              loading: false,
+              restoringSession: false,
+              hasSessionHint: true,
+            );
+          }
           break;
       }
     } catch (_) {
       if (!mounted) return;
-      state = state.copyWith(
-        initialized: true,
-        isAuthenticated: state.hasSessionHint,
-        loading: false,
-        restoringSession: false,
-      );
+      if (state.restoringSession || state.loading) {
+        state = state.copyWith(
+          initialized: true,
+          isAuthenticated: state.hasSessionHint,
+          loading: false,
+          restoringSession: false,
+        );
+      }
     } finally {
       sw.stop();
       TraceLog.log(
@@ -376,19 +385,63 @@ class AuthController extends StateNotifier<AuthState> {
     bool persistSnapshot = true,
     UserModel? snapshotUser,
   }) {
-    if (persistSnapshot) {
+    final sameUser = _sameUserSnapshot(state.user, user);
+    final needsStateUpdate =
+        !sameUser ||
+        !state.initialized ||
+        !state.isAuthenticated ||
+        state.loading ||
+        state.restoringSession ||
+        !state.hasSessionHint;
+
+    if (persistSnapshot && !sameUser) {
       unawaited(
         ref.read(tokenStorageProvider).saveUserSnapshot(snapshotUser ?? user),
       );
     }
     _markSessionHealthy();
+
+    if (!needsStateUpdate) return;
+
     state = state.copyWith(
-      user: user,
+      initialized: true,
+      user: sameUser ? state.user : user,
       isAuthenticated: true,
+      loading: false,
       restoringSession: false,
       hasSessionHint: true,
     );
   }
+}
+
+bool _sameUserSnapshot(UserModel? previous, UserModel next) {
+  if (previous == null) return false;
+  return _deepEquals(previous.toJson(), next.toJson());
+}
+
+bool _deepEquals(Object? left, Object? right) {
+  if (identical(left, right)) return true;
+  if (left.runtimeType != right.runtimeType) return false;
+
+  if (left is Map && right is Map) {
+    if (left.length != right.length) return false;
+    for (final key in left.keys) {
+      if (!right.containsKey(key) || !_deepEquals(left[key], right[key])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  if (left is List && right is List) {
+    if (left.length != right.length) return false;
+    for (var index = 0; index < left.length; index++) {
+      if (!_deepEquals(left[index], right[index])) return false;
+    }
+    return true;
+  }
+
+  return left == right;
 }
 
 AuthState _buildInitialAuthState(TokenStorageLaunchSnapshot snapshot) {
