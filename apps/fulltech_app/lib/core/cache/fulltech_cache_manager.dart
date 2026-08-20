@@ -5,6 +5,7 @@ import '../utils/product_image_url.dart';
 
 class FulltechImageCacheManager {
   static const _key = 'fulltechProductImagesV5';
+  static const _defaultThumbnailSize = 320;
 
   // Product images are versioned by URL/cache key. Thirty days keeps the POS
   // fast across restarts without allowing the disk cache to grow indefinitely.
@@ -19,6 +20,7 @@ class FulltechImageCacheManager {
   static Future<void> warmImageUrls(
     Iterable<String?> urls, {
     int maxUrls = 24,
+    int thumbnailSize = _defaultThumbnailSize,
   }) async {
     // On Flutter Web, especially iOS/Safari, preloading many product images can
     // create unnecessary memory pressure. Desktop uses the persistent disk cache.
@@ -26,18 +28,23 @@ class FulltechImageCacheManager {
 
     final unique = <String>{};
     for (final raw in urls) {
-      final url = (raw ?? '').trim();
-      if (url.isEmpty) continue;
-      if (!unique.add(url)) continue;
+      final sourceUrl = (raw ?? '').trim();
+      if (sourceUrl.isEmpty) continue;
+      final effectiveUrl = buildProductThumbnailUrl(
+        imageUrl: sourceUrl,
+        width: thumbnailSize,
+        height: thumbnailSize,
+      );
+      if (!unique.add(effectiveUrl)) continue;
       if (unique.length >= maxUrls) break;
     }
 
-    for (final url in unique) {
+    for (final effectiveUrl in unique) {
       try {
-        final cacheKey = buildProductImageCacheKey(url);
+        final cacheKey = buildProductImageCacheKey(effectiveUrl);
         await instance.downloadFile(
-          url,
-          key: cacheKey.isEmpty ? url : cacheKey,
+          effectiveUrl,
+          key: cacheKey.isEmpty ? effectiveUrl : cacheKey,
         );
       } catch (_) {
         // A warm-up failure must never block catalog rendering.
@@ -51,18 +58,39 @@ class FulltechImageCacheManager {
     required String url,
     required List<int> bytes,
     String? filename,
+    int thumbnailSize = _defaultThumbnailSize,
   }) async {
     final normalizedUrl = url.trim();
     if (normalizedUrl.isEmpty || bytes.isEmpty) return;
 
     try {
-      final cacheKey = buildProductImageCacheKey(normalizedUrl);
+      final data = Uint8List.fromList(bytes);
+      final extension = _extensionFromFilename(filename);
+      final fullCacheKey = buildProductImageCacheKey(normalizedUrl);
       await instance.putFile(
         normalizedUrl,
-        Uint8List.fromList(bytes),
-        key: cacheKey.isEmpty ? normalizedUrl : cacheKey,
-        fileExtension: _extensionFromFilename(filename),
+        data,
+        key: fullCacheKey.isEmpty ? normalizedUrl : fullCacheKey,
+        fileExtension: extension,
       );
+
+      // ProductNetworkImage requests media thumbnails on desktop. Seed that
+      // exact cache key too so a newly uploaded photo appears instantly and is
+      // not downloaded again on the next rebuild.
+      final thumbnailUrl = buildProductThumbnailUrl(
+        imageUrl: normalizedUrl,
+        width: thumbnailSize,
+        height: thumbnailSize,
+      );
+      if (thumbnailUrl != normalizedUrl) {
+        final thumbnailCacheKey = buildProductImageCacheKey(thumbnailUrl);
+        await instance.putFile(
+          thumbnailUrl,
+          data,
+          key: thumbnailCacheKey.isEmpty ? thumbnailUrl : thumbnailCacheKey,
+          fileExtension: extension,
+        );
+      }
     } catch (_) {
       // The network URL remains the source of truth if local caching fails.
     }
