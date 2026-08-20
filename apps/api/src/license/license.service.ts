@@ -418,7 +418,7 @@ export class LicenseService {
 
     return {
       companyId: company.id,
-      companyName: appConfig?.companyName || company.name,
+      companyName: company.name,
       slug: company.slug,
       plan: company.plan,
       licenseType: this.licenseType(company.plan, effectiveStatus, effectiveLimits),
@@ -448,7 +448,7 @@ export class LicenseService {
         products,
       },
       account: {
-        businessName: appConfig?.companyName || company.name,
+        businessName: company.name,
         taxId: appConfig?.rnc || null,
         businessPhone: appConfig?.phone || null,
         businessAddress: appConfig?.address || null,

@@ -34,9 +34,8 @@ final companySettingsProvider = FutureProvider<CompanySettings>((ref) async {
 
 String? _companySettingsCacheScope(dynamic user) {
   final companyId = user?.companyId?.toString().trim();
-  final userId = user?.id?.toString().trim();
-  if ((companyId ?? '').isEmpty || (userId ?? '').isEmpty) return null;
-  return 'company:$companyId:user:$userId';
+  if ((companyId ?? '').isEmpty) return null;
+  return 'company:$companyId';
 }
 
 class AdminAuthorizationVerification {

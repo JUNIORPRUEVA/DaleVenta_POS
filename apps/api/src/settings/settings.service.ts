@@ -205,6 +205,13 @@ export class SettingsService {
       },
       update: {},
     });
+    if (companyName && config.companyName !== companyName) {
+      await this.prisma.appConfig.update({
+        where: { companyId },
+        data: { companyName },
+        select: { id: true },
+      });
+    }
     return {
       ...config,
       companyName,

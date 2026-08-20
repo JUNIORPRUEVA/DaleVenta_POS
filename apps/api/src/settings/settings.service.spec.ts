@@ -56,6 +56,7 @@ describe('SettingsService company master data protection', () => {
           whatsappWebhookEnabled: false,
           adminAuthorizationPinHash: null,
         }),
+        update: jest.fn().mockResolvedValue({ id: 'company_company-a' }),
       },
     };
     const service = buildService(prisma);
@@ -70,6 +71,11 @@ describe('SettingsService company master data protection', () => {
     expect(prisma.company.findUnique).toHaveBeenCalledWith({
       where: { id: 'company-a' },
       select: { name: true },
+    });
+    expect(prisma.appConfig.update).toHaveBeenCalledWith({
+      where: { companyId: 'company-a' },
+      data: { companyName: 'Nombre Nuevo' },
+      select: { id: true },
     });
   });
 

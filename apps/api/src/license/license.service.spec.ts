@@ -50,6 +50,55 @@ describe('LicenseService limits', () => {
     );
   });
 
+  it('uses companies.name as the license display name when appConfig is stale', async () => {
+    const prisma = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'company-a',
+          name: 'Nombre Nuevo',
+          slug: 'empresa-a',
+          status: 'ACTIVE',
+          plan: 'STANDARD',
+          licenseStatus: LicenseStatus.TRIAL,
+          licenseKey: null,
+          trialStartedAt: new Date('2026-08-01T00:00:00Z'),
+          trialEndsAt: new Date('2026-08-30T00:00:00Z'),
+          licenseActivatedAt: null,
+          licenseExpiresAt: null,
+          licenseBlockedAt: null,
+          licenseNotes: null,
+          maxUsers: 2,
+          maxProducts: 100,
+        }),
+      },
+      user: { count: jest.fn().mockResolvedValue(1) },
+      product: { count: jest.fn().mockResolvedValue(0) },
+      companyMember: { findFirst: jest.fn().mockResolvedValue(null) },
+      appConfig: {
+        findFirst: jest.fn().mockResolvedValue({
+          companyName: 'Nombre Viejo',
+          rnc: null,
+          phone: null,
+          address: null,
+          description: null,
+          legalRepresentativeName: null,
+          legalRepresentativeCedula: null,
+          legalRepresentativeRole: null,
+        }),
+      },
+    };
+    const scopedService = new LicenseService(
+      prisma as any,
+      {} as any,
+      {} as any,
+    ) as any;
+
+    const status = await scopedService.getCompanyLicenseStatus('company-a');
+
+    expect(status.companyName).toBe('Nombre Nuevo');
+    expect(status.account.businessName).toBe('Nombre Nuevo');
+  });
+
   it('returns a structured inactive-license error for blocked accounts', () => {
     const error = service.licenseInactiveException({
       status: LicenseStatus.BLOCKED,
