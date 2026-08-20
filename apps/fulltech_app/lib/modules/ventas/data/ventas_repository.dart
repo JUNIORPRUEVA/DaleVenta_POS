@@ -50,6 +50,7 @@ class VentasRepository {
         ),
         creditAmount: _nullableDouble(payload['creditAmount']),
         expectedTotalSold: _nullableDouble(payload['expectedTotalSold']),
+        globalDiscountAmount: _nullableDouble(payload['globalDiscountAmount']),
         fiscalVoucherType: payload['fiscalVoucherType']?.toString(),
         fiscalCustomerTaxId: payload['fiscalCustomerTaxId']?.toString(),
         fiscalCustomerName: payload['fiscalCustomerName']?.toString(),
@@ -528,6 +529,7 @@ class VentasRepository {
     double? paymentTransferAmount,
     double? creditAmount,
     double? expectedTotalSold,
+    double? globalDiscountAmount,
     String? fiscalVoucherType,
     String? fiscalCustomerTaxId,
     String? fiscalCustomerName,
@@ -552,6 +554,8 @@ class VentasRepository {
         'paymentTransferAmount': paymentTransferAmount,
       if (creditAmount != null) 'creditAmount': creditAmount,
       if (expectedTotalSold != null) 'expectedTotalSold': expectedTotalSold,
+      if (globalDiscountAmount != null)
+        'globalDiscountAmount': globalDiscountAmount,
       if ((fiscalVoucherType ?? '').trim().isNotEmpty)
         'fiscalVoucherType': fiscalVoucherType!.trim().toUpperCase(),
       if ((fiscalCustomerTaxId ?? '').trim().isNotEmpty)
@@ -571,6 +575,7 @@ class VentasRepository {
         paymentTransferAmount: paymentTransferAmount,
         creditAmount: creditAmount,
         expectedTotalSold: expectedTotalSold,
+        globalDiscountAmount: globalDiscountAmount,
         fiscalVoucherType: fiscalVoucherType,
         fiscalCustomerTaxId: fiscalCustomerTaxId,
         fiscalCustomerName: fiscalCustomerName,
@@ -660,6 +665,7 @@ class VentasRepository {
     double? paymentTransferAmount,
     double? creditAmount,
     double? expectedTotalSold,
+    double? globalDiscountAmount,
     String? fiscalVoucherType,
     String? fiscalCustomerTaxId,
     String? fiscalCustomerName,
@@ -684,6 +690,8 @@ class VentasRepository {
           'paymentTransferAmount': paymentTransferAmount,
         if (creditAmount != null) 'creditAmount': creditAmount,
         if (expectedTotalSold != null) 'expectedTotalSold': expectedTotalSold,
+        if (globalDiscountAmount != null)
+          'globalDiscountAmount': globalDiscountAmount,
         if ((fiscalVoucherType ?? '').trim().isNotEmpty)
           'fiscalVoucherType': fiscalVoucherType!.trim().toUpperCase(),
         if ((fiscalCustomerTaxId ?? '').trim().isNotEmpty)

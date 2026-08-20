@@ -9,24 +9,27 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('ignores pending load results after VentasController is disposed', () async {
-    final repo = _FakeVentasRepository();
-    final container = ProviderContainer(
-      overrides: [ventasRepositoryProvider.overrideWithValue(repo)],
-    );
+  test(
+    'ignores pending load results after VentasController is disposed',
+    () async {
+      final repo = _FakeVentasRepository();
+      final container = ProviderContainer(
+        overrides: [ventasRepositoryProvider.overrideWithValue(repo)],
+      );
 
-    container.read(ventasControllerProvider);
-    await Future<void>.delayed(Duration.zero);
-    container.dispose();
+      container.read(ventasControllerProvider);
+      await Future<void>.delayed(Duration.zero);
+      container.dispose();
 
-    repo.cachedSalesCompleter.complete(const <SaleModel>[]);
-    repo.cachedSummaryCompleter.complete(null);
-    await Future<void>.delayed(Duration.zero);
+      repo.cachedSalesCompleter.complete(const <SaleModel>[]);
+      repo.cachedSummaryCompleter.complete(null);
+      await Future<void>.delayed(Duration.zero);
 
-    repo.listSalesCompleter.complete(const <SaleModel>[]);
-    repo.summaryCompleter.complete(SalesSummaryModel.empty());
-    await Future<void>.delayed(Duration.zero);
-  });
+      repo.listSalesCompleter.complete(const <SaleModel>[]);
+      repo.summaryCompleter.complete(SalesSummaryModel.empty());
+      await Future<void>.delayed(Duration.zero);
+    },
+  );
 }
 
 class _FakeVentasRepository implements VentasRepository {
@@ -146,6 +149,7 @@ class _FakeVentasRepository implements VentasRepository {
     double? paymentTransferAmount,
     double? creditAmount,
     double? expectedTotalSold,
+    double? globalDiscountAmount,
     String? fiscalVoucherType,
     String? fiscalCustomerTaxId,
     String? fiscalCustomerName,

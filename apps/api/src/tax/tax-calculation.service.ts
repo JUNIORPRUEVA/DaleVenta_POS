@@ -66,16 +66,6 @@ export class TaxCalculationService {
     const defaultRate = this.rate(input.defaultTaxRate ?? 0);
     const defaultPriceMode = input.defaultPriceMode ?? "NO_TAX";
     const taxEnabled = input.taxEnabled === true;
-    const subtotal = input.lines.reduce(
-      (sum, line) => sum.plus(this.money(line.quantity).mul(this.money(line.unitPrice))),
-      new Prisma.Decimal(0),
-    );
-    const requestedGlobalDiscount = this.money(input.globalDiscountAmount ?? 0);
-    const globalDiscount = Prisma.Decimal.min(
-      Prisma.Decimal.max(requestedGlobalDiscount, new Prisma.Decimal(0)),
-      subtotal,
-    );
-
     const grossLines = input.lines.map((line, index) => {
       const quantity = this.quantity(line.quantity);
       const unitPrice = this.money(line.unitPrice);
@@ -90,24 +80,43 @@ export class TaxCalculationService {
         Prisma.Decimal.max(this.money(line.discountAmount ?? 0), new Prisma.Decimal(0)),
         grossAmount,
       );
-      const proportionalGlobalDiscount = subtotal.gt(0)
-        ? grossAmount.div(subtotal).mul(globalDiscount)
+      const netBeforeGlobalDiscount = grossAmount.minus(lineDiscount);
+      return { line, index, quantity, unitPrice, grossAmount, lineDiscount, netBeforeGlobalDiscount };
+    });
+
+    const subtotal = grossLines.reduce(
+      (sum, entry) => sum.plus(entry.grossAmount),
+      new Prisma.Decimal(0),
+    );
+    const globalDiscountBase = grossLines.reduce(
+      (sum, entry) => sum.plus(entry.netBeforeGlobalDiscount),
+      new Prisma.Decimal(0),
+    );
+    const requestedGlobalDiscount = this.money(input.globalDiscountAmount ?? 0);
+    const globalDiscount = Prisma.Decimal.min(
+      Prisma.Decimal.max(requestedGlobalDiscount, new Prisma.Decimal(0)),
+      globalDiscountBase,
+    );
+
+    const discountedLines = grossLines.map((entry) => {
+      const proportionalGlobalDiscount = globalDiscountBase.gt(0)
+        ? entry.netBeforeGlobalDiscount.div(globalDiscountBase).mul(globalDiscount)
         : new Prisma.Decimal(0);
-      const discountAmount = lineDiscount.plus(proportionalGlobalDiscount);
-      const netAmount = grossAmount.minus(discountAmount);
+      const discountAmount = entry.lineDiscount.plus(proportionalGlobalDiscount);
+      const netAmount = entry.grossAmount.minus(discountAmount);
 
       return {
-        line,
-        index,
-        quantity,
-        unitPrice,
-        grossAmount,
+        line: entry.line,
+        index: entry.index,
+        quantity: entry.quantity,
+        unitPrice: entry.unitPrice,
+        grossAmount: entry.grossAmount,
         discountAmount,
         netAmount,
       };
     });
 
-    const mutable = grossLines.map((entry): MutableLine => {
+    const mutable = discountedLines.map((entry): MutableLine => {
       const treatment = entry.line.taxTreatment ?? "INHERIT";
       const priceMode = taxEnabled ? entry.line.priceMode ?? defaultPriceMode : "NO_TAX";
       const rate = taxEnabled ? this.rate(entry.line.taxRate ?? defaultRate) : new Prisma.Decimal(0);
@@ -284,4 +293,3 @@ export class TaxCalculationService {
     return value.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
   }
 }
-

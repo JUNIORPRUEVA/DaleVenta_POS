@@ -1194,32 +1194,28 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     final defaultRate = config?.defaultRate ?? settings?.defaultTaxRate ?? 0.18;
     final pricesIncludeTax = settings?.pricesIncludeTax ?? true;
 
-    var taxableBase = 0.0;
-    var taxAmount = 0.0;
-    var exemptAmount = 0.0;
-    var total = 0.0;
-    for (final item in _items) {
-      final preview = ProductTaxPreviewCalculator.calculate(
-        price: item.unitPrice,
-        quantity: item.qty,
-        companyTaxEnabled: taxEnabled,
-        companyPricesIncludeTax: pricesIncludeTax,
-        companyDefaultTaxRate: defaultRate,
-        taxTreatment: item.taxTreatment,
-        taxRate: item.taxRate > 0 ? item.taxRate : null,
-        taxPriceMode: item.taxPriceMode,
-      );
-      taxableBase += preview.baseAmount;
-      taxAmount += preview.taxAmount;
-      exemptAmount += preview.exemptAmount;
-      total += preview.finalAmount;
-    }
+    final summary = ProductTaxPreviewCalculator.calculateCart(
+      lines: [
+        for (final item in _items)
+          ProductCartTaxLineInput(
+            price: item.unitPrice,
+            quantity: item.qty,
+            taxTreatment: item.taxTreatment,
+            taxRate: item.taxRate > 0 ? item.taxRate : null,
+            taxPriceMode: item.taxPriceMode,
+          ),
+      ],
+      companyTaxEnabled: taxEnabled,
+      companyPricesIncludeTax: pricesIncludeTax,
+      companyDefaultTaxRate: defaultRate,
+      globalDiscountAmount: _effectiveGeneralDiscountAmount,
+    );
     return _QuoteTaxSummary(
       taxEnabled: taxEnabled,
-      taxableBase: _roundCurrency(taxableBase),
-      taxAmount: _roundCurrency(taxAmount),
-      exemptAmount: _roundCurrency(exemptAmount),
-      total: _roundCurrency(total),
+      taxableBase: summary.taxableBase,
+      taxAmount: summary.taxAmount,
+      exemptAmount: summary.exemptAmount,
+      total: summary.total,
       defaultRate: defaultRate,
     );
   }
@@ -1229,9 +1225,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   double get _subtotal {
     final summary = _quoteTaxSummary;
     if (!summary.taxEnabled) {
-      return _items.fold(0, (sum, item) => sum + item.total);
+      return _subtotalAfterLineDiscount;
     }
-    return _roundCurrency(summary.taxableBase + summary.exemptAmount);
+    return _subtotalAfterLineDiscount;
   }
 
   double get _subtotalBeforeDiscount => _items.fold(
@@ -1240,9 +1236,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   );
   double get _lineDiscountAmount =>
       _items.fold(0, (sum, item) => sum + item.discountAmount);
-  double get _grossTotalBeforeGeneralDiscount => _quoteTaxSummary.total;
+  double get _subtotalAfterLineDiscount =>
+      _roundCurrency(_items.fold(0, (sum, item) => sum + item.total));
+  double get _grossTotalBeforeGeneralDiscount =>
+      _roundCurrency(_subtotalAfterLineDiscount + _quoteTaxSummary.taxAmount);
   double get _effectiveGeneralDiscountAmount {
-    final maxDiscount = _grossTotalBeforeGeneralDiscount;
+    final maxDiscount = _subtotalAfterLineDiscount;
     if (_generalDiscountAmount <= 0) return 0;
     return _generalDiscountAmount > maxDiscount
         ? maxDiscount
@@ -1258,8 +1257,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   );
   double get _totalCost =>
       _items.fold(0, (sum, item) => sum + item.subtotalCost);
-  double get _total =>
-      _grossTotalBeforeGeneralDiscount - _effectiveGeneralDiscountAmount;
+  double get _total => _quoteTaxSummary.total;
   double get _utilityAmount =>
       _subtotal - _totalCost - _effectiveGeneralDiscountAmount;
 
@@ -1271,40 +1269,20 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       double.parse(value.toStringAsFixed(6));
 
   List<SaleDraftItem> _buildCheckoutSaleItems() {
-    final grossLines = _items
-        .map((item) => item.total.clamp(0, double.infinity))
-        .toList(growable: false);
-    final grossBase = grossLines.fold<double>(0, (sum, value) => sum + value);
-    final targetTotal = _roundCurrency(_total.clamp(0, double.infinity));
-    var remainingTotal = targetTotal;
-
     return [
-      for (var index = 0; index < _items.length; index++)
-        () {
-          final item = _items[index];
-          final isLast = index == _items.length - 1;
-          final lineTarget = grossBase <= 0
-              ? 0.0
-              : isLast
-              ? remainingTotal
-              : _roundCurrency(targetTotal * (grossLines[index] / grossBase));
-          remainingTotal = _roundCurrency(remainingTotal - lineTarget);
-          final priceSoldUnit = item.qty > 0
-              ? _roundUnitPrice(lineTarget / item.qty)
-              : 0.0;
-          return SaleDraftItem(
-            productId: item.isExternal ? null : item.productId,
-            name: item.nombre,
-            imageUrl: item.imageUrl,
-            isExternal: item.isExternal,
-            qty: item.qty,
-            priceSoldUnit: priceSoldUnit,
-            costUnitSnapshot: item.tracedCostUnit ?? 0,
-            taxTreatment: item.taxTreatment,
-            taxRate: item.taxRate > 0 ? item.taxRate : null,
-            taxPriceMode: item.taxPriceMode,
-          );
-        }(),
+      for (final item in _items)
+        SaleDraftItem(
+          productId: item.isExternal ? null : item.productId,
+          name: item.nombre,
+          imageUrl: item.imageUrl,
+          isExternal: item.isExternal,
+          qty: item.qty,
+          priceSoldUnit: _roundUnitPrice(item.unitPrice),
+          costUnitSnapshot: item.tracedCostUnit ?? 0,
+          taxTreatment: item.taxTreatment,
+          taxRate: item.taxRate > 0 ? item.taxRate : null,
+          taxPriceMode: item.taxPriceMode,
+        ),
     ];
   }
 
@@ -5481,6 +5459,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           paymentTransferAmount: checkout?.transferAmount,
           creditAmount: checkout?.creditAmount,
           expectedTotalSold: _roundCurrency(_total),
+          globalDiscountAmount: _effectiveGeneralDiscountAmount,
           items: saleItems,
         );
   }

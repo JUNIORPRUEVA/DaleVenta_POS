@@ -118,6 +118,40 @@ void main() {
     expect(preview.taxAmount, 450);
     expect(preview.finalAmount, 2950);
   });
+
+  test('Facturacion prorratea descuento general y recalcula ITBIS', () {
+    final summary = ProductTaxPreviewCalculator.calculateCart(
+      companyTaxEnabled: true,
+      companyPricesIncludeTax: false,
+      companyDefaultTaxRate: 0.18,
+      globalDiscountAmount: 200,
+      lines: const [
+        ProductCartTaxLineInput(
+          price: 900,
+          quantity: 1,
+          taxTreatment: 'EXEMPT',
+          taxPriceMode: 'NO_TAX',
+        ),
+        ProductCartTaxLineInput(
+          price: 2500,
+          quantity: 1,
+          taxTreatment: 'TAXABLE',
+          taxRate: 0.18,
+          taxPriceMode: 'TAX_ADDED',
+        ),
+      ],
+    );
+
+    expect(summary.subtotal, 3400);
+    expect(summary.generalDiscountAmount, 200);
+    expect(summary.lines[0].generalDiscountAmount, 52.94);
+    expect(summary.lines[0].preview.taxAmount, 0);
+    expect(summary.lines[1].generalDiscountAmount, 147.06);
+    expect(summary.taxableBase, 2352.94);
+    expect(summary.taxAmount, 423.53);
+    expect(summary.exemptAmount, 847.06);
+    expect(summary.total, 3623.53);
+  });
 }
 
 ProductTaxPreview _previewFor(CotizacionItem item) {
