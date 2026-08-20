@@ -11,7 +11,11 @@ describe("SalesService fiscal closure", () => {
   };
 
   it("converts a fiscal quote using stored snapshots and reserves one B01 NCF", async () => {
-    const createdSale = { id: "sale-a", cashSessionId: "cash-a", saleDate: new Date() };
+    const createdSale = {
+      id: "sale-a",
+      cashSessionId: "cash-a",
+      saleDate: new Date(),
+    };
     const tx = {
       product: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       sale: { create: jest.fn().mockResolvedValue(createdSale) },
@@ -54,7 +58,9 @@ describe("SalesService fiscal closure", () => {
           ],
         }),
       },
-      company: { findFirst: jest.fn().mockResolvedValue({ name: "Fallback SRL" }) },
+      company: {
+        findFirst: jest.fn().mockResolvedValue({ name: "Fallback SRL" }),
+      },
       appConfig: {
         findFirst: jest.fn().mockResolvedValue({
           companyName: "FULLTECH, SRL",
@@ -104,7 +110,9 @@ describe("SalesService fiscal closure", () => {
       fiscalCustomerTaxId: "101010101",
       fiscalCustomerName: "FULLTECH SRL",
       expectedTotalSold: 25700,
-      items: [{ productName: "Stale", qty: 1, priceSoldUnit: 1, costUnitSnapshot: 0 }],
+      items: [
+        { productName: "Stale", qty: 1, priceSoldUnit: 1, costUnitSnapshot: 0 },
+      ],
     });
 
     expect(calculatorService.calculate).not.toHaveBeenCalled();
@@ -117,11 +125,27 @@ describe("SalesService fiscal closure", () => {
           totalSold: new Prisma.Decimal("25700"),
           taxableBase: new Prisma.Decimal("21779.66"),
           taxAmount: new Prisma.Decimal("3920.34"),
+          totalCost: new Prisma.Decimal("18000"),
+          totalProfit: new Prisma.Decimal("3779.66"),
+          commercialProfit: new Prisma.Decimal("3779.66"),
+          netTaxProfit: new Prisma.Decimal("3779.66"),
           ncf: "B0100000001",
           issuerNameSnapshot: "FULLTECH, SRL",
           issuerTaxIdSnapshot: "133080206",
           issuerAddressSnapshot: "Higuey",
           issuerPhoneSnapshot: "809-000-0000",
+          items: expect.objectContaining({
+            create: [
+              expect.objectContaining({
+                taxableBase: new Prisma.Decimal("21779.66"),
+                taxAmount: new Prisma.Decimal("3920.34"),
+                subtotalCost: new Prisma.Decimal("18000"),
+                profit: new Prisma.Decimal("3779.66"),
+                commercialProfit: new Prisma.Decimal("3779.66"),
+                netTaxProfit: new Prisma.Decimal("3779.66"),
+              }),
+            ],
+          }),
         }),
       }),
     );
@@ -147,7 +171,11 @@ describe("SalesService fiscal closure", () => {
       },
       sale: { findFirst: jest.fn().mockResolvedValue(existingSale) },
     };
-    const ncf = { normalizeType: jest.fn(), reserveNextNcf: jest.fn(), markIssued: jest.fn() };
+    const ncf = {
+      normalizeType: jest.fn(),
+      reserveNextNcf: jest.fn(),
+      markIssued: jest.fn(),
+    };
     const service = new SalesService(
       prisma as never,
       { get: jest.fn().mockReturnValue("") } as never,
@@ -158,7 +186,14 @@ describe("SalesService fiscal closure", () => {
 
     const result = await service.create(user as never, {
       sourceQuotationId: "22222222-2222-4222-8222-222222222222",
-      items: [{ productName: "Ignored", qty: 1, priceSoldUnit: 1180, costUnitSnapshot: 0 }],
+      items: [
+        {
+          productName: "Ignored",
+          qty: 1,
+          priceSoldUnit: 1180,
+          costUnitSnapshot: 0,
+        },
+      ],
     });
 
     expect(result).toBe(existingSale);
@@ -188,9 +223,14 @@ describe("SalesService fiscal closure", () => {
     };
     const tx = {
       saleItem: {
-        groupBy: jest.fn().mockResolvedValue([
-          { refundedSaleItemId: "item-a", _sum: { qty: new Prisma.Decimal("1") } },
-        ]),
+        groupBy: jest
+          .fn()
+          .mockResolvedValue([
+            {
+              refundedSaleItemId: "item-a",
+              _sum: { qty: new Prisma.Decimal("1") },
+            },
+          ]),
       },
     };
     const prisma = {
@@ -216,7 +256,11 @@ describe("SalesService fiscal closure", () => {
       cashSession: { findFirst: jest.fn().mockResolvedValue({ id: "cash-a" }) },
       $transaction: jest.fn((callback) => callback(tx)),
     };
-    const ncf = { normalizeType: jest.fn(), reserveNextNcf: jest.fn(), markIssued: jest.fn() };
+    const ncf = {
+      normalizeType: jest.fn(),
+      reserveNextNcf: jest.fn(),
+      markIssued: jest.fn(),
+    };
     const service = new SalesService(
       prisma as never,
       { get: jest.fn().mockReturnValue("") } as never,

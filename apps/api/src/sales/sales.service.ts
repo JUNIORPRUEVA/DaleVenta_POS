@@ -718,15 +718,16 @@ export class SalesService {
 
     totalSold = totalSold.toDecimalPlaces(2);
     totalCost = totalCost.toDecimalPlaces(2);
-    totalProfit = totalSold.minus(totalCost).toDecimalPlaces(2);
-    const commercialProfit = totalProfit;
     const netTaxRevenue = taxCalculation.taxableBase.plus(
       taxCalculation.exemptAmount,
     );
-    const netTaxProfit = (sourceQuotation || fiscalSettings.taxEnabled
-      ? netTaxRevenue.minus(totalCost)
-      : totalProfit
+    totalProfit = (
+      sourceQuotation || fiscalSettings.taxEnabled
+        ? netTaxRevenue.minus(totalCost)
+        : totalProfit
     ).toDecimalPlaces(2);
+    const commercialProfit = totalProfit;
+    const netTaxProfit = totalProfit;
     const commercialMargin = totalSold.gt(0)
       ? commercialProfit.div(totalSold).toDecimalPlaces(4)
       : new Prisma.Decimal(0);
@@ -882,9 +883,6 @@ export class SalesService {
                 ...(() => {
                   const taxLine = taxCalculation.lines[index];
                   const lineTotal = taxLine?.lineTotal ?? item.subtotalSold;
-                  const itemCommercialProfit = lineTotal.minus(
-                    item.subtotalCost,
-                  );
                   const itemNetTaxProfit = (
                     sourceQuotation || fiscalSettings.taxEnabled
                       ? (taxLine?.taxableBase ?? new Prisma.Decimal(0)).plus(
@@ -892,9 +890,11 @@ export class SalesService {
                         )
                       : lineTotal
                   ).minus(item.subtotalCost);
+                  const itemCommercialProfit = itemNetTaxProfit;
                   return {
                     grossAmount: taxLine?.grossAmount ?? item.subtotalSold,
-                    lineDiscountAmount: taxLine?.discountAmount ?? new Prisma.Decimal(0),
+                    lineDiscountAmount:
+                      taxLine?.discountAmount ?? new Prisma.Decimal(0),
                     taxableBase: taxLine?.taxableBase ?? new Prisma.Decimal(0),
                     taxRate: taxLine?.taxRate ?? new Prisma.Decimal(0),
                     taxAmount: taxLine?.taxAmount ?? new Prisma.Decimal(0),

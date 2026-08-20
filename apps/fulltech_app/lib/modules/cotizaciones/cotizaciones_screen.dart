@@ -1258,8 +1258,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   double get _totalCost =>
       _items.fold(0, (sum, item) => sum + item.subtotalCost);
   double get _total => _quoteTaxSummary.total;
+  double get _netRevenueForProfit => _roundCurrency(
+    _quoteTaxSummary.taxableBase + _quoteTaxSummary.exemptAmount,
+  );
   double get _utilityAmount =>
-      _subtotal - _totalCost - _effectiveGeneralDiscountAmount;
+      _roundCurrency(_netRevenueForProfit - _totalCost);
 
   String _money(double value) => formatRdCurrencyAccounting(value);
 

@@ -478,6 +478,188 @@ void main() {
     expect(summary.taxAmount, 15.05);
     expect(summary.total, 264.88);
   });
+
+  test('utilidad TAX_ADDED excluye ITBIS', () {
+    final profit = _profitFromCart(
+      costs: const [1300],
+      lines: const [
+        ProductCartTaxLineInput(
+          price: 2500,
+          quantity: 1,
+          taxTreatment: 'TAXABLE',
+          taxRate: 0.18,
+          taxPriceMode: 'TAX_ADDED',
+        ),
+      ],
+    );
+
+    expect(profit, 1200);
+  });
+
+  test('utilidad TAX_ADDED con 100% descuento puede ser negativa', () {
+    final profit = _profitFromCart(
+      costs: const [1300],
+      globalDiscountAmount: 2500,
+      lines: const [
+        ProductCartTaxLineInput(
+          price: 2500,
+          quantity: 1,
+          taxTreatment: 'TAXABLE',
+          taxRate: 0.18,
+          taxPriceMode: 'TAX_ADDED',
+        ),
+      ],
+    );
+
+    expect(profit, -1300);
+  });
+
+  test('utilidad EXEMPT usa venta neta menos costo', () {
+    final profit = _profitFromCart(
+      costs: const [500],
+      lines: const [
+        ProductCartTaxLineInput(
+          price: 900,
+          quantity: 1,
+          lineDiscountAmount: 90,
+          taxTreatment: 'EXEMPT',
+          taxPriceMode: 'NO_TAX',
+        ),
+      ],
+    );
+
+    expect(profit, 310);
+  });
+
+  test(
+    'utilidad mixta usa netos sin ITBIS con descuentos de linea y general',
+    () {
+      final generalDiscount =
+          ProductTaxPreviewCalculator.generalDiscountAmountFromPercent(
+            percent: 10,
+            lines: const [
+              ProductCartTaxLineInput(
+                price: 900,
+                quantity: 1,
+                lineDiscountAmount: 90,
+                taxTreatment: 'EXEMPT',
+                taxPriceMode: 'NO_TAX',
+              ),
+              ProductCartTaxLineInput(
+                price: 2500,
+                quantity: 1,
+                lineDiscountAmount: 250,
+                taxTreatment: 'TAXABLE',
+                taxRate: 0.18,
+                taxPriceMode: 'TAX_ADDED',
+              ),
+            ],
+          );
+      final profit = _profitFromCart(
+        costs: const [400, 1300],
+        globalDiscountAmount: generalDiscount,
+        lines: const [
+          ProductCartTaxLineInput(
+            price: 900,
+            quantity: 1,
+            lineDiscountAmount: 90,
+            taxTreatment: 'EXEMPT',
+            taxPriceMode: 'NO_TAX',
+          ),
+          ProductCartTaxLineInput(
+            price: 2500,
+            quantity: 1,
+            lineDiscountAmount: 250,
+            taxTreatment: 'TAXABLE',
+            taxRate: 0.18,
+            taxPriceMode: 'TAX_ADDED',
+          ),
+        ],
+      );
+
+      expect(generalDiscount, 306);
+      expect(profit, 1054);
+    },
+  );
+
+  test('utilidad TAX_INCLUDED excluye ITBIS incluido en precio', () {
+    final profit = _profitFromCart(
+      costs: const [600],
+      lines: const [
+        ProductCartTaxLineInput(
+          price: 1180,
+          quantity: 1,
+          taxTreatment: 'TAXABLE',
+          taxRate: 0.18,
+          taxPriceMode: 'TAX_INCLUDED',
+        ),
+      ],
+    );
+
+    expect(profit, 400);
+  });
+
+  test('utilidad cantidad mayor que uno', () {
+    final profit = _profitFromCart(
+      costs: const [1300],
+      lines: const [
+        ProductCartTaxLineInput(
+          price: 2500,
+          quantity: 3,
+          taxTreatment: 'TAXABLE',
+          taxRate: 0.18,
+          taxPriceMode: 'TAX_ADDED',
+        ),
+      ],
+    );
+
+    expect(profit, 3600);
+  });
+
+  test('utilidad 100% descuento en todos los productos puede ser negativa', () {
+    final profit = _profitFromCart(
+      costs: const [500, 1300],
+      globalDiscountAmount: 3400,
+      lines: const [
+        ProductCartTaxLineInput(
+          price: 900,
+          quantity: 1,
+          taxTreatment: 'EXEMPT',
+          taxPriceMode: 'NO_TAX',
+        ),
+        ProductCartTaxLineInput(
+          price: 2500,
+          quantity: 1,
+          taxTreatment: 'TAXABLE',
+          taxRate: 0.18,
+          taxPriceMode: 'TAX_ADDED',
+        ),
+      ],
+    );
+
+    expect(profit, -1800);
+  });
+}
+
+double _profitFromCart({
+  required List<ProductCartTaxLineInput> lines,
+  required List<double> costs,
+  double globalDiscountAmount = 0,
+}) {
+  final summary = ProductTaxPreviewCalculator.calculateCart(
+    companyTaxEnabled: true,
+    companyPricesIncludeTax: false,
+    companyDefaultTaxRate: 0.18,
+    globalDiscountAmount: globalDiscountAmount,
+    lines: lines,
+  );
+  final totalCost = [
+    for (var index = 0; index < lines.length; index++)
+      costs[index] * lines[index].quantity,
+  ].fold<double>(0, (sum, value) => sum + value);
+  return double.parse(
+    (summary.taxableBase + summary.exemptAmount - totalCost).toStringAsFixed(2),
+  );
 }
 
 ProductTaxPreview _previewFor(CotizacionItem item) {
