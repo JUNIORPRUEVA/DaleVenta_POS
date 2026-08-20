@@ -8,9 +8,7 @@ import '../cache/fulltech_cache_manager.dart';
 import '../utils/is_flutter_test.dart';
 import '../utils/product_image_url.dart';
 
-class ProductNetworkImage extends StatelessWidget {
-  static final TokenStorage _tokenStorage = TokenStorage();
-
+class ProductNetworkImage extends StatefulWidget {
   final String imageUrl;
   final String productId;
   final String productName;
@@ -38,29 +36,65 @@ class ProductNetworkImage extends StatelessWidget {
   });
 
   @override
+  State<ProductNetworkImage> createState() => _ProductNetworkImageState();
+}
+
+class _ProductNetworkImageState extends State<ProductNetworkImage> {
+  static final TokenStorage _tokenStorage = TokenStorage();
+
+  late Future<String?> _tokenFuture;
+  late bool _needsAuth;
+  late String _sourceUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _configureAuthFuture();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProductNetworkImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final nextSource = widget.imageUrl.trim();
+    final nextNeedsAuth = !kIsWeb && _shouldSendAuthHeader(nextSource);
+    if (nextSource != _sourceUrl || nextNeedsAuth != _needsAuth) {
+      _configureAuthFuture();
+    }
+  }
+
+  void _configureAuthFuture() {
+    _sourceUrl = widget.imageUrl.trim();
+    _needsAuth = !kIsWeb && _shouldSendAuthHeader(_sourceUrl);
+    _tokenFuture = isFlutterTest || !_needsAuth
+        ? Future<String?>.value()
+        : _tokenStorage.getAccessToken();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final url = imageUrl.trim();
-    if (url.isEmpty) return fallback;
+    final url = widget.imageUrl.trim();
+    if (url.isEmpty) return widget.fallback;
     final baseUrl = Env.apiBaseUrl.trim();
     final webProductUrl = kIsWeb
-        ? buildPublicProductMediaUrl(productId: productId, baseUrl: baseUrl)
+        ? buildPublicProductMediaUrl(
+            productId: widget.productId,
+            baseUrl: baseUrl,
+          )
         : '';
-    final sourceUrl = url;
     final effectiveUrl = buildProductThumbnailUrl(
-      imageUrl: sourceUrl,
-      width: thumbnailSize,
-      height: thumbnailSize,
+      imageUrl: url,
+      width: widget.thumbnailSize,
+      height: widget.thumbnailSize,
     );
     final cacheKey = buildProductImageCacheKey(effectiveUrl);
-    final shouldSendAuth = !kIsWeb && _shouldSendAuthHeader(sourceUrl);
 
     if (kIsWeb) {
       final productEffectiveUrl = webProductUrl.isEmpty
           ? ''
           : buildProductThumbnailUrl(
               imageUrl: webProductUrl,
-              width: thumbnailSize,
-              height: thumbnailSize,
+              width: widget.thumbnailSize,
+              height: widget.thumbnailSize,
             );
       final fallbackEffectiveUrl =
           productEffectiveUrl.isEmpty || productEffectiveUrl == effectiveUrl
@@ -69,21 +103,19 @@ class ProductNetworkImage extends StatelessWidget {
       return _WebProductImage(
         primaryUrl: effectiveUrl,
         fallbackUrl: fallbackEffectiveUrl,
-        productId: productId,
-        productName: productName,
-        originalUrl: originalUrl,
-        fit: fit,
-        fallback: fallback,
-        loading: loading,
-        width: width,
-        height: height,
+        productId: widget.productId,
+        productName: widget.productName,
+        originalUrl: widget.originalUrl,
+        fit: widget.fit,
+        fallback: widget.fallback,
+        loading: widget.loading,
+        width: widget.width,
+        height: widget.height,
       );
     }
 
     return FutureBuilder<String?>(
-      future: isFlutterTest || !shouldSendAuth
-          ? Future<String?>.value()
-          : _tokenStorage.getAccessToken(),
+      future: _tokenFuture,
       builder: (context, snapshot) {
         final token = snapshot.data?.trim();
         final headers = token == null || token.isEmpty
@@ -91,29 +123,29 @@ class ProductNetworkImage extends StatelessWidget {
             : <String, String>{'Authorization': 'Bearer $token'};
 
         return CachedNetworkImage(
-          key: ValueKey('$effectiveUrl:${token?.isNotEmpty ?? false}'),
+          key: ValueKey(effectiveUrl),
           imageUrl: effectiveUrl,
           httpHeaders: headers,
           cacheKey: cacheKey.isEmpty ? effectiveUrl : cacheKey,
           cacheManager: FulltechImageCacheManager.instance,
-          fit: fit,
-          width: width,
-          height: height,
-          memCacheWidth: thumbnailSize,
-          memCacheHeight: thumbnailSize,
+          fit: widget.fit,
+          width: widget.width,
+          height: widget.height,
+          memCacheWidth: widget.thumbnailSize,
+          memCacheHeight: widget.thumbnailSize,
           fadeInDuration: Duration.zero,
           fadeOutDuration: Duration.zero,
           useOldImageOnUrlChange: true,
-          placeholder: (context, _) => loading ?? fallback,
+          placeholder: (context, _) => widget.loading ?? widget.fallback,
           errorWidget: (context, _, error) {
             debugLogProductImageFailure(
-              productId: productId,
-              productName: productName,
-              originalUrl: originalUrl,
+              productId: widget.productId,
+              productName: widget.productName,
+              originalUrl: widget.originalUrl,
               attemptedUrl: effectiveUrl,
               error: error,
             );
-            return fallback;
+            return widget.fallback;
           },
         );
       },
