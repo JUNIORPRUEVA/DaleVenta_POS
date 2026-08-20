@@ -10,7 +10,6 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:daleventa_pos/core/cache/local_json_cache.dart';
 import 'package:daleventa_pos/core/company/company_settings_model.dart';
 import 'package:daleventa_pos/core/company/company_settings_repository.dart';
-import 'package:daleventa_pos/core/errors/api_exception.dart';
 import 'package:daleventa_pos/core/offline/offline_store.dart';
 import 'package:daleventa_pos/core/offline/sync_queue_service.dart';
 
@@ -82,36 +81,6 @@ void main() {
     },
   );
 
-  test(
-    'getSettings does not serve cached settings after unauthorized',
-    () async {
-      await LocalJsonCache().writeMap('company_settings_cache_v1:company-a', {
-        ...CompanySettings.empty()
-            .copyWith(companyName: 'Cache vieja', taxEnabled: true)
-            .toMap(),
-      });
-      final dio = Dio()
-        ..httpClientAdapter = _FakeHttpClientAdapter((_) async {
-          throw DioException(
-            requestOptions: RequestOptions(path: '/settings'),
-            response: Response<dynamic>(
-              requestOptions: RequestOptions(path: '/settings'),
-              statusCode: 401,
-              data: {'message': 'Unauthorized'},
-            ),
-            type: DioExceptionType.badResponse,
-          );
-        });
-      final repository = CompanySettingsRepository(
-        dio,
-        SyncQueueService(OfflineStore.instance),
-        cacheScope: 'company-a',
-      );
-
-      await expectLater(repository.getSettings(), throwsA(isA<ApiException>()));
-    },
-  );
-
   test('scoped settings do not inherit stale global company cache', () async {
     await LocalJsonCache().writeMap('company_settings_cache_v1', {
       'companyName': 'Nombre Viejo',
@@ -162,56 +131,6 @@ void main() {
       throwsA(isA<Exception>()),
     );
     expect(patchCount, 0);
-  });
-
-  test('unauthorized settings save does not overwrite local cache', () async {
-    await LocalJsonCache().writeMap(
-      'company_settings_cache_v1:company-a',
-      CompanySettings.empty()
-          .copyWith(companyName: 'Servidor previo', taxEnabled: true)
-          .toMap(),
-    );
-    final dio = Dio()
-      ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
-        if (options.method.toUpperCase() == 'PATCH') {
-          throw DioException(
-            requestOptions: options,
-            response: Response<dynamic>(
-              requestOptions: options,
-              statusCode: 401,
-              data: {'message': 'Unauthorized'},
-            ),
-            type: DioExceptionType.badResponse,
-          );
-        }
-        return ResponseBody.fromString(
-          '{}',
-          200,
-          headers: {
-            Headers.contentTypeHeader: [Headers.jsonContentType],
-          },
-        );
-      });
-    final repository = CompanySettingsRepository(
-      dio,
-      SyncQueueService(OfflineStore.instance),
-      cacheScope: 'company-a',
-    );
-
-    await expectLater(
-      repository.saveSettingsOrQueue(
-        CompanySettings.empty().copyWith(
-          companyName: 'Intento local',
-          taxEnabled: false,
-          ncfEnabled: false,
-        ),
-      ),
-      throwsA(isA<ApiException>()),
-    );
-
-    final cached = await repository.getCachedSettings();
-    expect(cached?.companyName, 'Servidor previo');
-    expect(cached?.taxEnabled, isTrue);
   });
 
   test(
@@ -270,42 +189,6 @@ void main() {
       expect(reloaded.taxEnabled, isFalse);
       expect(reloaded.pricesIncludeTax, isFalse);
       expect(reloaded.ncfEnabled, isFalse);
-    },
-  );
-
-  test(
-    'admin PIN verification requests scoped company settings capability',
-    () async {
-      Map<String, dynamic>? verifyPayload;
-      final dio = Dio()
-        ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
-          verifyPayload = (options.data as Map).cast<String, dynamic>();
-          return ResponseBody.fromString(
-            jsonEncode({
-              'ok': true,
-              'expiresInSeconds': 600,
-              'adminAuthorizationToken': 'delegated-token',
-              'scopes': ['company.settings'],
-            }),
-            200,
-            headers: {
-              Headers.contentTypeHeader: [Headers.jsonContentType],
-            },
-          );
-        });
-      final repository = CompanySettingsRepository(
-        dio,
-        SyncQueueService(OfflineStore.instance),
-      );
-
-      final verification = await repository.verifyAdminAuthorizationPin(
-        '1234',
-        scope: 'company.settings',
-      );
-
-      expect(verifyPayload, containsPair('pin', '1234'));
-      expect(verifyPayload, containsPair('scope', 'company.settings'));
-      expect(verification.token, 'delegated-token');
     },
   );
 

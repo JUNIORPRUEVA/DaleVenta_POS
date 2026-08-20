@@ -59,18 +59,12 @@ final authLaunchSnapshotProvider = Provider<TokenStorageLaunchSnapshot>((ref) {
 });
 
 Future<TokenStorageLaunchSnapshot> loadAuthLaunchSnapshot() {
-  // Usa la MISMA instancia canónica que tokenStorageProvider para que el mutex
-  // interno serialice TODAS las operaciones sobre flutter_secure_storage.dat.
-  // Crear una instancia nueva aquí competiría por el mismo archivo con el
-  // bootstrap de AuthController (CryptUnprotectData / file being used).
-  return TokenStorage.instance.readFastLaunchSnapshot();
+  return TokenStorage().readFastLaunchSnapshot();
 }
-
 
 class AuthController extends StateNotifier<AuthState> {
   final Ref ref;
   late final AuthSessionEvents _sessionEvents;
-  Future<void>? _verifySessionFuture;
 
   AuthController(this.ref)
     : super(_buildInitialAuthState(ref.read(authLaunchSnapshotProvider))) {
@@ -93,10 +87,6 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> _logoutForUnauthorized() async {
     _sessionEvents.markLogoutHandled();
-    TraceLog.log(
-      'AUTH_CHANGE',
-      'from=authenticated to=unauthenticated reason=unauthorized_logout caller=_logoutForUnauthorized lifecycle=session_event',
-    );
     final storage = ref.read(tokenStorageProvider);
     await ref.read(offlineStoreProvider).clearAll(includePendingActions: false);
     await FulltechImageCacheManager.clear();
@@ -174,7 +164,7 @@ class AuthController extends StateNotifier<AuthState> {
         seq: seq,
       );
 
-      unawaited(verifySessionInBackground());
+      unawaited(_verifySession());
     } catch (_) {
       if (!mounted) return;
       state = AuthState(
@@ -217,10 +207,6 @@ class AuthController extends StateNotifier<AuthState> {
           );
           break;
         case SessionVerificationStatus.invalid:
-          TraceLog.log(
-            'AUTH_CHANGE',
-            'from=authenticated to=unauthenticated reason=verifySession_invalid caller=_verifySession lifecycle=resumed',
-          );
           state = AuthState(
             initialized: true,
             isAuthenticated: false,
@@ -231,27 +217,14 @@ class AuthController extends StateNotifier<AuthState> {
           );
           break;
         case SessionVerificationStatus.deferred:
-          final user = result.user ?? state.user;
-          final canKeepSession = user != null || state.hasSessionHint;
-          if (canKeepSession) {
-            _markSessionHealthy();
-            state = state.copyWith(
-              initialized: true,
-              isAuthenticated: true,
-              user: user,
-              loading: false,
-              restoringSession: false,
-              hasSessionHint: true,
-            );
-            break;
-          }
-          state = AuthState(
+          _markSessionHealthy();
+          state = state.copyWith(
             initialized: true,
-            isAuthenticated: false,
-            user: null,
+            isAuthenticated: true,
+            user: result.user,
             loading: false,
             restoringSession: false,
-            hasSessionHint: false,
+            hasSessionHint: true,
           );
           break;
       }
@@ -259,7 +232,7 @@ class AuthController extends StateNotifier<AuthState> {
       if (!mounted) return;
       state = state.copyWith(
         initialized: true,
-        isAuthenticated: state.hasSessionHint && state.user != null,
+        isAuthenticated: state.hasSessionHint,
         loading: false,
         restoringSession: false,
       );
@@ -355,17 +328,10 @@ class AuthController extends StateNotifier<AuthState> {
     if (!state.isAuthenticated) return null;
     final user = await ref
         .read(authRepositoryProvider)
-        .getMeOrNull(silent: silent, allowCachedFallback: true);
+        .getMeOrNull(silent: silent, allowCachedFallback: false);
     if (user == null || !mounted) return null;
     setUser(user);
     return user;
-  }
-
-  Future<void> verifySessionInBackground() {
-    _verifySessionFuture ??= _verifySession().whenComplete(() {
-      _verifySessionFuture = null;
-    });
-    return _verifySessionFuture!;
   }
 
   Future<AccountDeletionResult> deleteAccount({

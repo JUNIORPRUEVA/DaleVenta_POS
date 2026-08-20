@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:daleventa_pos/core/auth/app_bootstrap_status.dart';
 import 'package:daleventa_pos/core/auth/auth_provider.dart';
+import 'package:daleventa_pos/core/company/company_settings_model.dart';
+import 'package:daleventa_pos/core/company/company_settings_repository.dart';
 import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,31 +33,48 @@ UserModel _user({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('authenticated session becomes ready immediately after auth restore', () {
-    final container = ProviderContainer(
-      overrides: [
-        authStateProvider.overrideWith(
-          (ref) => _FixedAuthController(
-            ref,
-            AuthState(
-              initialized: true,
-              isAuthenticated: true,
-              user: _user(),
-              hasSessionHint: true,
+  test(
+    'authenticated session is not ready until active company resolves',
+    () async {
+      final companyCompleter = Completer<CompanySettings>();
+      final container = ProviderContainer(
+        overrides: [
+          authStateProvider.overrideWith(
+            (ref) => _FixedAuthController(
+              ref,
+              AuthState(
+                initialized: true,
+                isAuthenticated: true,
+                user: _user(),
+                hasSessionHint: true,
+              ),
             ),
           ),
-        ),
-      ],
-    );
-    addTearDown(container.dispose);
+          companySettingsProvider.overrideWith(
+            (ref) => companyCompleter.future,
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
 
-    expect(
-      container.read(appBootstrapStatusProvider),
-      AppBootstrapStatus.ready,
-    );
-  });
+      expect(
+        container.read(appBootstrapStatusProvider),
+        AppBootstrapStatus.authenticatedLoadingCompany,
+      );
 
-  test('authenticated session without companyId becomes bootstrap error', () {
+      companyCompleter.complete(
+        CompanySettings.empty().copyWith(companyName: 'FULLTECH, SRL'),
+      );
+      await container.read(companySettingsProvider.future);
+
+      expect(
+        container.read(appBootstrapStatusProvider),
+        AppBootstrapStatus.ready,
+      );
+    },
+  );
+
+  test('authenticated session without companyId never becomes app ready', () {
     final container = ProviderContainer(
       overrides: [
         authStateProvider.overrideWith(
@@ -67,30 +88,9 @@ void main() {
             ),
           ),
         ),
-      ],
-    );
-    addTearDown(container.dispose);
-
-    expect(
-      container.read(appBootstrapStatusProvider),
-      AppBootstrapStatus.error,
-    );
-  });
-
-  test('restoring session still waits before identity is verified', () {
-    final container = ProviderContainer(
-      overrides: [
-        authStateProvider.overrideWith(
-          (ref) => _FixedAuthController(
-            ref,
-            AuthState(
-              initialized: true,
-              isAuthenticated: true,
-              user: _user(companyId: ''),
-              restoringSession: true,
-              hasSessionHint: true,
-            ),
-          ),
+        companySettingsProvider.overrideWith(
+          (ref) async =>
+              CompanySettings.empty().copyWith(companyName: 'FULLTECH, SRL'),
         ),
       ],
     );
@@ -99,30 +99,6 @@ void main() {
     expect(
       container.read(appBootstrapStatusProvider),
       AppBootstrapStatus.authenticatedLoadingCompany,
-    );
-  });
-
-  test('ready bootstrap no longer depends on company settings fetch', () {
-    final container = ProviderContainer(
-      overrides: [
-        authStateProvider.overrideWith(
-          (ref) => _FixedAuthController(
-            ref,
-            AuthState(
-              initialized: true,
-              isAuthenticated: true,
-              user: _user(companyName: ''),
-              hasSessionHint: true,
-            ),
-          ),
-        ),
-      ],
-    );
-    addTearDown(container.dispose);
-
-    expect(
-      container.read(appBootstrapStatusProvider),
-      AppBootstrapStatus.ready,
     );
   });
 

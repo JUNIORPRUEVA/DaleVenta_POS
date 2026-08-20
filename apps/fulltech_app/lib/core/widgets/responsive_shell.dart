@@ -88,9 +88,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     _lastAuthorizationCleanupLocation = location;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final controller = ref.read(adminAuthorizationProvider.notifier);
-      controller.clearIfExpired();
-      controller.clearIfRouteScopeExited(location);
+      ref.read(adminAuthorizationProvider.notifier).clearIfExpired();
     });
   }
 

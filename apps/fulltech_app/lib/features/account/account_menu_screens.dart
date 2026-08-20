@@ -1933,15 +1933,15 @@ class _CompanySettingsEditorState
   }
 
   Future<void> _save() async {
+    final settingsRepository = ref.read(companySettingsRepositoryProvider);
     final authorized = await ensureAdminAuthorization(
       context,
       ref,
       permission: AppPermission.manageSettings,
       reason: 'Guardar información de la empresa',
-      routeLocation: Routes.configuracionEmpresa,
+      forceAdminAuthorization: true,
     );
     if (!authorized || !mounted) return;
-    final settingsRepository = ref.read(companySettingsRepositoryProvider);
 
     final settingsDraft = widget.settings.copyWith(
       companyName: _name.text.trim(),

@@ -10,10 +10,6 @@ class AuthSessionEvents extends ChangeNotifier {
   bool get isLicenseLogout => _logoutReason == 'license_expired';
 
   void requestUnauthorizedLogout({String? reason}) {
-    debugPrint(
-      '[AUTH_CHANGE] requestUnauthorizedLogout reason=$reason '
-      'caller=${StackTrace.current.toString().split('\n').skip(1).take(3).join(' | ')}',
-    );
     if (_unauthorizedLogoutRequested && _logoutReason == reason) return;
     _unauthorizedLogoutRequested = true;
     _logoutReason = reason;

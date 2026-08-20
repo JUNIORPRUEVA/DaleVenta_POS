@@ -639,7 +639,6 @@ model Company {
   appConfigs  AppConfig[]
   members     CompanyMember[]
   AuthSession AuthSession[]
-  adminAuthorizationCapabilities AdminAuthorizationCapability[]
   licenseAuditLogs CompanyLicenseAuditLog[]
   products Product[]
   suppliers Supplier[]
@@ -754,36 +753,12 @@ model AuthSession {
 
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  adminAuthorizationCapabilities AdminAuthorizationCapability[]
 
   @@index([userId, revokedAt])
   @@index([companyId, revokedAt])
   @@index([tokenFamily])
   @@index([expiresAt])
   @@map("auth_sessions")
-}
-
-model AdminAuthorizationCapability {
-  id             String    @id @default(uuid()) @db.Uuid
-  jti            String    @unique @db.Uuid
-  companyId      String    @map("company_id") @db.Uuid
-  userId         String    @map("user_id") @db.Uuid
-  sessionId      String    @map("session_id") @db.Uuid
-  scopes         Json      @default("[]")
-  expiresAt      DateTime  @map("expires_at")
-  consumedAt     DateTime? @map("consumed_at")
-  consumedByPath String?   @map("consumed_by_path")
-  revokedAt      DateTime? @map("revoked_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
-
-  company Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  session AuthSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@index([companyId, userId, consumedAt])
-  @@index([sessionId, revokedAt])
-  @@index([expiresAt])
-  @@map("admin_authorization_capabilities")
 }
 
 model User {
@@ -829,7 +804,6 @@ model User {
 
   company                                  Company?                          @relation(fields: [companyId], references: [id], onDelete: SetNull)
   authSessions                             AuthSession[]
-  adminAuthorizationCapabilities           AdminAuthorizationCapability[]
   companyMemberships                       CompanyMember[]
   companyMembersInvited                    CompanyMember[]                   @relation("CompanyMemberInvitedBy")
   clients                                  Client[]

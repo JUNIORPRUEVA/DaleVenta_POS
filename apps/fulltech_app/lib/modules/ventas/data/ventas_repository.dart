@@ -29,8 +29,7 @@ class VentasRepository {
   final SyncQueueService _syncQueue;
   final LocalJsonCache _cache = LocalJsonCache();
   final OfflineStore _offlineStore = OfflineStore.instance;
-  final TokenStorage _tokenStorage = TokenStorage.instance;
-
+  final TokenStorage _tokenStorage = TokenStorage();
   static const String _createSaleSyncType = 'sales.create';
   static const String _creditsCacheKey = 'sales.credits.v1';
   bool _handlersRegistered = false;

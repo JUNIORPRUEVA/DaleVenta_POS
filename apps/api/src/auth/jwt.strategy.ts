@@ -50,14 +50,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const role = membership
       ? this.mapMemberRoleToLegacyRole(membership.role)
       : this.normalizeLegacyRole(user.role);
-    return {
-      id: user.id,
-      email: user.email,
-      role,
-      memberRole: membership?.role ?? null,
-      companyId,
-      sessionId: (payload.sessionId ?? '').trim(),
-    };
+    return { id: user.id, email: user.email, role, memberRole: membership?.role ?? null, companyId };
   }
 
   private async assertActiveSession(payload: JwtUser) {

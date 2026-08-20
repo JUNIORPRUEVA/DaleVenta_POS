@@ -68,7 +68,7 @@ Future<void> main() async {
       }
       _configureImageCacheForPlatform();
       _initializeSqlite();
-      final authLaunchSnapshotFuture = loadAuthLaunchSnapshot();
+      await AppStorageScopeGuard.ensureCurrentScope();
 
       FlutterError.onError = (details) {
         FlutterError.presentError(details);
@@ -84,33 +84,18 @@ Future<void> main() async {
         return true;
       };
 
-      final authLaunchSnapshot = await authLaunchSnapshotFuture;
-
       unawaited(
         ensureContabilidadLocale(
           locale: PlatformDispatcher.instance.locale.toString(),
         ),
       );
-      unawaited(_runStartupPrerequisitesInBackground());
 
-      runApp(
-        ProviderScope(
-          overrides: [
-            authLaunchSnapshotProvider.overrideWithValue(authLaunchSnapshot),
-          ],
-          child: const AppBootstrap(),
-        ),
-      );
+      runApp(const ProviderScope(child: AppBootstrap()));
     },
     (error, stack) {
       AppErrorReporter.instance.record(error, stack, context: 'Zone');
     },
   );
-}
-
-Future<void> _runStartupPrerequisitesInBackground() async {
-  await prepareAppFirstFrame();
-  await AppStorageScopeGuard.ensureCurrentScope();
 }
 
 void _configureImageCacheForPlatform() {
@@ -254,17 +239,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       final license = await licenseRepository.getLicense();
       if (!mounted) return;
       ref.invalidate(licenseStatusProvider);
-      debugPrint(
-        '[AUTH_CHANGE] licenseCheck status=${license.status} '
-        'isUsable=${license.isUsable} caller=main._checkLicenseNow',
-      );
       if (!license.isUsable) {
         authSessionEvents.requestUnauthorizedLogout(reason: 'license_expired');
       }
-    } catch (e) {
-      debugPrint(
-        '[AUTH_CHANGE] licenseCheck ERROR $e caller=main._checkLicenseNow',
-      );
+    } catch (_) {
       // 401/403 responses are handled by AuthInterceptor. Temporary network
       // failures should not log out an otherwise valid user.
     }
@@ -272,11 +250,6 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final authBefore = ref.read(authStateProvider);
-    debugPrint(
-      '[AUTH_CHANGE] lifecycle=$state authBefore=${authBefore.isAuthenticated} '
-      'caller=main.didChangeAppLifecycleState',
-    );
     if (state != AppLifecycleState.resumed || !widget.enableBackgroundStartup) {
       return;
     }
@@ -286,7 +259,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     final authState = ref.read(authStateProvider);
     if (authState.isAuthenticated) {
       unawaited(ref.read(operationsRealtimeServiceProvider).connect(authState));
-      unawaited(ref.read(authStateProvider.notifier).verifySessionInBackground());
+      unawaited(
+        ref.read(authStateProvider.notifier).refreshCurrentUser(silent: true),
+      );
       unawaited(_checkLicenseNow());
     }
   }

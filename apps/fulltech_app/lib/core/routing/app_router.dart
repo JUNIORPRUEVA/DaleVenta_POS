@@ -327,9 +327,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isAuth = auth.isAuthenticated;
       final loc = state.uri.toString();
       final path = state.uri.path;
-      final adminAuthorization = ref.read(adminAuthorizationProvider.notifier);
-      adminAuthorization.clearIfExpired();
-      adminAuthorization.clearIfRouteScopeExited(loc);
+      ref.read(adminAuthorizationProvider.notifier).clearIfExpired();
       final isAuthRoute =
           path == Routes.login ||
           path == Routes.register ||
@@ -342,14 +340,11 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       final bootstrappingAuthenticatedSession =
           bootstrap == AppBootstrapStatus.initializing ||
-          bootstrap == AppBootstrapStatus.authenticatedLoadingCompany;
+          bootstrap == AppBootstrapStatus.authenticatedLoadingCompany ||
+          bootstrap == AppBootstrapStatus.error;
 
       if (bootstrappingAuthenticatedSession) {
         return isSplashRoute ? null : Routes.splash;
-      }
-
-      if (bootstrap == AppBootstrapStatus.error) {
-        return path == Routes.login ? null : Routes.login;
       }
 
       if (isSplashRoute) {
@@ -368,11 +363,10 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       final required = RouteAccess.permissionForLocation(loc);
       if (required != null && !hasUserPermission(auth.user, required)) {
-        final adminOverride = adminAuthorization.isAuthorizedForRoute(loc);
-        if (adminOverride) {
-          adminAuthorization.markRouteEntered(loc);
-          return null;
-        }
+        final adminOverride = ref
+            .read(adminAuthorizationProvider.notifier)
+            .isAuthorizedForRoute(loc);
+        if (adminOverride) return null;
         final fallback = RouteAccess.defaultHomeForUser(auth.user);
         if (path != fallback) {
           return fallback;

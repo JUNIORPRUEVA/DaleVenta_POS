@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_client.dart';
@@ -18,7 +17,6 @@ import '../offline/sync_queue_service.dart';
 import '../utils/is_flutter_test.dart';
 import 'admin_authorization_session.dart';
 import 'auth_interceptor.dart';
-import 'auth_refresh_coordinator.dart';
 import 'auth_session_events.dart';
 import 'token_storage.dart';
 import '../loading/app_loading_controller.dart';
@@ -51,13 +49,7 @@ class SessionVerificationResult {
     : this(status: SessionVerificationStatus.authenticated, user: user);
 }
 
-// UNA sola instancia canónica de secure storage para auth.
-// En Windows el plugin usa un único archivo (flutter_secure_storage.dat) y no
-// soporta acceso concurrente. Todos los providers y el bootstrap de arranque
-// deben compartir la misma instancia (TokenStorage.instance) para que el mutex
-// interno serialice TODAS las operaciones sobre ese archivo.
-final tokenStorageProvider = Provider<TokenStorage>((ref) => TokenStorage.instance);
-
+final tokenStorageProvider = Provider<TokenStorage>((ref) => TokenStorage());
 
 final networkReachabilityProvider = Provider<NetworkReachability>((ref) {
   return NetworkReachability();
@@ -69,10 +61,7 @@ final dioProvider = Provider<Dio>((ref) {
   final sessionEvents = ref.watch(authSessionEventsProvider);
   final reachability = ref.watch(networkReachabilityProvider);
   final offlineStore = ref.watch(offlineStoreProvider);
-  final refreshCoordinator = ref.watch(authRefreshCoordinatorProvider);
-  api.dio.interceptors.add(
-    AuthInterceptor(storage, sessionEvents, api.dio, refreshCoordinator),
-  );
+  api.dio.interceptors.add(AuthInterceptor(storage, sessionEvents, api.dio));
   api.dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (options, handler) {
@@ -135,25 +124,19 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepository(
     dio: ref.watch(dioProvider),
     storage: ref.watch(tokenStorageProvider),
-    refreshCoordinator: ref.watch(authRefreshCoordinatorProvider),
   );
 });
 
 class AuthRepository {
   final Dio _dio;
   final TokenStorage _storage;
-  final AuthRefreshCoordinator _refreshCoordinator;
   static const Duration _loginTimeout = Duration(seconds: 25);
   static const Duration _bootstrapTimeout = Duration(seconds: 12);
   static const Duration _storageTimeout = Duration(seconds: 3);
 
-  AuthRepository({
-    required Dio dio,
-    required TokenStorage storage,
-    required AuthRefreshCoordinator refreshCoordinator,
-  }) : _dio = dio,
-       _storage = storage,
-       _refreshCoordinator = refreshCoordinator;
+  AuthRepository({required Dio dio, required TokenStorage storage})
+    : _dio = dio,
+      _storage = storage;
 
   String _extractMessage(dynamic data, String fallback) {
     if (data is String && data.trim().isNotEmpty) return data;
@@ -368,42 +351,7 @@ class AuthRepository {
     return UserModel.fromJson(normalized);
   }
 
-  UserModel _mergeLoginFallbackIdentity(UserModel user, dynamic loginData) {
-    final fallback = _userFromLoginResponse(loginData);
-    if (fallback == null) return user;
-    final merged = user.toJson();
-    if ((user.companyId ?? '').trim().isEmpty &&
-        (fallback.companyId ?? '').trim().isNotEmpty) {
-      merged['companyId'] = fallback.companyId;
-    }
-    if ((user.companyName ?? '').trim().isEmpty &&
-        (fallback.companyName ?? '').trim().isNotEmpty) {
-      merged['companyName'] = fallback.companyName;
-    }
-    if ((user.companySlug ?? '').trim().isEmpty &&
-        (fallback.companySlug ?? '').trim().isNotEmpty) {
-      merged['companySlug'] = fallback.companySlug;
-    }
-    return UserModel.fromJson(merged);
-  }
-
-  Future<void> _assertUsableAuthenticatedUser(UserModel user) async {
-    final userId = user.id.trim();
-    final companyId = user.companyId?.trim() ?? '';
-    if (userId.isNotEmpty && companyId.isNotEmpty) return;
-    await _safeClearTokens();
-    throw const ApiException.detailed(
-      message:
-          'Tu usuario no tiene una empresa activa asignada. Contacta al administrador antes de iniciar sesion.',
-      type: ApiErrorType.forbidden,
-      displayCode: 'AUTH_COMPANY_REQUIRED',
-    );
-  }
-
   Future<void> _safeClearTokens() async {
-    debugPrint(
-      '[AUTH_CHANGE] _safeClearTokens caller=${StackTrace.current.toString().split('\n').skip(1).take(3).join(' | ')}',
-    );
     try {
       await _storage.clearTokens().timeout(_storageTimeout);
     } catch (_) {}
@@ -468,30 +416,24 @@ class AuthRepository {
               ),
             )
             .timeout(_loginTimeout);
-        final user = _mergeLoginFallbackIdentity(
-          UserModel.fromJson((me.data as Map).cast<String, dynamic>()),
-          res.data,
+        final user = UserModel.fromJson(
+          (me.data as Map).cast<String, dynamic>(),
         );
-        await _assertUsableAuthenticatedUser(user);
         await _storage.saveUserSnapshot(user);
         return user;
       } on DioException {
         final fallbackUser = _userFromLoginResponse(res.data);
         if (fallbackUser != null) {
-          await _assertUsableAuthenticatedUser(fallbackUser);
           await _storage.saveUserSnapshot(fallbackUser);
           return fallbackUser;
         }
-        await _safeClearTokens();
         rethrow;
       } on TimeoutException {
         final fallbackUser = _userFromLoginResponse(res.data);
         if (fallbackUser != null) {
-          await _assertUsableAuthenticatedUser(fallbackUser);
           await _storage.saveUserSnapshot(fallbackUser);
           return fallbackUser;
         }
-        await _safeClearTokens();
         rethrow;
       }
     } on TimeoutException {
@@ -523,10 +465,8 @@ class AuthRepository {
       }
       final fallbackUser = _userFromLoginResponse(res.data);
       if (fallbackUser == null) {
-        await _safeClearTokens();
         throw ApiException('No se recibio la sesion creada');
       }
-      await _assertUsableAuthenticatedUser(fallbackUser);
       await _storage.saveUserSnapshot(fallbackUser);
       return fallbackUser;
     } on TimeoutException {
@@ -609,10 +549,6 @@ class AuthRepository {
 
     try {
       final token = await _storage.getAccessToken().timeout(_storageTimeout);
-      debugPrint(
-        '[AUTH_CHANGE] getMeOrNull accessToken=${token == null ? 'null' : (token.isEmpty ? 'empty' : 'present')} '
-        'caller=auth_repository.getMeOrNull',
-      );
       if (token == null) return null;
       try {
         final res = await _dio
@@ -627,27 +563,16 @@ class AuthRepository {
               ),
             )
             .timeout(_bootstrapTimeout);
-        debugPrint(
-          '[AUTH_CHANGE] GET /me status=${res.statusCode} caller=auth_repository.getMeOrNull',
-        );
         final user = UserModel.fromJson(
           (res.data as Map).cast<String, dynamic>(),
         );
         await _storage.saveUserSnapshot(user);
         return user;
       } on DioException catch (e) {
-        debugPrint(
-          '[AUTH_CHANGE] GET /me DioException status=${e.response?.statusCode} '
-          'caller=auth_repository.getMeOrNull',
-        );
-        // Si expira, intenta refresh (single-flight compartido) y reintenta.
+        // Si expira, intenta refresh y reintenta
         if (e.response?.statusCode == 401) {
-          final refreshed = await _refreshCoordinator.ensureRefreshed();
-          debugPrint(
-            '[AUTH_CHANGE] refresh result=${refreshed.outcome} '
-            'caller=auth_repository.getMeOrNull',
-          );
-          if (refreshed.isSuccess && refreshed.accessToken != null) {
+          final refreshed = await _refreshAndSave(silent: silent);
+          if (refreshed) {
             final res = await _dio
                 .get(
                   ApiRoutes.usersMe,
@@ -667,12 +592,7 @@ class AuthRepository {
             return user;
           }
 
-          if (refreshed.isInvalid) {
-            await _safeClearTokens();
-          }
-          if (refreshed.isFailed && allowCachedFallback) {
-            return await _storage.getUserSnapshot();
-          }
+          await _safeClearTokens();
           return null;
         }
 
@@ -694,10 +614,6 @@ class AuthRepository {
     }
 
     final hydrated = await hydrateSession();
-    debugPrint(
-      '[AUTH_CHANGE] verifySession hydrated.hasToken=${hydrated.hasToken} '
-      'caller=auth_repository.verifySession',
-    );
     if (!hydrated.hasToken) {
       return const SessionVerificationResult.invalid();
     }
@@ -705,18 +621,10 @@ class AuthRepository {
     try {
       final user = await getMeOrNull(silent: silent);
       if (user != null) {
-        debugPrint(
-          '[AUTH_CHANGE] verifySession result=authenticated '
-          'caller=auth_repository.verifySession',
-        );
         return SessionVerificationResult.authenticated(user);
       }
 
       final token = await _storage.getAccessToken().timeout(_storageTimeout);
-      debugPrint(
-        '[AUTH_CHANGE] verifySession afterGetMe token=${token == null ? 'null' : (token.isEmpty ? 'empty' : 'present')} '
-        'caller=auth_repository.verifySession',
-      );
       if (token == null || token.isEmpty) {
         return const SessionVerificationResult.invalid();
       }
@@ -725,8 +633,7 @@ class AuthRepository {
         return SessionVerificationResult.deferred(user: hydrated.user);
       }
 
-      final snapshot = await _storage.getUserSnapshot().timeout(_storageTimeout);
-      return SessionVerificationResult.deferred(user: snapshot);
+      return const SessionVerificationResult.deferred();
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
         await _safeClearTokens();
@@ -741,6 +648,29 @@ class AuthRepository {
     }
   }
 
+  Future<bool> _refreshAndSave({bool silent = false}) async {
+    final refresh = await _storage.getRefreshToken();
+    if (refresh == null || refresh.isEmpty) return false;
+    try {
+      final res = await _dio.post(
+        ApiRoutes.refresh,
+        data: {'refreshToken': refresh},
+        options: Options(extra: {'silent': silent}),
+      );
+      final access = res.data['accessToken'] as String?;
+      final newRefresh = res.data['refreshToken'] as String?;
+      if (access != null && access.isNotEmpty) {
+        await _storage.saveTokens(
+          access,
+          (newRefresh != null && newRefresh.isNotEmpty) ? newRefresh : refresh,
+        );
+        return true;
+      }
+    } catch (_) {
+      return false;
+    }
+    return false;
+  }
 }
 
 class AccountDeletionPreview {

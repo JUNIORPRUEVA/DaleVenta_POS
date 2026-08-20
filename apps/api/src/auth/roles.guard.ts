@@ -42,12 +42,14 @@ export class RolesGuard implements CanActivate {
           id?: string;
           role?: Role | string;
           companyId?: string | null;
-          sessionId?: string | null;
           adminAuthorized?: boolean;
-          authorizedScopes?: string[];
           authorizedPermissions?: string[];
         }
       | undefined;
+    const adminAuthorized = this.hasValidAdminAuthorization(request, user);
+    if (adminAuthorized) {
+      this.markAdminAuthorization(request, user);
+    }
 
     if (
       (!requiredRoles || requiredRoles.length === 0) &&
@@ -63,22 +65,13 @@ export class RolesGuard implements CanActivate {
     if (role === Role.ADMIN) {
       return true;
     }
+    if (adminAuthorized) {
+      return true;
+    }
     if (requiredPermissions?.length) {
-      const granted = await this.hasAnyUserPermission(
-        user,
-        requiredPermissions,
-      );
+      const granted = await this.hasAnyUserPermission(user, requiredPermissions);
       if (granted) {
         this.markPermissionAuthorization(user, requiredPermissions);
-        return true;
-      }
-      if (
-        await this.consumeDelegatedAdminAuthorization(
-          request,
-          user,
-          requiredPermissions,
-        )
-      ) {
         return true;
       }
     }
@@ -154,33 +147,13 @@ export class RolesGuard implements CanActivate {
     return output;
   }
 
-  private async consumeDelegatedAdminAuthorization(
-    request: {
-      headers?: Record<string, unknown>;
-      originalUrl?: string;
-      url?: string;
-      path?: string;
-    },
-    user?: {
-      id?: string;
-      companyId?: string | null;
-      sessionId?: string | null;
-      authorizedScopes?: string[];
-      authorizedPermissions?: string[];
-    },
-    permissions: string[] = [],
+  private hasValidAdminAuthorization(
+    request: { headers?: Record<string, unknown> },
+    user?: { id?: string; companyId?: string | null },
   ) {
     const raw = request.headers?.["x-admin-authorization"];
     const token = Array.isArray(raw) ? raw[0] : raw;
-    const companyId = user?.companyId?.trim() ?? "";
-    const sessionId = user?.sessionId?.trim() ?? "";
-    if (
-      !user?.id ||
-      !companyId ||
-      !sessionId ||
-      typeof token !== "string" ||
-      !token
-    ) {
+    if (!user?.id || !user.companyId || typeof token !== "string" || !token) {
       return false;
     }
     try {
@@ -190,51 +163,13 @@ export class RolesGuard implements CanActivate {
       const payload = jwt.verify(token, secret) as {
         sub?: string;
         companyId?: string;
-        sessionId?: string;
-        jti?: string;
         tokenType?: string;
-        scopes?: unknown;
       };
-      if (
-        payload.tokenType !== "admin-authorization" ||
-        payload.sub !== user.id ||
-        payload.companyId !== companyId ||
-        payload.sessionId !== sessionId ||
-        !payload.jti
-      ) {
-        return false;
-      }
-      const scopes = Array.isArray(payload.scopes)
-        ? payload.scopes
-            .filter((scope): scope is string => typeof scope === "string")
-            .map((scope) => scope.trim())
-            .filter(Boolean)
-        : [];
-      if (scopes.length === 0) return false;
-      if (!this.scopesCoverPermissions(scopes, permissions)) return false;
-
-      const consumed =
-        await this.prisma.adminAuthorizationCapability.updateMany({
-          where: {
-            jti: payload.jti,
-            userId: user.id,
-            companyId,
-            sessionId,
-            consumedAt: null,
-            revokedAt: null,
-            expiresAt: { gt: new Date() },
-          },
-          data: {
-            consumedAt: new Date(),
-            consumedByPath: this.requestPath(request),
-          },
-        });
-      if (consumed.count !== 1) return false;
-
-      user.authorizedScopes = scopes;
-      this.markAdminAuthorization(request, user);
-      this.markPermissionAuthorization(user, permissions);
-      return true;
+      return (
+        payload.tokenType === "admin-authorization" &&
+        payload.sub === user.id &&
+        payload.companyId === user.companyId
+      );
     } catch {
       return false;
     }
@@ -242,36 +177,16 @@ export class RolesGuard implements CanActivate {
 
   private markAdminAuthorization(
     request: Record<string, unknown>,
-    user?: { adminAuthorized?: boolean; authorizedScopes?: string[] },
+    user?: { adminAuthorized?: boolean },
   ) {
     if (user) user.adminAuthorized = true;
     request.adminAuthorized = true;
-    request.adminAuthorizationScopes = user?.authorizedScopes ?? [];
-  }
-
-  private scopesCoverPermissions(scopesRaw: string[], permissions: string[]) {
-    const scopes = new Set(scopesRaw);
-    return permissions.some((permission) => {
-      switch (permission.trim()) {
-        case "manageSettings":
-          return scopes.has("company.settings");
-        default:
-          return false;
-      }
-    });
-  }
-
-  private requestPath(request: {
-    originalUrl?: string;
-    url?: string;
-    path?: string;
-  }) {
-    const value = request.originalUrl ?? request.url ?? request.path ?? "";
-    return value.slice(0, 500);
   }
 
   private markPermissionAuthorization(
-    user: { authorizedPermissions?: string[] } | undefined,
+    user:
+      | { authorizedPermissions?: string[] }
+      | undefined,
     permissions: string[],
   ) {
     if (!user) return;

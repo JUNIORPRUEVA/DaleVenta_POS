@@ -4,7 +4,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_routes.dart';
-import '../auth/admin_authorization_session.dart';
 import '../auth/app_role.dart';
 import '../auth/auth_provider.dart';
 import '../auth/auth_repository.dart';
@@ -18,17 +17,12 @@ final companySettingsRepositoryProvider = Provider<CompanySettingsRepository>((
   ref,
 ) {
   final user = ref.watch(authStateProvider).user;
-  final adminAuthorization = ref.watch(adminAuthorizationProvider);
   final repository = CompanySettingsRepository(
     ref.watch(dioProvider),
     ref.read(syncQueueServiceProvider.notifier),
     cacheScope: _companySettingsCacheScope(user),
     canWriteSettings:
-        user?.appRole == AppRole.admin ||
-        user?.appRole == AppRole.asistente ||
-        (adminAuthorization.isAuthorized &&
-            adminAuthorization.belongsTo(user?.id, user?.companyId) &&
-            adminAuthorization.delegationScope == 'company.settings'),
+        user?.appRole == AppRole.admin || user?.appRole == AppRole.asistente,
   );
   repository.registerSyncHandlers();
   return repository;
@@ -220,11 +214,6 @@ class CompanySettingsRepository {
       return await getSettingsRemoteAndCache();
     } catch (error, stackTrace) {
       _traceProtectedError('settings load failed', error, stackTrace);
-      if (error is ApiException &&
-          (error.type == ApiErrorType.unauthorized ||
-              error.type == ApiErrorType.forbidden)) {
-        rethrow;
-      }
       final cached = await getCachedSettings();
       if (cached != null) return cached;
       return CompanySettings.empty();
@@ -304,13 +293,12 @@ class CompanySettingsRepository {
         403,
       );
     }
+    await _cache.writeMap(_scopedCacheKey, settings.toMap());
     try {
       await _saveSettingsRemote(settings);
-      await _cache.writeMap(_scopedCacheKey, settings.toMap());
       return false;
     } on ApiException catch (e) {
       if (!_shouldQueueSync(e)) rethrow;
-      await _cache.writeMap(_scopedCacheKey, settings.toMap());
       await _syncQueue.enqueue(
         id: '$_saveSyncType:$_scopedCacheKey',
         type: _saveSyncType,
@@ -348,19 +336,14 @@ class CompanySettingsRepository {
   }
 
   Future<AdminAuthorizationVerification> verifyAdminAuthorizationPin(
-    String pin, {
-    String? scope,
-  }) async {
+    String pin,
+  ) async {
     try {
       final res = await _dio
           .post(
             ApiRoutes.settingsAdminPinVerify,
             options: Options(extra: const {'skipLoader': true}),
-            data: {
-              'pin': pin,
-              if (scope != null && scope.trim().isNotEmpty)
-                'scope': scope.trim(),
-            },
+            data: {'pin': pin},
           )
           .timeout(_settingsTimeout);
       final data = _normalizeMap(
