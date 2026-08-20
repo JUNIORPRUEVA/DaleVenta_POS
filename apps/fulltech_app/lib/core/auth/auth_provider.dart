@@ -96,6 +96,26 @@ class AuthController extends StateNotifier<AuthState> {
         (user.companyId?.trim().isNotEmpty ?? false);
   }
 
+  UserModel? _preserveCurrentTenantIdentity(UserModel? verifiedUser) {
+    if (verifiedUser == null || _hasResolvedTenantIdentity(verifiedUser)) {
+      return verifiedUser;
+    }
+
+    final currentUser = state.user;
+    if (!_hasResolvedTenantIdentity(currentUser)) return verifiedUser;
+    if (currentUser!.id.trim() != verifiedUser.id.trim()) return verifiedUser;
+
+    final merged = verifiedUser.toJson();
+    merged['companyId'] = currentUser.companyId;
+    if ((verifiedUser.companyName ?? '').trim().isEmpty) {
+      merged['companyName'] = currentUser.companyName;
+    }
+    if ((verifiedUser.companySlug ?? '').trim().isEmpty) {
+      merged['companySlug'] = currentUser.companySlug;
+    }
+    return UserModel.fromJson(merged);
+  }
+
   Future<void> _logoutForUnauthorized() async {
     _sessionEvents.markLogoutHandled();
     TraceLog.log(
@@ -206,18 +226,29 @@ class AuthController extends StateNotifier<AuthState> {
 
       switch (result.status) {
         case SessionVerificationStatus.authenticated:
+          final rawUser = result.user;
+          final user = _preserveCurrentTenantIdentity(rawUser);
+          final tenantIdentityResolved = _hasResolvedTenantIdentity(user);
+          final tenantIdentityPreserved =
+              rawUser != null &&
+              !_hasResolvedTenantIdentity(rawUser) &&
+              tenantIdentityResolved;
           _markSessionHealthy();
           TraceLog.log(
             'Auth',
-            'USER_RESOLVED userId=${result.user?.id ?? ''} companyId=${result.user?.companyId ?? ''}',
+            'USER_RESOLVED userId=${user?.id ?? ''} companyId=${user?.companyId ?? ''} tenantIdentityPreserved=$tenantIdentityPreserved',
             seq: seq,
           );
+          if (tenantIdentityPreserved && user != null) {
+            await ref.read(tokenStorageProvider).saveUserSnapshot(user);
+            if (!mounted) return;
+          }
           state = AuthState(
             initialized: true,
             isAuthenticated: true,
-            user: result.user,
+            user: user,
             loading: false,
-            restoringSession: false,
+            restoringSession: !tenantIdentityResolved,
             hasSessionHint: true,
           );
           break;
@@ -366,10 +397,20 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<UserModel?> refreshCurrentUser({bool silent = true}) async {
     if (!state.isAuthenticated) return null;
-    final user = await ref
+    final verifiedUser = await ref
         .read(authRepositoryProvider)
         .getMeOrNull(silent: silent, allowCachedFallback: true);
-    if (user == null || !mounted) return null;
+    if (verifiedUser == null || !mounted) return null;
+    final user = _preserveCurrentTenantIdentity(verifiedUser);
+    if (user == null) return null;
+    if (!_hasResolvedTenantIdentity(user)) {
+      state = state.copyWith(
+        user: user,
+        restoringSession: true,
+        hasSessionHint: true,
+      );
+      return user;
+    }
     setUser(user);
     return user;
   }
