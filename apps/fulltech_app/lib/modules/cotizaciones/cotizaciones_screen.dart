@@ -49,6 +49,7 @@ import '../../core/widgets/product_network_image.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../features/catalogo/application/catalog_controller.dart';
 import '../../features/catalogo/data/catalog_repository.dart';
+import '../../features/catalogo/data/catalog_sync_utils.dart';
 import '../../features/account/delete_account_dialog.dart';
 import '../../features/products/ui/inventory_module_pages.dart';
 import '../cash/cash_repository.dart';
@@ -410,7 +411,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _liveSyncTimer?.cancel();
     _liveSyncTimer = Timer.periodic(_liveSyncInterval, (_) {
       if (!mounted) return;
-      _loadProducts(forceRemote: true, silent: true);
+      _loadProducts(silent: true);
     });
   }
 
@@ -427,14 +428,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _loadProducts(forceRemote: true, silent: true);
+      _loadProducts(silent: true);
     });
   }
 
   void _syncProductsOnEnter() {
     if (!mounted) return;
     _clearMobileSearchFocus();
-    _loadProducts(forceRemote: true, silent: true);
+    _loadProducts(silent: true);
   }
 
   void _clearMobileSearchFocus() {
@@ -464,7 +465,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && mounted) {
       _startLiveSync();
-      _loadProducts(forceRemote: true, silent: true);
+      _loadProducts(silent: true);
       return;
     }
 
@@ -782,6 +783,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       _remoteRefreshInFlight = true;
     }
 
+    final requestCompanyId =
+        ref.read(authStateProvider).user?.companyId?.trim() ?? '';
+    if (requestCompanyId.isEmpty) return;
+
     if (_productos.isEmpty) {
       final cached = await ref
           .read(catalogRepositoryProvider)
@@ -813,16 +818,27 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       final rows = await ref
           .read(catalogRepositoryProvider)
           .fetchProducts(forceRefresh: forceRemote, silent: true);
+      if (ref.read(authStateProvider).user?.companyId?.trim() !=
+          requestCompanyId) {
+        return;
+      }
       final catalogVersion = buildCatalogSyncVersion(rows);
       final syncedRows = applyCatalogSyncVersion(rows, catalogVersion);
       final syncedAt = DateTime.now();
 
       if (!mounted) return;
-      setState(() {
-        _productos = syncedRows;
-        _loadingProducts = false;
-        _error = null;
-      });
+      if (!areCatalogProductsEquivalent(_productos, syncedRows)) {
+        setState(() {
+          _productos = syncedRows;
+          _loadingProducts = false;
+          _error = null;
+        });
+      } else if (_loadingProducts) {
+        setState(() {
+          _loadingProducts = false;
+          _error = null;
+        });
+      }
       unawaited(_syncQuotationAi(triggerAi: false));
       Future<void>.microtask(
         () => FulltechImageCacheManager.warmImageUrls(
@@ -845,7 +861,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Future<void> _bootstrapCatalog() async {
-    await _loadProducts(forceRemote: true);
+    await _loadProducts();
   }
 
   void _persistCatalogUiState() {}

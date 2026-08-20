@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/env.dart';
+import '../../../core/auth/auth_provider.dart';
 import '../../../core/cache/fulltech_cache_manager.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/models/product_model.dart';
@@ -218,6 +219,27 @@ class CatalogController extends StateNotifier<CatalogState> {
       _remoteRefreshInFlight = true;
     }
 
+    final requestCompanyId =
+        ref.read(authStateProvider).user?.companyId?.trim() ?? '';
+
+    final repo = ref.read(catalogRepositoryProvider);
+    if (state.items.isEmpty) {
+      final cached = await repo.getCachedProducts();
+      if (!mounted) return;
+        if (cached.isNotEmpty &&
+          (requestCompanyId.isEmpty ||
+            ref.read(authStateProvider).user?.companyId?.trim() ==
+              requestCompanyId)) {
+        final catalogVersion = buildCatalogSyncVersion(cached);
+        state = state.copyWith(
+          items: applyCatalogSyncVersion(cached, catalogVersion),
+          loading: false,
+          refreshing: false,
+          clearError: true,
+        );
+      }
+    }
+
     final shouldShowLoading = !silent || state.items.isEmpty;
 
     if (shouldShowLoading && state.items.isEmpty) {
@@ -237,18 +259,30 @@ class CatalogController extends StateNotifier<CatalogState> {
     }
 
     try {
-      final repo = ref.read(catalogRepositoryProvider);
       final fetched = await repo.fetchProducts(
         forceRefresh: forceRemote,
         silent: silent,
       );
+        if (requestCompanyId.isNotEmpty &&
+          ref.read(authStateProvider).user?.companyId?.trim() !=
+            requestCompanyId) {
+        return;
+      }
       final merged = mergeRecoveredCatalogImages(
         previousItems: state.items,
         fetchedItems: fetched,
       );
       final syncVersion = buildCatalogSyncVersion(merged);
       final items = applyCatalogSyncVersion(merged, syncVersion);
-      state = state.copyWith(items: items, loading: false, refreshing: false);
+      if (!areCatalogProductsEquivalent(state.items, items)) {
+        state = state.copyWith(
+          items: items,
+          loading: false,
+          refreshing: false,
+        );
+      } else {
+        state = state.copyWith(loading: false, refreshing: false);
+      }
       unawaited(_saveSnapshotSafely(repo, items));
       unawaited(
         FulltechImageCacheManager.warmImageUrls(

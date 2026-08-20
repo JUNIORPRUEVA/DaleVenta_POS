@@ -1,5 +1,34 @@
 import '../../../core/models/product_model.dart';
 
+bool areCatalogProductsEquivalent(
+  List<ProductModel> previous,
+  List<ProductModel> next,
+) {
+  if (identical(previous, next)) return true;
+  if (previous.length != next.length) return false;
+
+  final previousById = {
+    for (final item in previous) item.id: item.toJson(),
+  };
+  for (final item in next) {
+    final previousJson = previousById[item.id];
+    if (previousJson == null || !_mapsEqual(previousJson, item.toJson())) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _mapsEqual(Map<String, dynamic> left, Map<String, dynamic> right) {
+  if (left.length != right.length) return false;
+  for (final entry in left.entries) {
+    if (!right.containsKey(entry.key) || right[entry.key] != entry.value) {
+      return false;
+    }
+  }
+  return true;
+}
+
 List<ProductModel> mergeRecoveredCatalogImages({
   required List<ProductModel> previousItems,
   required List<ProductModel> fetchedItems,

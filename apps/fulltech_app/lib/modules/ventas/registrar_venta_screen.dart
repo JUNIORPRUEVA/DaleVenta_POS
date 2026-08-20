@@ -32,6 +32,8 @@ import '../../core/widgets/product_network_image.dart';
 import '../../core/widgets/fulltech_dialog.dart';
 import '../../features/account/delete_account_dialog.dart';
 import '../../features/catalogo/application/catalog_controller.dart';
+import '../../features/catalogo/data/catalog_repository.dart';
+import '../../features/catalogo/data/catalog_sync_utils.dart';
 import '../../features/contabilidad/data/contabilidad_repository.dart';
 import '../cash/cash_dialogs.dart';
 import '../clientes/cliente_model.dart';
@@ -301,7 +303,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     _startLiveSync();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      unawaited(_loadProducts(forceRemote: true, silent: true));
+      unawaited(_loadProducts(silent: true));
     });
   }
 
@@ -352,7 +354,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
 
   void _syncProductsOnEnter() {
     if (!mounted) return;
-    _loadProducts(forceRemote: true, silent: true);
+    _loadProducts(silent: true);
   }
 
   @override
@@ -375,7 +377,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && mounted) {
       _startLiveSync();
-      _loadProducts(forceRemote: true, silent: true);
+      _loadProducts(silent: true);
       return;
     }
 
@@ -390,7 +392,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     _liveSyncTimer?.cancel();
     _liveSyncTimer = Timer.periodic(_liveSyncInterval, (_) {
       if (!mounted) return;
-      _loadProducts(forceRemote: true, silent: true);
+      _loadProducts(silent: true);
     });
   }
 
@@ -407,7 +409,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _loadProducts(forceRemote: true, silent: true);
+      _loadProducts(silent: true);
     });
   }
 
@@ -446,18 +448,45 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       _remoteRefreshInFlight = true;
     }
 
+    final requestCompanyId =
+        ref.read(authStateProvider).user?.companyId?.trim() ?? '';
+    if (requestCompanyId.isEmpty) return;
+
+    final repo = ref.read(catalogRepositoryProvider);
+    if (_products.isEmpty) {
+      final cached = await repo.getCachedProducts();
+      if (!mounted) return;
+      if (cached.isNotEmpty &&
+          ref.read(authStateProvider).user?.companyId?.trim() ==
+              requestCompanyId) {
+        setState(() {
+          _products = cached;
+          _loadingProducts = false;
+        });
+      }
+    }
+
     if (mounted && !silent) setState(() => _loadingProducts = true);
     try {
-      final fetched = await ref
-          .read(ventasRepositoryProvider)
-          .fetchProducts(forceRefresh: forceRemote);
+      final fetched = await repo.fetchProducts(
+        forceRefresh: forceRemote,
+        silent: silent,
+      );
+      if (ref.read(authStateProvider).user?.companyId?.trim() !=
+          requestCompanyId) {
+        return;
+      }
       final syncVersion = buildCatalogSyncVersion(fetched);
       final products = applyCatalogSyncVersion(fetched, syncVersion);
       if (!mounted) return;
-      setState(() {
-        _products = products;
-        _loadingProducts = false;
-      });
+      if (!areCatalogProductsEquivalent(_products, products)) {
+        setState(() {
+          _products = products;
+          _loadingProducts = false;
+        });
+      } else if (_loadingProducts) {
+        setState(() => _loadingProducts = false);
+      }
       _prefetchProductImages(products);
       _lastSuccessfulRemoteSyncAt = DateTime.now();
     } catch (e) {

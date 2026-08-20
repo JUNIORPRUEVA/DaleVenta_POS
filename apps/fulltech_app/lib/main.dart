@@ -20,6 +20,7 @@ import 'core/company/company_settings_repository.dart';
 import 'core/debug/app_error_reporter.dart';
 import 'core/debug/app_error_overlay.dart';
 import 'core/license/license_repository.dart';
+import 'core/lifecycle/app_lifecycle_coordinator.dart';
 import 'core/offline/sync_queue_service.dart';
 import 'core/offline/offline_sync_handlers_bootstrap.dart';
 import 'core/realtime/catalog_realtime_service.dart';
@@ -148,6 +149,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   ProviderSubscription<AuthState>? _authStateSubscription;
   StreamSubscription<LicenseRealtimeMessage>? _licenseRealtimeSubscription;
   Timer? _licensePollTimer;
+  final _lifecycleCoordinator = AppLifecycleCoordinator();
 
   @override
   void initState() {
@@ -229,22 +231,24 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     _licensePollTimer = null;
   }
 
-  Future<void> _checkLicenseNow() async {
-    if (!mounted) return;
+  Future<bool> _checkLicenseNow() async {
+    if (!mounted) return false;
     final authState = ref.read(authStateProvider);
-    if (!authState.isAuthenticated) return;
+    if (!authState.isAuthenticated) return false;
     final licenseRepository = ref.read(licenseRepositoryProvider);
     final authSessionEvents = ref.read(authSessionEventsProvider);
     try {
       final license = await licenseRepository.getLicense();
-      if (!mounted) return;
+      if (!mounted) return false;
       ref.invalidate(licenseStatusProvider);
       if (!license.isUsable) {
         authSessionEvents.requestUnauthorizedLogout(reason: 'license_expired');
       }
+      return true;
     } catch (_) {
       // 401/403 responses are handled by AuthInterceptor. Temporary network
       // failures should not log out an otherwise valid user.
+      return false;
     }
   }
 
@@ -254,15 +258,29 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       return;
     }
 
-    unawaited(ref.read(syncQueueServiceProvider.notifier).processPending());
-    unawaited(ref.read(appUpdateProvider.notifier).checkNow());
+    unawaited(
+      _lifecycleCoordinator.runPendingSync(
+        () => ref.read(syncQueueServiceProvider.notifier).processPending(),
+      ),
+    );
+    unawaited(
+      _lifecycleCoordinator.runUpdateCheck(
+        () => ref.read(appUpdateProvider.notifier).checkNow(),
+      ),
+    );
     final authState = ref.read(authStateProvider);
     if (authState.isAuthenticated) {
       unawaited(ref.read(operationsRealtimeServiceProvider).connect(authState));
       unawaited(
-        ref.read(authStateProvider.notifier).refreshCurrentUser(silent: true),
+        _lifecycleCoordinator.runSessionValidation(
+          () async => ref
+              .read(authStateProvider.notifier)
+              .refreshCurrentUser(silent: true),
+        ),
       );
-      unawaited(_checkLicenseNow());
+      unawaited(
+        _lifecycleCoordinator.runLicenseValidation(_checkLicenseNow),
+      );
     }
   }
 

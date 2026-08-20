@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -351,6 +352,38 @@ class AuthRepository {
     return UserModel.fromJson(normalized);
   }
 
+  String? _companyIdFromAccessToken(String? accessToken) {
+    if (accessToken == null || accessToken.trim().isEmpty) return null;
+
+    try {
+      final parts = accessToken.split('.');
+      if (parts.length < 2) return null;
+      var payload = parts[1].replaceAll('-', '+').replaceAll('_', '/');
+      while (payload.length % 4 != 0) {
+        payload += '=';
+      }
+      final decoded = jsonDecode(
+        utf8.decode(base64.decode(payload)),
+      );
+      if (decoded is! Map) return null;
+      final companyId = decoded['companyId']?.toString().trim();
+      return companyId == null || companyId.isEmpty ? null : companyId;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  UserModel _userFromMeResponse(dynamic data, String? accessToken) {
+    final normalized = (data as Map).cast<String, dynamic>();
+    final user = UserModel.fromJson(normalized);
+    if (user.companyId?.trim().isNotEmpty ?? false) return user;
+
+    final jwtCompanyId = _companyIdFromAccessToken(accessToken);
+    if (jwtCompanyId == null) return user;
+
+    return UserModel.fromJson({...normalized, 'companyId': jwtCompanyId});
+  }
+
   Future<void> _safeClearTokens() async {
     try {
       await _storage.clearTokens().timeout(_storageTimeout);
@@ -416,9 +449,7 @@ class AuthRepository {
               ),
             )
             .timeout(_loginTimeout);
-        final user = UserModel.fromJson(
-          (me.data as Map).cast<String, dynamic>(),
-        );
+        final user = _userFromMeResponse(me.data, access);
         await _storage.saveUserSnapshot(user);
         return user;
       } on DioException {
@@ -563,9 +594,7 @@ class AuthRepository {
               ),
             )
             .timeout(_bootstrapTimeout);
-        final user = UserModel.fromJson(
-          (res.data as Map).cast<String, dynamic>(),
-        );
+        final user = _userFromMeResponse(res.data, token);
         await _storage.saveUserSnapshot(user);
         return user;
       } on DioException catch (e) {
@@ -585,9 +614,8 @@ class AuthRepository {
                   ),
                 )
                 .timeout(_bootstrapTimeout);
-            final user = UserModel.fromJson(
-              (res.data as Map).cast<String, dynamic>(),
-            );
+            final refreshedAccess = await _storage.getAccessToken();
+            final user = _userFromMeResponse(res.data, refreshedAccess);
             await _storage.saveUserSnapshot(user);
             return user;
           }

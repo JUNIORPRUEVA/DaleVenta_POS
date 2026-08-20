@@ -293,7 +293,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
       if (!mounted) return;
       ref
           .read(catalogControllerProvider.notifier)
-          .load(silent: true, forceRemote: true);
+          .load(silent: true);
     });
   }
 

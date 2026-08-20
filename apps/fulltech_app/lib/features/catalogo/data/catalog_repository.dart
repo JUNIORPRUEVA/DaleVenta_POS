@@ -25,18 +25,28 @@ class CatalogRepository {
   final Dio _dio;
   final TokenStorage _tokenStorage;
   final SyncQueueService? _syncQueue;
-  final LocalJsonCache _cache = LocalJsonCache();
+  final Duration _networkFreshnessWindow;
+  final LocalJsonCache _cache;
 
   static const String _createSyncType = 'catalog.products.create';
   static const String _updateSyncType = 'catalog.products.update';
   static const String _deleteSyncType = 'catalog.products.delete';
   static const String _productsCacheKeyPrefix = 'catalog.products.snapshot.v2';
-  static const Duration _cacheTtl = Duration(days: 7);
+  static const Duration _offlineCacheTtl = Duration(days: 7);
+  static const Duration _networkFreshnessTtl = Duration(minutes: 2);
 
   bool _handlersRegistered = false;
+  final Map<String, Future<List<ProductModel>>> _remoteFetches = {};
 
-  CatalogRepository(this._dio, [TokenStorage? tokenStorage, this._syncQueue])
-    : _tokenStorage = tokenStorage ?? TokenStorage();
+  CatalogRepository(
+    this._dio, [
+    TokenStorage? tokenStorage,
+    this._syncQueue,
+    Duration networkFreshnessWindow = _networkFreshnessTtl,
+     LocalJsonCache? cache,
+  ]) : _tokenStorage = tokenStorage ?? TokenStorage(),
+       _networkFreshnessWindow = networkFreshnessWindow,
+       _cache = cache ?? LocalJsonCache();
 
   void registerSyncHandlers() {
     final syncQueue = _syncQueue;
@@ -101,14 +111,24 @@ class CatalogRepository {
     return 'default';
   }
 
-  Future<String> _productsCacheKey() async {
-    final companyId = await _activeCompanyStorageId();
-    return '$_productsCacheKeyPrefix.$companyId';
+  Future<String?> _productsCacheKey() async {
+    final companyId = await _productsCompanyId();
+    return companyId == null ? null : '$_productsCacheKeyPrefix.$companyId';
   }
 
   Future<String> _syncScope() async {
     final companyId = await _activeCompanyStorageId();
     return 'catalog.$companyId';
+  }
+
+  Future<String?> _productsCompanyId() async {
+    try {
+      final user = await _tokenStorage.getUserSnapshot();
+      final companyId = user?.companyId?.trim() ?? '';
+      return companyId.isEmpty ? null : companyId;
+    } catch (_) {
+      return null;
+    }
   }
 
   List<dynamic> _extractRows(dynamic data) {
@@ -153,6 +173,34 @@ class CatalogRepository {
     bool forceRefresh = false,
     bool silent = false,
   }) async {
+    final companyId = await _productsCompanyId();
+    if (companyId == null) return const [];
+
+    if (!forceRefresh) {
+      final fresh = await getFreshCachedProducts();
+      if (fresh != null) return fresh;
+    }
+
+    final existing = _remoteFetches[companyId];
+    if (existing != null) return existing;
+
+    late final Future<List<ProductModel>> future;
+    future = _fetchProductsRemote(
+      companyId: companyId,
+      silent: silent,
+    ).whenComplete(() {
+      if (identical(_remoteFetches[companyId], future)) {
+        _remoteFetches.remove(companyId);
+      }
+    });
+    _remoteFetches[companyId] = future;
+    return future;
+  }
+
+  Future<List<ProductModel>> _fetchProductsRemote({
+    required String companyId,
+    required bool silent,
+  }) async {
     try {
       final res = await _dio.get(
         ApiRoutes.catalogProducts,
@@ -171,7 +219,7 @@ class CatalogRepository {
           .whereType<Map>()
           .map((row) => ProductModel.fromJson(Map<String, dynamic>.from(row)))
           .toList();
-      await saveProductsSnapshot(products);
+        await _saveProductsSnapshotForCompany(companyId, products);
       return products;
     } on DioException catch (e) {
       final status = e.response?.statusCode;
@@ -192,12 +240,24 @@ class CatalogRepository {
     }
   }
 
-  Future<List<ProductModel>> getCachedProducts() async {
+  Future<List<ProductModel>?> getFreshCachedProducts() async {
+    return _readCachedProducts(maxAge: _networkFreshnessWindow);
+  }
+
+  Future<List<ProductModel>> getCachedProducts({Duration? maxAge}) async {
+    return (await _readCachedProducts(maxAge: maxAge ?? _offlineCacheTtl)) ??
+        const [];
+  }
+
+  Future<List<ProductModel>?> _readCachedProducts({required Duration maxAge}) async {
+    final key = await _productsCacheKey();
+    if (key == null) return null;
     final cached = await _cache.readMap(
-      await _productsCacheKey(),
-      maxAge: _cacheTtl,
+      key,
+      maxAge: maxAge,
     );
-    final rows = cached?['items'];
+    if (cached == null) return null;
+    final rows = cached['items'];
     if (rows is! List) return const [];
     return rows
         .whereType<Map>()
@@ -206,7 +266,16 @@ class CatalogRepository {
   }
 
   Future<void> saveProductsSnapshot(List<ProductModel> items) async {
-    return _cache.writeMap(await _productsCacheKey(), {
+    final companyId = await _productsCompanyId();
+    if (companyId == null) return;
+    return _saveProductsSnapshotForCompany(companyId, items);
+  }
+
+  Future<void> _saveProductsSnapshotForCompany(
+    String companyId,
+    List<ProductModel> items,
+  ) async {
+    return _cache.writeMap('$_productsCacheKeyPrefix.$companyId', {
       'items': items.map((item) => item.toJson()).toList(growable: false),
     });
   }

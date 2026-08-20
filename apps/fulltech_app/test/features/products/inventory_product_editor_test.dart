@@ -36,7 +36,7 @@ class _FakeCatalogRepository extends CatalogRepository {
   }
 
   @override
-  Future<List<ProductModel>> getCachedProducts() async {
+  Future<List<ProductModel>> getCachedProducts({Duration? maxAge}) async {
     return products;
   }
 
