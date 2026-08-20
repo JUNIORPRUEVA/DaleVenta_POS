@@ -7034,6 +7034,36 @@ class _InventoryProductEditorPageState
     );
   }
 
+  Future<String?> _resolveSelectedImageForSave() async {
+    final readyPath = _uploadedImagePath;
+    if ((readyPath ?? '').trim().isNotEmpty) {
+      return readyPath!.trim();
+    }
+    if (_imageBytes == null) return null;
+
+    final upload = _imageUploadFuture;
+    if (upload == null) {
+      throw StateError('La imagen seleccionada no pudo iniciar la subida');
+    }
+
+    final uploadedPath = await upload.timeout(
+      const Duration(seconds: 20),
+      onTimeout: () {
+        throw TimeoutException('La imagen tardó demasiado en subir');
+      },
+    );
+    final normalizedPath = (uploadedPath ?? '').trim();
+    if (normalizedPath.isEmpty) {
+      throw StateError('No se recibió la ruta de la imagen subida');
+    }
+    if (mounted) {
+      setState(() => _uploadedImagePath = normalizedPath);
+    } else {
+      _uploadedImagePath = normalizedPath;
+    }
+    return normalizedPath;
+  }
+
   Future<void> _save() async {
     if (_isSaving) return;
     FocusManager.instance.primaryFocus?.unfocus();
@@ -7082,11 +7112,7 @@ class _InventoryProductEditorPageState
           : product?.originalFotoUrl?.trim().isNotEmpty == true
           ? product!.originalFotoUrl!.trim()
           : null;
-      final readyImagePath = _uploadedImagePath;
-      final normalizedReadyImagePath =
-          (readyImagePath ?? '').trim().isNotEmpty == true
-          ? readyImagePath!.trim()
-          : null;
+      final normalizedReadyImagePath = await _resolveSelectedImageForSave();
       final imagePathForSave = normalizedReadyImagePath ?? existingImagePath;
       final taxTreatmentForSave = taxEnabled
           ? _taxTreatment
@@ -7166,7 +7192,8 @@ class _InventoryProductEditorPageState
             );
       }
 
-      if ((normalizedReadyImagePath ?? '').isEmpty &&
+      if (_imageBytes == null &&
+          (normalizedReadyImagePath ?? '').isEmpty &&
           pendingImageUpload != null) {
         _attachImageAfterUpload(
           catalogController: catalogController,

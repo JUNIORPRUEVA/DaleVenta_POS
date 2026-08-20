@@ -780,4 +780,34 @@ void main() {
       expect(product.taxPriceMode, isNull);
     },
   );
+
+  test('repository uploadImage prefiere URL servible sobre key cruda', () async {
+    final dio = Dio()
+      ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
+        expect(options.path, contains('/products/upload'));
+        return ResponseBody.fromString(
+          jsonEncode({
+            'key': 'uploads/companies/company-1/products/images/raw.png',
+            'objectKey': 'uploads/companies/company-1/products/images/raw.png',
+            'path':
+                '/media/object?key=uploads%2Fcompanies%2Fcompany-1%2Fproducts%2Fimages%2Fraw.png',
+            'url':
+                '/media/object?key=uploads%2Fcompanies%2Fcompany-1%2Fproducts%2Fimages%2Fraw.png',
+          }),
+          201,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType],
+          },
+        );
+      });
+    final repository = CatalogRepository(dio);
+
+    final uploaded = await repository.uploadImage(
+      bytes: const [1, 2, 3],
+      filename: 'producto.png',
+    );
+
+    expect(uploaded, startsWith('/media/object?key='));
+    expect(uploaded, isNot(startsWith('uploads/companies/')));
+  });
 }

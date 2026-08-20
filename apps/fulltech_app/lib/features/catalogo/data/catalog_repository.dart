@@ -322,17 +322,17 @@ class CatalogRepository {
         options: Options(extra: const {'skipLoader': true}),
       );
       final data = res.data;
-      if (data is Map && data['key'] is String) {
-        return data['key'] as String;
-      }
-      if (data is Map && data['objectKey'] is String) {
-        return data['objectKey'] as String;
-      }
       if (data is Map && data['url'] is String) {
         return data['url'] as String;
       }
       if (data is Map && data['path'] is String) {
         return data['path'] as String;
+      }
+      if (data is Map && data['key'] is String) {
+        return data['key'] as String;
+      }
+      if (data is Map && data['objectKey'] is String) {
+        return data['objectKey'] as String;
       }
       throw ApiException('No se recibió la ruta de la imagen');
     } on DioException catch (e) {

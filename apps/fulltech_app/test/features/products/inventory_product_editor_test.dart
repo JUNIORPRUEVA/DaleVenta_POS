@@ -1006,7 +1006,7 @@ void main() {
   });
 
   testWidgets(
-    'crear EXEMPT guarda rapido y adjunta imagen pendiente sin perder fiscalidad',
+    'crear EXEMPT espera imagen y guarda foto sin perder fiscalidad',
     (tester) async {
       FilePicker? previousPicker;
       try {
@@ -1163,17 +1163,15 @@ void main() {
       await tester.ensureVisible(find.text('Crear producto'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Crear producto'));
-      await tester.pumpAndSettle();
-      expect(repo.creates, 1);
+      await tester.pump();
+      expect(repo.creates, 0);
       expect(repo.updates, 0);
-      expect(repo.lastFotoUrl, isNull);
-      expect(repo.lastTaxTreatment, 'EXEMPT');
 
       repo.uploadCompleter!.complete('/uploads/scanner.png');
       await tester.pumpAndSettle();
 
       expect(repo.creates, 1);
-      expect(repo.updates, 1);
+      expect(repo.updates, 0);
       expect(repo.lastFotoUrl, '/uploads/scanner.png');
       expect(repo.lastTaxTreatment, 'EXEMPT');
       expect(repo.lastTaxRate, isNull);
