@@ -1,14 +1,18 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
-class FulltechImageCacheManager {
-  static const _key = 'fulltechProductImagesV4';
+import '../utils/product_image_url.dart';
 
+class FulltechImageCacheManager {
+  static const _key = 'fulltechProductImagesV5';
+
+  // Product images are versioned by URL/cache key. Thirty days keeps the POS
+  // fast across restarts without allowing the disk cache to grow indefinitely.
   static final CacheManager instance = CacheManager(
     Config(
       _key,
-      stalePeriod: const Duration(days: 365),
-      maxNrOfCacheObjects: 2500,
+      stalePeriod: const Duration(days: 30),
+      maxNrOfCacheObjects: 1200,
     ),
   );
 
@@ -16,8 +20,8 @@ class FulltechImageCacheManager {
     Iterable<String?> urls, {
     int maxUrls = 24,
   }) async {
-    // En Flutter Web, especialmente iOS/Safari, precargar decenas de fotos de
-    // producto puede disparar presión de memoria antes de que el usuario las vea.
+    // On Flutter Web, especially iOS/Safari, preloading many product images can
+    // create unnecessary memory pressure. Desktop uses the persistent disk cache.
     if (kIsWeb) return;
 
     final unique = <String>{};
@@ -30,9 +34,13 @@ class FulltechImageCacheManager {
 
     for (final url in unique) {
       try {
-        await instance.downloadFile(url);
+        final cacheKey = buildProductImageCacheKey(url);
+        await instance.downloadFile(
+          url,
+          key: cacheKey.isEmpty ? url : cacheKey,
+        );
       } catch (_) {
-        // Ignore individual warm-up failures.
+        // A warm-up failure must never block catalog rendering.
       }
     }
   }
@@ -48,9 +56,11 @@ class FulltechImageCacheManager {
     if (normalizedUrl.isEmpty || bytes.isEmpty) return;
 
     try {
+      final cacheKey = buildProductImageCacheKey(normalizedUrl);
       await instance.putFile(
         normalizedUrl,
         Uint8List.fromList(bytes),
+        key: cacheKey.isEmpty ? normalizedUrl : cacheKey,
         fileExtension: _extensionFromFilename(filename),
       );
     } catch (_) {
