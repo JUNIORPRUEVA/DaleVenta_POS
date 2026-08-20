@@ -109,7 +109,6 @@ class CatalogImportResult {
 
 class CatalogController extends StateNotifier<CatalogState> {
   final Ref ref;
-  static const _silentRefreshMinInterval = Duration(seconds: 20);
   bool _remoteRefreshInFlight = false;
   DateTime? _lastSuccessfulRemoteSyncAt;
 
@@ -207,14 +206,6 @@ class CatalogController extends StateNotifier<CatalogState> {
 
   Future<void> load({bool silent = false, bool forceRemote = false}) async {
     if (silent && forceRemote && _remoteRefreshInFlight) return;
-    if (silent &&
-        forceRemote &&
-        state.items.isNotEmpty &&
-        _lastSuccessfulRemoteSyncAt != null &&
-        DateTime.now().difference(_lastSuccessfulRemoteSyncAt!) <
-            _silentRefreshMinInterval) {
-      return;
-    }
     if (silent && forceRemote) {
       _remoteRefreshInFlight = true;
     }
@@ -226,10 +217,10 @@ class CatalogController extends StateNotifier<CatalogState> {
     if (state.items.isEmpty) {
       final cached = await repo.getCachedProducts();
       if (!mounted) return;
-        if (cached.isNotEmpty &&
+      if (cached.isNotEmpty &&
           (requestCompanyId.isEmpty ||
-            ref.read(authStateProvider).user?.companyId?.trim() ==
-              requestCompanyId)) {
+              ref.read(authStateProvider).user?.companyId?.trim() ==
+                  requestCompanyId)) {
         final catalogVersion = buildCatalogSyncVersion(cached);
         state = state.copyWith(
           items: applyCatalogSyncVersion(cached, catalogVersion),
@@ -263,9 +254,9 @@ class CatalogController extends StateNotifier<CatalogState> {
         forceRefresh: forceRemote,
         silent: silent,
       );
-        if (requestCompanyId.isNotEmpty &&
+      if (requestCompanyId.isNotEmpty &&
           ref.read(authStateProvider).user?.companyId?.trim() !=
-            requestCompanyId) {
+              requestCompanyId) {
         return;
       }
       final merged = mergeRecoveredCatalogImages(
