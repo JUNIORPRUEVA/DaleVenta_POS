@@ -109,10 +109,88 @@ class CatalogImportResult {
 
 class CatalogController extends StateNotifier<CatalogState> {
   final Ref ref;
-  bool _remoteRefreshInFlight = false;
-  DateTime? _lastSuccessfulRemoteSyncAt;
+  int _loadRequestSeq = 0;
+  int _mutationSeq = 0;
+  final Map<String, _ConfirmedCatalogMutation> _confirmedMutations = {};
+  final Set<String> _confirmedDeletedIds = <String>{};
 
   CatalogController(this.ref) : super(const CatalogState());
+
+  List<ProductModel> _upsertProduct(
+    List<ProductModel> items,
+    ProductModel product,
+  ) {
+    final next = <ProductModel>[];
+    var replaced = false;
+    for (final item in items) {
+      if (item.id == product.id) {
+        next.add(product);
+        replaced = true;
+      } else {
+        next.add(item);
+      }
+    }
+    if (!replaced) {
+      next.insert(0, product);
+    }
+    return next;
+  }
+
+  void _rememberConfirmedMutation(ProductModel product) {
+    _confirmedDeletedIds.remove(product.id);
+    _confirmedMutations[product.id] = _ConfirmedCatalogMutation(
+      product: product,
+      mutationSeq: _mutationSeq,
+    );
+  }
+
+  void _markConfirmedDelete(String productId) {
+    _confirmedMutations.remove(productId);
+    _confirmedDeletedIds.add(productId);
+  }
+
+  List<ProductModel> _reconcileFetchedItems(List<ProductModel> fetchedItems) {
+    final remoteById = {
+      for (final product in fetchedItems)
+        if (!_confirmedDeletedIds.contains(product.id)) product.id: product,
+    };
+
+    for (final entry in _confirmedMutations.entries) {
+      remoteById[entry.key] = entry.value.product;
+    }
+
+    final ordered = <ProductModel>[];
+    final usedIds = <String>{};
+
+    for (final product in fetchedItems) {
+      if (_confirmedDeletedIds.contains(product.id)) continue;
+      final resolved = remoteById[product.id];
+      if (resolved == null || !usedIds.add(product.id)) continue;
+      ordered.add(resolved);
+    }
+
+    for (final entry in _confirmedMutations.entries) {
+      if (!usedIds.add(entry.key)) continue;
+      ordered.insert(0, entry.value.product);
+    }
+
+    return ordered;
+  }
+
+  void _pruneConfirmedMutations(List<ProductModel> items) {
+    final remoteById = {for (final item in items) item.id: item};
+    final removable = <String>[];
+    for (final entry in _confirmedMutations.entries) {
+      final remote = remoteById[entry.key];
+      if (remote == null) continue;
+      if (areCatalogProductsEquivalent([entry.value.product], [remote])) {
+        removable.add(entry.key);
+      }
+    }
+    for (final id in removable) {
+      _confirmedMutations.remove(id);
+    }
+  }
 
   String _newProductOperationId(String action, {String? productId}) {
     final now = DateTime.now().toUtc().microsecondsSinceEpoch;
@@ -205,10 +283,8 @@ class CatalogController extends StateNotifier<CatalogState> {
   }
 
   Future<void> load({bool silent = false, bool forceRemote = false}) async {
-    if (silent && forceRemote && _remoteRefreshInFlight) return;
-    if (silent && forceRemote) {
-      _remoteRefreshInFlight = true;
-    }
+    final loadRequestSeq = ++_loadRequestSeq;
+    final loadMutationSeq = _mutationSeq;
 
     final requestCompanyId =
         ref.read(authStateProvider).user?.companyId?.trim() ?? '';
@@ -217,6 +293,10 @@ class CatalogController extends StateNotifier<CatalogState> {
     if (state.items.isEmpty) {
       final cached = await repo.getCachedProducts();
       if (!mounted) return;
+      if (loadRequestSeq != _loadRequestSeq ||
+          loadMutationSeq != _mutationSeq) {
+        return;
+      }
       if (cached.isNotEmpty &&
           (requestCompanyId.isEmpty ||
               ref.read(authStateProvider).user?.companyId?.trim() ==
@@ -259,18 +339,26 @@ class CatalogController extends StateNotifier<CatalogState> {
               requestCompanyId) {
         return;
       }
+      if (!mounted) return;
+      if (loadRequestSeq != _loadRequestSeq) {
+        return;
+      }
+      final shouldReconcile =
+          loadMutationSeq != _mutationSeq ||
+          _confirmedMutations.isNotEmpty ||
+          _confirmedDeletedIds.isNotEmpty;
+      final reconciledFetched = shouldReconcile
+          ? _reconcileFetchedItems(fetched)
+          : fetched;
       final merged = mergeRecoveredCatalogImages(
         previousItems: state.items,
-        fetchedItems: fetched,
+        fetchedItems: reconciledFetched,
       );
       final syncVersion = buildCatalogSyncVersion(merged);
       final items = applyCatalogSyncVersion(merged, syncVersion);
+      _pruneConfirmedMutations(fetched);
       if (!areCatalogProductsEquivalent(state.items, items)) {
-        state = state.copyWith(
-          items: items,
-          loading: false,
-          refreshing: false,
-        );
+        state = state.copyWith(items: items, loading: false, refreshing: false);
       } else {
         state = state.copyWith(loading: false, refreshing: false);
       }
@@ -280,33 +368,37 @@ class CatalogController extends StateNotifier<CatalogState> {
           items.map((item) => item.displayFotoUrl),
         ),
       );
-      _lastSuccessfulRemoteSyncAt = DateTime.now();
     } catch (e) {
       final message = e is ApiException
           ? e.message
           : 'No se pudieron cargar los productos';
+      if (!mounted) return;
+      if (loadRequestSeq != _loadRequestSeq ||
+          loadMutationSeq != _mutationSeq) {
+        return;
+      }
       // Keep cached/previous items (if any) so UI doesn't go blank.
       if (silent && state.items.isNotEmpty) return;
       state = state.copyWith(loading: false, refreshing: false, error: message);
-    } finally {
-      if (silent && forceRemote) {
-        _remoteRefreshInFlight = false;
-      }
     }
   }
 
-  Future<void> create({
+  Future<ProductModel?> create({
     required String nombre,
     String? codigo,
     required double precio,
     required double costo,
     required double stock,
     required String categoria,
+    String? fotoUrl,
     List<int>? imageBytes,
     String? filename,
     String? operationId,
+    String? taxTreatment,
+    double? taxRate,
+    String? taxPriceMode,
   }) async {
-    if (state.saving) return;
+    if (state.saving) return null;
     state = state.copyWith(saving: true, actionError: null);
     final saveOperationId = operationId ?? _newProductOperationId('create');
     try {
@@ -336,15 +428,29 @@ class CatalogController extends StateNotifier<CatalogState> {
         precio: precio,
         costo: costo,
         stock: stock,
-        fotoUrl: path,
+        fotoUrl: path ?? fotoUrl,
         categoria: categoria,
         operationId: saveOperationId,
+        taxTreatment: taxTreatment,
+        taxRate: taxRate,
+        taxPriceMode: taxPriceMode,
       );
-      final updated = [created, ...state.items];
+      _mutationSeq += 1;
+      final mutationSeq = _mutationSeq;
+      _rememberConfirmedMutation(created);
+      final updated = _upsertProduct(state.items, created);
       state = state.copyWith(items: updated, saving: false);
       unawaited(_saveSnapshotSafely(repo, updated));
-      await load(forceRemote: true, silent: true);
-      _lastSuccessfulRemoteSyncAt = DateTime.now();
+      unawaited(
+        load(forceRemote: true, silent: true).then((_) {
+          if (!mounted || _mutationSeq != mutationSeq) return;
+          if (state.items.any((item) => item.id == created.id)) return;
+          final refreshed = _upsertProduct(state.items, created);
+          state = state.copyWith(items: refreshed, saving: false);
+          unawaited(_saveSnapshotSafely(repo, refreshed));
+        }),
+      );
+      return created;
     } catch (e) {
       final message = e is ApiException
           ? e.message
@@ -505,7 +611,6 @@ class CatalogController extends StateNotifier<CatalogState> {
       }
       state = state.copyWith(saving: false);
       await load(forceRemote: true);
-      _lastSuccessfulRemoteSyncAt = DateTime.now();
       return CatalogImportResult(
         created: createdCount,
         updated: updatedCount,
@@ -521,7 +626,7 @@ class CatalogController extends StateNotifier<CatalogState> {
     }
   }
 
-  Future<void> update({
+  Future<ProductModel?> update({
     required String id,
     required String nombre,
     String? codigo,
@@ -533,8 +638,11 @@ class CatalogController extends StateNotifier<CatalogState> {
     List<int>? newImageBytes,
     String? newFilename,
     String? operationId,
+    String? taxTreatment,
+    double? taxRate,
+    String? taxPriceMode,
   }) async {
-    if (state.saving) return;
+    if (state.saving) return null;
     state = state.copyWith(saving: true, actionError: null);
     final saveOperationId =
         operationId ?? _newProductOperationId('update', productId: id);
@@ -572,22 +680,49 @@ class CatalogController extends StateNotifier<CatalogState> {
         fotoUrl: uploadedFotoUrl ?? fotoUrl,
         categoria: categoria,
         operationId: saveOperationId,
+        taxTreatment: taxTreatment,
+        taxRate: taxRate,
+        taxPriceMode: taxPriceMode,
       );
+      final fallbackFotoUrl =
+          (uploadedFotoUrl ?? fotoUrl)?.trim().isNotEmpty == true
+          ? (uploadedFotoUrl ?? fotoUrl)!.trim()
+          : null;
+      final previousProduct = state.items.cast<ProductModel?>().firstWhere(
+        (product) => product?.id == id,
+        orElse: () => null,
+      );
+      final resolvedUpdated =
+          updated.displayFotoUrl == null &&
+              (previousProduct != null || fallbackFotoUrl != null)
+          ? updated.copyWith(
+              fotoUrl: previousProduct?.fotoUrl ?? fallbackFotoUrl,
+              originalFotoUrl:
+                  previousProduct?.originalFotoUrl ?? fallbackFotoUrl,
+              imageVersion: previousProduct?.imageVersion,
+            )
+          : updated;
       final list = state.items
-          .map(
-            (p) => p.id == id && updated.displayFotoUrl == null
-                ? updated.copyWith(
-                    fotoUrl: p.fotoUrl,
-                    originalFotoUrl: p.originalFotoUrl,
-                    imageVersion: p.imageVersion,
-                  )
-                : (p.id == id ? updated : p),
-          )
-          .toList();
+          .map((p) => p.id == id ? resolvedUpdated : p)
+          .toList(growable: false);
+      _mutationSeq += 1;
+      final mutationSeq = _mutationSeq;
+      _rememberConfirmedMutation(resolvedUpdated);
       state = state.copyWith(items: list, saving: false);
       unawaited(_saveSnapshotSafely(repo, list));
-      await load(forceRemote: true, silent: true);
-      _lastSuccessfulRemoteSyncAt = DateTime.now();
+      unawaited(
+        load(forceRemote: true, silent: true).then((_) {
+          if (!mounted || _mutationSeq != mutationSeq) return;
+          final refreshed = state.items
+              .map((p) => p.id == id ? resolvedUpdated : p)
+              .toList();
+          if (refreshed.any((p) => p.id == id)) {
+            state = state.copyWith(items: refreshed, saving: false);
+            unawaited(_saveSnapshotSafely(repo, refreshed));
+          }
+        }),
+      );
+      return resolvedUpdated;
     } catch (e) {
       final message = e is ApiException
           ? e.message
@@ -600,8 +735,8 @@ class CatalogController extends StateNotifier<CatalogState> {
   Future<void> adjustStock({
     required ProductModel product,
     required double stock,
-  }) {
-    return update(
+  }) async {
+    await update(
       id: product.id,
       nombre: product.nombre,
       codigo: product.codigo,
@@ -609,6 +744,9 @@ class CatalogController extends StateNotifier<CatalogState> {
       costo: product.costo,
       stock: stock,
       categoria: product.categoriaLabel,
+      taxTreatment: product.taxTreatment,
+      taxRate: product.taxRate,
+      taxPriceMode: product.taxPriceMode,
     );
   }
 
@@ -627,6 +765,8 @@ class CatalogController extends StateNotifier<CatalogState> {
       clearError: true,
       actionError: null,
     );
+    _mutationSeq += 1;
+    _markConfirmedDelete(id);
 
     final repo = ref.read(catalogRepositoryProvider);
     unawaited(
@@ -634,7 +774,6 @@ class CatalogController extends StateNotifier<CatalogState> {
           .deleteProduct(id, skipLoader: true)
           .then((_) async {
             await load(forceRemote: true, silent: true);
-            _lastSuccessfulRemoteSyncAt = DateTime.now();
           })
           .catchError((Object e) {
             final current = state.items;
@@ -656,8 +795,10 @@ class CatalogController extends StateNotifier<CatalogState> {
     state = state.copyWith(saving: true, actionError: null);
     try {
       final result = await ref.read(catalogRepositoryProvider).purgeAllDebug();
+      _mutationSeq += 1;
+      _confirmedMutations.clear();
+      _confirmedDeletedIds.clear();
       state = state.copyWith(items: const [], saving: false, clearError: true);
-      _lastSuccessfulRemoteSyncAt = DateTime.now();
       return (result['deletedProducts'] as num?)?.toInt() ?? 0;
     } catch (e) {
       final message = e is ApiException
@@ -667,4 +808,14 @@ class CatalogController extends StateNotifier<CatalogState> {
       rethrow;
     }
   }
+}
+
+class _ConfirmedCatalogMutation {
+  const _ConfirmedCatalogMutation({
+    required this.product,
+    required this.mutationSeq,
+  });
+
+  final ProductModel product;
+  final int mutationSeq;
 }

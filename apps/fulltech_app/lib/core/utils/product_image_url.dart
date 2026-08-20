@@ -279,10 +279,7 @@ void debugLogProductImageResolution({
   required String? originalUrl,
   required String finalUrl,
 }) {
-  if (!kDebugMode) return;
-  debugPrint(
-    '[product-image][resolve] id=$productId name="$productName" original="${originalUrl ?? ''}" final="$finalUrl"',
-  );
+  // Intencionalmente silencioso: se invoca por cada tarjeta de producto.
 }
 
 void debugLogProductImageFailure({

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +22,8 @@ class _FakeCatalogRepository extends CatalogRepository {
   String? lastTaxTreatment;
   double? lastTaxRate;
   String? lastTaxPriceMode;
+  String? lastFotoUrl;
+  bool dropImageOnUpdateResponse = false;
   Completer<String>? uploadCompleter;
   List<ProductModel> products = [
     _product(id: 'p-1', name: 'Auriculares Pro', category: 'Audio'),
@@ -64,6 +67,7 @@ class _FakeCatalogRepository extends CatalogRepository {
     lastTaxTreatment = taxTreatment;
     lastTaxRate = taxRate;
     lastTaxPriceMode = taxPriceMode;
+    lastFotoUrl = fotoUrl;
     await Future<void>.delayed(const Duration(milliseconds: 20));
     return ProductModel(
       id: 'created-$creates',
@@ -100,6 +104,7 @@ class _FakeCatalogRepository extends CatalogRepository {
     lastTaxTreatment = taxTreatment;
     lastTaxRate = taxRate;
     lastTaxPriceMode = taxPriceMode;
+    lastFotoUrl = fotoUrl;
     await Future<void>.delayed(const Duration(milliseconds: 20));
     return ProductModel(
       id: id,
@@ -109,7 +114,7 @@ class _FakeCatalogRepository extends CatalogRepository {
       costo: costo,
       stock: stock,
       categoria: categoria,
-      fotoUrl: fotoUrl,
+      fotoUrl: dropImageOnUpdateResponse ? null : fotoUrl,
       taxTreatment: taxTreatment ?? 'INHERIT',
       taxRate: taxRate,
       taxPriceMode: taxPriceMode,
@@ -125,6 +130,30 @@ class _FakeCatalogRepository extends CatalogRepository {
     final completer = uploadCompleter;
     if (completer != null) return completer.future;
     return '/uploads/$filename';
+  }
+}
+
+class _FakeFilePicker extends FilePicker {
+  _FakeFilePicker(this.result);
+
+  final FilePickerResult? result;
+
+  @override
+  Future<FilePickerResult?> pickFiles({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    bool allowCompression = true,
+    int compressionQuality = 30,
+    bool allowMultiple = false,
+    bool withData = false,
+    bool withReadStream = false,
+    bool lockParentWindow = false,
+    bool readSequential = false,
+  }) async {
+    return result;
   }
 }
 
@@ -693,6 +722,152 @@ void main() {
     expect(repo.lastTaxPriceMode, isNull);
   });
 
+  testWidgets('editar producto INHERIT a EXEMPT envia EXEMPT al guardar', (
+    tester,
+  ) async {
+    final repo = _FakeCatalogRepository();
+    ProductFormResult? result;
+    final product = ProductModel(
+      id: 'p-tax-edit',
+      nombre: 'Producto fiscal',
+      precio: 100,
+      costo: 60,
+      stock: 1,
+      categoria: 'General',
+      taxTreatment: 'INHERIT',
+    );
+    final taxConfig = ProductTaxUiConfig(
+      settings: CompanySettings.empty().copyWith(
+        taxEnabled: true,
+        defaultTaxRate: 0.18,
+        pricesIncludeTax: false,
+      ),
+      activeTaxes: const [
+        ProductTaxOption(
+          id: 'tax-18',
+          name: 'ITBIS',
+          rate: 0.18,
+          isDefault: true,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          catalogRepositoryProvider.overrideWithValue(repo),
+          productTaxUiConfigProvider.overrideWith((ref) async => taxConfig),
+        ],
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () async {
+                  result = await Navigator.of(context).push<ProductFormResult>(
+                    MaterialPageRoute<ProductFormResult>(
+                      builder: (_) => InventoryProductEditorPage(
+                        product: product,
+                        categories: const ['General'],
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('Abrir editor fiscal'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Abrir editor fiscal'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Predeterminado').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Exento').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Guardar cambios'));
+    await tester.pumpAndSettle();
+
+    expect(repo.lastTaxTreatment, 'EXEMPT');
+    expect(repo.lastTaxRate, isNull);
+    expect(repo.lastTaxPriceMode, isNull);
+    expect(result?.product?.taxTreatment, 'EXEMPT');
+  });
+
+  testWidgets('editar producto EXEMPT a INHERIT envia INHERIT al guardar', (
+    tester,
+  ) async {
+    final repo = _FakeCatalogRepository();
+    ProductFormResult? result;
+    final product = ProductModel(
+      id: 'p-tax-edit',
+      nombre: 'Producto fiscal',
+      precio: 100,
+      costo: 60,
+      stock: 1,
+      categoria: 'General',
+      taxTreatment: 'EXEMPT',
+    );
+    final taxConfig = ProductTaxUiConfig(
+      settings: CompanySettings.empty().copyWith(
+        taxEnabled: true,
+        defaultTaxRate: 0.18,
+        pricesIncludeTax: false,
+      ),
+      activeTaxes: const [
+        ProductTaxOption(
+          id: 'tax-18',
+          name: 'ITBIS',
+          rate: 0.18,
+          isDefault: true,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          catalogRepositoryProvider.overrideWithValue(repo),
+          productTaxUiConfigProvider.overrideWith((ref) async => taxConfig),
+        ],
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () async {
+                  result = await Navigator.of(context).push<ProductFormResult>(
+                    MaterialPageRoute<ProductFormResult>(
+                      builder: (_) => InventoryProductEditorPage(
+                        product: product,
+                        categories: const ['General'],
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('Abrir editor fiscal'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Abrir editor fiscal'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Exento').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Predeterminado').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Guardar cambios'));
+    await tester.pumpAndSettle();
+
+    expect(repo.lastTaxTreatment, 'INHERIT');
+    expect(repo.lastTaxRate, isNull);
+    expect(repo.lastTaxPriceMode, isNull);
+    expect(result?.product?.taxTreatment, 'INHERIT');
+  });
+
   testWidgets(
     'formulario oculta sección fiscal cuando impuestos están apagados',
     (tester) async {
@@ -756,6 +931,256 @@ void main() {
     expect(repo.creates, 0);
     expect(find.text('Editar producto'), findsNothing);
   });
+
+  testWidgets('editar EXEMPT reenvia la imagen actual al guardar', (
+    tester,
+  ) async {
+    final repo = _FakeCatalogRepository();
+    ProductFormResult? result;
+    final product = ProductModel(
+      id: 'p-image-tax',
+      nombre: 'Escaner',
+      precio: 2500,
+      costo: 1300,
+      stock: 1,
+      categoria: 'General',
+      fotoUrl: '/uploads/existing.png',
+    );
+    final taxConfig = ProductTaxUiConfig(
+      settings: CompanySettings.empty().copyWith(
+        taxEnabled: true,
+        defaultTaxRate: 0.18,
+        pricesIncludeTax: false,
+      ),
+      activeTaxes: const [
+        ProductTaxOption(
+          id: 'tax-18',
+          name: 'ITBIS',
+          rate: 0.18,
+          isDefault: true,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          catalogRepositoryProvider.overrideWithValue(repo),
+          productTaxUiConfigProvider.overrideWith((ref) async => taxConfig),
+        ],
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () async {
+                  result = await Navigator.of(context).push<ProductFormResult>(
+                    MaterialPageRoute<ProductFormResult>(
+                      builder: (_) => InventoryProductEditorPage(
+                        product: product,
+                        categories: const ['General'],
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('Abrir editor con imagen'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Abrir editor con imagen'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Predeterminado').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Exento').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Guardar cambios'));
+    await tester.pumpAndSettle();
+
+    expect(repo.lastTaxTreatment, 'EXEMPT');
+    expect(repo.lastFotoUrl, '/uploads/existing.png');
+    expect(result?.product?.taxTreatment, 'EXEMPT');
+    expect(result?.product?.displayFotoUrl, isNotNull);
+  });
+
+  testWidgets(
+    'crear EXEMPT guarda rapido y adjunta imagen pendiente sin perder fiscalidad',
+    (tester) async {
+      FilePicker? previousPicker;
+      try {
+        previousPicker = FilePicker.platform;
+      } catch (_) {
+        previousPicker = null;
+      }
+      FilePicker.platform = _FakeFilePicker(
+        FilePickerResult([
+          PlatformFile(
+            name: 'scanner.png',
+            size: 68,
+            bytes: Uint8List.fromList([
+              0x89,
+              0x50,
+              0x4E,
+              0x47,
+              0x0D,
+              0x0A,
+              0x1A,
+              0x0A,
+              0x00,
+              0x00,
+              0x00,
+              0x0D,
+              0x49,
+              0x48,
+              0x44,
+              0x52,
+              0x00,
+              0x00,
+              0x00,
+              0x01,
+              0x00,
+              0x00,
+              0x00,
+              0x01,
+              0x08,
+              0x06,
+              0x00,
+              0x00,
+              0x00,
+              0x1F,
+              0x15,
+              0xC4,
+              0x89,
+              0x00,
+              0x00,
+              0x00,
+              0x0B,
+              0x49,
+              0x44,
+              0x41,
+              0x54,
+              0x78,
+              0x9C,
+              0x63,
+              0x00,
+              0x01,
+              0x00,
+              0x00,
+              0x05,
+              0x00,
+              0x01,
+              0x0D,
+              0x0A,
+              0x2D,
+              0xB4,
+              0x00,
+              0x00,
+              0x00,
+              0x00,
+              0x49,
+              0x45,
+              0x4E,
+              0x44,
+              0xAE,
+              0x42,
+              0x60,
+              0x82,
+            ]),
+          ),
+        ]),
+      );
+      if (previousPicker != null) {
+        addTearDown(() => FilePicker.platform = previousPicker!);
+      }
+
+      final repo = _FakeCatalogRepository()
+        ..uploadCompleter = Completer<String>();
+      ProductFormResult? result;
+      final taxConfig = ProductTaxUiConfig(
+        settings: CompanySettings.empty().copyWith(
+          taxEnabled: true,
+          defaultTaxRate: 0.18,
+          pricesIncludeTax: false,
+        ),
+        activeTaxes: const [
+          ProductTaxOption(
+            id: 'tax-18',
+            name: 'ITBIS',
+            rate: 0.18,
+            isDefault: true,
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            catalogRepositoryProvider.overrideWithValue(repo),
+            productTaxUiConfigProvider.overrideWith((ref) async => taxConfig),
+          ],
+          child: MaterialApp(
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: ElevatedButton(
+                  onPressed: () async {
+                    result = await Navigator.of(context)
+                        .push<ProductFormResult>(
+                          MaterialPageRoute<ProductFormResult>(
+                            builder: (_) => const InventoryProductEditorPage(
+                              product: null,
+                              categories: ['General'],
+                            ),
+                          ),
+                        );
+                  },
+                  child: const Text('Abrir crear'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Abrir crear'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(0), 'Scanner nuevo');
+      await tester.enterText(find.byType(TextField).at(2), '2500');
+      await tester.enterText(find.byType(TextField).at(3), '1300');
+      await tester.enterText(find.byType(TextField).at(4), '5');
+      await tester.enterText(find.byType(TextField).at(5), 'General');
+      await tester.tap(find.text('Predeterminado').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Exento').last);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Subir imagen desde el ordenador'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Subir imagen desde el ordenador'));
+      await tester.pump();
+      expect(repo.uploads, 1);
+
+      await tester.ensureVisible(find.text('Crear producto'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Crear producto'));
+      await tester.pumpAndSettle();
+      expect(repo.creates, 1);
+      expect(repo.updates, 0);
+      expect(repo.lastFotoUrl, isNull);
+      expect(repo.lastTaxTreatment, 'EXEMPT');
+
+      repo.uploadCompleter!.complete('/uploads/scanner.png');
+      await tester.pumpAndSettle();
+
+      expect(repo.creates, 1);
+      expect(repo.updates, 1);
+      expect(repo.lastFotoUrl, '/uploads/scanner.png');
+      expect(repo.lastTaxTreatment, 'EXEMPT');
+      expect(repo.lastTaxRate, isNull);
+      expect(repo.lastTaxPriceMode, isNull);
+      expect(result?.product?.taxTreatment, 'EXEMPT');
+    },
+  );
 
   testWidgets('escribir letras en código no guarda automáticamente', (
     tester,

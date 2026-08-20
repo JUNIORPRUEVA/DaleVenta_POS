@@ -160,16 +160,15 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     var total = 0.0;
     final includedByRate = <String, ({double rate, double total})>{};
     for (final item in _cart) {
-      final product = item.product;
       final preview = ProductTaxPreviewCalculator.calculate(
         price: item.priceSoldUnit,
         quantity: item.qty,
         companyTaxEnabled: true,
         companyPricesIncludeTax: taxConfig!.settings.pricesIncludeTax,
         companyDefaultTaxRate: taxConfig.defaultRate,
-        taxTreatment: product?.taxTreatment ?? 'INHERIT',
-        taxRate: product?.taxRate,
-        taxPriceMode: product?.taxPriceMode,
+        taxTreatment: item.effectiveTaxTreatment,
+        taxRate: item.effectiveTaxRate,
+        taxPriceMode: item.effectiveTaxPriceMode,
       );
       if (preview.taxable && preview.priceIncludesTax) {
         final key = preview.rate.toStringAsFixed(6);
@@ -298,6 +297,9 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       if (previousCompanyId == nextCompanyId) return;
       _handleCompanyChanged(nextCompanyId);
     });
+    ref.listenManual<CatalogState>(catalogControllerProvider, (previous, next) {
+      _applyCatalogControllerProducts(next.items);
+    });
     WidgetsBinding.instance.addObserver(this);
     _subscribeRealtime();
     _startLiveSync();
@@ -333,6 +335,41 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
         .read(catalogRealtimeServiceProvider)
         .stream
         .listen((_) => _loadProducts(forceRemote: true, silent: true));
+  }
+
+  void _applyCatalogControllerProducts(List<ProductModel> rows) {
+    if (!mounted || rows.isEmpty) return;
+    final syncVersion = buildCatalogSyncVersion(rows);
+    final products = applyCatalogSyncVersion(rows, syncVersion);
+    final productsChanged = !areCatalogProductsEquivalent(_products, products);
+    final productsById = {for (final product in products) product.id: product};
+    var cartChanged = false;
+    final nextCart = _cart
+        .map((item) {
+          final productId = item.product?.id ?? item.productId;
+          final product = productsById[productId];
+          if (product == null || item.product == product) return item;
+          final current = item.product;
+          if (current != null &&
+              areCatalogProductsEquivalent([current], [product])) {
+            return item;
+          }
+          cartChanged = true;
+          return item.copyWith(product: product);
+        })
+        .toList(growable: false);
+
+    if (!productsChanged && !cartChanged && !_loadingProducts) return;
+
+    setState(() {
+      if (productsChanged) {
+        _products = products;
+      }
+      if (cartChanged) {
+        _cart = nextCart;
+      }
+      _loadingProducts = false;
+    });
   }
 
   @override

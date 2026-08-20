@@ -900,9 +900,11 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
       ),
     );
     if (!mounted || result?.saved != true) return;
-    await ref
-        .read(catalogControllerProvider.notifier)
-        .load(forceRemote: true, silent: true);
+    if (result?.product == null) {
+      await ref
+          .read(catalogControllerProvider.notifier)
+          .load(forceRemote: true, silent: true);
+    }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -1119,6 +1121,9 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
         stock: product.stock ?? 0,
         categoria: category,
         fotoUrl: product.fotoUrl ?? product.originalFotoUrl,
+        taxTreatment: product.taxTreatment,
+        taxRate: product.taxRate,
+        taxPriceMode: product.taxPriceMode,
       );
     }
   }
@@ -4612,10 +4617,15 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
       await controller.update(
         id: product.id,
         nombre: product.nombre,
+        codigo: product.codigo,
         precio: product.precio,
         costo: product.costo,
         stock: product.stock ?? 0,
         categoria: newName,
+        fotoUrl: product.fotoUrl ?? product.originalFotoUrl,
+        taxTreatment: product.taxTreatment,
+        taxRate: product.taxRate,
+        taxPriceMode: product.taxPriceMode,
       );
     }
     await widget.onRefresh();
@@ -6486,9 +6496,10 @@ Future<void> _showStockAdjustmentPanel(
 }
 
 class ProductFormResult {
-  const ProductFormResult({required this.saved});
+  const ProductFormResult({required this.saved, this.product});
 
   final bool saved;
+  final ProductModel? product;
 }
 
 InputDecoration _inventoryTextInputDecoration(
@@ -6806,7 +6817,6 @@ class _InventoryProductEditorPageState
   @override
   void initState() {
     super.initState();
-    debugPrint('[ProductForm#$hashCode] initState');
     ref.listenManual<AuthState>(authStateProvider, (previous, next) {
       final previousCompanyId = (previous?.user?.companyId ?? '').trim();
       final nextCompanyId = (next.user?.companyId ?? '').trim();
@@ -6844,7 +6854,6 @@ class _InventoryProductEditorPageState
 
   @override
   void dispose() {
-    debugPrint('[ProductForm#$hashCode] dispose');
     _nameCtrl.dispose();
     _codeCtrl.dispose();
     _priceCtrl.removeListener(_onTaxPreviewInputChanged);
@@ -6900,7 +6909,6 @@ class _InventoryProductEditorPageState
 
   Future<void> _pickImage() async {
     if (_isPickingImage || _isSaving) return;
-    debugPrint('[ProductForm#$hashCode] pick start mounted=$mounted');
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _isPickingImage = true;
@@ -6929,7 +6937,6 @@ class _InventoryProductEditorPageState
       if (!mounted) return;
       setState(() => _formError = 'No se pudo leer la imagen: $e');
     } finally {
-      debugPrint('[ProductForm#$hashCode] pick end mounted=$mounted');
       if (mounted) {
         setState(() => _isPickingImage = false);
       }
@@ -6977,9 +6984,6 @@ class _InventoryProductEditorPageState
         );
         return path;
       } catch (e) {
-        debugPrint(
-          '[ProductForm#$hashCode] image upload attempt ${attempt + 1} failed: $e',
-        );
         if (attempt < 2) {
           await Future<void>.delayed(
             Duration(milliseconds: 450 * (attempt + 1)),
@@ -6991,7 +6995,7 @@ class _InventoryProductEditorPageState
   }
 
   void _attachImageAfterUpload({
-    required CatalogRepository repo,
+    required CatalogController catalogController,
     required ProductModel saved,
     required Future<String?> upload,
     required String name,
@@ -7000,13 +7004,16 @@ class _InventoryProductEditorPageState
     required double cost,
     required double stock,
     required String category,
+    required String? taxTreatment,
+    required double? taxRate,
+    required String? taxPriceMode,
   }) {
     unawaited(
       upload.then((path) async {
         final normalizedPath = (path ?? '').trim();
         if (normalizedPath.isEmpty) return;
         try {
-          await repo.updateProduct(
+          await catalogController.update(
             id: saved.id,
             nombre: name,
             codigo: code.isEmpty ? null : code,
@@ -7016,12 +7023,12 @@ class _InventoryProductEditorPageState
             categoria: category,
             fotoUrl: normalizedPath,
             operationId: _newSaveOperationId(saved),
-            skipLoader: true,
+            taxTreatment: taxTreatment,
+            taxRate: taxRate,
+            taxPriceMode: taxPriceMode,
           );
         } catch (e) {
-          debugPrint(
-            '[ProductForm#$hashCode] silent background image attach failed: $e',
-          );
+          // La imagen pendiente no debe revertir ni bloquear el guardado fiscal.
         }
       }),
     );
@@ -7029,7 +7036,6 @@ class _InventoryProductEditorPageState
 
   Future<void> _save() async {
     if (_isSaving) return;
-    debugPrint('[ProductForm#$hashCode] save start mounted=$mounted');
     FocusManager.instance.primaryFocus?.unfocus();
 
     final name = _nameCtrl.text.trim();
@@ -7070,54 +7076,100 @@ class _InventoryProductEditorPageState
     final operationId = _newSaveOperationId(product);
     try {
       final repo = ref.read(catalogRepositoryProvider);
-      final readyImagePath = _uploadedImagePath;
       final pendingImageUpload = _imageUploadFuture;
+      final existingImagePath = product?.fotoUrl?.trim().isNotEmpty == true
+          ? product!.fotoUrl!.trim()
+          : product?.originalFotoUrl?.trim().isNotEmpty == true
+          ? product!.originalFotoUrl!.trim()
+          : null;
+      final readyImagePath = _uploadedImagePath;
+      final normalizedReadyImagePath =
+          (readyImagePath ?? '').trim().isNotEmpty == true
+          ? readyImagePath!.trim()
+          : null;
+      final imagePathForSave = normalizedReadyImagePath ?? existingImagePath;
+      final taxTreatmentForSave = taxEnabled
+          ? _taxTreatment
+          : product?.taxTreatment;
+      final taxRateForSave = taxEnabled && _taxTreatment == 'TAXABLE'
+          ? effectiveTaxRate
+          : taxEnabled
+          ? null
+          : product?.taxRate;
+      final taxPriceModeForSave = taxEnabled && _taxTreatment == 'TAXABLE'
+          ? _taxPriceMode
+          : taxEnabled
+          ? null
+          : product?.taxPriceMode;
       ProductModel saved;
+      final catalogController = ref.read(catalogControllerProvider.notifier);
 
       if (product == null) {
-        saved = await repo.createProduct(
-          nombre: name,
-          codigo: code.isEmpty ? null : code,
-          precio: price,
-          costo: cost,
-          stock: stock,
-          categoria: category,
-          fotoUrl: readyImagePath,
-          operationId: operationId,
-          taxTreatment: taxEnabled ? _taxTreatment : null,
-          taxRate: taxEnabled && _taxTreatment == 'TAXABLE'
-              ? effectiveTaxRate
-              : null,
-          taxPriceMode: taxEnabled && _taxTreatment == 'TAXABLE'
-              ? _taxPriceMode
-              : null,
-          skipLoader: true,
-        );
+        saved =
+            await catalogController.create(
+              nombre: name,
+              codigo: code.isEmpty ? null : code,
+              precio: price,
+              costo: cost,
+              stock: stock,
+              categoria: category,
+              fotoUrl: imagePathForSave,
+              operationId: operationId,
+              taxTreatment: taxTreatmentForSave,
+              taxRate: taxRateForSave,
+              taxPriceMode: taxPriceModeForSave,
+            ) ??
+            await repo.createProduct(
+              nombre: name,
+              codigo: code.isEmpty ? null : code,
+              precio: price,
+              costo: cost,
+              stock: stock,
+              categoria: category,
+              fotoUrl: imagePathForSave,
+              operationId: operationId,
+              taxTreatment: taxTreatmentForSave,
+              taxRate: taxRateForSave,
+              taxPriceMode: taxPriceModeForSave,
+              skipLoader: true,
+            );
       } else {
-        saved = await repo.updateProduct(
-          id: product.id,
-          nombre: name,
-          codigo: code.isEmpty ? null : code,
-          precio: price,
-          costo: cost,
-          stock: stock,
-          categoria: category,
-          fotoUrl: readyImagePath,
-          operationId: operationId,
-          taxTreatment: taxEnabled ? _taxTreatment : null,
-          taxRate: taxEnabled && _taxTreatment == 'TAXABLE'
-              ? effectiveTaxRate
-              : null,
-          taxPriceMode: taxEnabled && _taxTreatment == 'TAXABLE'
-              ? _taxPriceMode
-              : null,
-          skipLoader: true,
-        );
+        saved =
+            await catalogController.update(
+              id: product.id,
+              nombre: name,
+              codigo: code.isEmpty ? null : code,
+              precio: price,
+              costo: cost,
+              stock: stock,
+              categoria: category,
+              fotoUrl: imagePathForSave,
+              operationId: operationId,
+              taxTreatment: taxTreatmentForSave,
+              taxRate: taxRateForSave,
+              taxPriceMode: taxPriceModeForSave,
+            ) ??
+            await repo.updateProduct(
+              id: product.id,
+              nombre: name,
+              codigo: code.isEmpty ? null : code,
+              precio: price,
+              costo: cost,
+              stock: stock,
+              categoria: category,
+              fotoUrl: imagePathForSave,
+              operationId: operationId,
+              taxTreatment: taxTreatmentForSave,
+              taxRate: taxRateForSave,
+              taxPriceMode: taxPriceModeForSave,
+              skipLoader: true,
+            );
       }
 
-      if ((readyImagePath ?? '').trim().isEmpty && pendingImageUpload != null) {
+      if ((normalizedReadyImagePath ?? '').isEmpty &&
+          pendingImageUpload != null) {
         _attachImageAfterUpload(
-          repo: repo,
+          catalogController: catalogController,
           saved: saved,
           upload: pendingImageUpload,
           name: name,
@@ -7126,12 +7178,14 @@ class _InventoryProductEditorPageState
           cost: cost,
           stock: stock,
           category: category,
+          taxTreatment: taxTreatmentForSave,
+          taxRate: taxRateForSave,
+          taxPriceMode: taxPriceModeForSave,
         );
       }
 
       if (!mounted) return;
-      debugPrint('[ProductForm#$hashCode] pop saved');
-      Navigator.of(context).pop(const ProductFormResult(saved: true));
+      Navigator.of(context).pop(ProductFormResult(saved: true, product: saved));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -7144,7 +7198,6 @@ class _InventoryProductEditorPageState
   void _close() {
     if (_isSaving) return;
     FocusManager.instance.primaryFocus?.unfocus();
-    debugPrint('[ProductForm#$hashCode] pop cancel');
     Navigator.of(context).pop(const ProductFormResult(saved: false));
   }
 

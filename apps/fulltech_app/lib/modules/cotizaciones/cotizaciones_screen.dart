@@ -183,6 +183,69 @@ class CotizacionesScreen extends ConsumerStatefulWidget {
   ConsumerState<CotizacionesScreen> createState() => _CotizacionesScreenState();
 }
 
+CotizacionItem buildBillingItemFromProduct(ProductModel product) {
+  return CotizacionItem(
+    productId: product.id,
+    nombre: product.nombre,
+    imageUrl: product.displayFotoUrl,
+    originalUnitPrice: product.precio,
+    unitPrice: product.precio,
+    qty: 1,
+    costUnit: product.costo,
+    taxTreatment: product.taxTreatment,
+    taxRate: product.taxRate ?? 0,
+    taxPriceMode: product.taxPriceMode ?? 'NO_TAX',
+  );
+}
+
+CotizacionItem syncBillingItemFiscalFromProduct(
+  CotizacionItem item,
+  ProductModel product,
+) {
+  return item.copyWith(
+    taxTreatment: product.taxTreatment,
+    taxRate: product.taxRate ?? 0,
+    taxPriceMode: product.taxPriceMode ?? 'NO_TAX',
+  );
+}
+
+List<CotizacionItem> syncBillingItemsFiscalFromProducts({
+  required Iterable<CotizacionItem> items,
+  required Map<String, ProductModel> productsById,
+}) {
+  return items
+      .map((item) {
+        final product = productsById[item.productId];
+        if (product == null) return item;
+        return syncBillingItemFiscalFromProduct(item, product);
+      })
+      .toList(growable: false);
+}
+
+bool _areBillingItemsFiscalEquivalent(
+  List<CotizacionItem> previous,
+  List<CotizacionItem> next,
+) {
+  if (previous.length != next.length) return false;
+  for (var index = 0; index < previous.length; index++) {
+    final left = previous[index];
+    final right = next[index];
+    if (left.taxTreatment != right.taxTreatment ||
+        left.taxRate != right.taxRate ||
+        left.taxPriceMode != right.taxPriceMode) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool shouldShowBillingItbis({
+  required bool taxEnabled,
+  required double taxAmount,
+}) {
+  return taxEnabled && taxAmount > 0;
+}
+
 class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     with WidgetsBindingObserver
     implements RouteAware {
@@ -273,6 +336,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       final nextCompanyId = (next.user?.companyId ?? '').trim();
       if (previousCompanyId == nextCompanyId) return;
       _handleCompanyChanged(nextCompanyId, next.user);
+    });
+    ref.listenManual<CatalogState>(catalogControllerProvider, (previous, next) {
+      _applyCatalogControllerProducts(next.items);
     });
     WidgetsBinding.instance.addObserver(this);
     _subscribeRealtime();
@@ -405,6 +471,62 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         .read(catalogRealtimeServiceProvider)
         .stream
         .listen((_) => _loadProducts(forceRemote: true, silent: true));
+  }
+
+  void _applyCatalogControllerProducts(List<ProductModel> rows) {
+    if (!mounted || rows.isEmpty) return;
+    final catalogVersion = buildCatalogSyncVersion(rows);
+    final syncedRows = applyCatalogSyncVersion(rows, catalogVersion);
+    final productsChanged = !areCatalogProductsEquivalent(
+      _productos,
+      syncedRows,
+    );
+    final productsById = {
+      for (final product in syncedRows) product.id: product,
+    };
+    var itemsChanged = false;
+    final nextItems = syncBillingItemsFiscalFromProducts(
+      items: _items,
+      productsById: productsById,
+    );
+    itemsChanged = !_areBillingItemsFiscalEquivalent(_items, nextItems);
+
+    if (!productsChanged && !itemsChanged && !_loadingProducts) return;
+
+    setState(() {
+      if (productsChanged) {
+        _productos = syncedRows;
+      }
+      if (itemsChanged) {
+        _items
+          ..clear()
+          ..addAll(nextItems);
+        _writeActiveDesktopDraft();
+      }
+      _loadingProducts = false;
+      _error = null;
+    });
+    if (itemsChanged) {
+      _schedulePersistEditorDraft();
+      unawaited(_syncQuotationAi());
+    }
+  }
+
+  bool _syncEditorItemsFiscalWithLoadedProducts() {
+    if (_productos.isEmpty || _items.isEmpty) return false;
+    final productsById = {
+      for (final product in _productos) product.id: product,
+    };
+    final nextItems = syncBillingItemsFiscalFromProducts(
+      items: _items,
+      productsById: productsById,
+    );
+    if (_areBillingItemsFiscalEquivalent(_items, nextItems)) return false;
+    _items
+      ..clear()
+      ..addAll(nextItems);
+    _writeActiveDesktopDraft();
+    return true;
   }
 
   void _startLiveSync() {
@@ -726,6 +848,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         _desktopTickets = tickets;
         _activeDesktopTicketId = activeId;
         _replaceEditorStateFromDraft(activeTicket);
+        _syncEditorItemsFiscalWithLoadedProducts();
         _writeActiveDesktopDraft();
       });
       _applyClientPrefillFromRoute(force: true);
@@ -755,6 +878,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           _desktopTickets = tickets;
           _activeDesktopTicketId = activeId;
           _replaceEditorStateFromDraft(tickets.first);
+          _syncEditorItemsFiscalWithLoadedProducts();
           _writeActiveDesktopDraft();
         });
         unawaited(_applyQuotationPrefillFromRoute());
@@ -827,12 +951,32 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       final syncedAt = DateTime.now();
 
       if (!mounted) return;
-      if (!areCatalogProductsEquivalent(_productos, syncedRows)) {
+      final productsById = {
+        for (final product in syncedRows) product.id: product,
+      };
+      var itemsChanged = false;
+      final nextItems = syncBillingItemsFiscalFromProducts(
+        items: _items,
+        productsById: productsById,
+      );
+      itemsChanged = !_areBillingItemsFiscalEquivalent(_items, nextItems);
+      if (!areCatalogProductsEquivalent(_productos, syncedRows) ||
+          itemsChanged) {
         setState(() {
           _productos = syncedRows;
+          if (itemsChanged) {
+            _items
+              ..clear()
+              ..addAll(nextItems);
+            _writeActiveDesktopDraft();
+          }
           _loadingProducts = false;
           _error = null;
         });
+        if (itemsChanged) {
+          _schedulePersistEditorDraft();
+          unawaited(_syncQuotationAi());
+        }
       } else if (_loadingProducts) {
         setState(() {
           _loadingProducts = false;
@@ -1108,6 +1252,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   double get _discountAmount =>
       _lineDiscountAmount + _effectiveGeneralDiscountAmount;
   double get _taxAmount => _quoteTaxSummary.taxAmount;
+  bool get _shouldShowItbis => shouldShowBillingItbis(
+    taxEnabled: _quoteTaxEnabled,
+    taxAmount: _taxAmount,
+  );
   double get _totalCost =>
       _items.fold(0, (sum, item) => sum + item.subtotalCost);
   double get _total =>
@@ -1152,6 +1300,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             qty: item.qty,
             priceSoldUnit: priceSoldUnit,
             costUnitSnapshot: item.tracedCostUnit ?? 0,
+            taxTreatment: item.taxTreatment,
+            taxRate: item.taxRate > 0 ? item.taxRate : null,
+            taxPriceMode: item.taxPriceMode,
           );
         }(),
     ];
@@ -1338,7 +1489,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         'RNC/Cédula: ${_fiscalCustomerTaxId.trim()}',
       if (_fiscalCustomerName.trim().isNotEmpty)
         'Razón social: ${_fiscalCustomerName.trim()}',
-      'ITBIS ${(_quoteTaxSummary.defaultRate * 100).toStringAsFixed(0)}%: ${_money(_taxAmount)}',
+      if (_shouldShowItbis)
+        'ITBIS ${(_quoteTaxSummary.defaultRate * 100).toStringAsFixed(0)}%: ${_money(_taxAmount)}',
     ];
   }
 
@@ -1441,6 +1593,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       _activeDesktopTicketId = next.id;
       _showMobileTicketDropdown = false;
       _replaceEditorStateFromDraft(next);
+      _syncEditorItemsFiscalWithLoadedProducts();
     });
     _schedulePersistEditorDraft();
     unawaited(_syncQuotationAi());
@@ -2594,19 +2747,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _commitEditorChange(() {
       if (index >= 0) {
         final current = _items[index];
-        _items[index] = current.copyWith(qty: current.qty + 1);
-      } else {
-        _items.add(
-          CotizacionItem(
-            productId: product.id,
-            nombre: product.nombre,
-            imageUrl: product.displayFotoUrl,
-            originalUnitPrice: product.precio,
-            unitPrice: product.precio,
-            qty: 1,
-            costUnit: product.costo,
-          ),
+        _items[index] = syncBillingItemFiscalFromProduct(
+          current.copyWith(qty: current.qty + 1),
+          product,
         );
+      } else {
+        _items.add(buildBillingItemFromProduct(product));
       }
     });
     final isMobile =
@@ -4057,7 +4203,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       customerName: _selectedClientName,
       customerPhone: _selectedClientPhone,
       note: _note,
-      includeItbis: _quoteTaxEnabled && _taxAmount > 0,
+      includeItbis: _shouldShowItbis,
       itbisRate: _quoteTaxSummary.defaultRate,
       fiscalTaxEnabled: _quoteTaxEnabled,
       fiscalPriceMode: _quoteTaxEnabled
@@ -6034,7 +6180,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     ),
                   ),
                 ),
-                if (_quoteTaxEnabled)
+                if (_shouldShowItbis)
                   GestureDetector(
                     onTap: () => unawaited(
                       _openMobileFiscalInvoicePanel(authorized: true),
@@ -6359,7 +6505,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                             items: _items,
                             selectedClientName: _selectedClientName,
                             selectedClientPhone: _selectedClientPhone,
-                            includeItbis: _quoteTaxEnabled,
+                            includeItbis: _shouldShowItbis,
                             subtotalBeforeDiscount: _subtotalBeforeDiscount,
                             discountAmount: _lineDiscountAmount,
                             generalDiscountAmount:
@@ -6377,7 +6523,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                               _selectedClientPhone = null;
                             }),
                             onOpenHistory: _openRecentSalesPanel,
-                            onOpenFiscalData: _quoteTaxEnabled
+                            onOpenFiscalData: _shouldShowItbis
                                 ? () => unawaited(
                                     _openMobileFiscalInvoicePanel(
                                       authorized: true,

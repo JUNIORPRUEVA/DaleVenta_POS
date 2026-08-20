@@ -37,13 +37,14 @@ class CatalogRepository {
 
   bool _handlersRegistered = false;
   final Map<String, Future<List<ProductModel>>> _remoteFetches = {};
+  final Map<String, int> _remoteFetchSeqByCompany = {};
 
   CatalogRepository(
     this._dio, [
     TokenStorage? tokenStorage,
     this._syncQueue,
     Duration networkFreshnessWindow = _networkFreshnessTtl,
-     LocalJsonCache? cache,
+    LocalJsonCache? cache,
   ]) : _tokenStorage = tokenStorage ?? TokenStorage(),
        _networkFreshnessWindow = networkFreshnessWindow,
        _cache = cache ?? LocalJsonCache();
@@ -64,6 +65,11 @@ class CatalogRepository {
         fotoUrl: payload['fotoUrl']?.toString(),
         categoria: (payload['categoria'] ?? '').toString(),
         operationId: payload['operationId']?.toString(),
+        taxTreatment: payload['taxTreatment']?.toString(),
+        taxRate: payload.containsKey('taxRate')
+            ? _asNullableDouble(payload['taxRate'])
+            : null,
+        taxPriceMode: payload['taxPriceMode']?.toString(),
         skipLoader: true,
       );
     });
@@ -79,6 +85,11 @@ class CatalogRepository {
         fotoUrl: payload['fotoUrl']?.toString(),
         categoria: payload['categoria']?.toString(),
         operationId: payload['operationId']?.toString(),
+        taxTreatment: payload['taxTreatment']?.toString(),
+        taxRate: payload.containsKey('taxRate')
+            ? _asNullableDouble(payload['taxRate'])
+            : null,
+        taxPriceMode: payload['taxPriceMode']?.toString(),
         skipLoader: true,
       );
     });
@@ -94,6 +105,12 @@ class CatalogRepository {
   double _asDouble(dynamic value) {
     if (value is num) return value.toDouble();
     return double.tryParse((value ?? '').toString().replaceAll(',', '.')) ?? 0;
+  }
+
+  double? _asNullableDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString().replaceAll(',', '.'));
   }
 
   bool _shouldQueueSync(ApiException error) {
@@ -182,17 +199,22 @@ class CatalogRepository {
     }
 
     final existing = _remoteFetches[companyId];
-    if (existing != null) return existing;
+    if (existing != null && !forceRefresh) return existing;
+
+    final requestSeq = (_remoteFetchSeqByCompany[companyId] ?? 0) + 1;
+    _remoteFetchSeqByCompany[companyId] = requestSeq;
 
     late final Future<List<ProductModel>> future;
-    future = _fetchProductsRemote(
-      companyId: companyId,
-      silent: silent,
-    ).whenComplete(() {
-      if (identical(_remoteFetches[companyId], future)) {
-        _remoteFetches.remove(companyId);
-      }
-    });
+    future =
+        _fetchProductsRemote(
+          companyId: companyId,
+          silent: silent,
+          requestSeq: requestSeq,
+        ).whenComplete(() {
+          if (identical(_remoteFetches[companyId], future)) {
+            _remoteFetches.remove(companyId);
+          }
+        });
     _remoteFetches[companyId] = future;
     return future;
   }
@@ -200,6 +222,7 @@ class CatalogRepository {
   Future<List<ProductModel>> _fetchProductsRemote({
     required String companyId,
     required bool silent,
+    required int requestSeq,
   }) async {
     try {
       final res = await _dio.get(
@@ -219,7 +242,9 @@ class CatalogRepository {
           .whereType<Map>()
           .map((row) => ProductModel.fromJson(Map<String, dynamic>.from(row)))
           .toList();
+      if (_remoteFetchSeqByCompany[companyId] == requestSeq) {
         await _saveProductsSnapshotForCompany(companyId, products);
+      }
       return products;
     } on DioException catch (e) {
       final status = e.response?.statusCode;
@@ -249,13 +274,12 @@ class CatalogRepository {
         const [];
   }
 
-  Future<List<ProductModel>?> _readCachedProducts({required Duration maxAge}) async {
+  Future<List<ProductModel>?> _readCachedProducts({
+    required Duration maxAge,
+  }) async {
     final key = await _productsCacheKey();
     if (key == null) return null;
-    final cached = await _cache.readMap(
-      key,
-      maxAge: maxAge,
-    );
+    final cached = await _cache.readMap(key, maxAge: maxAge);
     if (cached == null) return null;
     final rows = cached['items'];
     if (rows is! List) return const [];

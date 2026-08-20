@@ -84,14 +84,21 @@ export class ProductsService {
     companyId: string,
     dto: CreateProductDto | UpdateProductDto,
   ) {
-    const treatment = dto.taxTreatment;
+    const treatment =
+      dto.taxTreatment == null || String(dto.taxTreatment).trim() === ""
+        ? undefined
+        : dto.taxTreatment;
+    const rawTaxRate = dto.taxRate;
+    const hasTaxRate = rawTaxRate !== undefined && rawTaxRate !== null;
+    const taxPriceMode =
+      dto.taxPriceMode == null || String(dto.taxPriceMode).trim() === ""
+        ? undefined
+        : dto.taxPriceMode;
+
     if (treatment === undefined) {
       return {
-        taxRate:
-          dto.taxRate === undefined
-            ? undefined
-            : new Prisma.Decimal(dto.taxRate),
-        taxPriceMode: dto.taxPriceMode,
+        taxRate: hasTaxRate ? new Prisma.Decimal(rawTaxRate) : undefined,
+        taxPriceMode,
       };
     }
 
@@ -111,13 +118,13 @@ export class ProductsService {
       };
     }
 
-    if (dto.taxRate === undefined || dto.taxRate <= 0) {
+    if (!hasTaxRate || rawTaxRate <= 0) {
       throw new BadRequestException(
         "Selecciona un impuesto activo para productos gravados",
       );
     }
 
-    const rate = new Prisma.Decimal(dto.taxRate);
+    const rate = new Prisma.Decimal(rawTaxRate);
     const activeTax = await tx.tax.findFirst({
       where: { companyId, isActive: true, rate },
       select: { id: true },
@@ -131,7 +138,7 @@ export class ProductsService {
     return {
       taxTreatment: "TAXABLE" as const,
       taxRate: rate,
-      taxPriceMode: dto.taxPriceMode ?? null,
+      taxPriceMode: taxPriceMode ?? null,
     };
   }
 

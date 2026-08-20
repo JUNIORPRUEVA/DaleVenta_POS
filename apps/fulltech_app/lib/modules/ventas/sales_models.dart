@@ -361,6 +361,9 @@ class SaleDraftItem {
   final double qty;
   final double priceSoldUnit;
   final double costUnitSnapshot;
+  final String? taxTreatment;
+  final double? taxRate;
+  final String? taxPriceMode;
 
   const SaleDraftItem({
     this.product,
@@ -371,11 +374,18 @@ class SaleDraftItem {
     required this.qty,
     required this.priceSoldUnit,
     required this.costUnitSnapshot,
+    this.taxTreatment,
+    this.taxRate,
+    this.taxPriceMode,
   });
 
   double get subtotalSold => qty * priceSoldUnit;
   double get subtotalCost => qty * costUnitSnapshot;
   double get profit => subtotalSold - subtotalCost;
+  String get effectiveTaxTreatment =>
+      product?.taxTreatment ?? taxTreatment ?? 'INHERIT';
+  double? get effectiveTaxRate => product?.taxRate ?? taxRate;
+  String? get effectiveTaxPriceMode => product?.taxPriceMode ?? taxPriceMode;
 
   SaleDraftItem copyWith({
     ProductModel? product,
@@ -386,6 +396,9 @@ class SaleDraftItem {
     double? qty,
     double? priceSoldUnit,
     double? costUnitSnapshot,
+    String? taxTreatment,
+    double? taxRate,
+    String? taxPriceMode,
   }) {
     return SaleDraftItem(
       product: product ?? this.product,
@@ -396,6 +409,9 @@ class SaleDraftItem {
       qty: qty ?? this.qty,
       priceSoldUnit: priceSoldUnit ?? this.priceSoldUnit,
       costUnitSnapshot: costUnitSnapshot ?? this.costUnitSnapshot,
+      taxTreatment: taxTreatment ?? this.taxTreatment,
+      taxRate: taxRate ?? this.taxRate,
+      taxPriceMode: taxPriceMode ?? this.taxPriceMode,
     );
   }
 
@@ -406,9 +422,9 @@ class SaleDraftItem {
       'qty': qty,
       'priceSoldUnit': priceSoldUnit,
       if (productId == null) 'costUnitSnapshot': costUnitSnapshot,
-      if (product != null) 'taxTreatment': product!.taxTreatment,
-      if (product?.taxRate != null) 'taxRate': product!.taxRate,
-      if (product?.taxPriceMode != null) 'taxPriceMode': product!.taxPriceMode,
+      'taxTreatment': effectiveTaxTreatment,
+      if (effectiveTaxRate != null) 'taxRate': effectiveTaxRate,
+      if (effectiveTaxPriceMode != null) 'taxPriceMode': effectiveTaxPriceMode,
     };
   }
 
@@ -423,6 +439,9 @@ class SaleDraftItem {
       qty: _toDouble(json['qty']),
       priceSoldUnit: _toDouble(json['priceSoldUnit']),
       costUnitSnapshot: _toDouble(json['costUnitSnapshot']),
+      taxTreatment: json['taxTreatment']?.toString(),
+      taxRate: _nullableDouble(json['taxRate']),
+      taxPriceMode: json['taxPriceMode']?.toString(),
     );
   }
 }
@@ -438,4 +457,10 @@ double _toDouble(dynamic value) {
   if (value is num) return value.toDouble();
   if (value == null) return 0;
   return double.tryParse(value.toString()) ?? 0;
+}
+
+double? _nullableDouble(dynamic value) {
+  if (value == null) return null;
+  if (value is num) return value.toDouble();
+  return double.tryParse(value.toString());
 }
