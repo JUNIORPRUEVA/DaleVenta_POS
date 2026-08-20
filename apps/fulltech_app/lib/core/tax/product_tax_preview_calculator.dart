@@ -192,6 +192,27 @@ class ProductTaxPreviewCalculator {
     );
   }
 
+  static double generalDiscountAmountFromPercent({
+    required List<ProductCartTaxLineInput> lines,
+    required double percent,
+  }) {
+    if (percent <= 0 || lines.isEmpty) return 0;
+    final boundedPercent = percent > 100 ? 100 : percent;
+    final base = lines.fold<double>(0, (sum, line) {
+      final qty = line.quantity <= 0 ? 1 : line.quantity;
+      final gross = _roundMoney((line.price < 0 ? 0.0 : line.price) * qty);
+      final lineDiscount = _roundMoney(
+        line.lineDiscountAmount < 0
+            ? 0
+            : line.lineDiscountAmount > gross
+            ? gross
+            : line.lineDiscountAmount,
+      );
+      return sum + _roundMoney(gross - lineDiscount);
+    });
+    return _roundMoney(base * boundedPercent / 100);
+  }
+
   static ProductTaxPreview calculate({
     required double price,
     required bool companyTaxEnabled,

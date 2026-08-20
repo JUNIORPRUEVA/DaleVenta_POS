@@ -2568,10 +2568,22 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 return;
               }
               final nextDiscount = type == _DiscountType.percent
-                  ? _grossTotalBeforeGeneralDiscount * (amount / 100)
+                  ? ProductTaxPreviewCalculator.generalDiscountAmountFromPercent(
+                      lines: [
+                        for (final item in _items)
+                          ProductCartTaxLineInput(
+                            price: item.unitPrice,
+                            quantity: item.qty,
+                            taxTreatment: item.taxTreatment,
+                            taxRate: item.taxRate > 0 ? item.taxRate : null,
+                            taxPriceMode: item.taxPriceMode,
+                          ),
+                      ],
+                      percent: amount,
+                    )
                   : amount;
               final boundedDiscount = nextDiscount
-                  .clamp(0, _grossTotalBeforeGeneralDiscount)
+                  .clamp(0, _subtotalAfterLineDiscount)
                   .toDouble();
               _commitEditorChange(() {
                 _generalDiscountAmount = boundedDiscount;

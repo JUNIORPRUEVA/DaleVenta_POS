@@ -292,6 +292,43 @@ describe("TaxCalculationService", () => {
     expect(n(result.total)).toBe("3623.53");
   });
 
+  it("prorates percentage-derived global discount over net lines after line discounts", () => {
+    const result = service.calculate({
+      taxEnabled: true,
+      defaultTaxRate: 0.18,
+      defaultPriceMode: "TAX_ADDED",
+      globalDiscountAmount: 306,
+      lines: [
+        {
+          description: "Exento",
+          quantity: 1,
+          unitPrice: 900,
+          discountAmount: 90,
+          taxTreatment: "EXEMPT",
+          priceMode: "NO_TAX",
+        },
+        {
+          description: "Gravado",
+          quantity: 1,
+          unitPrice: 2500,
+          discountAmount: 250,
+          taxTreatment: "TAXABLE",
+          taxRate: 0.18,
+          priceMode: "TAX_ADDED",
+        },
+      ],
+    });
+
+    expect(n(result.subtotal)).toBe("3400.00");
+    expect(n(result.discountAmount)).toBe("646.00");
+    expect(n(result.lines[0].discountAmount)).toBe("171.00");
+    expect(n(result.lines[1].discountAmount)).toBe("475.00");
+    expect(n(result.exemptAmount)).toBe("729.00");
+    expect(n(result.taxableBase)).toBe("2025.00");
+    expect(n(result.taxAmount)).toBe("364.50");
+    expect(n(result.total)).toBe("3118.50");
+  });
+
   it("case 10 - handles complex rounding for RD$99.99", () => {
     const result = service.calculate({
       taxEnabled: true,

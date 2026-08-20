@@ -152,6 +152,332 @@ void main() {
     expect(summary.exemptAmount, 847.06);
     expect(summary.total, 3623.53);
   });
+
+  test(
+    'descuento general porcentual usa neto despues de descuentos de linea',
+    () {
+      final generalDiscount =
+          ProductTaxPreviewCalculator.generalDiscountAmountFromPercent(
+            percent: 10,
+            lines: const [
+              ProductCartTaxLineInput(
+                price: 900,
+                quantity: 1,
+                lineDiscountAmount: 90,
+                taxTreatment: 'EXEMPT',
+                taxPriceMode: 'NO_TAX',
+              ),
+              ProductCartTaxLineInput(
+                price: 2500,
+                quantity: 1,
+                lineDiscountAmount: 250,
+                taxTreatment: 'TAXABLE',
+                taxRate: 0.18,
+                taxPriceMode: 'TAX_ADDED',
+              ),
+            ],
+          );
+      final summary = ProductTaxPreviewCalculator.calculateCart(
+        companyTaxEnabled: true,
+        companyPricesIncludeTax: false,
+        companyDefaultTaxRate: 0.18,
+        globalDiscountAmount: generalDiscount,
+        lines: const [
+          ProductCartTaxLineInput(
+            price: 900,
+            quantity: 1,
+            lineDiscountAmount: 90,
+            taxTreatment: 'EXEMPT',
+            taxPriceMode: 'NO_TAX',
+          ),
+          ProductCartTaxLineInput(
+            price: 2500,
+            quantity: 1,
+            lineDiscountAmount: 250,
+            taxTreatment: 'TAXABLE',
+            taxRate: 0.18,
+            taxPriceMode: 'TAX_ADDED',
+          ),
+        ],
+      );
+
+      expect(summary.subtotal, 3400);
+      expect(summary.discountAmount, 646);
+      expect(generalDiscount, 306);
+      expect(summary.generalDiscountAmount, 306);
+      expect(summary.lines[0].generalDiscountAmount, 81);
+      expect(summary.lines[1].generalDiscountAmount, 225);
+      expect(summary.exemptAmount, 729);
+      expect(summary.taxableBase, 2025);
+      expect(summary.taxAmount, 364.5);
+      expect(summary.total, 3118.5);
+    },
+  );
+
+  test('descuento general porcentual solo TAXABLE', () {
+    final generalDiscount =
+        ProductTaxPreviewCalculator.generalDiscountAmountFromPercent(
+          percent: 10,
+          lines: const [
+            ProductCartTaxLineInput(
+              price: 2500,
+              quantity: 1,
+              taxTreatment: 'TAXABLE',
+              taxRate: 0.18,
+              taxPriceMode: 'TAX_ADDED',
+            ),
+          ],
+        );
+    final summary = ProductTaxPreviewCalculator.calculateCart(
+      companyTaxEnabled: true,
+      companyPricesIncludeTax: false,
+      companyDefaultTaxRate: 0.18,
+      globalDiscountAmount: generalDiscount,
+      lines: const [
+        ProductCartTaxLineInput(
+          price: 2500,
+          quantity: 1,
+          taxTreatment: 'TAXABLE',
+          taxRate: 0.18,
+          taxPriceMode: 'TAX_ADDED',
+        ),
+      ],
+    );
+
+    expect(generalDiscount, 250);
+    expect(summary.taxableBase, 2250);
+    expect(summary.taxAmount, 405);
+    expect(summary.total, 2655);
+  });
+
+  test('descuento general porcentual solo EXEMPT', () {
+    final generalDiscount =
+        ProductTaxPreviewCalculator.generalDiscountAmountFromPercent(
+          percent: 10,
+          lines: const [
+            ProductCartTaxLineInput(
+              price: 900,
+              quantity: 1,
+              taxTreatment: 'EXEMPT',
+              taxPriceMode: 'NO_TAX',
+            ),
+          ],
+        );
+    final summary = ProductTaxPreviewCalculator.calculateCart(
+      companyTaxEnabled: true,
+      companyPricesIncludeTax: false,
+      companyDefaultTaxRate: 0.18,
+      globalDiscountAmount: generalDiscount,
+      lines: const [
+        ProductCartTaxLineInput(
+          price: 900,
+          quantity: 1,
+          taxTreatment: 'EXEMPT',
+          taxPriceMode: 'NO_TAX',
+        ),
+      ],
+    );
+
+    expect(generalDiscount, 90);
+    expect(summary.taxAmount, 0);
+    expect(summary.exemptAmount, 810);
+    expect(summary.total, 810);
+  });
+
+  test('descuento general porcentual mixto sin descuentos de linea', () {
+    final generalDiscount =
+        ProductTaxPreviewCalculator.generalDiscountAmountFromPercent(
+          percent: 10,
+          lines: const [
+            ProductCartTaxLineInput(
+              price: 900,
+              quantity: 1,
+              taxTreatment: 'EXEMPT',
+              taxPriceMode: 'NO_TAX',
+            ),
+            ProductCartTaxLineInput(
+              price: 2500,
+              quantity: 1,
+              taxTreatment: 'TAXABLE',
+              taxRate: 0.18,
+              taxPriceMode: 'TAX_ADDED',
+            ),
+          ],
+        );
+    final summary = ProductTaxPreviewCalculator.calculateCart(
+      companyTaxEnabled: true,
+      companyPricesIncludeTax: false,
+      companyDefaultTaxRate: 0.18,
+      globalDiscountAmount: generalDiscount,
+      lines: const [
+        ProductCartTaxLineInput(
+          price: 900,
+          quantity: 1,
+          taxTreatment: 'EXEMPT',
+          taxPriceMode: 'NO_TAX',
+        ),
+        ProductCartTaxLineInput(
+          price: 2500,
+          quantity: 1,
+          taxTreatment: 'TAXABLE',
+          taxRate: 0.18,
+          taxPriceMode: 'TAX_ADDED',
+        ),
+      ],
+    );
+
+    expect(generalDiscount, 340);
+    expect(summary.lines[0].generalDiscountAmount, 90);
+    expect(summary.lines[1].generalDiscountAmount, 250);
+    expect(summary.taxableBase, 2250);
+    expect(summary.taxAmount, 405);
+    expect(summary.total, 3465);
+  });
+
+  test('descuento general porcentual cero no altera totales', () {
+    final generalDiscount =
+        ProductTaxPreviewCalculator.generalDiscountAmountFromPercent(
+          percent: 0,
+          lines: const [
+            ProductCartTaxLineInput(
+              price: 2500,
+              quantity: 1,
+              taxTreatment: 'TAXABLE',
+              taxRate: 0.18,
+              taxPriceMode: 'TAX_ADDED',
+            ),
+          ],
+        );
+    final summary = ProductTaxPreviewCalculator.calculateCart(
+      companyTaxEnabled: true,
+      companyPricesIncludeTax: false,
+      companyDefaultTaxRate: 0.18,
+      globalDiscountAmount: generalDiscount,
+      lines: const [
+        ProductCartTaxLineInput(
+          price: 2500,
+          quantity: 1,
+          taxTreatment: 'TAXABLE',
+          taxRate: 0.18,
+          taxPriceMode: 'TAX_ADDED',
+        ),
+      ],
+    );
+
+    expect(generalDiscount, 0);
+    expect(summary.taxableBase, 2500);
+    expect(summary.taxAmount, 450);
+    expect(summary.total, 2950);
+  });
+
+  test('descuento general porcentual 100 no produce total negativo', () {
+    final generalDiscount =
+        ProductTaxPreviewCalculator.generalDiscountAmountFromPercent(
+          percent: 100,
+          lines: const [
+            ProductCartTaxLineInput(
+              price: 900,
+              quantity: 1,
+              taxTreatment: 'EXEMPT',
+              taxPriceMode: 'NO_TAX',
+            ),
+            ProductCartTaxLineInput(
+              price: 2500,
+              quantity: 1,
+              taxTreatment: 'TAXABLE',
+              taxRate: 0.18,
+              taxPriceMode: 'TAX_ADDED',
+            ),
+          ],
+        );
+    final summary = ProductTaxPreviewCalculator.calculateCart(
+      companyTaxEnabled: true,
+      companyPricesIncludeTax: false,
+      companyDefaultTaxRate: 0.18,
+      globalDiscountAmount: generalDiscount,
+      lines: const [
+        ProductCartTaxLineInput(
+          price: 900,
+          quantity: 1,
+          taxTreatment: 'EXEMPT',
+          taxPriceMode: 'NO_TAX',
+        ),
+        ProductCartTaxLineInput(
+          price: 2500,
+          quantity: 1,
+          taxTreatment: 'TAXABLE',
+          taxRate: 0.18,
+          taxPriceMode: 'TAX_ADDED',
+        ),
+      ],
+    );
+
+    expect(generalDiscount, 3400);
+    expect(summary.taxableBase, 0);
+    expect(summary.taxAmount, 0);
+    expect(summary.exemptAmount, 0);
+    expect(summary.total, 0);
+  });
+
+  test('descuento general porcentual mantiene centavos por prorrateo', () {
+    final generalDiscount =
+        ProductTaxPreviewCalculator.generalDiscountAmountFromPercent(
+          percent: 12.5,
+          lines: const [
+            ProductCartTaxLineInput(
+              price: 99.99,
+              quantity: 2,
+              lineDiscountAmount: 10.01,
+              taxTreatment: 'EXEMPT',
+              taxPriceMode: 'NO_TAX',
+            ),
+            ProductCartTaxLineInput(
+              price: 33.33,
+              quantity: 3,
+              lineDiscountAmount: 4.44,
+              taxTreatment: 'TAXABLE',
+              taxRate: 0.18,
+              taxPriceMode: 'TAX_ADDED',
+            ),
+          ],
+        );
+    final summary = ProductTaxPreviewCalculator.calculateCart(
+      companyTaxEnabled: true,
+      companyPricesIncludeTax: false,
+      companyDefaultTaxRate: 0.18,
+      globalDiscountAmount: generalDiscount,
+      lines: const [
+        ProductCartTaxLineInput(
+          price: 99.99,
+          quantity: 2,
+          lineDiscountAmount: 10.01,
+          taxTreatment: 'EXEMPT',
+          taxPriceMode: 'NO_TAX',
+        ),
+        ProductCartTaxLineInput(
+          price: 33.33,
+          quantity: 3,
+          lineDiscountAmount: 4.44,
+          taxTreatment: 'TAXABLE',
+          taxRate: 0.18,
+          taxPriceMode: 'TAX_ADDED',
+        ),
+      ],
+    );
+
+    expect(generalDiscount, 35.69);
+    expect(summary.generalDiscountAmount, 35.69);
+    expect(
+      summary.lines.fold<double>(
+        0,
+        (sum, line) => sum + line.generalDiscountAmount,
+      ),
+      35.69,
+    );
+    expect(summary.taxableBase, 83.61);
+    expect(summary.taxAmount, 15.05);
+    expect(summary.total, 264.88);
+  });
 }
 
 ProductTaxPreview _previewFor(CotizacionItem item) {
