@@ -932,6 +932,32 @@ void main() {
     expect(find.text('Editar producto'), findsNothing);
   });
 
+  testWidgets(
+    'editar conserva fuente original de imagen aunque la vista use URL versionada',
+    (tester) async {
+      final repo = _FakeCatalogRepository();
+      final product = ProductModel(
+        id: 'p-versioned-image',
+        nombre: 'Camara',
+        precio: 1200,
+        costo: 700,
+        stock: 4,
+        categoria: 'Seguridad',
+        fotoUrl:
+            '/media/object?key=uploads%2Fcompanies%2Fc1%2Fproducts%2Fcamara.png&v=123',
+        originalFotoUrl: 'uploads/companies/c1/products/camara.png',
+      );
+      await _pumpEditor(tester, repo: repo, product: product);
+
+      await tester.enterText(find.byType(TextField).at(0), 'Camara Pro');
+      await tester.tap(find.text('Guardar cambios'));
+      await tester.pumpAndSettle();
+
+      expect(repo.updates, 1);
+      expect(repo.lastFotoUrl, 'uploads/companies/c1/products/camara.png');
+    },
+  );
+
   testWidgets('editar EXEMPT reenvia la imagen actual al guardar', (
     tester,
   ) async {

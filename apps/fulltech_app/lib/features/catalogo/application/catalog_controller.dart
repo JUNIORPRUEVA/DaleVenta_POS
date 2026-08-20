@@ -699,6 +699,7 @@ class CatalogController extends StateNotifier<CatalogState> {
               fotoUrl: previousProduct?.fotoUrl ?? fallbackFotoUrl,
               originalFotoUrl:
                   previousProduct?.originalFotoUrl ?? fallbackFotoUrl,
+              imageKey: previousProduct?.imageKey,
               imageVersion: previousProduct?.imageVersion,
             )
           : updated;

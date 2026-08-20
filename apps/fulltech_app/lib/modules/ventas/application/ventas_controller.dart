@@ -73,26 +73,32 @@ final ventasControllerProvider =
 
 class VentasController extends StateNotifier<VentasState> {
   final Ref ref;
+  int _loadGeneration = 0;
 
   VentasController(this.ref) : super(VentasState.initial()) {
     load();
   }
 
   Future<void> load() async {
+    final generation = ++_loadGeneration;
     final repo = ref.read(ventasRepositoryProvider);
+    final from = state.from;
+    final to = state.to;
+    final customerId = state.customerIdFilter;
     final cachedResults = await Future.wait([
       repo.cachedSales(
-        from: state.from,
-        to: state.to,
-        customerId: state.customerIdFilter,
+        from: from,
+        to: to,
+        customerId: customerId,
         includeDeleted: true,
       ),
       repo.cachedSummary(
-        from: state.from,
-        to: state.to,
-        customerId: state.customerIdFilter,
+        from: from,
+        to: to,
+        customerId: customerId,
       ),
     ]);
+    if (!mounted || generation != _loadGeneration) return;
     final cachedSales = cachedResults[0] as List<SaleModel>;
     final cachedSummary = cachedResults[1] as SalesSummaryModel?;
     final hasCached = cachedSales.isNotEmpty || cachedSummary != null;
@@ -107,17 +113,18 @@ class VentasController extends StateNotifier<VentasState> {
     try {
       final results = await Future.wait([
         repo.listSales(
-          from: state.from,
-          to: state.to,
-          customerId: state.customerIdFilter,
+          from: from,
+          to: to,
+          customerId: customerId,
           includeDeleted: true,
         ),
         repo.summary(
-          from: state.from,
-          to: state.to,
-          customerId: state.customerIdFilter,
+          from: from,
+          to: to,
+          customerId: customerId,
         ),
       ]);
+      if (!mounted || generation != _loadGeneration) return;
 
       state = state.copyWith(
         loading: false,
@@ -128,6 +135,7 @@ class VentasController extends StateNotifier<VentasState> {
       final message = e is ApiException
           ? e.message
           : 'No se pudieron cargar las ventas';
+      if (!mounted || generation != _loadGeneration) return;
       state = state.copyWith(loading: false, error: message);
     }
   }
@@ -137,6 +145,7 @@ class VentasController extends StateNotifier<VentasState> {
   Future<void> setCustomerFilter(String? customerId) async {
     final normalized = (customerId ?? '').trim();
     final nextFilter = normalized.isEmpty ? null : normalized;
+    if (!mounted) return;
     if (nextFilter == state.customerIdFilter) {
       return;
     }
@@ -150,6 +159,7 @@ class VentasController extends StateNotifier<VentasState> {
   }
 
   Future<void> deleteSale(String id) async {
+    if (!mounted) return;
     final previous = state.sales;
     state = state.copyWith(
       sales: state.sales.where((sale) => sale.id != id).toList(),
@@ -157,17 +167,21 @@ class VentasController extends StateNotifier<VentasState> {
 
     try {
       await ref.read(ventasRepositoryProvider).deleteSale(id);
+      if (!mounted) return;
       await load();
     } catch (_) {
+      if (!mounted) return;
       state = state.copyWith(sales: previous);
       rethrow;
     }
   }
 
   Future<void> returnSale(String id) async {
+    if (!mounted) return;
     final previous = state.sales;
     try {
       final returned = await ref.read(ventasRepositoryProvider).returnSale(id);
+      if (!mounted) return;
       state = state.copyWith(
         sales: [
           for (final sale in state.sales)
@@ -176,6 +190,7 @@ class VentasController extends StateNotifier<VentasState> {
       );
       await load();
     } catch (_) {
+      if (!mounted) return;
       state = state.copyWith(sales: previous);
       rethrow;
     }
@@ -183,6 +198,7 @@ class VentasController extends StateNotifier<VentasState> {
 
   Future<int> purgeAllDebug() async {
     final result = await ref.read(ventasRepositoryProvider).purgeAllDebug();
+    if (!mounted) return (result['deletedSales'] as num?)?.toInt() ?? 0;
     state = state.copyWith(
       sales: const [],
       summary: SalesSummaryModel.empty(),
@@ -192,6 +208,7 @@ class VentasController extends StateNotifier<VentasState> {
   }
 
   Future<void> setPreset(SalesRangePreset preset) async {
+    if (!mounted) return;
     final now = DateTime.now();
     SalesDateRange nextRange;
 
@@ -225,6 +242,7 @@ class VentasController extends StateNotifier<VentasState> {
   Future<void> setCustomRange(DateTime from, DateTime to) async {
     final start = DateTime(from.year, from.month, from.day);
     final end = DateTime(to.year, to.month, to.day);
+    if (!mounted) return;
     if (end.isBefore(start)) return;
 
     state = state.copyWith(

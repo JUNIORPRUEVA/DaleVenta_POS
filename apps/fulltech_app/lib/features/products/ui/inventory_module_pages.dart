@@ -78,6 +78,39 @@ String _costText(ProductModel product) {
       : 'No disponible';
 }
 
+String? _stripImageCacheVersion(String value) {
+  final normalized = value.trim();
+  if (normalized.isEmpty) return null;
+  final uri = Uri.tryParse(normalized);
+  if (uri == null || !uri.hasQuery) return normalized;
+  final queryParameters = <String, List<String>>{
+    for (final entry in uri.queryParametersAll.entries)
+      if (entry.key != 'v') entry.key: List<String>.from(entry.value),
+  };
+  final query = queryParameters.entries
+      .expand(
+        (entry) => entry.value.map(
+          (value) =>
+              '${Uri.encodeQueryComponent(entry.key)}=${Uri.encodeQueryComponent(value)}',
+        ),
+      )
+      .join('&');
+  return uri.replace(query: query.isEmpty ? null : query).toString();
+}
+
+String? _persistentProductImageSource(ProductModel product) {
+  for (final candidate in [
+    product.originalFotoUrl,
+    product.imageKey,
+    product.fotoUrl,
+    product.displayFotoUrl,
+  ]) {
+    final normalized = _stripImageCacheVersion(candidate ?? '');
+    if ((normalized ?? '').isNotEmpty) return normalized;
+  }
+  return null;
+}
+
 String _profitText(ProductModel product) {
   return product.costAvailable
       ? formatRdCurrencyAccounting(_profitOf(product))
@@ -1120,7 +1153,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
         costo: product.costo,
         stock: product.stock ?? 0,
         categoria: category,
-        fotoUrl: product.fotoUrl ?? product.originalFotoUrl,
+        fotoUrl: _persistentProductImageSource(product),
         taxTreatment: product.taxTreatment,
         taxRate: product.taxRate,
         taxPriceMode: product.taxPriceMode,
@@ -4622,7 +4655,7 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
         costo: product.costo,
         stock: product.stock ?? 0,
         categoria: newName,
-        fotoUrl: product.fotoUrl ?? product.originalFotoUrl,
+        fotoUrl: _persistentProductImageSource(product),
         taxTreatment: product.taxTreatment,
         taxRate: product.taxRate,
         taxPriceMode: product.taxPriceMode,
@@ -7107,11 +7140,9 @@ class _InventoryProductEditorPageState
     try {
       final repo = ref.read(catalogRepositoryProvider);
       final pendingImageUpload = _imageUploadFuture;
-      final existingImagePath = product?.fotoUrl?.trim().isNotEmpty == true
-          ? product!.fotoUrl!.trim()
-          : product?.originalFotoUrl?.trim().isNotEmpty == true
-          ? product!.originalFotoUrl!.trim()
-          : null;
+      final existingImagePath = product == null
+          ? null
+          : _persistentProductImageSource(product);
       final normalizedReadyImagePath = await _resolveSelectedImageForSave();
       final imagePathForSave = normalizedReadyImagePath ?? existingImagePath;
       final taxTreatmentForSave = taxEnabled
