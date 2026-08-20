@@ -230,12 +230,14 @@ export class UsersController {
   }
 
   @Get('me')
-  me(@Req() req: Request) {
-    const user = req.user as { id?: string } | undefined;
-    if (!user?.id) {
+  async me(@Req() req: Request) {
+    const auth = req.user as TenantUser | undefined;
+    if (!auth?.id) {
       throw new UnauthorizedException('Usuario no autenticado');
     }
-    return this.users.findById(user.id);
+    const companyId = requireTenant(auth);
+    const user = await this.users.findById(auth.id);
+    return { ...user, companyId };
   }
 
   @Post('me/work-contract/sign')
