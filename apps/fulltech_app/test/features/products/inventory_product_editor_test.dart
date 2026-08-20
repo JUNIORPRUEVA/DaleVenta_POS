@@ -41,6 +41,11 @@ class _FakeCatalogRepository extends CatalogRepository {
   }
 
   @override
+  Future<void> saveProductsSnapshot(List<ProductModel> items) async {
+    // No-op: widget tests validate inventory UI, not secure persistence.
+  }
+
+  @override
   Future<ProductModel> createProduct({
     required String nombre,
     String? codigo,
