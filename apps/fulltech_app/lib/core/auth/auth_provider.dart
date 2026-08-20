@@ -66,7 +66,6 @@ Future<TokenStorageLaunchSnapshot> loadAuthLaunchSnapshot() {
   return TokenStorage.instance.readFastLaunchSnapshot();
 }
 
-
 class AuthController extends StateNotifier<AuthState> {
   final Ref ref;
   late final AuthSessionEvents _sessionEvents;
@@ -89,6 +88,12 @@ class AuthController extends StateNotifier<AuthState> {
 
   void _markSessionHealthy() {
     _sessionEvents.markSessionHealthy();
+  }
+
+  bool _hasResolvedTenantIdentity(UserModel? user) {
+    if (user == null) return false;
+    return user.id.trim().isNotEmpty &&
+        (user.companyId?.trim().isNotEmpty ?? false);
   }
 
   Future<void> _logoutForUnauthorized() async {
@@ -234,13 +239,19 @@ class AuthController extends StateNotifier<AuthState> {
           final user = result.user ?? state.user;
           final canKeepSession = user != null || state.hasSessionHint;
           if (canKeepSession) {
+            final tenantIdentityResolved = _hasResolvedTenantIdentity(user);
             _markSessionHealthy();
+            TraceLog.log(
+              'AUTH_CHANGE',
+              'verifySession deferred authenticated=true tenantIdentityResolved=$tenantIdentityResolved restoringSession=${!tenantIdentityResolved}',
+              seq: seq,
+            );
             state = state.copyWith(
               initialized: true,
               isAuthenticated: true,
               user: user,
               loading: false,
-              restoringSession: false,
+              restoringSession: !tenantIdentityResolved,
               hasSessionHint: true,
             );
             break;
@@ -257,11 +268,13 @@ class AuthController extends StateNotifier<AuthState> {
       }
     } catch (_) {
       if (!mounted) return;
+      final canKeepSession = state.hasSessionHint;
+      final tenantIdentityResolved = _hasResolvedTenantIdentity(state.user);
       state = state.copyWith(
         initialized: true,
-        isAuthenticated: state.hasSessionHint && state.user != null,
+        isAuthenticated: canKeepSession,
         loading: false,
-        restoringSession: false,
+        restoringSession: canKeepSession && !tenantIdentityResolved,
       );
     } finally {
       sw.stop();
