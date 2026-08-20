@@ -66,13 +66,40 @@ class ApiDiagnosticsInterceptor extends Interceptor {
     return jsonEncode(sanitized);
   }
 
+  /// Redacta campos sensibles del body (password, tokens) para no imprimirlos
+  /// en los logs. Nunca debe aparecer password/accessToken/refreshToken.
   String _compact(dynamic value) {
     if (value == null) return 'null';
     if (value is FormData) {
       return 'FormData(fields=${value.fields.length}, files=${value.files.length})';
     }
     final text = value is String ? value : jsonEncode(value);
-    if (text.length <= 400) return text;
-    return '${text.substring(0, 400)}...';
+    final redacted = _redactSensitiveBody(text);
+    if (redacted.length <= 400) return redacted;
+    return '${redacted.substring(0, 400)}...';
+  }
+
+  /// Reemplaza los valores de campos sensibles por '***' en un JSON/string.
+  String _redactSensitiveBody(String text) {
+    // Campos que nunca deben imprimirse con su valor real.
+    const sensitiveKeys = [
+      'password',
+      'accessToken',
+      'refreshToken',
+      'authorization',
+      'x-admin-authorization',
+    ];
+    var result = text;
+    for (final key in sensitiveKeys) {
+      // "key": "value"  o  "key":"value"
+      final pattern = RegExp(
+        '("$key"\\s*:\\s*)"[^"]*"',
+        caseSensitive: false,
+      );
+      result = result.replaceAllMapped(pattern, (m) => '${m[1]}"***"');
+    }
+    return result;
   }
 }
+
+

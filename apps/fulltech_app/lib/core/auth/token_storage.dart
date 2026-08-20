@@ -23,10 +23,61 @@ class TokenStorage {
   static const _accessTokenKey = 'accessToken';
   static const _refreshTokenKey = 'refreshToken';
   static const _userSnapshotKey = 'authUserSnapshot';
-  final _secureStorage = const FlutterSecureStorage();
+
+  /// Instancia canónica única de secure storage para auth.
+  ///
+  /// En Windows el plugin `flutter_secure_storage` usa UN solo archivo
+  /// (`flutter_secure_storage.dat`). Si se crean varias instancias de
+  /// [TokenStorage] (cada una con su propio `FlutterSecureStorage` y su propio
+  /// mutex), dos operaciones pueden tocar el mismo archivo a la vez y
+  /// corromperlo (CryptUnprotectData / PathAccessException: file is being used
+  /// by another process).
+  ///
+  /// Por eso existe UNA sola instancia compartida: `tokenStorageProvider` y el
+  /// bootstrap de arranque (`loadAuthLaunchSnapshot`) deben usar [instance].
+  static TokenStorage? _instance;
+
+  static TokenStorage get instance => _instance ??= TokenStorage();
+
+  final FlutterSecureStorage _secureStorage;
   String? _memoryAccessToken;
   String? _memoryRefreshToken;
   UserModel? _memoryUserSnapshot;
+
+  /// [secureStorage] es inyectable para pruebas. En producción se usa la
+  /// instancia canónica única (const FlutterSecureStorage()) para que TODAS las
+  /// operaciones compartan el mismo archivo flutter_secure_storage.dat y el
+  /// mismo mutex interno.
+  TokenStorage({FlutterSecureStorage? secureStorage})
+    : _secureStorage = secureStorage ?? const FlutterSecureStorage();
+
+
+
+
+
+  // Serializa TODAS las operaciones sobre flutter_secure_storage.dat.
+  // En Windows el plugin usa un único archivo y NO soporta acceso concurrente:
+  // lecturas/escrituras/borrados simultáneos corrompen el archivo
+  // (CryptUnprotectData / PathAccessException: file is being used by another process).
+  // Este mutex encadena cada operación detrás de la anterior (single-flight).
+  Future<void> _secureTail = Future.value();
+  bool _secureCorrupted = false;
+  bool _secureRecoveryAttempted = false;
+
+  /// Ejecuta [op] de forma serializada sobre el secure storage.
+  /// Garantiza que solo una operación toque flutter_secure_storage.dat a la vez.
+  ///
+  /// El mutex encadena cada operación detrás de la anterior (single-flight).
+  /// Todas las operaciones de secure storage (read/write/delete/recovery) pasan
+  /// por aquí para que NUNCA haya dos accesos simultáneos al archivo
+  /// flutter_secure_storage.dat en Windows.
+  Future<T> _serializeSecure<T>(Future<T> Function() op) {
+    final result = _secureTail.then((_) => op());
+    _secureTail = result.then<void>((_) {}, onError: (_) {});
+    return result;
+  }
+
+
 
   bool get _useSecureStorage {
     if (kIsWeb) return false;
@@ -173,9 +224,12 @@ class TokenStorage {
     }
 
     try {
-      await _secureStorage
-          .write(key: _userSnapshotKey, value: encoded)
-          .timeout(_secureTimeout);
+      await _serializeSecure(() async {
+        await _recoverSecureIfNeeded();
+        await _secureStorage
+            .write(key: _userSnapshotKey, value: encoded)
+            .timeout(_secureTimeout);
+      });
     } catch (e, st) {
       TraceLog.log(
         'TokenStorage',
@@ -347,16 +401,15 @@ class TokenStorage {
   Future<void> _saveInSecure(String accessToken, [String? refreshToken]) async {
     if (!_useSecureStorage) return;
     try {
-      if (accessToken.isNotEmpty) {
-        await _secureStorage
-            .write(key: _accessTokenKey, value: accessToken)
-            .timeout(_secureTimeout);
-      }
-      if (refreshToken != null && refreshToken.isNotEmpty) {
-        await _secureStorage
-            .write(key: _refreshTokenKey, value: refreshToken)
-            .timeout(_secureTimeout);
-      }
+      await _serializeSecure(() async {
+        await _recoverSecureIfNeeded();
+        if (accessToken.isNotEmpty) {
+          await _secureStorage.write(key: _accessTokenKey, value: accessToken).timeout(_secureTimeout);
+        }
+        if (refreshToken != null && refreshToken.isNotEmpty) {
+          await _secureStorage.write(key: _refreshTokenKey, value: refreshToken).timeout(_secureTimeout);
+        }
+      });
     } catch (e, st) {
       TraceLog.log(
         'TokenStorage',
@@ -368,12 +421,14 @@ class TokenStorage {
     }
   }
 
+
   Future<void> _writeSecureValue(String key, String value) async {
     if (!_useSecureStorage || value.isEmpty) return;
     try {
-      await _secureStorage
-          .write(key: key, value: value)
-          .timeout(_secureTimeout);
+      await _serializeSecure(() async {
+        await _recoverSecureIfNeeded();
+        await _secureStorage.write(key: key, value: value).timeout(_secureTimeout);
+      });
     } catch (e, st) {
       TraceLog.log(
         'TokenStorage',
@@ -384,17 +439,37 @@ class TokenStorage {
     }
   }
 
+
   Future<String?> _readSecure(String key) async {
     if (!_useSecureStorage) return null;
     try {
-      return await _secureStorage.read(key: key).timeout(_secureTimeout);
+      return await _serializeSecure(() async {
+        await _recoverSecureIfNeeded();
+        return await _secureStorage.read(key: key).timeout(_secureTimeout);
+      });
     } catch (e, st) {
-      TraceLog.log(
-        'TokenStorage',
-        '_readSecure ERROR key=$key',
-        error: e,
-        stackTrace: st,
-      );
+      // Detecta corrupción del archivo flutter_secure_storage.dat en Windows.
+      // No borramos la sesión: solo marcamos para recuperar el archivo una vez.
+      final msg = e.toString().toLowerCase();
+      if (msg.contains('cryptunprotectdata') ||
+          msg.contains('corrupt') ||
+          msg.contains('being used by another process') ||
+          msg.contains('pathaccess')) {
+        _secureCorrupted = true;
+        TraceLog.log(
+          'TokenStorage',
+          '_readSecure CORRUPT key=$key -> will recover once',
+          error: e,
+          stackTrace: st,
+        );
+      } else {
+        TraceLog.log(
+          'TokenStorage',
+          '_readSecure ERROR key=$key',
+          error: e,
+          stackTrace: st,
+        );
+      }
       return null;
     }
   }
@@ -402,7 +477,10 @@ class TokenStorage {
   Future<void> _deleteSecure(String key) async {
     if (!_useSecureStorage) return;
     try {
-      await _secureStorage.delete(key: key).timeout(_secureTimeout);
+      await _serializeSecure(() async {
+        await _recoverSecureIfNeeded();
+        await _secureStorage.delete(key: key).timeout(_secureTimeout);
+      });
     } catch (e, st) {
       TraceLog.log(
         'TokenStorage',
@@ -452,9 +530,11 @@ class TokenStorage {
     } catch (_) {}
 
     try {
-      await _secureStorage
-          .delete(key: _userSnapshotKey)
-          .timeout(_secureTimeout);
+      await _serializeSecure(() async {
+        await _secureStorage
+            .delete(key: _userSnapshotKey)
+            .timeout(_secureTimeout);
+      });
     } catch (_) {}
 
     TraceLog.log(
@@ -462,6 +542,66 @@ class TokenStorage {
       'Removed corrupted user snapshot from $source',
     );
   }
+
+  /// Recupera el secure storage corrupto UNA sola vez.
+  ///
+  /// En Windows, si flutter_secure_storage.dat quedó corrupto (por ejemplo por
+  /// un acceso concurrente previo), el plugin lanza CryptUnprotectData() en cada
+  /// lectura. Para no perder la sesión, intentamos reconstruir el archivo una
+  /// única vez: borramos la clave corrupta y la reescribimos desde prefs/memoria.
+  ///
+  /// IMPORTANTE: esto NO borra la sesión. Solo repara el archivo de secure
+  /// storage. Los tokens siguen vivos en prefs y en memoria.
+  Future<void> _recoverSecureIfNeeded() async {
+    if (!_useSecureStorage || !_secureCorrupted || _secureRecoveryAttempted) {
+      return;
+    }
+    // Marca como intentado para que, si varias operaciones encoladas llaman a
+    // este método, solo UNA ejecute la recuperación (el resto la ve ya
+    // intentada). Si falla por un bloqueo temporal, se resetea abajo para que
+    // una operación posterior pueda reintentar.
+    _secureRecoveryAttempted = true;
+    try {
+      // Borra el archivo corrupto para que el plugin lo regenere limpio.
+      await _secureStorage.deleteAll().timeout(_secureTimeout);
+      // Re-escribe los tokens desde memoria/prefs para no perder la sesión.
+      if (_memoryAccessToken != null && _memoryAccessToken!.isNotEmpty) {
+        await _secureStorage
+            .write(key: _accessTokenKey, value: _memoryAccessToken!)
+            .timeout(_secureTimeout);
+      }
+      if (_memoryRefreshToken != null && _memoryRefreshToken!.isNotEmpty) {
+        await _secureStorage
+            .write(key: _refreshTokenKey, value: _memoryRefreshToken!)
+            .timeout(_secureTimeout);
+      }
+      if (_memoryUserSnapshot != null) {
+        await _secureStorage
+            .write(
+              key: _userSnapshotKey,
+              value: jsonEncode(_memoryUserSnapshot!.toJson()),
+            )
+            .timeout(_secureTimeout);
+      }
+      _secureCorrupted = false;
+      TraceLog.log(
+        'TokenStorage',
+        'Secure storage recovered (corrupt file rebuilt)',
+      );
+    } catch (e, st) {
+      // Si la recuperación falla por un bloqueo temporal (file being used),
+      // permitimos reintentar en la siguiente operación. NO borramos tokens en
+      // memoria ni cerramos sesión: la sesión sigue viva en prefs/memoria.
+      _secureRecoveryAttempted = false;
+      TraceLog.log(
+        'TokenStorage',
+        '_recoverSecureIfNeeded ERROR (will retry)',
+        error: e,
+        stackTrace: st,
+      );
+    }
+  }
+
 
   UserModel? _parseLaunchUserSnapshot(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;

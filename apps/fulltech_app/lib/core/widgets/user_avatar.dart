@@ -12,7 +12,8 @@ import '../utils/media_url.dart';
 /// This prevents the unhandled [SocketException] that a plain [CircleAvatar]
 /// with [NetworkImage] throws when DNS resolution fails.
 class UserAvatar extends StatelessWidget {
-  static final TokenStorage _tokenStorage = TokenStorage();
+  static final TokenStorage _tokenStorage = TokenStorage.instance;
+
 
   final String? imageUrl;
   final double radius;

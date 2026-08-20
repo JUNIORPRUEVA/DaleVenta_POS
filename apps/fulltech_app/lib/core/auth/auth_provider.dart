@@ -59,8 +59,13 @@ final authLaunchSnapshotProvider = Provider<TokenStorageLaunchSnapshot>((ref) {
 });
 
 Future<TokenStorageLaunchSnapshot> loadAuthLaunchSnapshot() {
-  return TokenStorage().readFastLaunchSnapshot();
+  // Usa la MISMA instancia canónica que tokenStorageProvider para que el mutex
+  // interno serialice TODAS las operaciones sobre flutter_secure_storage.dat.
+  // Crear una instancia nueva aquí competiría por el mismo archivo con el
+  // bootstrap de AuthController (CryptUnprotectData / file being used).
+  return TokenStorage.instance.readFastLaunchSnapshot();
 }
+
 
 class AuthController extends StateNotifier<AuthState> {
   final Ref ref;
@@ -88,6 +93,10 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> _logoutForUnauthorized() async {
     _sessionEvents.markLogoutHandled();
+    TraceLog.log(
+      'AUTH_CHANGE',
+      'from=authenticated to=unauthenticated reason=unauthorized_logout caller=_logoutForUnauthorized lifecycle=session_event',
+    );
     final storage = ref.read(tokenStorageProvider);
     await ref.read(offlineStoreProvider).clearAll(includePendingActions: false);
     await FulltechImageCacheManager.clear();
@@ -208,6 +217,10 @@ class AuthController extends StateNotifier<AuthState> {
           );
           break;
         case SessionVerificationStatus.invalid:
+          TraceLog.log(
+            'AUTH_CHANGE',
+            'from=authenticated to=unauthenticated reason=verifySession_invalid caller=_verifySession lifecycle=resumed',
+          );
           state = AuthState(
             initialized: true,
             isAuthenticated: false,

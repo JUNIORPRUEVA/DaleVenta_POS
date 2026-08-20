@@ -76,7 +76,8 @@ final offlineStoreProvider = Provider<OfflineStore>((ref) {
 
 final syncQueueServiceProvider =
     StateNotifierProvider<SyncQueueService, SyncQueueState>((ref) {
-      final storage = TokenStorage();
+      final storage = TokenStorage.instance;
+
       final service = SyncQueueService(
         ref.read(offlineStoreProvider),
         scopeResolver: () async {

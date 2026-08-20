@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../debug/trace_log.dart';
 import '../api/api_routes.dart';
+import 'auth_refresh_coordinator.dart';
 import 'auth_session_events.dart';
 import 'token_storage.dart';
 
@@ -11,13 +13,16 @@ class AuthInterceptor extends Interceptor {
   final TokenStorage tokenStorage;
   final AuthSessionEvents sessionEvents;
   final Dio dio;
-  final Dio _refreshDio;
+  final AuthRefreshCoordinator refreshCoordinator;
 
   static const String _retryFlagKey = '__auth_retry';
-  Future<_RefreshAttempt>? _refreshFuture;
 
-  AuthInterceptor(this.tokenStorage, this.sessionEvents, this.dio)
-    : _refreshDio = Dio(dio.options);
+  AuthInterceptor(
+    this.tokenStorage,
+    this.sessionEvents,
+    this.dio,
+    this.refreshCoordinator,
+  );
 
   @override
   void onRequest(
@@ -89,87 +94,14 @@ class AuthInterceptor extends Interceptor {
         _isAuthRefreshPath(path);
   }
 
-  Future<_RefreshAttempt> _ensureRefreshed({required int seq}) {
-    _refreshFuture ??=
-        () async {
-          String? refreshToken;
-          try {
-            refreshToken = await tokenStorage.getRefreshToken();
-          } on TimeoutException catch (e, st) {
-            TraceLog.log(
-              'AuthInterceptor',
-              'getRefreshToken() TIMEOUT',
-              seq: seq,
-              error: e,
-              stackTrace: st,
-            );
-          } catch (e, st) {
-            TraceLog.log(
-              'AuthInterceptor',
-              'getRefreshToken() ERROR',
-              seq: seq,
-              error: e,
-              stackTrace: st,
-            );
-          }
-
-          if (refreshToken == null || refreshToken.isEmpty) {
-            return const _RefreshAttempt.invalid();
-          }
-
-          final refreshed = await _refresh(refreshToken);
-          if (!refreshed.isSuccess) {
-            return refreshed;
-          }
-
-          await tokenStorage.saveTokens(
-            refreshed.accessToken!,
-            (refreshed.refreshToken != null &&
-                    refreshed.refreshToken!.isNotEmpty)
-                ? refreshed.refreshToken
-                : refreshToken,
-          );
-          return refreshed;
-        }().whenComplete(() {
-          _refreshFuture = null;
-        });
-
-    return _refreshFuture!;
-  }
-
-  Future<_RefreshAttempt> _refresh(String refreshToken) async {
-    try {
-      final response = await _refreshDio.post(
-        ApiRoutes.refresh,
-        data: {'refreshToken': refreshToken},
-      );
-      final data = response.data;
-      if (data is Map) {
-        final newAccess = data['accessToken'] as String?;
-        final newRefresh = data['refreshToken'] as String?;
-        if (newAccess != null && newAccess.isNotEmpty) {
-          return _RefreshAttempt.success(
-            accessToken: newAccess,
-            refreshToken: newRefresh,
-          );
-        }
-      }
-      return const _RefreshAttempt.failed();
-    } on DioException catch (error) {
-      final status = error.response?.statusCode ?? 0;
-      if (status == 400 || status == 401 || status == 403) {
-        return const _RefreshAttempt.invalid();
-      }
-      return const _RefreshAttempt.failed();
-    } catch (_) {
-      return const _RefreshAttempt.failed();
-    }
-  }
-
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     final statusCode = err.response?.statusCode;
     final responseData = err.response?.data;
+    debugPrint(
+      '[AUTH_CHANGE] interceptor onError status=$statusCode '
+      'path=${err.requestOptions.path} caller=auth_interceptor.onError',
+    );
     final errorCode = responseData is Map
         ? responseData['errorCode']?.toString().toUpperCase()
         : null;
@@ -214,7 +146,7 @@ class AuthInterceptor extends Interceptor {
       );
 
       try {
-        final refreshed = await _ensureRefreshed(seq: seq);
+        final refreshed = await refreshCoordinator.ensureRefreshed();
         if (refreshed.isSuccess && refreshed.accessToken != null) {
           final opts = err.requestOptions;
           opts.headers['Authorization'] = 'Bearer ${refreshed.accessToken}';
@@ -230,7 +162,7 @@ class AuthInterceptor extends Interceptor {
           final retryResponse = await dio.fetch(opts);
           return handler.resolve(retryResponse);
         }
-        if (refreshed.shouldLogout) {
+        if (refreshed.isInvalid) {
           sessionEvents.requestUnauthorizedLogout(
             reason: licenseInactive ? 'license_expired' : null,
           );
@@ -241,33 +173,4 @@ class AuthInterceptor extends Interceptor {
     }
     handler.next(err);
   }
-}
-
-class _RefreshAttempt {
-  final String? accessToken;
-  final String? refreshToken;
-  final bool shouldLogout;
-
-  const _RefreshAttempt({
-    required this.accessToken,
-    required this.refreshToken,
-    required this.shouldLogout,
-  });
-
-  const _RefreshAttempt.success({
-    required String accessToken,
-    String? refreshToken,
-  }) : this(
-         accessToken: accessToken,
-         refreshToken: refreshToken,
-         shouldLogout: false,
-       );
-
-  const _RefreshAttempt.failed()
-    : this(accessToken: null, refreshToken: null, shouldLogout: false);
-
-  const _RefreshAttempt.invalid()
-    : this(accessToken: null, refreshToken: null, shouldLogout: true);
-
-  bool get isSuccess => accessToken != null && accessToken!.isNotEmpty;
 }

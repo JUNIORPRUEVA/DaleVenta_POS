@@ -36,7 +36,8 @@ class CatalogRepository {
   bool _handlersRegistered = false;
 
   CatalogRepository(this._dio, [TokenStorage? tokenStorage, this._syncQueue])
-    : _tokenStorage = tokenStorage ?? TokenStorage();
+    : _tokenStorage = tokenStorage ?? TokenStorage.instance;
+
 
   void registerSyncHandlers() {
     final syncQueue = _syncQueue;

@@ -9,7 +9,8 @@ import '../utils/is_flutter_test.dart';
 import '../utils/product_image_url.dart';
 
 class ProductNetworkImage extends StatelessWidget {
-  static final TokenStorage _tokenStorage = TokenStorage();
+  static final TokenStorage _tokenStorage = TokenStorage.instance;
+
 
   final String imageUrl;
   final String productId;

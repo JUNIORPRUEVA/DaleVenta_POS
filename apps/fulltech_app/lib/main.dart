@@ -254,10 +254,17 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       final license = await licenseRepository.getLicense();
       if (!mounted) return;
       ref.invalidate(licenseStatusProvider);
+      debugPrint(
+        '[AUTH_CHANGE] licenseCheck status=${license.status} '
+        'isUsable=${license.isUsable} caller=main._checkLicenseNow',
+      );
       if (!license.isUsable) {
         authSessionEvents.requestUnauthorizedLogout(reason: 'license_expired');
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint(
+        '[AUTH_CHANGE] licenseCheck ERROR $e caller=main._checkLicenseNow',
+      );
       // 401/403 responses are handled by AuthInterceptor. Temporary network
       // failures should not log out an otherwise valid user.
     }
@@ -265,6 +272,11 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    final authBefore = ref.read(authStateProvider);
+    debugPrint(
+      '[AUTH_CHANGE] lifecycle=$state authBefore=${authBefore.isAuthenticated} '
+      'caller=main.didChangeAppLifecycleState',
+    );
     if (state != AppLifecycleState.resumed || !widget.enableBackgroundStartup) {
       return;
     }

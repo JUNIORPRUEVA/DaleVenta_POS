@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_client.dart';
@@ -17,6 +18,7 @@ import '../offline/sync_queue_service.dart';
 import '../utils/is_flutter_test.dart';
 import 'admin_authorization_session.dart';
 import 'auth_interceptor.dart';
+import 'auth_refresh_coordinator.dart';
 import 'auth_session_events.dart';
 import 'token_storage.dart';
 import '../loading/app_loading_controller.dart';
@@ -49,7 +51,13 @@ class SessionVerificationResult {
     : this(status: SessionVerificationStatus.authenticated, user: user);
 }
 
-final tokenStorageProvider = Provider<TokenStorage>((ref) => TokenStorage());
+// UNA sola instancia canónica de secure storage para auth.
+// En Windows el plugin usa un único archivo (flutter_secure_storage.dat) y no
+// soporta acceso concurrente. Todos los providers y el bootstrap de arranque
+// deben compartir la misma instancia (TokenStorage.instance) para que el mutex
+// interno serialice TODAS las operaciones sobre ese archivo.
+final tokenStorageProvider = Provider<TokenStorage>((ref) => TokenStorage.instance);
+
 
 final networkReachabilityProvider = Provider<NetworkReachability>((ref) {
   return NetworkReachability();
@@ -61,7 +69,10 @@ final dioProvider = Provider<Dio>((ref) {
   final sessionEvents = ref.watch(authSessionEventsProvider);
   final reachability = ref.watch(networkReachabilityProvider);
   final offlineStore = ref.watch(offlineStoreProvider);
-  api.dio.interceptors.add(AuthInterceptor(storage, sessionEvents, api.dio));
+  final refreshCoordinator = ref.watch(authRefreshCoordinatorProvider);
+  api.dio.interceptors.add(
+    AuthInterceptor(storage, sessionEvents, api.dio, refreshCoordinator),
+  );
   api.dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (options, handler) {
@@ -124,20 +135,25 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepository(
     dio: ref.watch(dioProvider),
     storage: ref.watch(tokenStorageProvider),
+    refreshCoordinator: ref.watch(authRefreshCoordinatorProvider),
   );
 });
 
 class AuthRepository {
   final Dio _dio;
   final TokenStorage _storage;
+  final AuthRefreshCoordinator _refreshCoordinator;
   static const Duration _loginTimeout = Duration(seconds: 25);
   static const Duration _bootstrapTimeout = Duration(seconds: 12);
   static const Duration _storageTimeout = Duration(seconds: 3);
-  Future<_RefreshSessionResult>? _refreshFuture;
 
-  AuthRepository({required Dio dio, required TokenStorage storage})
-    : _dio = dio,
-      _storage = storage;
+  AuthRepository({
+    required Dio dio,
+    required TokenStorage storage,
+    required AuthRefreshCoordinator refreshCoordinator,
+  }) : _dio = dio,
+       _storage = storage,
+       _refreshCoordinator = refreshCoordinator;
 
   String _extractMessage(dynamic data, String fallback) {
     if (data is String && data.trim().isNotEmpty) return data;
@@ -385,6 +401,9 @@ class AuthRepository {
   }
 
   Future<void> _safeClearTokens() async {
+    debugPrint(
+      '[AUTH_CHANGE] _safeClearTokens caller=${StackTrace.current.toString().split('\n').skip(1).take(3).join(' | ')}',
+    );
     try {
       await _storage.clearTokens().timeout(_storageTimeout);
     } catch (_) {}
@@ -590,6 +609,10 @@ class AuthRepository {
 
     try {
       final token = await _storage.getAccessToken().timeout(_storageTimeout);
+      debugPrint(
+        '[AUTH_CHANGE] getMeOrNull accessToken=${token == null ? 'null' : (token.isEmpty ? 'empty' : 'present')} '
+        'caller=auth_repository.getMeOrNull',
+      );
       if (token == null) return null;
       try {
         final res = await _dio
@@ -604,16 +627,27 @@ class AuthRepository {
               ),
             )
             .timeout(_bootstrapTimeout);
+        debugPrint(
+          '[AUTH_CHANGE] GET /me status=${res.statusCode} caller=auth_repository.getMeOrNull',
+        );
         final user = UserModel.fromJson(
           (res.data as Map).cast<String, dynamic>(),
         );
         await _storage.saveUserSnapshot(user);
         return user;
       } on DioException catch (e) {
-        // Si expira, intenta refresh y reintenta
+        debugPrint(
+          '[AUTH_CHANGE] GET /me DioException status=${e.response?.statusCode} '
+          'caller=auth_repository.getMeOrNull',
+        );
+        // Si expira, intenta refresh (single-flight compartido) y reintenta.
         if (e.response?.statusCode == 401) {
-          final refreshed = await _refreshAndSave(silent: silent);
-          if (refreshed == _RefreshSessionResult.success) {
+          final refreshed = await _refreshCoordinator.ensureRefreshed();
+          debugPrint(
+            '[AUTH_CHANGE] refresh result=${refreshed.outcome} '
+            'caller=auth_repository.getMeOrNull',
+          );
+          if (refreshed.isSuccess && refreshed.accessToken != null) {
             final res = await _dio
                 .get(
                   ApiRoutes.usersMe,
@@ -633,11 +667,10 @@ class AuthRepository {
             return user;
           }
 
-          if (refreshed == _RefreshSessionResult.invalid) {
+          if (refreshed.isInvalid) {
             await _safeClearTokens();
           }
-          if (refreshed == _RefreshSessionResult.failed &&
-              allowCachedFallback) {
+          if (refreshed.isFailed && allowCachedFallback) {
             return await _storage.getUserSnapshot();
           }
           return null;
@@ -661,6 +694,10 @@ class AuthRepository {
     }
 
     final hydrated = await hydrateSession();
+    debugPrint(
+      '[AUTH_CHANGE] verifySession hydrated.hasToken=${hydrated.hasToken} '
+      'caller=auth_repository.verifySession',
+    );
     if (!hydrated.hasToken) {
       return const SessionVerificationResult.invalid();
     }
@@ -668,10 +705,18 @@ class AuthRepository {
     try {
       final user = await getMeOrNull(silent: silent);
       if (user != null) {
+        debugPrint(
+          '[AUTH_CHANGE] verifySession result=authenticated '
+          'caller=auth_repository.verifySession',
+        );
         return SessionVerificationResult.authenticated(user);
       }
 
       final token = await _storage.getAccessToken().timeout(_storageTimeout);
+      debugPrint(
+        '[AUTH_CHANGE] verifySession afterGetMe token=${token == null ? 'null' : (token.isEmpty ? 'empty' : 'present')} '
+        'caller=auth_repository.verifySession',
+      );
       if (token == null || token.isEmpty) {
         return const SessionVerificationResult.invalid();
       }
@@ -696,51 +741,7 @@ class AuthRepository {
     }
   }
 
-  Future<_RefreshSessionResult> _refreshAndSave({bool silent = false}) async {
-    _refreshFuture ??= _performRefreshAndSave(silent: silent).whenComplete(() {
-      _refreshFuture = null;
-    });
-    return _refreshFuture!;
-  }
-
-  Future<_RefreshSessionResult> _performRefreshAndSave({
-    required bool silent,
-  }) async {
-    final refresh = await _storage.getRefreshToken();
-    if (refresh == null || refresh.isEmpty) {
-      return _RefreshSessionResult.invalid;
-    }
-    try {
-      final res = await _dio.post(
-        ApiRoutes.refresh,
-        data: {'refreshToken': refresh},
-        options: Options(extra: {'silent': silent}),
-      );
-      final access = res.data['accessToken'] as String?;
-      final newRefresh = res.data['refreshToken'] as String?;
-      if (access != null && access.isNotEmpty) {
-        await _storage.saveTokens(
-          access,
-          (newRefresh != null && newRefresh.isNotEmpty) ? newRefresh : refresh,
-        );
-        return _RefreshSessionResult.success;
-      }
-    } on DioException catch (error) {
-      final status = error.response?.statusCode ?? 0;
-      if (status == 400 || status == 401 || status == 403) {
-        return _RefreshSessionResult.invalid;
-      }
-      return _RefreshSessionResult.failed;
-    } on TimeoutException {
-      return _RefreshSessionResult.failed;
-    } catch (_) {
-      return _RefreshSessionResult.failed;
-    }
-    return _RefreshSessionResult.failed;
-  }
 }
-
-enum _RefreshSessionResult { success, invalid, failed }
 
 class AccountDeletionPreview {
   const AccountDeletionPreview({
