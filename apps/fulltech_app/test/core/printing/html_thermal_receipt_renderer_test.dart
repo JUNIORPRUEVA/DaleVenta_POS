@@ -63,6 +63,44 @@ void main() {
     expect(withNote, contains('Entregar con garantía.'));
   });
 
+  test('renders NCF and comprobante block for a fiscal ticket', () {
+    final html = const HtmlThermalReceiptRenderer().render(
+      _receipt(
+        ncf: 'B0100000042',
+        fiscalVoucherType: 'B01',
+        client: const ThermalReceiptClientViewModel(
+          name: 'EMPRESA XYZ',
+          document: '131234567',
+        ),
+      ),
+    );
+
+    expect(html, contains('COMPROBANTE:'));
+    expect(html, contains('B01 - CREDITO FISCAL'));
+    expect(html, contains('NCF:'));
+    expect(html, contains('B0100000042'));
+    expect(html, contains('RNC/CEDULA:'));
+    expect(html, contains('131234567'));
+  });
+
+  test('renders B02 comprobante label without forcing a customer RNC', () {
+    final html = const HtmlThermalReceiptRenderer().render(
+      _receipt(ncf: 'B0200000001', fiscalVoucherType: 'B02'),
+    );
+
+    expect(html, contains('COMPROBANTE:'));
+    expect(html, contains('B02 - CONSUMIDOR FINAL'));
+    expect(html, contains('NCF:'));
+    expect(html, contains('B0200000001'));
+  });
+
+  test('does not render NCF block for a non-fiscal ticket', () {
+    final html = const HtmlThermalReceiptRenderer().render(_receipt());
+
+    expect(html, isNot(contains('COMPROBANTE:')));
+    expect(html, isNot(contains('NCF:')));
+  });
+
   test('renders warranty policy only when configured', () {
     final withoutPolicy = const HtmlThermalReceiptRenderer().render(_receipt());
     final withPolicy = const HtmlThermalReceiptRenderer(
@@ -223,6 +261,8 @@ ThermalReceiptViewModel _receipt({
   double taxAmount = 0,
   double total = 150,
   String? note,
+  String? ncf,
+  String? fiscalVoucherType,
 }) {
   return ThermalReceiptViewModel(
     ticketNumber: '81472316',
@@ -261,5 +301,7 @@ ThermalReceiptViewModel _receipt({
     cashierName: 'Yunior Lopez',
     paymentMethod: 'Efectivo',
     note: note,
+    ncf: ncf,
+    fiscalVoucherType: fiscalVoucherType,
   );
 }

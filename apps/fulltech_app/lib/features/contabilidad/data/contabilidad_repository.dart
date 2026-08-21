@@ -19,6 +19,12 @@ final contabilidadRepositoryProvider = Provider<ContabilidadRepository>((ref) {
   return ContabilidadRepository(ref.watch(dioProvider));
 });
 
+/// Secuencias NCF activas de la empresa (se recargan al invalidar el provider).
+final ncfSequencesProvider =
+    FutureProvider.autoDispose<List<NcfSequenceModel>>((ref) {
+  return ref.watch(contabilidadRepositoryProvider).listNcfSequences();
+});
+
 class ContabilidadRepository {
   final Dio _dio;
 
@@ -37,6 +43,70 @@ class ContabilidadRepository {
         _extractMessage(
           e.response?.data,
           'No se pudieron cargar las secuencias NCF',
+        ),
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<NcfSequenceModel> createNcfSequence({
+    required String voucherType,
+    required int startNumber,
+    required int endNumber,
+    DateTime? validUntil,
+    bool active = true,
+  }) async {
+    final type = voucherType.trim().toUpperCase();
+    try {
+      final res = await _dio.post(
+        ApiRoutes.ncfSequences,
+        data: {
+          'voucherType': type,
+          'prefix': type,
+          'startNumber': startNumber,
+          'endNumber': endNumber,
+          if (validUntil != null)
+            'validUntil': validUntil.toUtc().toIso8601String(),
+          'active': active,
+        },
+      );
+      final data = res.data is Map
+          ? (res.data as Map).cast<String, dynamic>()
+          : <String, dynamic>{};
+      return NcfSequenceModel.fromJson(data);
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(e.response?.data, 'No se pudo crear la secuencia NCF'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<NcfSequenceModel> updateNcfSequence(
+    String id, {
+    int? endNumber,
+    DateTime? validUntil,
+    bool? active,
+  }) async {
+    try {
+      final res = await _dio.patch(
+        ApiRoutes.ncfSequence(id),
+        data: {
+          if (endNumber != null) 'endNumber': endNumber,
+          if (validUntil != null)
+            'validUntil': validUntil.toUtc().toIso8601String(),
+          if (active != null) 'active': active,
+        },
+      );
+      final data = res.data is Map
+          ? (res.data as Map).cast<String, dynamic>()
+          : <String, dynamic>{};
+      return NcfSequenceModel.fromJson(data);
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(
+          e.response?.data,
+          'No se pudo actualizar la secuencia NCF',
         ),
         e.response?.statusCode,
       );

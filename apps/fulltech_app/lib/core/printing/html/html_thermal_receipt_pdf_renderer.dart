@@ -44,6 +44,7 @@ class HtmlThermalReceiptPdfRenderer {
               _rule(dashed: true),
               _invoiceMeta(receipt),
               _rule(dashed: true),
+              _fiscal(receipt),
               _client(receipt),
               _items(receipt),
               _totals(receipt),
@@ -168,6 +169,37 @@ class HtmlThermalReceiptPdfRenderer {
         ],
       ),
     );
+  }
+
+  pw.Widget _fiscal(ThermalReceiptViewModel receipt) {
+    final ncf = _clean(receipt.ncf ?? '');
+    final type = _clean(receipt.fiscalVoucherType ?? '');
+    if (ncf.isEmpty && type.isEmpty) return pw.SizedBox();
+    final voucherLabel = _fiscalVoucherLabel(type);
+    return pw.Padding(
+      padding: pw.EdgeInsets.only(bottom: 1.5 * PdfPageFormat.mm),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          _inlineText(
+            'COMPROBANTE:',
+            voucherLabel.isEmpty ? 'FISCAL' : voucherLabel,
+          ),
+          if (ncf.isNotEmpty) _inlineText('NCF:', ncf),
+        ],
+      ),
+    );
+  }
+
+  String _fiscalVoucherLabel(String type) {
+    switch (type.trim().toUpperCase()) {
+      case 'B01':
+        return 'B01 - CREDITO FISCAL';
+      case 'B02':
+        return 'B02 - CONSUMIDOR FINAL';
+      default:
+        return _clean(type);
+    }
   }
 
   pw.Widget _items(ThermalReceiptViewModel receipt) {
@@ -448,6 +480,11 @@ class HtmlThermalReceiptPdfRenderer {
       receipt.taxableBase,
       receipt.taxAmount,
     ].where((value) => value > 0).length;
+    final ncfLines =
+        (_clean(receipt.ncf ?? '').isEmpty &&
+            _clean(receipt.fiscalVoucherType ?? '').isEmpty)
+        ? 0
+        : 2;
     final warrantyLines = _clean(warrantyPolicy).isEmpty
         ? 0
         : _warrantyWrapLines(_clean(warrantyPolicy)).length;
@@ -456,6 +493,7 @@ class HtmlThermalReceiptPdfRenderer {
         (receipt.items.length * 4.8) +
         (lineDiscounts * 2.8) +
         (fiscalLines * 3.5) +
+        (ncfLines * 3.5) +
         (noteLines * 4.0) +
         (warrantyLines == 0 ? 0 : 12 + (warrantyLines * 3.6));
     return mm.clamp(100, 2000) * PdfPageFormat.mm;

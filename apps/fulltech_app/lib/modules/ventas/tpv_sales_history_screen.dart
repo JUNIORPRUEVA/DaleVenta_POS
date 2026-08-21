@@ -22,6 +22,7 @@ import '../../core/widgets/fulltech_page_header.dart';
 import '../../core/widgets/pdf_action_menu.dart';
 import '../cash/cash_dialogs.dart';
 import 'data/ventas_repository.dart';
+import 'fiscal_voucher_options.dart';
 import 'sales_models.dart';
 import 'utils/sales_pdf_service.dart';
 
@@ -2063,6 +2064,17 @@ class _InvoiceDetailPanel extends StatelessWidget {
                 ),
                 _DetailLine('Cajero', sale.userName ?? sale.userId),
                 _DetailLine('Pago', _paymentLabel(sale.paymentMethod)),
+                if ((sale.ncf ?? '').trim().isNotEmpty) ...[
+                  _DetailLine(
+                    'Comprobante',
+                    fiscalVoucherLabel(sale.fiscalVoucherType),
+                  ),
+                  _DetailLine('NCF', sale.ncf!.trim()),
+                ],
+                if ((sale.fiscalCustomerTaxId ?? '').trim().isNotEmpty)
+                  _DetailLine('RNC/Cédula', sale.fiscalCustomerTaxId!.trim()),
+                if ((sale.fiscalCustomerName ?? '').trim().isNotEmpty)
+                  _DetailLine('Cliente fiscal', sale.fiscalCustomerName!.trim()),
               ],
             ),
           ),

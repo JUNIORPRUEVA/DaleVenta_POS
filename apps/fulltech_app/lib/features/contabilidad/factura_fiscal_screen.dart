@@ -1,21 +1,23 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
+import '../../core/company/company_settings_model.dart';
+import '../../core/company/company_settings_repository.dart';
 import '../../core/evolution/evolution_api_repository.dart';
 import '../../core/errors/api_exception.dart';
+import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
@@ -52,7 +54,6 @@ DateTimeRange _currentMonthRange([DateTime? reference]) {
 }
 
 const String _fiscalAccountantPhone = '8295319442';
-const String _fiscalConfigPrefsKey = 'fullpos_cloud_fiscal_invoice_config_v1';
 
 class FacturaFiscalScreen extends ConsumerStatefulWidget {
   const FacturaFiscalScreen({super.key});
@@ -65,39 +66,25 @@ class FacturaFiscalScreen extends ConsumerStatefulWidget {
 class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
   final _noteCtrl = TextEditingController();
   final _noteFocusNode = FocusNode();
-  final _rncCtrl = TextEditingController();
-  final _businessNameCtrl = TextEditingController();
-  final _commercialNameCtrl = TextEditingController();
-  final _addressCtrl = TextEditingController();
-  final _providerCtrl = TextEditingController();
-  final _certificateCtrl = TextEditingController();
   DateTime _invoiceDate = DateTime.now();
   FiscalInvoiceKind _kind = FiscalInvoiceKind.purchase;
   List<PlatformFile> _selectedFiles = const [];
-  _FiscalInvoiceConfig _fiscalConfig = _FiscalInvoiceConfig.defaults();
   List<NcfSequenceModel> _ncfSequences = const [];
   bool _saving = false;
-  bool _savingConfig = false;
   bool _loadingSequences = false;
-  bool _configLoaded = false;
+  bool _sequenceDialogOpen = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    unawaited(_loadFiscalConfig());
+    unawaited(_reloadNcfSequences());
   }
 
   @override
   void dispose() {
     _noteFocusNode.dispose();
     _noteCtrl.dispose();
-    _rncCtrl.dispose();
-    _businessNameCtrl.dispose();
-    _commercialNameCtrl.dispose();
-    _addressCtrl.dispose();
-    _providerCtrl.dispose();
-    _certificateCtrl.dispose();
     super.dispose();
   }
 
@@ -252,57 +239,7 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
     return parts.isEmpty ? null : parts.join('\n');
   }
 
-  Future<void> _loadFiscalConfig() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_fiscalConfigPrefsKey);
-      final config = raw == null || raw.trim().isEmpty
-          ? _FiscalInvoiceConfig.defaults()
-          : _FiscalInvoiceConfig.fromJson(
-              jsonDecode(raw) as Map<String, dynamic>,
-            );
-      if (!mounted) return;
-      setState(() {
-        _fiscalConfig = config;
-        _configLoaded = true;
-      });
-      _syncFiscalConfigControllers(config);
-      unawaited(_loadNcfSequences());
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _fiscalConfig = _FiscalInvoiceConfig.defaults();
-        _configLoaded = true;
-      });
-      _syncFiscalConfigControllers(_fiscalConfig);
-      unawaited(_loadNcfSequences());
-    }
-  }
-
-  void _syncFiscalConfigControllers(_FiscalInvoiceConfig config) {
-    _rncCtrl.text = config.rnc;
-    _businessNameCtrl.text = config.businessName;
-    _commercialNameCtrl.text = config.commercialName;
-    _addressCtrl.text = config.address;
-    _providerCtrl.text = config.electronicProvider;
-    _certificateCtrl.text = config.certificateAlias;
-  }
-
-  _FiscalInvoiceConfig _readFiscalConfigFromControllers() {
-    return _FiscalInvoiceConfig(
-      enabled: _fiscalConfig.enabled,
-      electronicEnabled: _fiscalConfig.electronicEnabled,
-      environment: _fiscalConfig.environment,
-      rnc: _rncCtrl.text.trim(),
-      businessName: _businessNameCtrl.text.trim(),
-      commercialName: _commercialNameCtrl.text.trim(),
-      address: _addressCtrl.text.trim(),
-      electronicProvider: _providerCtrl.text.trim(),
-      certificateAlias: _certificateCtrl.text.trim(),
-    );
-  }
-
-  Future<void> _loadNcfSequences() async {
+  Future<void> _reloadNcfSequences() async {
     if (_loadingSequences) return;
     setState(() => _loadingSequences = true);
     try {
@@ -325,36 +262,107 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
     }
   }
 
-  Future<void> _saveFiscalConfig() async {
-    if (_savingConfig) return;
-    final config = _readFiscalConfigFromControllers();
-    final validation = config.validationMessage;
-    if (validation != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(validation)));
-      return;
-    }
-    setState(() => _savingConfig = true);
+  void _showSequenceError(Object e, String fallback) {
+    final message = e is ApiException ? e.message : fallback;
+    setState(() => _error = message);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> _openCreateSequenceDialog() async {
+    if (_sequenceDialogOpen) return;
+    _sequenceDialogOpen = true;
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_fiscalConfigPrefsKey, jsonEncode(config.toJson()));
-      if (!mounted) return;
-      setState(() {
-        _fiscalConfig = config;
-        _savingConfig = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Datos fiscales guardados.')),
+      final result = await showDialog<_NcfSequenceFormResult>(
+        context: context,
+        builder: (_) => const _NcfSequenceDialog(),
       );
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _savingConfig = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se pudo guardar la configuración fiscal.'),
-        ),
+      if (result == null || !mounted) return;
+      try {
+        await ref.read(contabilidadRepositoryProvider).createNcfSequence(
+              voucherType: result.voucherType,
+              startNumber: result.startNumber,
+              endNumber: result.endNumber,
+              validUntil: result.validUntil,
+              active: result.active,
+            );
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Secuencia ${result.voucherType} creada.'),
+          ),
+        );
+        await _reloadNcfSequences();
+      } catch (e) {
+        if (!mounted) return;
+        _showSequenceError(e, 'No se pudo crear la secuencia NCF');
+      }
+    } finally {
+      _sequenceDialogOpen = false;
+    }
+  }
+
+  Future<void> _openEditSequenceDialog(NcfSequenceModel sequence) async {
+    if (_sequenceDialogOpen) return;
+    _sequenceDialogOpen = true;
+    try {
+      final result = await showDialog<_NcfSequenceFormResult>(
+        context: context,
+        builder: (_) => _NcfSequenceDialog(sequence: sequence),
       );
+      if (result == null || !mounted) return;
+      try {
+        await ref
+            .read(contabilidadRepositoryProvider)
+            .updateNcfSequence(
+              sequence.id,
+              endNumber: result.endNumber,
+              validUntil: result.validUntil,
+              active: result.active,
+            );
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Secuencia ${sequence.voucherType} actualizada.'),
+          ),
+        );
+        await _reloadNcfSequences();
+      } catch (e) {
+        if (!mounted) return;
+        _showSequenceError(e, 'No se pudo actualizar la secuencia NCF');
+      }
+    } finally {
+      _sequenceDialogOpen = false;
+    }
+  }
+
+  Future<void> _toggleSequenceActive(NcfSequenceModel sequence) async {
+    if (_sequenceDialogOpen) return;
+    _sequenceDialogOpen = true;
+    try {
+      final targetActive = !sequence.active;
+      try {
+        await ref
+            .read(contabilidadRepositoryProvider)
+            .updateNcfSequence(sequence.id, active: targetActive);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              targetActive
+                  ? 'Secuencia ${sequence.voucherType} activada.'
+                  : 'Secuencia ${sequence.voucherType} desactivada.',
+            ),
+          ),
+        );
+        await _reloadNcfSequences();
+      } catch (e) {
+        if (!mounted) return;
+        _showSequenceError(e, 'No se pudo cambiar el estado de la secuencia NCF');
+      }
+    } finally {
+      _sequenceDialogOpen = false;
     }
   }
 
@@ -454,7 +462,12 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
                       kindLabel: _kind.label,
                       filesCount: _selectedFiles.length,
                       invoiceDate: _invoiceDate,
-                      configLoaded: _configLoaded,
+                      ncfEnabled:
+                          ref.watch(companySettingsProvider).valueOrNull
+                                  ?.ncfEnabled ??
+                              false,
+                      companyLoading:
+                          ref.watch(companySettingsProvider).isLoading,
                       saving: _saving,
                       onAdd: _pickInvoiceImage,
                       onSave: _selectedFiles.isEmpty || _saving
@@ -472,124 +485,38 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
 
   Widget _buildFiscalConfigCard(BuildContext context) {
     final theme = Theme.of(context);
-    final config = _fiscalConfig;
     final isMobile = MediaQuery.sizeOf(context).width < 700;
-    if (!_configLoaded) {
-      return const AppCard(
-        child: Padding(
-          padding: EdgeInsets.all(18),
-          child: Center(child: CircularProgressIndicator()),
-        ),
-      );
-    }
+    final companyAsync = ref.watch(companySettingsProvider);
 
     final content = Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEAF1FF),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.fact_check_outlined,
-                  color: Color(0xFF1957E6),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Configuración de factura fiscal',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              Switch.adaptive(
-                value: config.enabled,
-                onChanged: (value) => setState(
-                  () => _fiscalConfig = config.copyWith(enabled: value),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final twoColumns = constraints.maxWidth >= 780;
-              final gap = twoColumns ? 10.0 : 8.0;
-              final fieldWidth = twoColumns
-                  ? (constraints.maxWidth - gap) / 2
-                  : constraints.maxWidth;
-              return Wrap(
-                spacing: gap,
-                runSpacing: 8,
-                children: [
-                  SizedBox(
-                    width: fieldWidth,
-                    child: _FiscalTextField(
-                      controller: _rncCtrl,
-                      label: 'RNC emisor',
-                    ),
-                  ),
-                  SizedBox(
-                    width: fieldWidth,
-                    child: _FiscalTextField(
-                      controller: _businessNameCtrl,
-                      label: 'Razón social',
-                    ),
-                  ),
-                  SizedBox(
-                    width: fieldWidth,
-                    child: _FiscalTextField(
-                      controller: _commercialNameCtrl,
-                      label: 'Nombre comercial',
-                    ),
-                  ),
-                  SizedBox(
-                    width: fieldWidth,
-                    child: _FiscalTextField(
-                      controller: _addressCtrl,
-                      label: 'Dirección fiscal',
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 14),
+          _CompanyFiscalDataBlock(companyAsync: companyAsync),
+          const SizedBox(height: 18),
           Text(
             'Secuencias NCF',
             style: theme.textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
+          Text(
+            'El NCF real se asigna al emitir la venta desde el backend. Aquí administras los rangos autorizados por tipo de comprobante.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 10),
           _FiscalSequenceInfoPanel(
             sequences: _ncfSequences,
             loading: _loadingSequences,
-            onRefresh: _loadNcfSequences,
-          ),
-          const SizedBox(height: 14),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton.icon(
-              onPressed: _savingConfig ? null : _saveFiscalConfig,
-              icon: _savingConfig
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.save_outlined),
-              label: const Text('Guardar configuración'),
-            ),
+            onRefresh: _reloadNcfSequences,
+            onAdd: _openCreateSequenceDialog,
+            onEdit: _openEditSequenceDialog,
+            onToggle: _toggleSequenceActive,
           ),
         ],
       ),
@@ -924,7 +851,8 @@ class _FiscalFixedInfoColumn extends StatelessWidget {
     required this.kindLabel,
     required this.filesCount,
     required this.invoiceDate,
-    required this.configLoaded,
+    required this.ncfEnabled,
+    required this.companyLoading,
     required this.saving,
     required this.onAdd,
     required this.onSave,
@@ -934,7 +862,8 @@ class _FiscalFixedInfoColumn extends StatelessWidget {
   final String kindLabel;
   final int filesCount;
   final DateTime invoiceDate;
-  final bool configLoaded;
+  final bool ncfEnabled;
+  final bool companyLoading;
   final bool saving;
   final VoidCallback onAdd;
   final VoidCallback? onSave;
@@ -975,9 +904,11 @@ class _FiscalFixedInfoColumn extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           _FiscalSideStat(
-            icon: Icons.settings_outlined,
-            label: 'Configuración',
-            value: configLoaded ? 'Lista' : 'Cargando',
+            icon: Icons.fact_check_outlined,
+            label: 'Comprobantes fiscales',
+            value: companyLoading
+                ? 'Cargando'
+                : (ncfEnabled ? 'Activados' : 'Desactivados'),
           ),
           const Spacer(),
           OutlinedButton.icon(
@@ -1304,29 +1235,21 @@ class _SelectedFiscalFileChip extends StatelessWidget {
   }
 }
 
-class _FiscalTextField extends StatelessWidget {
-  const _FiscalTextField({required this.controller, required this.label});
-
-  final TextEditingController controller;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      decoration: _fiscalInputDecoration(label),
-    );
-  }
-}
-
 class _FiscalSequenceRow extends StatelessWidget {
-  const _FiscalSequenceRow({required this.sequence});
+  const _FiscalSequenceRow({
+    required this.sequence,
+    required this.onEdit,
+    required this.onToggle,
+  });
 
   final NcfSequenceModel sequence;
+  final VoidCallback onEdit;
+  final VoidCallback onToggle;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final status = sequence.status.trim().isEmpty
         ? (sequence.active ? 'ACTIVE' : 'DISABLED')
         : sequence.status.trim().toUpperCase();
@@ -1334,7 +1257,7 @@ class _FiscalSequenceRow extends StatelessWidget {
         ? 'Sin vencimiento'
         : DateFormat('dd/MM/yyyy').format(sequence.validUntil!);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FBFF),
         borderRadius: BorderRadius.circular(8),
@@ -1376,12 +1299,43 @@ class _FiscalSequenceRow extends StatelessWidget {
               _FiscalSequenceMetric(label: 'Vence', value: dueLabel),
             ],
           );
+          final actions = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: 'Editar secuencia',
+                visualDensity: VisualDensity.compact,
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                color: scheme.primary,
+              ),
+              IconButton(
+                tooltip: sequence.active
+                    ? 'Desactivar secuencia'
+                    : 'Activar secuencia',
+                visualDensity: VisualDensity.compact,
+                onPressed: onToggle,
+                icon: Icon(
+                  sequence.active
+                      ? Icons.toggle_on_rounded
+                      : Icons.toggle_off_rounded,
+                  size: 24,
+                ),
+                color: sequence.active ? scheme.primary : scheme.outline,
+              ),
+            ],
+          );
 
           if (narrow) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                titleWidget,
+                Row(
+                  children: [
+                    Expanded(child: titleWidget),
+                    actions,
+                  ],
+                ),
                 const SizedBox(height: 8),
                 Text(
                   'Próximo número disponible: ${sequence.possibleNextNcf}',
@@ -1402,6 +1356,8 @@ class _FiscalSequenceRow extends StatelessWidget {
               titleWidget,
               const SizedBox(width: 10),
               Expanded(child: fields),
+              const SizedBox(width: 6),
+              actions,
             ],
           );
         },
@@ -1415,11 +1371,17 @@ class _FiscalSequenceInfoPanel extends StatelessWidget {
     required this.sequences,
     required this.loading,
     required this.onRefresh,
+    required this.onAdd,
+    required this.onEdit,
+    required this.onToggle,
   });
 
   final List<NcfSequenceModel> sequences;
   final bool loading;
   final Future<void> Function() onRefresh;
+  final VoidCallback onAdd;
+  final void Function(NcfSequenceModel sequence) onEdit;
+  final void Function(NcfSequenceModel sequence) onToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -1441,7 +1403,7 @@ class _FiscalSequenceInfoPanel extends StatelessWidget {
             border: Border.all(color: const Color(0xFFF7D070)),
           ),
           child: Text(
-            'Las secuencias se administran en el backend. El próximo número es solo referencia administrativa; el NCF real se asigna al emitir la venta.',
+            'El próximo número es solo referencia administrativa; el NCF real se asigna al emitir la venta desde el backend.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: const Color(0xFF7A4B00),
               fontWeight: FontWeight.w800,
@@ -1466,17 +1428,30 @@ class _FiscalSequenceInfoPanel extends StatelessWidget {
           )
         else
           for (final sequence in sequences) ...[
-            _FiscalSequenceRow(sequence: sequence),
+            _FiscalSequenceRow(
+              sequence: sequence,
+              onEdit: () => onEdit(sequence),
+              onToggle: () => onToggle(sequence),
+            ),
             if (sequence != sequences.last) const SizedBox(height: 8),
           ],
         const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerRight,
-          child: OutlinedButton.icon(
-            onPressed: loading ? null : onRefresh,
-            icon: const Icon(Icons.refresh_rounded),
-            label: const Text('Actualizar'),
-          ),
+        Wrap(
+          alignment: WrapAlignment.end,
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(
+              onPressed: loading ? null : onRefresh,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Actualizar'),
+            ),
+            FilledButton.icon(
+              onPressed: loading ? null : onAdd,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Agregar secuencia'),
+            ),
+          ],
         ),
       ],
     );
@@ -1530,116 +1505,376 @@ String _voucherTypeLabel(String type) {
   }
 }
 
-InputDecoration _fiscalInputDecoration(String label, {String? hint}) {
-  return InputDecoration(
-    labelText: label,
-    hintText: hint,
-    filled: true,
-    fillColor: Colors.white,
-    isDense: true,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(7),
-      borderSide: BorderSide.none,
-    ),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(7),
-      borderSide: BorderSide.none,
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(7),
-      borderSide: const BorderSide(color: Color(0xFF1957E6), width: 1.3),
-    ),
-  );
+class _CompanyFiscalDataBlock extends StatelessWidget {
+  const _CompanyFiscalDataBlock({required this.companyAsync});
+
+  final AsyncValue<CompanySettings> companyAsync;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final settings = companyAsync.valueOrNull;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEAF1FF),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.business_outlined,
+                color: Color(0xFF1957E6),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Datos fiscales de empresa',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Se leen de la configuración de la empresa (fuente única).',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: () => context.push(Routes.configuracionEmpresa),
+              icon: const Icon(Icons.edit_outlined, size: 16),
+              label: const Text('Editar'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        if (settings == null)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 14),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else ...[
+          _CompanyFiscalRow(label: 'RNC emisor', value: settings.rnc),
+          _CompanyFiscalRow(
+            label: 'Razón social / Nombre comercial',
+            value: settings.companyName,
+          ),
+          _CompanyFiscalRow(
+            label: 'Representante legal',
+            value: settings.legalRepresentativeName,
+          ),
+          _CompanyFiscalRow(label: 'Dirección fiscal', value: settings.address),
+          _CompanyFiscalRow(label: 'Teléfono', value: settings.phone),
+          if (!settings.ncfEnabled) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFF7D070)),
+              ),
+              child: Text(
+                'Los comprobantes fiscales (NCF) están desactivados. Actívalos en Configuración de empresa → Impuestos y comprobantes.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: const Color(0xFF7A4B00),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ],
+    );
+  }
 }
 
-class _FiscalInvoiceConfig {
-  const _FiscalInvoiceConfig({
-    required this.enabled,
-    required this.electronicEnabled,
-    required this.environment,
-    required this.rnc,
-    required this.businessName,
-    required this.commercialName,
-    required this.address,
-    required this.electronicProvider,
-    required this.certificateAlias,
+class _CompanyFiscalRow extends StatelessWidget {
+  const _CompanyFiscalRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final display = value.trim().isEmpty ? '—' : value.trim();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 200,
+            child: Text(
+              label,
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              display,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w900,
+                color: display == '—' ? theme.colorScheme.outline : null,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NcfSequenceFormResult {
+  const _NcfSequenceFormResult({
+    required this.voucherType,
+    required this.startNumber,
+    required this.endNumber,
+    required this.validUntil,
+    required this.active,
   });
 
-  factory _FiscalInvoiceConfig.defaults() {
-    return _FiscalInvoiceConfig(
-      enabled: true,
-      electronicEnabled: false,
-      environment: 'Pruebas',
-      rnc: '',
-      businessName: '',
-      commercialName: '',
-      address: '',
-      electronicProvider: '',
-      certificateAlias: '',
+  final String voucherType;
+  final int startNumber;
+  final int endNumber;
+  final DateTime? validUntil;
+  final bool active;
+}
+
+class _NcfSequenceDialog extends StatefulWidget {
+  const _NcfSequenceDialog({this.sequence});
+
+  final NcfSequenceModel? sequence;
+
+  @override
+  State<_NcfSequenceDialog> createState() => _NcfSequenceDialogState();
+}
+
+class _NcfSequenceDialogState extends State<_NcfSequenceDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late String _voucherType;
+  late final TextEditingController _startCtrl;
+  late final TextEditingController _endCtrl;
+  DateTime? _validUntil;
+  late bool _active;
+  bool _submitting = false;
+
+  bool get _isEditing => widget.sequence != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final sequence = widget.sequence;
+    _voucherType = sequence?.voucherType ?? 'B01';
+    _startCtrl = TextEditingController(
+      text: '${sequence?.startNumber ?? 1}',
+    );
+    _endCtrl = TextEditingController(
+      text: '${sequence?.endNumber ?? 100000}',
+    );
+    _validUntil = sequence?.validUntil;
+    _active = sequence?.active ?? true;
+  }
+
+  @override
+  void dispose() {
+    _startCtrl.dispose();
+    _endCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickValidUntil() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _validUntil ?? now.add(const Duration(days: 365)),
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 10),
+      helpText: 'Vencimiento de la secuencia',
+    );
+    if (picked == null) return;
+    setState(
+      () => _validUntil = DateTime(
+        picked.year,
+        picked.month,
+        picked.day,
+        23,
+        59,
+        59,
+      ),
     );
   }
 
-  factory _FiscalInvoiceConfig.fromJson(Map<String, dynamic> json) {
-    return _FiscalInvoiceConfig(
-      enabled: json['enabled'] != false,
-      electronicEnabled: json['electronicEnabled'] == true,
-      environment: (json['environment'] ?? 'Pruebas').toString(),
-      rnc: (json['rnc'] ?? '').toString(),
-      businessName: (json['businessName'] ?? '').toString(),
-      commercialName: (json['commercialName'] ?? '').toString(),
-      address: (json['address'] ?? '').toString(),
-      electronicProvider: (json['electronicProvider'] ?? '').toString(),
-      certificateAlias: (json['certificateAlias'] ?? '').toString(),
+  void _submit() {
+    if (_submitting) return;
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final start = int.tryParse(_startCtrl.text.trim()) ?? 1;
+    final end = int.tryParse(_endCtrl.text.trim()) ?? 0;
+    if (end < start) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'El número final no puede ser menor que el número inicial.',
+          ),
+        ),
+      );
+      return;
+    }
+    _submitting = true;
+    Navigator.of(
+      context,
+    ).pop(
+      _NcfSequenceFormResult(
+        voucherType: _voucherType,
+        startNumber: start,
+        endNumber: end,
+        validUntil: _validUntil,
+        active: _active,
+      ),
     );
   }
 
-  final bool enabled;
-  final bool electronicEnabled;
-  final String environment;
-  final String rnc;
-  final String businessName;
-  final String commercialName;
-  final String address;
-  final String electronicProvider;
-  final String certificateAlias;
-
-  String? get validationMessage {
-    if (!enabled) return null;
-    if (rnc.trim().isEmpty) return 'Debe colocar el RNC emisor.';
-    if (businessName.trim().isEmpty) return 'Debe colocar la razón social.';
-    return null;
-  }
-
-  _FiscalInvoiceConfig copyWith({
-    bool? enabled,
-    bool? electronicEnabled,
-    String? environment,
-  }) {
-    return _FiscalInvoiceConfig(
-      enabled: enabled ?? this.enabled,
-      electronicEnabled: electronicEnabled ?? this.electronicEnabled,
-      environment: environment ?? this.environment,
-      rnc: rnc,
-      businessName: businessName,
-      commercialName: commercialName,
-      address: address,
-      electronicProvider: electronicProvider,
-      certificateAlias: certificateAlias,
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isEditing = _isEditing;
+    final sequence = widget.sequence;
+    return AlertDialog(
+      title: Text(
+        isEditing ? 'Editar secuencia NCF' : 'Agregar secuencia NCF',
+      ),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: _voucherType,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Tipo de comprobante',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'B01',
+                    child: Text('B01 - Crédito fiscal'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'B02',
+                    child: Text('B02 - Consumidor final'),
+                  ),
+                ],
+                onChanged: isEditing
+                    ? null
+                    : (value) =>
+                          setState(() => _voucherType = value ?? 'B01'),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _startCtrl,
+                enabled: !isEditing,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Número inicial',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                validator: (value) {
+                  final parsed = int.tryParse((value ?? '').trim());
+                  if (parsed == null || parsed < 1) {
+                    return 'Número inicial inválido.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _endCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Número final',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                validator: (value) {
+                  final parsed = int.tryParse((value ?? '').trim());
+                  if (parsed == null || parsed < 1) {
+                    return 'Número final inválido.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _pickValidUntil,
+                icon: const Icon(Icons.event_outlined, size: 18),
+                label: Text(
+                  _validUntil == null
+                      ? 'Sin vencimiento'
+                      : 'Vence: ${DateFormat('dd/MM/yyyy').format(_validUntil!)}',
+                ),
+              ),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Secuencia activa'),
+                subtitle: Text(
+                  _active
+                      ? 'Se usará al emitir ventas fiscales de este tipo.'
+                      : 'No se asignará mientras esté desactivada.',
+                ),
+                value: _active,
+                onChanged: (value) => setState(() => _active = value),
+              ),
+              if (isEditing && sequence != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Número actual: ${sequence.nextNumber} · Próximo disponible: ${sequence.possibleNextNcf}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: Text(isEditing ? 'Guardar cambios' : 'Crear secuencia'),
+        ),
+      ],
     );
   }
-
-  Map<String, dynamic> toJson() => {
-    'enabled': enabled,
-    'electronicEnabled': electronicEnabled,
-    'environment': environment,
-    'rnc': rnc,
-    'businessName': businessName,
-    'commercialName': commercialName,
-    'address': address,
-    'electronicProvider': electronicProvider,
-    'certificateAlias': certificateAlias,
-  };
 }
 
 class _ErrorBox extends StatelessWidget {

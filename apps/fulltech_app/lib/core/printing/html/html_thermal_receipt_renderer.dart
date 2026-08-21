@@ -37,6 +37,7 @@ ${_css()}
   <main class="ticket">
     ${_header(receipt, logoSrc)}
     ${_invoiceMeta(receipt)}
+    ${_fiscal(receipt)}
     ${_client(receipt)}
     ${_items(receipt)}
     ${_totals(receipt)}
@@ -350,6 +351,34 @@ body {
       ${document.isEmpty ? '' : '<div class="client-line"><strong>RNC/CEDULA:</strong> ${_escape(document)}</div>'}
     </section>
 ''';
+  }
+
+  String _fiscal(ThermalReceiptViewModel receipt) {
+    final ncf = _clean(receipt.ncf ?? '');
+    final type = _clean(receipt.fiscalVoucherType ?? '');
+    if (ncf.isEmpty && type.isEmpty) return '';
+    final voucherLabel = _fiscalVoucherLabel(type);
+    final lines = <String>[
+      '<div class="client-line"><strong>COMPROBANTE:</strong> ${_escape(voucherLabel.isEmpty ? 'FISCAL' : voucherLabel)}</div>',
+      if (ncf.isNotEmpty)
+        '<div class="client-line"><strong>NCF:</strong> ${_escape(ncf)}</div>',
+    ];
+    return '''
+    <section class="client">
+      ${lines.join()}
+    </section>
+''';
+  }
+
+  String _fiscalVoucherLabel(String type) {
+    switch (type.trim().toUpperCase()) {
+      case 'B01':
+        return 'B01 - CREDITO FISCAL';
+      case 'B02':
+        return 'B02 - CONSUMIDOR FINAL';
+      default:
+        return _clean(type);
+    }
   }
 
   String _items(ThermalReceiptViewModel receipt) {

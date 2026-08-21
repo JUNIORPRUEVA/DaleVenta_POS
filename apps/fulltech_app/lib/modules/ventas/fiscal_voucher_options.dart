@@ -64,8 +64,16 @@ bool shouldResetFiscalVoucherSelection({
   return !options.any((option) => option.type == normalized);
 }
 
+/// Normaliza un RNC / Cédula a solo dígitos para comparaciones consistentes.
+/// `133020253` y `1-33-02025-3` se consideran el mismo documento.
+String normalizeTaxId(String? input) {
+  final raw = (input ?? '').trim();
+  if (raw.isEmpty) return '';
+  return raw.replaceAll(RegExp(r'\D'), '');
+}
+
 bool isB01FiscalClientValid(String? taxId) {
-  final digits = (taxId ?? '').replaceAll(RegExp(r'\D'), '');
+  final digits = normalizeTaxId(taxId);
   return digits.length >= 9;
 }
 

@@ -59,9 +59,11 @@ import '../clientes/cliente_model.dart';
 import '../clientes/cliente_form_screen.dart';
 import '../ventas/data/ventas_repository.dart';
 import '../ventas/application/ventas_controller.dart';
+import '../ventas/fiscal_voucher_options.dart';
 import '../ventas/sales_credit_screen.dart';
 import '../ventas/sales_models.dart';
 import '../ventas/utils/sales_pdf_service.dart';
+import '../../features/contabilidad/data/contabilidad_repository.dart';
 import 'ai/application/quotation_ai_controller.dart';
 import 'ai/domain/models/ai_warning.dart';
 import 'ai/domain/models/quotation_context.dart';
@@ -280,6 +282,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   String _fiscalCustomerTaxId = '';
   String _fiscalCustomerName = '';
+  String _fiscalVoucherType = '';
   double _generalDiscountAmount = 0;
 
   String? _editingId;
@@ -382,6 +385,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _selectedClientId = client.id;
     _selectedClientName = client.nombre;
     _selectedClientPhone = client.telefono;
+    _applyClientFiscalPrefill(client);
   }
 
   void _handleCompanyChanged(String companyId, UserModel? user) {
@@ -1312,7 +1316,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       selectedClientPhone: _selectedClientPhone,
       note: _note,
       includeItbis: includeItbis ?? _quoteTaxEnabled,
-      fiscalVoucherType: '',
+      fiscalVoucherType: _fiscalVoucherType,
       fiscalVoucherNumber: '',
       fiscalVoucherDueDate: null,
       fiscalCustomerTaxId: _fiscalCustomerTaxId,
@@ -1357,6 +1361,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _note = draft.note;
     _fiscalCustomerTaxId = draft.fiscalCustomerTaxId;
     _fiscalCustomerName = draft.fiscalCustomerName;
+    _fiscalVoucherType = draft.fiscalVoucherType;
     _generalDiscountAmount = draft.globalDiscountAmount;
     _editingId = draft.editingId;
     _editingCreatedAt = draft.editingCreatedAt;
@@ -1376,6 +1381,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _note = '';
     _fiscalCustomerTaxId = '';
     _fiscalCustomerName = '';
+    _fiscalVoucherType = '';
     _generalDiscountAmount = 0;
     _editingId = null;
     _editingCreatedAt = null;
@@ -1410,6 +1416,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         _note.trim().isNotEmpty ||
         _fiscalCustomerTaxId.trim().isNotEmpty ||
         _fiscalCustomerName.trim().isNotEmpty ||
+        _fiscalVoucherType.trim().isNotEmpty ||
         _generalDiscountAmount != 0 ||
         (_editingId ?? '').trim().isNotEmpty ||
         _selectedCategories.isNotEmpty;
@@ -1419,7 +1426,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     return _fiscalVoucherValidationMessage == null;
   }
 
-  String? get _fiscalVoucherValidationMessage => null;
+  String? get _fiscalVoucherValidationMessage {
+    final type = _fiscalVoucherType.trim().toUpperCase();
+    if (type.isEmpty) return null;
+    if (type == 'B01' && !isB01FiscalClientValid(_fiscalCustomerTaxId)) {
+      return 'Para emitir B01 debes indicar RNC/Cédula del cliente (mínimo 9 dígitos).';
+    }
+    return null;
+  }
 
   Future<bool> _ensurePosActionPermission(
     AppPermission permission,
@@ -2069,6 +2083,24 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
   }
 
+  /// Prellena los datos fiscales del cliente (RNC y razón social) solo si el
+  /// usuario aún no escribió nada en el panel fiscal.
+  void _applyClientFiscalPrefill(ClienteModel client) {
+    final taxId = client.taxId?.trim() ?? '';
+    final businessName = client.businessName?.trim() ?? '';
+    final clientName = client.nombre.trim();
+    if (_fiscalCustomerTaxId.trim().isEmpty && taxId.isNotEmpty) {
+      _fiscalCustomerTaxId = taxId;
+    }
+    if (_fiscalCustomerName.trim().isEmpty) {
+      if (businessName.isNotEmpty) {
+        _fiscalCustomerName = businessName;
+      } else if (clientName.isNotEmpty && clientName != 'Sin cliente') {
+        _fiscalCustomerName = clientName;
+      }
+    }
+  }
+
   Future<void> _openMobileFiscalInvoicePanel({bool authorized = false}) async {
     if (!_quoteTaxEnabled) return;
     if (!authorized) {
@@ -2081,6 +2113,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         _fiscalCustomerName = clientName == 'Sin cliente' ? '' : clientName;
       });
     }
+    final initialVoucherType = _fiscalVoucherType;
+    final initialTaxId = _fiscalCustomerTaxId;
+    final initialCustomerName = _fiscalCustomerName;
+    final initialClientId = _selectedClientId;
     await showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -2121,7 +2157,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                             ),
                           ),
                           IconButton(
-                            tooltip: 'Cerrar',
+                            tooltip: 'Cerrar sin guardar',
                             onPressed: () => Navigator.of(dialogContext).pop(),
                             icon: const Icon(Icons.close),
                           ),
@@ -2131,29 +2167,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     const Divider(height: 1),
                     Expanded(
                       child: _DesktopFiscalInvoicePanel(
-                        customerTaxId: _fiscalCustomerTaxId,
-                        customerName: _fiscalCustomerName,
-                        onCustomerTaxIdChanged: (value) => _commitEditorChange(
-                          () => _fiscalCustomerTaxId = value,
-                        ),
-                        onCustomerNameChanged: (value) => _commitEditorChange(
-                          () => _fiscalCustomerName = value,
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          onPressed: () => Navigator.of(dialogContext).pop(),
-                          style: FilledButton.styleFrom(
-                            shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.zero,
-                            ),
-                          ),
-                          child: const Text('Listo'),
-                        ),
+                        initialVoucherType: initialVoucherType,
+                        initialTaxId: initialTaxId,
+                        initialCustomerName: initialCustomerName,
+                        initialClientId: initialClientId,
+                        onSave: (result) => _applyFiscalPanelResult(result),
                       ),
                     ),
                   ],
@@ -2178,6 +2196,24 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         );
       },
     );
+  }
+
+  /// Aplica el resultado del panel fiscal al ticket activo (fuente única) y
+  /// persiste en el draft. Vincula el cliente si el panel lo resolvió.
+  void _applyFiscalPanelResult(_FiscalPanelResult result) {
+    _commitEditorChange(() {
+      _fiscalVoucherType = result.voucherType;
+      _fiscalCustomerTaxId = result.taxId;
+      _fiscalCustomerName = result.customerName;
+      final clientId = (result.clientId ?? '').trim();
+      if (clientId.isNotEmpty) {
+        final alreadySelected = clientId == (_selectedClientId ?? '');
+        _selectedClientId = clientId;
+        if (!alreadySelected && result.customerName.trim().isNotEmpty) {
+          _selectedClientName = result.customerName.trim();
+        }
+      }
+    });
   }
 
   Future<void> _handleMobileQuickAction(_MobileQuickAction action) async {
@@ -3693,6 +3729,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                           _selectedClientId = selectedDetailClient.id;
                           _selectedClientName = selectedDetailClient.nombre;
                           _selectedClientPhone = selectedDetailClient.telefono;
+                          _applyClientFiscalPrefill(selectedDetailClient);
                         });
                         Navigator.pop(context);
                       },
@@ -3781,6 +3818,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                     _selectedClientId = created.id;
                                     _selectedClientName = created.nombre;
                                     _selectedClientPhone = created.telefono;
+                                    _applyClientFiscalPrefill(created);
                                   });
                                   Navigator.pop(context);
                                 },
@@ -3898,6 +3936,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                             _selectedClientName = client.nombre;
                                             _selectedClientPhone =
                                                 client.telefono;
+                                            _applyClientFiscalPrefill(client);
                                           });
                                           Navigator.pop(context);
                                         },
@@ -3962,6 +4001,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                             _selectedClientName = client.nombre;
                                             _selectedClientPhone =
                                                 client.telefono;
+                                            _applyClientFiscalPrefill(client);
                                           });
                                           Navigator.pop(context);
                                         },
@@ -4005,6 +4045,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                         _selectedClientId = updated.id;
                         _selectedClientName = updated.nombre;
                         _selectedClientPhone = updated.telefono;
+                        _applyClientFiscalPrefill(updated);
                       });
                       Navigator.pop(context);
                     },
@@ -5410,6 +5451,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     required String saleNote,
     required List<SaleDraftItem> saleItems,
   }) {
+    final voucherType = _fiscalVoucherType.trim().toUpperCase();
     return ref
         .read(ventasRepositoryProvider)
         .createSale(
@@ -5431,6 +5473,17 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           creditAmount: checkout?.creditAmount,
           expectedTotalSold: _roundCurrency(_total),
           globalDiscountAmount: _effectiveGeneralDiscountAmount,
+          fiscalVoucherType: voucherType.isEmpty ? null : voucherType,
+          fiscalCustomerTaxId: voucherType.isEmpty
+              ? null
+              : _fiscalCustomerTaxId.trim().isEmpty
+              ? null
+              : _fiscalCustomerTaxId.trim(),
+          fiscalCustomerName: voucherType.isEmpty
+              ? null
+              : _fiscalCustomerName.trim().isEmpty
+              ? null
+              : _fiscalCustomerName.trim(),
           items: saleItems,
         );
   }
@@ -13196,59 +13249,238 @@ class _DesktopQuotePanel extends StatelessWidget {
   }
 }
 
-class _DesktopFiscalInvoicePanel extends StatefulWidget {
-  const _DesktopFiscalInvoicePanel({
-    required this.customerTaxId,
+class _FiscalPanelResult {
+  const _FiscalPanelResult({
+    required this.voucherType,
+    required this.taxId,
     required this.customerName,
-    required this.onCustomerTaxIdChanged,
-    required this.onCustomerNameChanged,
+    this.clientId,
   });
 
-  final String customerTaxId;
+  final String voucherType;
+  final String taxId;
   final String customerName;
-  final ValueChanged<String> onCustomerTaxIdChanged;
-  final ValueChanged<String> onCustomerNameChanged;
+  final String? clientId;
+}
+
+class _DesktopFiscalInvoicePanel extends ConsumerStatefulWidget {
+  const _DesktopFiscalInvoicePanel({
+    required this.initialVoucherType,
+    required this.initialTaxId,
+    required this.initialCustomerName,
+    required this.initialClientId,
+    required this.onSave,
+  });
+
+  final String initialVoucherType;
+  final String initialTaxId;
+  final String initialCustomerName;
+  final String? initialClientId;
+  final ValueChanged<_FiscalPanelResult> onSave;
 
   @override
-  State<_DesktopFiscalInvoicePanel> createState() =>
+  ConsumerState<_DesktopFiscalInvoicePanel> createState() =>
       _DesktopFiscalInvoicePanelState();
 }
 
 class _DesktopFiscalInvoicePanelState
-    extends State<_DesktopFiscalInvoicePanel> {
+    extends ConsumerState<_DesktopFiscalInvoicePanel> {
+  late String _voucherType;
   late final TextEditingController _taxIdCtrl;
   late final TextEditingController _customerNameCtrl;
+  ClienteModel? _foundClient;
+  bool _searching = false;
+  bool _savingClient = false;
+  bool _saveAsClient = false;
+  Timer? _searchDebounce;
+  int _searchRequestId = 0;
 
   @override
   void initState() {
     super.initState();
-    _taxIdCtrl = TextEditingController(text: widget.customerTaxId);
-    _customerNameCtrl = TextEditingController(text: widget.customerName);
-  }
-
-  @override
-  void didUpdateWidget(covariant _DesktopFiscalInvoicePanel oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _syncController(_taxIdCtrl, widget.customerTaxId);
-    _syncController(_customerNameCtrl, widget.customerName);
-  }
-
-  void _syncController(TextEditingController controller, String value) {
-    if (controller.text == value) return;
-    controller.text = value;
-    controller.selection = TextSelection.collapsed(offset: value.length);
+    _voucherType = widget.initialVoucherType.trim().toUpperCase();
+    _taxIdCtrl = TextEditingController(text: widget.initialTaxId);
+    _customerNameCtrl = TextEditingController(
+      text: widget.initialCustomerName,
+    );
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _taxIdCtrl.dispose();
     _customerNameCtrl.dispose();
     super.dispose();
   }
 
+  bool get _b01Selected => _voucherType == 'B01';
+
+  bool get _hasValidTaxId => isB01FiscalClientValid(_taxIdCtrl.text);
+
+  String get _normalizedTaxId => normalizeTaxId(_taxIdCtrl.text);
+
+  String? get _validationMessage {
+    if (!_b01Selected) return null;
+    if (!_hasValidTaxId) {
+      return 'El B01 requiere RNC/Cédula del cliente (mínimo 9 dígitos).';
+    }
+    return null;
+  }
+
+  bool get _showSaveAsClient =>
+      !_savingClient &&
+      _foundClient == null &&
+      _hasValidTaxId &&
+      _customerNameCtrl.text.trim().isNotEmpty;
+
+  void _selectVoucher(String type) {
+    setState(() => _voucherType = type.trim().toUpperCase());
+  }
+
+  void _onTaxIdChanged(String value) {
+    setState(() {
+      if (_foundClient != null &&
+          normalizeTaxId(_foundClient!.taxId) != normalizeTaxId(value)) {
+        _foundClient = null;
+      }
+    });
+    _scheduleTaxIdSearch(value);
+  }
+
+  void _scheduleTaxIdSearch(String value) {
+    _searchDebounce?.cancel();
+    final digits = normalizeTaxId(value);
+    if (digits.length < 6) {
+      setState(() {
+        _foundClient = null;
+        _searching = false;
+      });
+      return;
+    }
+    _searchDebounce = Timer(const Duration(milliseconds: 450), () {
+      _searchByTaxId(digits);
+    });
+  }
+
+  Future<void> _searchByTaxId(String digits) async {
+    final requestId = ++_searchRequestId;
+    if (mounted) setState(() => _searching = true);
+    try {
+      final clients = await ref
+          .read(ventasRepositoryProvider)
+          .searchClients(digits);
+      if (!mounted || requestId != _searchRequestId) return;
+      ClienteModel? match;
+      for (final client in clients) {
+        if (normalizeTaxId(client.taxId) == digits) {
+          match = client;
+          break;
+        }
+      }
+      if (!mounted || requestId != _searchRequestId) return;
+      setState(() {
+        _searching = false;
+        _foundClient = match;
+        if (match != null && _customerNameCtrl.text.trim().isEmpty) {
+          final businessName = match.businessName?.trim() ?? '';
+          final name = businessName.isNotEmpty
+              ? businessName
+              : match.nombre.trim();
+          _customerNameCtrl.text = name;
+          _customerNameCtrl.selection =
+              TextSelection.collapsed(offset: name.length);
+        }
+      });
+    } catch (_) {
+      if (!mounted || requestId != _searchRequestId) return;
+      setState(() {
+        _searching = false;
+        _foundClient = null;
+      });
+    }
+  }
+
+  Future<bool> _saveFiscalClient() async {
+    if (_savingClient) return false;
+    final digits = _normalizedTaxId;
+    final name = _customerNameCtrl.text.trim();
+    if (digits.length < 9 || name.isEmpty) return false;
+    setState(() => _savingClient = true);
+    try {
+      final created = await ref
+          .read(ventasRepositoryProvider)
+          .createQuickClient(
+            nombre: name,
+            telefono: '',
+            taxId: digits,
+            businessName: name,
+          );
+      if (!mounted) return false;
+      setState(() {
+        _savingClient = false;
+        _saveAsClient = false;
+        _foundClient = created;
+      });
+      return true;
+    } catch (e) {
+      if (!mounted) return false;
+      setState(() => _savingClient = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e is ApiException ? e.message : 'No se pudo guardar el cliente.',
+          ),
+        ),
+      );
+      return false;
+    }
+  }
+
+  Future<void> _finish() async {
+    final message = _validationMessage;
+    if (message != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+      return;
+    }
+    String? clientId = _foundClient?.id ?? widget.initialClientId;
+    if (_saveAsClient && _foundClient == null) {
+      final saved = await _saveFiscalClient();
+      if (!saved || !mounted) return;
+      clientId = _foundClient?.id;
+    }
+    widget.onSave(
+      _FiscalPanelResult(
+        voucherType: _voucherType,
+        taxId: _normalizedTaxId,
+        customerName: _customerNameCtrl.text.trim(),
+        clientId: clientId,
+      ),
+    );
+    if (mounted) Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final border = Border.all(color: const Color(0xFFD3E0E7), width: 1.1);
+    final config = ref.watch(productTaxUiConfigProvider).valueOrNull;
+    final settings = config?.settings;
+    final taxEnabled = settings?.taxEnabled == true;
+    final ncfEnabled = settings?.ncfEnabled == true;
+    final sequences = ref.watch(ncfSequencesProvider).valueOrNull ?? const [];
+    final options = fiscalVoucherOptionsFromConfiguredTypes(
+      taxEnabled: taxEnabled,
+      ncfEnabled: ncfEnabled,
+      configuredTypes: sequences.map((sequence) => sequence.voucherType),
+    );
+    final selectedType = _voucherType;
+    final fiscalDisabled = !taxEnabled || !ncfEnabled;
+    final validationMessage = _validationMessage;
+    final showSaveAsClient = _showSaveAsClient;
+    final foundClient = _foundClient;
 
     return Container(
       height: double.infinity,
@@ -13336,10 +13568,80 @@ class _DesktopFiscalInvoicePanelState
                         color: Color(0xFF647985),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'COMPROBANTE',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF647985),
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (fiscalDisabled)
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFFBEB),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFF7D070)),
+                        ),
+                        child: Text(
+                          'Los comprobantes fiscales están desactivados. Actívalos en Configuración de empresa.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: const Color(0xFF7A4B00),
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      )
+                    else if (options.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FBFF),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFD3E0E7)),
+                        ),
+                        child: Text(
+                          'No hay secuencias NCF activas configuradas para B01/B02.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      )
+                    else
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _VoucherChoiceChip(
+                            label: fiscalVoucherNoneLabel,
+                            selected: selectedType.isEmpty,
+                            onTap: () => _selectVoucher(''),
+                          ),
+                          for (final option in options)
+                            _VoucherChoiceChip(
+                              label: option.label,
+                              selected: selectedType == option.type,
+                              onTap: () => _selectVoucher(option.type),
+                            ),
+                        ],
+                      ),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'CLIENTE FISCAL',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF647985),
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     TextField(
                       controller: _taxIdCtrl,
-                      onChanged: widget.onCustomerTaxIdChanged,
+                      onChanged: _onTaxIdChanged,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
                         labelText: 'RNC / Cédula (opcional)',
@@ -13347,21 +13649,191 @@ class _DesktopFiscalInvoicePanelState
                         isDense: true,
                       ),
                     ),
+                    if (_searching) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Buscando cliente por RNC…',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else if (foundClient != null) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEAF8EC),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFB7E0C2)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.check_circle_outline,
+                              size: 18,
+                              color: Color(0xFF1A7F37),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Cliente registrado: ${_clientLabel(foundClient)}',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: const Color(0xFF0B5E23),
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (validationMessage != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        validationMessage,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.error,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     TextField(
                       controller: _customerNameCtrl,
-                      onChanged: widget.onCustomerNameChanged,
+                      onChanged: (_) => setState(() {}),
                       decoration: const InputDecoration(
                         labelText: 'Razón social / cliente fiscal',
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
                     ),
+                    if (showSaveAsClient) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FBFF),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFD3E0E7)),
+                        ),
+                        child: CheckboxListTile(
+                          dense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                          ),
+                          controlAffinity: ListTileControlAffinity.leading,
+                          value: _saveAsClient,
+                          onChanged: _savingClient
+                              ? null
+                              : (value) => setState(
+                                    () => _saveAsClient = value ?? false,
+                                  ),
+                          title: Text(
+                            'Guardar como cliente para futuras ventas',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          subtitle: _savingClient
+                              ? const Text('Guardando…')
+                              : null,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
             ),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 46,
+              child: FilledButton.icon(
+                onPressed: _savingClient ? null : _finish,
+                icon: _savingClient
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.check_rounded),
+                label: const Text('Guardar'),
+                style: FilledButton.styleFrom(
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
+                  ),
+                ),
+              ),
+            ),
           ],
+        ),
+      ),
+    );
+  }
+
+  String _clientLabel(ClienteModel client) {
+    final businessName = client.businessName?.trim() ?? '';
+    final name = businessName.isNotEmpty ? businessName : client.nombre.trim();
+    final taxId = normalizeTaxId(client.taxId);
+    if (taxId.isEmpty) return name.isEmpty ? 'Cliente' : name;
+    return name.isEmpty ? taxId : '$name · $taxId';
+  }
+}
+
+class _VoucherChoiceChip extends StatelessWidget {
+  const _VoucherChoiceChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: selected
+                ? const Color(0xFFEAF1FF)
+                : scheme.surface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected
+                  ? const Color(0xFF1957E6)
+                  : const Color(0xFFD3E0E7),
+              width: selected ? 1.3 : 1,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+              color: selected
+                  ? const Color(0xFF1957E6)
+                  : const Color(0xFF52697A),
+            ),
+          ),
         ),
       ),
     );

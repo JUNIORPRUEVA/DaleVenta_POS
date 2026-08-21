@@ -10,6 +10,7 @@ import {
 import { Prisma, Role, type Client } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizePhone } from '../common/utils/normalize-phone';
+import { normalizeTaxId } from '../common/utils/normalize-tax-id';
 import { ClientLocationFieldsDto } from './dto/client-location-fields.dto';
 import { CreateClientDto } from './dto/create-client.dto';
 import { ClientsQueryDto } from './dto/clients-query.dto';
@@ -309,14 +310,40 @@ export class ClientsService {
     }
   }
 
+  private async assertNoActiveDuplicateTaxId(
+    companyId: string,
+    normalizedTaxId: string,
+    excludeClientId?: string,
+  ) {
+    if (!normalizedTaxId) return;
+
+    const existing = await this.prisma.client.findFirst({
+      where: {
+        isDeleted: false,
+        companyId,
+        taxId: normalizedTaxId,
+        ...(excludeClientId ? { id: { not: excludeClientId } } : {}),
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      throw new ConflictException(
+        `Ya existe un cliente activo con ese RNC/Cédula (${normalizedTaxId}).`,
+      );
+    }
+  }
+
   async create(user: AuthUser, dto: CreateClientDto) {
     const companyId = requireTenant(user);
     const phoneNormalized = normalizePhone(dto.telefono);
+    const normalizedTaxId = normalizeTaxId(dto.taxId);
     const locationData = this.resolveLocationPayload(dto);
     await this.assertNoActiveDuplicatePhoneNormalized(
       companyId,
       phoneNormalized,
     );
+    await this.assertNoActiveDuplicateTaxId(companyId, normalizedTaxId);
     try {
       const client = await this.prisma.client.create({
         data: {
@@ -325,7 +352,7 @@ export class ClientsService {
           email: dto.email,
           direccion: dto.direccion,
           notas: dto.notas,
-          taxId: dto.taxId?.trim() || null,
+          taxId: normalizedTaxId || null,
           businessName: dto.businessName?.trim() || null,
           taxIdType: dto.taxIdType?.trim() || null,
           ownerId: user.id,
@@ -358,6 +385,7 @@ export class ClientsService {
     const phone = query.phone?.trim();
     const phoneCandidate = phone || search;
     const phoneNormalizedSearch = normalizePhone(phoneCandidate);
+    const taxIdNormalizedSearch = normalizeTaxId(search);
     const baseWhere: Prisma.ClientWhereInput = {
       companyId,
       ...(query.onlyDeleted === true
@@ -374,6 +402,12 @@ export class ClientsService {
               nombre: { contains: search, mode: Prisma.QueryMode.insensitive },
             },
             {
+              businessName: {
+                contains: search,
+                mode: Prisma.QueryMode.insensitive,
+              },
+            },
+            {
               telefono: {
                 contains: search,
                 mode: Prisma.QueryMode.insensitive,
@@ -384,6 +418,9 @@ export class ClientsService {
         : []),
       ...(phoneNormalizedSearch
         ? [{ phoneNormalized: { contains: phoneNormalizedSearch } }]
+        : []),
+      ...(taxIdNormalizedSearch
+        ? [{ taxId: { contains: taxIdNormalizedSearch } }]
         : []),
     ];
 
@@ -422,11 +459,22 @@ export class ClientsService {
     const phoneNormalized = telefonoWasProvided
       ? normalizePhone(dto.telefono)
       : undefined;
+    const taxIdWasProvided = Object.prototype.hasOwnProperty.call(dto, 'taxId');
+    const normalizedTaxId = taxIdWasProvided
+      ? normalizeTaxId(dto.taxId)
+      : undefined;
     const locationData = this.resolveLocationPayload(dto, true);
     if (telefonoWasProvided) {
       await this.assertNoActiveDuplicatePhoneNormalized(
         requireTenant(user),
         phoneNormalized ?? '',
+        id,
+      );
+    }
+    if (taxIdWasProvided) {
+      await this.assertNoActiveDuplicateTaxId(
+        requireTenant(user),
+        normalizedTaxId ?? '',
         id,
       );
     }
@@ -440,7 +488,10 @@ export class ClientsService {
           email: dto.email,
           direccion: dto.direccion,
           notas: dto.notas,
-          taxId: dto.taxId === undefined ? undefined : dto.taxId.trim() || null,
+          taxId:
+            normalizedTaxId === undefined
+              ? undefined
+              : normalizedTaxId || null,
           businessName:
             dto.businessName === undefined ? undefined : dto.businessName.trim() || null,
           taxIdType:

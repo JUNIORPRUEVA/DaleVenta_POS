@@ -72,5 +72,37 @@ void main() {
       expect(isB01FiscalClientValid('12345678'), isFalse);
       expect(isB01FiscalClientValid('101-01010-1'), isTrue);
     });
+
+    test('B01 accepts a plain 9-digit RNC like 133020253', () {
+      expect(isB01FiscalClientValid('133020253'), isTrue);
+    });
+
+    test('B01 accepts a dashed RNC that normalizes to 9 digits', () {
+      expect(isB01FiscalClientValid('1-33-02025-3'), isTrue);
+      expect(isB01FiscalClientValid('1 33 02025 3'), isTrue);
+    });
+
+    test('B01 rejects 8 or fewer normalized digits', () {
+      expect(isB01FiscalClientValid('13302025'), isFalse);
+      expect(isB01FiscalClientValid('1-33-0202-5'), isFalse);
+    });
+  });
+
+  group('normalizeTaxId', () {
+    test('returns only digits', () {
+      expect(normalizeTaxId('133020253'), '133020253');
+      expect(normalizeTaxId('1-33-02025-3'), '133020253');
+      expect(normalizeTaxId('1 33 02025 3'), '133020253');
+    });
+
+    test('treats null and empty as empty', () {
+      expect(normalizeTaxId(null), '');
+      expect(normalizeTaxId(''), '');
+      expect(normalizeTaxId('   '), '');
+    });
+
+    test('does not conflate dashes with different documents', () {
+      expect(normalizeTaxId('133020253'), isNot(normalizeTaxId('133020254')));
+    });
   });
 }
