@@ -10,6 +10,99 @@ describe("SalesService fiscal closure", () => {
     authorizedPermissions: ["refundSales"],
   };
 
+  function buildB01CreateHarness(
+    customer:
+      | {
+          id: string;
+          nombre: string;
+          telefono: string;
+          taxId: string | null;
+          businessName: string | null;
+          direccion: string | null;
+        }
+      | null,
+  ) {
+    const prisma = {
+      cotizacion: { findFirst: jest.fn() },
+      company: {
+        findFirst: jest.fn().mockResolvedValue({ name: "Fallback SRL" }),
+      },
+      appConfig: {
+        findFirst: jest.fn().mockResolvedValue({
+          companyName: "FULLTECH, SRL",
+          rnc: "133080206",
+          address: "Higuey",
+          phone: "809-000-0000",
+        }),
+      },
+      sale: { findFirst: jest.fn() },
+      product: { findMany: jest.fn().mockResolvedValue([]) },
+      client: { findFirst: jest.fn().mockResolvedValue(customer) },
+      cashSession: { findFirst: jest.fn().mockResolvedValue({ id: "cash-a" }) },
+      $transaction: jest.fn(),
+    };
+    const ncf = {
+      normalizeType: jest.fn((type: string) => type.trim().toUpperCase()),
+      reserveNextNcf: jest.fn(),
+      markIssued: jest.fn(),
+    };
+    const calculatorService = {
+      calculate: jest.fn().mockReturnValue({
+        total: new Prisma.Decimal("1180"),
+        taxableBase: new Prisma.Decimal("1000"),
+        taxAmount: new Prisma.Decimal("180"),
+        exemptAmount: new Prisma.Decimal("0"),
+        discountAmount: new Prisma.Decimal("0"),
+        lines: [
+          {
+            index: 0,
+            grossAmount: new Prisma.Decimal("1180"),
+            discountAmount: new Prisma.Decimal("0"),
+            taxableBase: new Prisma.Decimal("1000"),
+            taxRate: new Prisma.Decimal("0.18"),
+            taxAmount: new Prisma.Decimal("180"),
+            exemptAmount: new Prisma.Decimal("0"),
+            taxIncluded: true,
+            taxExempt: false,
+            lineTotal: new Prisma.Decimal("1180"),
+          },
+        ],
+      }),
+      validateFiscalCustomer: jest.fn(),
+    };
+    const service = new SalesService(
+      prisma as never,
+      { get: jest.fn().mockReturnValue("") } as never,
+      { emitCompany: jest.fn() } as never,
+      {
+        getCompanyFiscalSettings: jest.fn().mockResolvedValue({
+          taxEnabled: true,
+          defaultTaxRate: new Prisma.Decimal("0.18"),
+          pricesIncludeTax: true,
+          ncfEnabled: true,
+        }),
+        resolvePriceMode: jest.fn().mockReturnValue("TAX_INCLUDED"),
+        calculatorService,
+      } as never,
+      ncf as never,
+    );
+    return { prisma, ncf, service };
+  }
+
+  const b01Dto = {
+    customerId: "55555555-5555-4555-8555-555555555555",
+    fiscalVoucherType: "B01",
+    expectedTotalSold: 1180,
+    items: [
+      {
+        productName: "Servicio",
+        qty: 1,
+        priceSoldUnit: 1180,
+        costUnitSnapshot: 0,
+      },
+    ],
+  };
+
   it("converts a fiscal quote using stored snapshots and reserves one B01 NCF", async () => {
     const createdSale = {
       id: "sale-a",
@@ -245,6 +338,62 @@ describe("SalesService fiscal closure", () => {
         ],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(ncf.reserveNextNcf).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects B01 when the selected customer belongs to another company before reserving an NCF", async () => {
+    const { prisma, ncf, service } = buildB01CreateHarness(null);
+
+    await expect(service.create(user as never, b01Dto)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+
+    expect(prisma.client.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: b01Dto.customerId,
+          companyId: user.companyId,
+          isDeleted: false,
+        }),
+      }),
+    );
+    expect(ncf.reserveNextNcf).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects B01 when the selected customer has no tax id before reserving an NCF", async () => {
+    const { prisma, ncf, service } = buildB01CreateHarness({
+      id: b01Dto.customerId,
+      nombre: "FULLTECH SRL",
+      telefono: "809-555-0000",
+      taxId: null,
+      businessName: "FULLTECH SRL",
+      direccion: "Higuey",
+    });
+
+    await expect(service.create(user as never, b01Dto)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+
+    expect(ncf.reserveNextNcf).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects B01 when the selected customer has no fiscal name before reserving an NCF", async () => {
+    const { prisma, ncf, service } = buildB01CreateHarness({
+      id: b01Dto.customerId,
+      nombre: "",
+      telefono: "809-555-0000",
+      taxId: "101010101",
+      businessName: null,
+      direccion: "Higuey",
+    });
+
+    await expect(service.create(user as never, b01Dto)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
 
     expect(ncf.reserveNextNcf).not.toHaveBeenCalled();
     expect(prisma.$transaction).not.toHaveBeenCalled();
