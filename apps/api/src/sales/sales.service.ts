@@ -122,11 +122,14 @@ export class SalesService {
   private async findManySalesWithFallback(
     where: Prisma.SaleWhereInput,
     include: Prisma.SaleInclude,
+    limit?: number,
   ) {
+    const take = limit && limit > 0 ? limit : undefined;
     try {
       return await this.prisma.sale.findMany({
         where,
         orderBy: { saleDate: "desc" },
+        take,
         include,
       });
     } catch (error) {
@@ -134,6 +137,7 @@ export class SalesService {
       return this.prisma.sale.findMany({
         where,
         orderBy: { saleDate: "desc" },
+        take,
         select: this.compatibleSaleListSelect(),
       });
     }
@@ -253,6 +257,7 @@ export class SalesService {
     to?: string,
     customerId?: string,
     includeDeleted = false,
+    limit?: number,
   ) {
     const companyId = requireTenant(user);
     const normalizedCustomerId = customerId?.trim();
@@ -264,11 +269,15 @@ export class SalesService {
     };
 
     const include = this.saleInclude();
-    return this.findManySalesWithFallback(where, {
-      customer: include.customer,
-      user: include.user,
-      items: include.items,
-    });
+    return this.findManySalesWithFallback(
+      where,
+      {
+        customer: include.customer,
+        user: include.user,
+        items: include.items,
+      },
+      limit,
+    );
   }
 
   async listInvoices(
@@ -277,6 +286,7 @@ export class SalesService {
     to?: string,
     customerId?: string,
     includeDeleted = false,
+    limit?: number,
   ) {
     const companyId = requireTenant(user);
     const normalizedCustomerId = customerId?.trim();
@@ -287,7 +297,7 @@ export class SalesService {
       ...this.buildDateRange(from, to),
     };
 
-    return this.findManySalesWithFallback(where, this.saleInclude());
+    return this.findManySalesWithFallback(where, this.saleInclude(), limit);
   }
 
   async listByUser(

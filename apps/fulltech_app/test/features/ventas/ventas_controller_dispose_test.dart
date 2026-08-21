@@ -45,6 +45,7 @@ class _FakeVentasRepository implements VentasRepository {
     String? userId,
     String? customerId,
     bool includeDeleted = false,
+    int? limit,
   }) {
     return cachedSalesCompleter.future;
   }
@@ -66,6 +67,7 @@ class _FakeVentasRepository implements VentasRepository {
     String? userId,
     String? customerId,
     bool includeDeleted = false,
+    int? limit,
   }) {
     return listSalesCompleter.future;
   }
@@ -133,6 +135,7 @@ class _FakeVentasRepository implements VentasRepository {
     required DateTime to,
     String? customerId,
     bool includeDeleted = true,
+    int? limit,
   }) {
     throw UnimplementedError();
   }
@@ -189,6 +192,7 @@ class _FakeVentasRepository implements VentasRepository {
     required DateTime to,
     String? customerId,
     bool includeDeleted = true,
+    int? limit,
   }) {
     throw UnimplementedError();
   }

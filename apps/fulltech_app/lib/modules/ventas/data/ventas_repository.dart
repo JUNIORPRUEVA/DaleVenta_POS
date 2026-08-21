@@ -7,6 +7,7 @@ import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/token_storage.dart';
 import '../../../core/cache/local_json_cache.dart';
+import '../../../core/debug/trace_log.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/models/product_model.dart';
 import '../../../core/offline/offline_store.dart';
@@ -107,6 +108,7 @@ class VentasRepository {
     String? userId,
     String? customerId,
     bool includeDeleted = false,
+    int? limit,
   }) async {
     try {
       final res = await _dio.get(
@@ -118,18 +120,20 @@ class VentasRepository {
           if ((customerId ?? '').trim().isNotEmpty)
             'customerId': customerId!.trim(),
           if (includeDeleted) 'includeDeleted': 'true',
+          if (limit != null && limit > 0) 'limit': limit,
         },
         options: Options(extra: const {'skipLoader': true}),
       );
 
       final rows = res.data is List ? (res.data as List) : const [];
-      await _cache.writeMap(
+      await _tryWriteCache(
         _salesListCacheKey(
           from: from,
           to: to,
           userId: userId,
           customerId: customerId,
           includeDeleted: includeDeleted,
+          limit: limit,
         ),
         {'items': rows},
       );
@@ -151,6 +155,7 @@ class VentasRepository {
     String? userId,
     String? customerId,
     bool includeDeleted = false,
+    int? limit,
   }) async {
     final data = await _cache.readMap(
       _salesListCacheKey(
@@ -159,6 +164,7 @@ class VentasRepository {
         userId: userId,
         customerId: customerId,
         includeDeleted: includeDeleted,
+        limit: limit,
       ),
     );
     final rows = _extractRows(data);
@@ -173,6 +179,7 @@ class VentasRepository {
     required DateTime to,
     String? customerId,
     bool includeDeleted = true,
+    int? limit,
   }) async {
     try {
       final res = await _dio.get(
@@ -183,17 +190,19 @@ class VentasRepository {
           if ((customerId ?? '').trim().isNotEmpty)
             'customerId': customerId!.trim(),
           if (includeDeleted) 'includeDeleted': 'true',
+          if (limit != null && limit > 0) 'limit': limit,
         },
         options: Options(extra: const {'skipLoader': true}),
       );
 
       final rows = res.data is List ? (res.data as List) : const [];
-      await _cache.writeMap(
+      await _tryWriteCache(
         _salesInvoicesCacheKey(
           from: from,
           to: to,
           customerId: customerId,
           includeDeleted: includeDeleted,
+          limit: limit,
         ),
         {'items': rows},
       );
@@ -207,6 +216,7 @@ class VentasRepository {
         to: to,
         customerId: customerId,
         includeDeleted: includeDeleted,
+        limit: limit,
       );
       if (cached.isNotEmpty) return cached;
       throw ApiException(
@@ -221,6 +231,7 @@ class VentasRepository {
     required DateTime to,
     String? customerId,
     bool includeDeleted = true,
+    int? limit,
   }) async {
     final data = await _cache.readMap(
       _salesInvoicesCacheKey(
@@ -228,6 +239,7 @@ class VentasRepository {
         to: to,
         customerId: customerId,
         includeDeleted: includeDeleted,
+        limit: limit,
       ),
     );
     final rows = _extractRows(data);
@@ -945,10 +957,12 @@ class VentasRepository {
     String? userId,
     String? customerId,
     required bool includeDeleted,
+    int? limit,
   }) {
     final user = _cacheKeyPart(userId);
     final customer = _cacheKeyPart(customerId);
-    return 'sales.list.v1.${_dateOnly(from)}.${_dateOnly(to)}.$user.$customer.$includeDeleted';
+    final capped = limit != null && limit > 0 ? 'l$limit' : 'all';
+    return 'sales.list.v1.${_dateOnly(from)}.${_dateOnly(to)}.$user.$customer.$includeDeleted.$capped';
   }
 
   String _salesSummaryCacheKey({
@@ -967,9 +981,30 @@ class VentasRepository {
     required DateTime to,
     String? customerId,
     required bool includeDeleted,
+    int? limit,
   }) {
     final customer = _cacheKeyPart(customerId);
-    return 'sales.invoices.v1.${_dateOnly(from)}.${_dateOnly(to)}.$customer.$includeDeleted';
+    final capped = limit != null && limit > 0 ? 'l$limit' : 'all';
+    return 'sales.invoices.v1.${_dateOnly(from)}.${_dateOnly(to)}.$customer.$includeDeleted.$capped';
+  }
+
+  /// Escribe en caché sin bloquear/fallar la respuesta de red: un problema
+  /// local (p. ej. base SQLite ocupada) NUNCA debe dejar colgada la carga
+  /// de ventas recientes.
+  Future<void> _tryWriteCache(
+    String key,
+    Map<String, dynamic> value,
+  ) async {
+    try {
+      await _cache.writeMap(key, value);
+    } catch (error, stackTrace) {
+      TraceLog.log(
+        'ventas_cache',
+        'write fallo key=$key (no bloquea la respuesta)',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
   }
 
   String _cacheKeyPart(String? value) {

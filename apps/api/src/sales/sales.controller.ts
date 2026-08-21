@@ -34,6 +34,7 @@ export class SalesController {
       query.to,
       query.customerId,
       query.includeDeleted === "true",
+      query.limit,
     );
   }
 
@@ -46,6 +47,7 @@ export class SalesController {
       query.to,
       query.customerId,
       query.includeDeleted === "true",
+      query.limit,
     );
   }
 

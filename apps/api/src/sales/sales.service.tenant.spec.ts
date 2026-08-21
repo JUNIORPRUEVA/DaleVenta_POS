@@ -199,4 +199,83 @@ describe("SalesService tenant isolation", () => {
       }),
     });
   });
+
+  it("listInvoices scopes by companyId and applies take when limit is provided", async () => {
+    const prisma = {
+      sale: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const service = serviceWith(prisma);
+
+    await service.listInvoices(
+      user as never,
+      "2026-08-01",
+      "2026-08-20",
+      undefined,
+      false,
+      20,
+    );
+
+    expect(prisma.sale.findMany).toHaveBeenCalledWith({
+      where: {
+        companyId: user.companyId,
+        isDeleted: false,
+        saleDate: {
+          gte: new Date("2026-08-01T04:00:00.000Z"),
+          lt: new Date("2026-08-21T04:00:00.000Z"),
+        },
+      },
+      orderBy: { saleDate: "desc" },
+      take: 20,
+      include: expect.any(Object),
+    });
+  });
+
+  it("listMine scopes by companyId and applies take when limit is provided", async () => {
+    const prisma = {
+      sale: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const service = serviceWith(prisma);
+
+    await service.listMine(
+      user as never,
+      "2026-08-01",
+      "2026-08-20",
+      undefined,
+      false,
+      20,
+    );
+
+    expect(prisma.sale.findMany).toHaveBeenCalledWith({
+      where: {
+        companyId: user.companyId,
+        isDeleted: false,
+        saleDate: {
+          gte: new Date("2026-08-01T04:00:00.000Z"),
+          lt: new Date("2026-08-21T04:00:00.000Z"),
+        },
+      },
+      orderBy: { saleDate: "desc" },
+      take: 20,
+      include: expect.any(Object),
+    });
+  });
+
+  it("listInvoices without limit does not add take", async () => {
+    const prisma = {
+      sale: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const service = serviceWith(prisma);
+
+    await service.listInvoices(
+      user as never,
+      "2026-08-01",
+      "2026-08-20",
+      undefined,
+      false,
+    );
+
+    expect(prisma.sale.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ take: undefined }),
+    );
+  });
 });
