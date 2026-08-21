@@ -153,6 +153,7 @@ class _FakeVentasRepository implements VentasRepository {
     String? fiscalVoucherType,
     String? fiscalCustomerTaxId,
     String? fiscalCustomerName,
+    bool? saveFiscalCustomer,
     required List<SaleDraftItem> items,
   }) {
     throw UnimplementedError();

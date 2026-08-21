@@ -32,9 +32,6 @@ describe("SalesService fiscal client persistence (B01)", () => {
 
   function buildHarness(options: {
     findClient?: (query: unknown) => Promise<unknown | null>;
-    fiscalVoucherType?: string;
-    fiscalCustomerTaxId?: string | null;
-    fiscalCustomerName?: string | null;
   }) {
     const tx = {
       product: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
@@ -47,7 +44,9 @@ describe("SalesService fiscal client persistence (B01)", () => {
       },
       client: {
         findFirst: jest.fn((query) =>
-          options.findClient ? options.findClient(query) : Promise.resolve(null),
+          options.findClient
+            ? options.findClient(query)
+            : Promise.resolve(null),
         ),
         update: jest.fn(),
         create: jest.fn(),
@@ -108,21 +107,37 @@ describe("SalesService fiscal client persistence (B01)", () => {
   }
 
   const saleItems = [
-    { productName: "Servicio", qty: 1, priceSoldUnit: 1000, costUnitSnapshot: 0 },
+    {
+      productName: "Servicio",
+      qty: 1,
+      priceSoldUnit: 1000,
+      costUnitSnapshot: 0,
+    },
   ];
 
-  it("creates a reusable fiscal client (normalized RNC) when a B01 sale is emitted", async () => {
+  it("creates a reusable fiscal client (normalized RNC, company-scoped) when saveFiscalCustomer=true", async () => {
     const { service, tx, ncf } = buildHarness({});
 
     await service.create(user as never, {
       fiscalVoucherType: "B01",
       fiscalCustomerTaxId: "1-33-02025-3",
       fiscalCustomerName: "potatoes.dres, srl",
+      saveFiscalCustomer: true,
       expectedTotalSold: 1180,
       items: saleItems,
     });
 
-    // The client is persisted with the NORMALIZED document and the name.
+    // Lookup is scoped by the active company (never a global RNC search).
+    expect(tx.client.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          companyId: user.companyId,
+          isDeleted: false,
+          taxId: "133020253",
+        }),
+      }),
+    );
+    // Client persisted with normalized document + companyId (master data).
     expect(tx.client.create).toHaveBeenCalledTimes(1);
     expect(tx.client.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -140,7 +155,7 @@ describe("SalesService fiscal client persistence (B01)", () => {
     expect(ncf.markIssued).toHaveBeenCalledTimes(1);
   });
 
-  it("reuses an existing client by RNC without creating a duplicate", async () => {
+  it("reuses an existing client by RNC within the same company (no duplicate)", async () => {
     const { service, tx, ncf } = buildHarness({
       findClient: () =>
         Promise.resolve({
@@ -155,11 +170,20 @@ describe("SalesService fiscal client persistence (B01)", () => {
       fiscalVoucherType: "B01",
       fiscalCustomerTaxId: "133020253",
       fiscalCustomerName: "potatoes.dres, srl",
+      saveFiscalCustomer: true,
       expectedTotalSold: 1180,
       items: saleItems,
     });
 
     expect(tx.client.create).not.toHaveBeenCalled();
+    expect(tx.client.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          companyId: user.companyId,
+          taxId: "133020253",
+        }),
+      }),
+    );
     // Fills the missing businessName on the existing client.
     expect(tx.client.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -168,6 +192,49 @@ describe("SalesService fiscal client persistence (B01)", () => {
       }),
     );
     expect(ncf.reserveNextNcf).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT create a master client when saveFiscalCustomer=false (snapshot still saved)", async () => {
+    const { service, tx, ncf } = buildHarness({});
+
+    await service.create(user as never, {
+      fiscalVoucherType: "B01",
+      fiscalCustomerTaxId: "133020253",
+      fiscalCustomerName: "potatoes.dres, srl",
+      saveFiscalCustomer: false,
+      expectedTotalSold: 1180,
+      items: saleItems,
+    });
+
+    expect(tx.client.create).not.toHaveBeenCalled();
+    expect(tx.client.update).not.toHaveBeenCalled();
+    // The sale is still emitted and the snapshot is stored.
+    expect(tx.sale.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          fiscalCustomerTaxId: "133020253",
+          fiscalCustomerName: "potatoes.dres, srl",
+          ncf: "B0100000001",
+        }),
+      }),
+    );
+    expect(ncf.reserveNextNcf).toHaveBeenCalledTimes(1);
+    expect(ncf.markIssued).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT create a master client when saveFiscalCustomer is undefined", async () => {
+    const { service, tx } = buildHarness({});
+
+    await service.create(user as never, {
+      fiscalVoucherType: "B01",
+      fiscalCustomerTaxId: "133020253",
+      fiscalCustomerName: "potatoes.dres, srl",
+      expectedTotalSold: 1180,
+      items: saleItems,
+    });
+
+    expect(tx.client.create).not.toHaveBeenCalled();
+    expect(tx.client.update).not.toHaveBeenCalled();
   });
 
   it("does not create a client nor consume NCF for a non-fiscal sale", async () => {
@@ -190,6 +257,7 @@ describe("SalesService fiscal client persistence (B01)", () => {
       fiscalVoucherType: "B01",
       fiscalCustomerTaxId: "133020253",
       fiscalCustomerName: "",
+      saveFiscalCustomer: true,
       expectedTotalSold: 1180,
       items: saleItems,
     });

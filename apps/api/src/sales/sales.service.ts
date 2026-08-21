@@ -974,16 +974,19 @@ export class SalesService {
           });
         }
 
-        // Persist the fiscal customer as a REUSABLE Client (master data) so a
-        // later sale can recover it by RNC/Cédula. Best effort: never blocks a
+        // Persist the fiscal customer as a REUSABLE Client (master data) only
+        // when the user explicitly opted in (saveFiscalCustomer) so a later
+        // sale can recover it by RNC/Cédula. Best effort: never blocks a
         // successfully emitted sale, and never consumes an extra NCF.
-        await this.ensureFiscalClientForSale(tx, {
-          companyId,
-          userId: user.id,
-          customerId,
-          taxId: fiscalCustomerTaxId,
-          name: fiscalCustomerName,
-        });
+        if (dto.saveFiscalCustomer === true) {
+          await this.ensureFiscalClientForSale(tx, {
+            companyId,
+            userId: user.id,
+            customerId,
+            taxId: fiscalCustomerTaxId,
+            name: fiscalCustomerName,
+          });
+        }
 
         return sale;
       });

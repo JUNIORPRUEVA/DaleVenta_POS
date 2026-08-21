@@ -283,6 +283,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   String _fiscalCustomerTaxId = '';
   String _fiscalCustomerName = '';
   String _fiscalVoucherType = '';
+  bool _saveFiscalCustomer = false;
   double _generalDiscountAmount = 0;
 
   String? _editingId;
@@ -1321,6 +1322,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       fiscalVoucherDueDate: null,
       fiscalCustomerTaxId: _fiscalCustomerTaxId,
       fiscalCustomerName: _fiscalCustomerName,
+      saveFiscalCustomer: _saveFiscalCustomer,
       globalDiscountAmount: _generalDiscountAmount,
       editingId: _editingId,
       editingCreatedAt: _editingCreatedAt,
@@ -1362,6 +1364,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _fiscalCustomerTaxId = draft.fiscalCustomerTaxId;
     _fiscalCustomerName = draft.fiscalCustomerName;
     _fiscalVoucherType = draft.fiscalVoucherType;
+    _saveFiscalCustomer = draft.saveFiscalCustomer;
     _generalDiscountAmount = draft.globalDiscountAmount;
     _editingId = draft.editingId;
     _editingCreatedAt = draft.editingCreatedAt;
@@ -1382,6 +1385,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _fiscalCustomerTaxId = '';
     _fiscalCustomerName = '';
     _fiscalVoucherType = '';
+    _saveFiscalCustomer = false;
     _generalDiscountAmount = 0;
     _editingId = null;
     _editingCreatedAt = null;
@@ -1417,6 +1421,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         _fiscalCustomerTaxId.trim().isNotEmpty ||
         _fiscalCustomerName.trim().isNotEmpty ||
         _fiscalVoucherType.trim().isNotEmpty ||
+        _saveFiscalCustomer ||
         _generalDiscountAmount != 0 ||
         (_editingId ?? '').trim().isNotEmpty ||
         _selectedCategories.isNotEmpty;
@@ -2117,6 +2122,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     final initialTaxId = _fiscalCustomerTaxId;
     final initialCustomerName = _fiscalCustomerName;
     final initialClientId = _selectedClientId;
+    final initialSaveFiscalCustomer = _saveFiscalCustomer;
     await showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -2171,6 +2177,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                         initialTaxId: initialTaxId,
                         initialCustomerName: initialCustomerName,
                         initialClientId: initialClientId,
+                        initialSaveFiscalCustomer: initialSaveFiscalCustomer,
                         onSave: (result) => _applyFiscalPanelResult(result),
                       ),
                     ),
@@ -2205,6 +2212,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       _fiscalVoucherType = result.voucherType;
       _fiscalCustomerTaxId = result.taxId;
       _fiscalCustomerName = result.customerName;
+      _saveFiscalCustomer = result.saveFiscalCustomer;
       final clientId = (result.clientId ?? '').trim();
       if (clientId.isNotEmpty) {
         final alreadySelected = clientId == (_selectedClientId ?? '');
@@ -5484,6 +5492,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               : _fiscalCustomerName.trim().isEmpty
               ? null
               : _fiscalCustomerName.trim(),
+          saveFiscalCustomer: _saveFiscalCustomer,
           items: saleItems,
         );
   }
@@ -13254,12 +13263,14 @@ class _FiscalPanelResult {
     required this.voucherType,
     required this.taxId,
     required this.customerName,
+    required this.saveFiscalCustomer,
     this.clientId,
   });
 
   final String voucherType;
   final String taxId;
   final String customerName;
+  final bool saveFiscalCustomer;
   final String? clientId;
 }
 
@@ -13269,6 +13280,7 @@ class _DesktopFiscalInvoicePanel extends ConsumerStatefulWidget {
     required this.initialTaxId,
     required this.initialCustomerName,
     required this.initialClientId,
+    required this.initialSaveFiscalCustomer,
     required this.onSave,
   });
 
@@ -13276,6 +13288,7 @@ class _DesktopFiscalInvoicePanel extends ConsumerStatefulWidget {
   final String initialTaxId;
   final String initialCustomerName;
   final String? initialClientId;
+  final bool initialSaveFiscalCustomer;
   final ValueChanged<_FiscalPanelResult> onSave;
 
   @override
@@ -13290,8 +13303,7 @@ class _DesktopFiscalInvoicePanelState
   late final TextEditingController _customerNameCtrl;
   ClienteModel? _foundClient;
   bool _searching = false;
-  bool _savingClient = false;
-  bool _saveAsClient = false;
+  late bool _saveAsClient;
   Timer? _searchDebounce;
   int _searchRequestId = 0;
 
@@ -13303,6 +13315,7 @@ class _DesktopFiscalInvoicePanelState
     _customerNameCtrl = TextEditingController(
       text: widget.initialCustomerName,
     );
+    _saveAsClient = widget.initialSaveFiscalCustomer;
   }
 
   @override
@@ -13328,7 +13341,6 @@ class _DesktopFiscalInvoicePanelState
   }
 
   bool get _showSaveAsClient =>
-      !_savingClient &&
       _foundClient == null &&
       _hasValidTaxId &&
       _customerNameCtrl.text.trim().isNotEmpty;
@@ -13400,42 +13412,6 @@ class _DesktopFiscalInvoicePanelState
     }
   }
 
-  Future<bool> _saveFiscalClient() async {
-    if (_savingClient) return false;
-    final digits = _normalizedTaxId;
-    final name = _customerNameCtrl.text.trim();
-    if (digits.length < 9 || name.isEmpty) return false;
-    setState(() => _savingClient = true);
-    try {
-      final created = await ref
-          .read(ventasRepositoryProvider)
-          .createQuickClient(
-            nombre: name,
-            telefono: '',
-            taxId: digits,
-            businessName: name,
-          );
-      if (!mounted) return false;
-      setState(() {
-        _savingClient = false;
-        _saveAsClient = false;
-        _foundClient = created;
-      });
-      return true;
-    } catch (e) {
-      if (!mounted) return false;
-      setState(() => _savingClient = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e is ApiException ? e.message : 'No se pudo guardar el cliente.',
-          ),
-        ),
-      );
-      return false;
-    }
-  }
-
   Future<void> _finish() async {
     final message = _validationMessage;
     if (message != null) {
@@ -13444,17 +13420,13 @@ class _DesktopFiscalInvoicePanelState
       );
       return;
     }
-    String? clientId = _foundClient?.id ?? widget.initialClientId;
-    if (_saveAsClient && _foundClient == null) {
-      final saved = await _saveFiscalClient();
-      if (!saved || !mounted) return;
-      clientId = _foundClient?.id;
-    }
+    final clientId = _foundClient?.id ?? widget.initialClientId;
     widget.onSave(
       _FiscalPanelResult(
         voucherType: _voucherType,
         taxId: _normalizedTaxId,
         customerName: _customerNameCtrl.text.trim(),
+        saveFiscalCustomer: _saveAsClient,
         clientId: clientId,
       ),
     );
@@ -13773,20 +13745,22 @@ class _DesktopFiscalInvoicePanelState
                           ),
                           controlAffinity: ListTileControlAffinity.leading,
                           value: _saveAsClient,
-                          onChanged: _savingClient
-                              ? null
-                              : (value) => setState(
-                                    () => _saveAsClient = value ?? false,
-                                  ),
+                          onChanged: (value) => setState(
+                            () => _saveAsClient = value ?? false,
+                          ),
                           title: Text(
                             'Guardar como cliente para futuras ventas',
                             style: theme.textTheme.bodySmall?.copyWith(
                               fontWeight: FontWeight.w800,
                             ),
                           ),
-                          subtitle: _savingClient
-                              ? const Text('Guardando…')
-                              : null,
+                          subtitle: Text(
+                            'Se creará o reutilizará al emitir esta venta.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -13798,14 +13772,8 @@ class _DesktopFiscalInvoicePanelState
             SizedBox(
               height: 46,
               child: FilledButton.icon(
-                onPressed: _savingClient ? null : _finish,
-                icon: _savingClient
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.check_rounded),
+                onPressed: _finish,
+                icon: const Icon(Icons.check_rounded),
                 label: const Text('Guardar'),
                 style: FilledButton.styleFrom(
                   shape: const RoundedRectangleBorder(
@@ -16254,6 +16222,7 @@ class _DesktopTicketDraft {
     required this.fiscalVoucherDueDate,
     required this.fiscalCustomerTaxId,
     required this.fiscalCustomerName,
+    required this.saveFiscalCustomer,
     required this.globalDiscountAmount,
     required this.editingId,
     required this.editingCreatedAt,
@@ -16287,6 +16256,7 @@ class _DesktopTicketDraft {
       fiscalVoucherDueDate: null,
       fiscalCustomerTaxId: '',
       fiscalCustomerName: '',
+      saveFiscalCustomer: false,
       globalDiscountAmount: 0,
       editingId: null,
       editingCreatedAt: null,
@@ -16312,6 +16282,7 @@ class _DesktopTicketDraft {
   final DateTime? fiscalVoucherDueDate;
   final String fiscalCustomerTaxId;
   final String fiscalCustomerName;
+  final bool saveFiscalCustomer;
   final double globalDiscountAmount;
   final String? editingId;
   final DateTime? editingCreatedAt;
@@ -16336,6 +16307,7 @@ class _DesktopTicketDraft {
     DateTime? fiscalVoucherDueDate,
     String? fiscalCustomerTaxId,
     String? fiscalCustomerName,
+    bool? saveFiscalCustomer,
     double? globalDiscountAmount,
     String? editingId,
     DateTime? editingCreatedAt,
@@ -16360,6 +16332,8 @@ class _DesktopTicketDraft {
       fiscalVoucherDueDate: fiscalVoucherDueDate ?? this.fiscalVoucherDueDate,
       fiscalCustomerTaxId: fiscalCustomerTaxId ?? this.fiscalCustomerTaxId,
       fiscalCustomerName: fiscalCustomerName ?? this.fiscalCustomerName,
+      saveFiscalCustomer:
+          saveFiscalCustomer ?? this.saveFiscalCustomer,
       globalDiscountAmount: globalDiscountAmount ?? this.globalDiscountAmount,
       editingId: editingId ?? this.editingId,
       editingCreatedAt: editingCreatedAt ?? this.editingCreatedAt,
@@ -16392,6 +16366,7 @@ class _DesktopTicketDraft {
     'fiscalVoucherDueDate': fiscalVoucherDueDate?.toIso8601String(),
     'fiscalCustomerTaxId': fiscalCustomerTaxId,
     'fiscalCustomerName': fiscalCustomerName,
+    'saveFiscalCustomer': saveFiscalCustomer,
     'globalDiscountAmount': globalDiscountAmount,
     'editingId': editingId,
     'editingCreatedAt': editingCreatedAt?.toIso8601String(),
@@ -16437,6 +16412,7 @@ class _DesktopTicketDraft {
       ),
       fiscalCustomerTaxId: (map['fiscalCustomerTaxId'] ?? '').toString(),
       fiscalCustomerName: (map['fiscalCustomerName'] ?? '').toString(),
+      saveFiscalCustomer: map['saveFiscalCustomer'] == true,
       globalDiscountAmount:
           (map['globalDiscountAmount'] as num?)?.toDouble() ?? 0,
       editingId: map['editingId']?.toString(),

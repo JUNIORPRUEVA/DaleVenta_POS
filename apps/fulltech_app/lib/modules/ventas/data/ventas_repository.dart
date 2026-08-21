@@ -533,6 +533,7 @@ class VentasRepository {
     String? fiscalVoucherType,
     String? fiscalCustomerTaxId,
     String? fiscalCustomerName,
+    bool? saveFiscalCustomer,
     required List<SaleDraftItem> items,
   }) async {
     if (items.isEmpty) {
@@ -562,6 +563,7 @@ class VentasRepository {
         'fiscalCustomerTaxId': fiscalCustomerTaxId!.trim(),
       if ((fiscalCustomerName ?? '').trim().isNotEmpty)
         'fiscalCustomerName': fiscalCustomerName!.trim(),
+      if (saveFiscalCustomer == true) 'saveFiscalCustomer': true,
       'items': items.map((item) => item.toPayload()).toList(),
     };
 
@@ -579,6 +581,7 @@ class VentasRepository {
         fiscalVoucherType: fiscalVoucherType,
         fiscalCustomerTaxId: fiscalCustomerTaxId,
         fiscalCustomerName: fiscalCustomerName,
+        saveFiscalCustomer: saveFiscalCustomer,
         clientRequestId: clientRequestId,
         items: items,
       );
@@ -671,6 +674,7 @@ class VentasRepository {
     String? fiscalVoucherType,
     String? fiscalCustomerTaxId,
     String? fiscalCustomerName,
+    bool? saveFiscalCustomer,
     String? clientRequestId,
     required List<SaleDraftItem> items,
   }) async {
@@ -700,6 +704,7 @@ class VentasRepository {
           'fiscalCustomerTaxId': fiscalCustomerTaxId!.trim(),
         if ((fiscalCustomerName ?? '').trim().isNotEmpty)
           'fiscalCustomerName': fiscalCustomerName!.trim(),
+        if (saveFiscalCustomer == true) 'saveFiscalCustomer': true,
         'items': items.map((item) => item.toPayload()).toList(),
       },
     );
