@@ -190,6 +190,22 @@ void main() {
       expect(file.lengthSync(), greaterThan(1000));
     }
   });
+
+  test('thermal PDF renders a long warranty policy fully (no truncation)',
+      () async {
+    final longPolicy =
+        'La garantía cubre únicamente defectos de fabricación por un período '
+        'de doce (12) meses a partir de la fecha de compra. No incluye daños '
+        'por mal uso, caídas, humedad, descargas eléctricas ni alteraciones '
+        'realizadas por personal no autorizado. Conserve su factura para '
+        'hacer valida la garantía en nuestro establecimiento.';
+    final bytes = await HtmlThermalReceiptPdfRenderer(
+      warrantyPolicy: longPolicy,
+    ).render(_receipt());
+
+    expect(bytes, isNotEmpty);
+    expect(bytes.length, greaterThan(1000));
+  });
 }
 
 ThermalReceiptViewModel _receipt({

@@ -306,6 +306,7 @@ class HtmlThermalReceiptPdfRenderer {
   pw.Widget _warrantyPolicy() {
     final policy = _clean(warrantyPolicy);
     if (policy.isEmpty) return pw.SizedBox();
+    final lines = _warrantyWrapLines(policy);
     return pw.Padding(
       padding: pw.EdgeInsets.only(top: 2 * PdfPageFormat.mm),
       child: pw.Column(
@@ -313,10 +314,18 @@ class HtmlThermalReceiptPdfRenderer {
         children: [
           pw.Text('POLITICA DE GARANTIA', style: _style(8, bold: true)),
           pw.SizedBox(height: 0.6 * PdfPageFormat.mm),
-          pw.Text(policy, style: _style(7.5), maxLines: 3),
+          for (final line in lines) pw.Text(line, style: _style(7.5)),
         ],
       ),
     );
+  }
+
+  /// Full-wrap of the warranty policy text (never truncated with '...').
+  /// Uses a conservative character width per paper size so every line fits
+  /// the physical ticket.
+  List<String> _warrantyWrapLines(String policy) {
+    final width = paperWidthMm == 58 ? 30 : 48;
+    return ReceiptTextUtils.wrap(policy, width);
   }
 
   pw.Widget _footer() {
@@ -439,13 +448,16 @@ class HtmlThermalReceiptPdfRenderer {
       receipt.taxableBase,
       receipt.taxAmount,
     ].where((value) => value > 0).length;
+    final warrantyLines = _clean(warrantyPolicy).isEmpty
+        ? 0
+        : _warrantyWrapLines(_clean(warrantyPolicy)).length;
     final mm =
         72 +
         (receipt.items.length * 4.8) +
         (lineDiscounts * 2.8) +
         (fiscalLines * 3.5) +
         (noteLines * 4.0) +
-        (_clean(warrantyPolicy).isEmpty ? 0 : 14.0);
+        (warrantyLines == 0 ? 0 : 12 + (warrantyLines * 3.6));
     return mm.clamp(100, 2000) * PdfPageFormat.mm;
   }
 

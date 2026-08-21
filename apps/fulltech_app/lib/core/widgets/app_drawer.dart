@@ -358,13 +358,15 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
 
   Future<void> _openMovementDialog(BuildContext context, String type) async {
     final rootContext = Navigator.of(context, rootNavigator: true).context;
-    final controller = ref.read(activeCashSessionControllerProvider.notifier);
     Navigator.pop(context);
     await Future<void>.delayed(Duration.zero);
     if (!rootContext.mounted) return;
     final input = await showCashMovementDialog(rootContext, type: type);
     if (input == null || !rootContext.mounted) return;
     try {
+      // Releer el notifier justo en el punto de uso (tras pop/diálogo/await).
+      final controller =
+          ref.read(activeCashSessionControllerProvider.notifier);
       await controller.addMovement(
         type: type,
         amount: input.amount,
@@ -386,7 +388,6 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
   Future<void> _closeTurnFromDrawer(BuildContext context) async {
     final rootContext = Navigator.of(context, rootNavigator: true).context;
     final repository = ref.read(cashRepositoryProvider);
-    final controller = ref.read(activeCashSessionControllerProvider.notifier);
     Navigator.pop(context);
     await Future<void>.delayed(Duration.zero);
     if (!rootContext.mounted) return;
@@ -398,10 +399,14 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
         rootContext,
         expectedCash: summary.expectedCash,
         onCloseShift: (amount) {
+          final controller =
+              ref.read(activeCashSessionControllerProvider.notifier);
           return controller.close(amount);
         },
       );
       if (!rootContext.mounted || result?.success != true) return;
+      final controller =
+          ref.read(activeCashSessionControllerProvider.notifier);
       await controller.refresh();
       if (!rootContext.mounted) return;
       final printResult = result?.printResult;

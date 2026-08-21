@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,7 +10,6 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
-import '../../core/widgets/desktop_sales_style.dart';
 import '../../core/widgets/fulltech_page_header.dart';
 import 'cash_dialogs.dart';
 import 'cash_close_ticket_printer.dart';
@@ -209,65 +206,50 @@ enum _MovementTypeFilter { all, inOnly, outOnly }
 
 enum _MovementDateFilter { today, yesterday, week, month, specific, all }
 
-DateTimeRange _last15DaysRange([DateTime? reference]) {
-  final now = reference ?? DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  return DateTimeRange(
-    start: today.subtract(const Duration(days: 14)),
-    end: today,
-  );
-}
-
 class _CashMovementsHistoryScreenState
     extends ConsumerState<CashMovementsHistoryScreen> {
   final _searchController = TextEditingController();
   _MovementTypeFilter _type = _MovementTypeFilter.all;
-  _MovementDateFilter _date = _MovementDateFilter.specific;
-  DateTimeRange? _specificRange = _last15DaysRange();
-  String? _selectedMovementId;
-  Timer? _refreshTimer;
+  _MovementDateFilter _date = _MovementDateFilter.today;
+  DateTime? _specificDate;
+  bool _searchOpen = false;
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(() => setState(() {}));
-    // Refresco automático: la página obtiene nuevos movimientos por sí sola,
-    // sin necesidad de pulsar "Actualizar" manualmente.
-    _refreshTimer = Timer.periodic(
-      const Duration(seconds: 20),
-      (_) => _autoRefresh(),
-    );
   }
 
   @override
   void dispose() {
-    _refreshTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
-  void _autoRefresh() {
-    if (!mounted) return;
-    ref.invalidate(cashMovementHistoryProvider);
-  }
-
-  int get _activeMovementFilterCount {
-    var count = 0;
-    if (_type != _MovementTypeFilter.all) count++;
-    if (_date != _MovementDateFilter.all) count++;
-    return count;
-  }
-
-  String get _movementFilterSummary {
-    final typeLabel = _movementTypeLabel(_type);
-    final dateLabel =
-        _date == _MovementDateFilter.specific && _specificRange != null
-        ? '${DateFormat('dd/MM/yyyy', 'es_DO').format(_specificRange!.start)} - ${DateFormat('dd/MM/yyyy', 'es_DO').format(_specificRange!.end)}'
-        : _movementDateLabel(_date);
-    if (_type == _MovementTypeFilter.all && _date == _MovementDateFilter.all) {
-      return 'Todos';
+  Future<void> _register(String type) async {
+    final input = await showCashMovementDialog(context, type: type);
+    if (input == null) return;
+    try {
+      await ref
+          .read(activeCashSessionControllerProvider.notifier)
+          .addMovement(
+            type: type,
+            amount: input.amount,
+            reason: input.reason,
+            movementType: input.movementType,
+            affectsProfit: input.affectsProfit,
+          );
+      ref.invalidate(cashMovementHistoryProvider);
+      ref.invalidate(cashExpenseHistoryProvider);
+      if (!mounted) return;
+      showCashToast(
+        context,
+        type == 'IN' ? 'Ingreso registrado' : 'Salida registrada',
+      );
+    } catch (error) {
+      if (!mounted) return;
+      showCashToast(context, resolveCashError(error), isError: true);
     }
-    return '$typeLabel · $dateLabel';
   }
 
   List<CashMovementModel> _filter(List<CashMovementModel> rows) {
@@ -292,17 +274,6 @@ class _CashMovementsHistoryScreenState
         .toList(growable: false);
   }
 
-  CashMovementModel? _selectedMovementFrom(List<CashMovementModel> rows) {
-    if (rows.isEmpty) return null;
-    final selectedId = (_selectedMovementId ?? '').trim();
-    if (selectedId.isNotEmpty) {
-      for (final row in rows) {
-        if (row.id == selectedId) return row;
-      }
-    }
-    return rows.first;
-  }
-
   bool _matchesDate(DateTime value) {
     if (_date == _MovementDateFilter.all) return true;
     final local = value.toLocal();
@@ -319,23 +290,28 @@ class _CashMovementsHistoryScreenState
       _MovementDateFilter.month =>
         rowDay.year == today.year && rowDay.month == today.month,
       _MovementDateFilter.specific =>
-        _specificRange == null ||
-            (!rowDay.isBefore(
-                  DateTime(
-                    _specificRange!.start.year,
-                    _specificRange!.start.month,
-                    _specificRange!.start.day,
-                  ),
-                ) &&
-                !rowDay.isAfter(
-                  DateTime(
-                    _specificRange!.end.year,
-                    _specificRange!.end.month,
-                    _specificRange!.end.day,
-                  ),
-                )),
+        _specificDate == null || _sameCalendarDay(rowDay, _specificDate!),
       _MovementDateFilter.all => true,
     };
+  }
+
+  Future<void> _pickSpecificDate() async {
+    final now = DateTime.now();
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: _specificDate ?? now,
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 1),
+      locale: const Locale('es', 'DO'),
+      helpText: 'Filtrar por fecha',
+      cancelText: 'Cancelar',
+      confirmText: 'Aplicar',
+    );
+    if (selected == null || !mounted) return;
+    setState(() {
+      _specificDate = selected;
+      _date = _MovementDateFilter.specific;
+    });
   }
 
   Future<void> _openMovementFilters() async {
@@ -351,7 +327,7 @@ class _CashMovementsHistoryScreenState
           child: _CashMovementsFilterDrawer(
             initialType: _type,
             initialDate: _date,
-            initialSpecificRange: _specificRange,
+            initialSpecificDate: _specificDate,
           ),
         );
       },
@@ -376,7 +352,7 @@ class _CashMovementsHistoryScreenState
       _type = result.type;
       _date = result.date;
       if (result.date == _MovementDateFilter.specific) {
-        _specificRange = result.specificRange ?? _last15DaysRange();
+        _specificDate = result.specificDate;
       }
     });
   }
@@ -425,7 +401,9 @@ class _CashMovementsHistoryScreenState
               child: ListView.separated(
                 padding: listPadding,
                 itemCount: visible.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                separatorBuilder: (_, __) => isMobile
+                    ? const SizedBox.shrink()
+                    : const SizedBox(height: 8),
                 itemBuilder: (context, index) =>
                     _CashMovementRow(row: visible[index]),
               ),
@@ -436,112 +414,36 @@ class _CashMovementsHistoryScreenState
     );
   }
 
-  Widget _buildDesktopMovementsContent(
-    BuildContext context,
-    AsyncValue<List<CashMovementModel>> history,
-  ) {
-    return history.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => _CashPanelMessage(
-        icon: Icons.payments_outlined,
-        title: 'No se pudieron cargar movimientos',
-        detail: resolveCashError(error),
-      ),
-      data: (rows) {
-        final visible = _filter(rows);
-        final entries = visible
-            .where((row) => row.isIn)
-            .fold<double>(0, (sum, row) => sum + row.amount);
-        final exits = visible
-            .where((row) => !row.isIn)
-            .fold<double>(0, (sum, row) => sum + row.amount);
-        final selected = _selectedMovementFrom(visible);
-
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: DesktopSalesPanel(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    _buildMovementToolbar(isMobile: false),
-                    const SizedBox(height: 14),
-                    _MovementStatsGrid(
-                      isMobile: false,
-                      entries: entries,
-                      exits: exits,
-                      count: visible.length,
-                    ),
-                    const SizedBox(height: 14),
-                    Expanded(
-                      child: visible.isEmpty
-                          ? const _CashPanelMessage(
-                              icon: Icons.history_toggle_off_rounded,
-                              title: 'Sin movimientos',
-                              detail:
-                                  'No hay entradas ni salidas en el rango seleccionado.',
-                            )
-                          : ListView.separated(
-                              padding: EdgeInsets.zero,
-                              itemCount: visible.length,
-                              separatorBuilder: (_, __) =>
-                                  const SizedBox(height: 8),
-                              itemBuilder: (context, index) {
-                                final row = visible[index];
-                                return _CashMovementRow(
-                                  row: row,
-                                  selected: selected?.id == row.id,
-                                  onTap: () => setState(
-                                    () => _selectedMovementId = row.id,
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                  ],
-                ),
-              ),
+  Widget _buildMovementSearchField() {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 280),
+        child: TextField(
+          controller: _searchController,
+          autofocus: true,
+          style: const TextStyle(color: Color(0xFF111827)),
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            hintText: 'Buscar',
+            hintStyle: const TextStyle(color: Color(0xFF8A9AA8)),
+            filled: true,
+            fillColor: Colors.white,
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
             ),
-            const SizedBox(width: 16),
-            SizedBox(
-              width: (MediaQuery.sizeOf(context).width * 0.33).clamp(
-                420.0,
-                640.0,
-              ),
-              child: _CashMovementDetailColumn(
-                row: selected,
-                entries: entries,
-                exits: exits,
-                count: visible.length,
-                refreshing: history.isLoading,
-              ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.zero,
+              borderSide: BorderSide.none,
             ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildMovementToolbar({required bool isMobile}) {
-    return Row(
-      children: [
-        Expanded(
-          child: _CashSearchField(
-            controller: _searchController,
-            hint: isMobile
-                ? 'Buscar movimientos...'
-                : 'Buscar por usuario, motivo, monto o turno...',
+            prefixIcon: const Icon(
+              Icons.search_rounded,
+              color: Color(0xFF8A9AA8),
+            ),
           ),
         ),
-        const SizedBox(width: 10),
-        _MovementFilterButton(
-          activeCount: _activeMovementFilterCount,
-          summary: _movementFilterSummary,
-          compact: isMobile,
-          onPressed: _openMovementFilters,
-        ),
-      ],
+      ),
     );
   }
 
@@ -593,7 +495,7 @@ class _CashMovementsHistoryScreenState
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.enter): () =>
-            ref.refresh(cashMovementHistoryProvider),
+            ref.invalidate(cashMovementHistoryProvider),
       },
       child: Focus(
         autofocus: true,
@@ -603,23 +505,67 @@ class _CashMovementsHistoryScreenState
           appBar: isMobile
               ? CustomAppBar(
                   title: 'Movimientos',
+                  titleWidget: _searchOpen ? _buildMovementSearchField() : null,
                   showLogo: false,
                   showDepartmentLabel: false,
                   actions: [
                     IconButton(
-                      tooltip: 'Actualizar',
-                      onPressed: () => ref.refresh(cashMovementHistoryProvider),
-                      icon: const Icon(Icons.refresh_rounded),
+                      tooltip: _searchOpen ? 'Cerrar búsqueda' : 'Buscar',
+                      onPressed: () => setState(() {
+                        _searchOpen = !_searchOpen;
+                        if (!_searchOpen) _searchController.clear();
+                      }),
+                      icon: Icon(
+                        _searchOpen
+                            ? Icons.close_rounded
+                            : Icons.search_rounded,
+                      ),
                     ),
+                    if (!_searchOpen)
+                      IconButton(
+                        tooltip: 'Filtros',
+                        onPressed: _openMovementFilters,
+                        icon: Badge(
+                          isLabelVisible:
+                              _type != _MovementTypeFilter.all ||
+                              _date != _MovementDateFilter.today,
+                          smallSize: 8,
+                          child: const Icon(Icons.filter_alt_outlined),
+                        ),
+                      ),
+                    if (!_searchOpen)
+                      IconButton(
+                        tooltip: 'Actualizar',
+                        onPressed: () =>
+                            ref.invalidate(cashMovementHistoryProvider),
+                        icon: const Icon(Icons.refresh_rounded),
+                      ),
                   ],
                   trailing: const SizedBox.shrink(),
                 )
               : FullTechPageHeader(
                   title: 'Movimiento de efectivo',
                   actions: [
+                    TextButton.icon(
+                      onPressed: () => _register('IN'),
+                      icon: const Icon(Icons.add_circle_outline_rounded),
+                      label: const Text('Registrar ingreso'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      onPressed: () => _register('OUT'),
+                      icon: const Icon(Icons.remove_circle_outline_rounded),
+                      label: const Text('Registrar salida'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _danger,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
                     IconButton.filledTonal(
                       tooltip: 'Actualizar',
-                      onPressed: () => ref.refresh(cashMovementHistoryProvider),
+                      onPressed: () =>
+                          ref.invalidate(cashMovementHistoryProvider),
                       icon: const Icon(Icons.refresh_rounded),
                     ),
                     const SizedBox(width: 10),
@@ -638,26 +584,95 @@ class _CashMovementsHistoryScreenState
                 )
               : null,
           body: isMobile
-              ? Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-                  child: Column(
-                    children: [
-                      _buildMovementToolbar(isMobile: true),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: _buildMovementsContent(
-                          context,
-                          history,
-                          isMobile: true,
-                          showStats: false,
-                          listPadding: const EdgeInsets.fromLTRB(0, 0, 0, 80),
-                        ),
-                      ),
-                    ],
-                  ),
+              ? _buildMovementsContent(
+                  context,
+                  history,
+                  isMobile: true,
+                  showStats: false,
+                  listPadding: const EdgeInsets.fromLTRB(0, 0, 0, 80),
                 )
-              : DesktopSalesFrame(
-                  child: _buildDesktopMovementsContent(context, history),
+              : Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: _CashCard(
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _CashSearchField(
+                                controller: _searchController,
+                                hint:
+                                    'Buscar por usuario, motivo, monto o turno...',
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            _MovementTypeSelector(
+                              selected: _type,
+                              onChanged: (value) =>
+                                  setState(() => _type = value),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                _MovementDateSelector(
+                                  selected: _date,
+                                  onChanged: (next) {
+                                    if (next == _MovementDateFilter.specific) {
+                                      _pickSpecificDate();
+                                      return;
+                                    }
+                                    setState(() => _date = next);
+                                  },
+                                ),
+                                if (_date == _MovementDateFilter.specific) ...[
+                                  const SizedBox(width: 10),
+                                  OutlinedButton.icon(
+                                    onPressed: _pickSpecificDate,
+                                    icon: const Icon(
+                                      Icons.event_rounded,
+                                      size: 18,
+                                    ),
+                                    label: Text(
+                                      _specificDate == null
+                                          ? 'Elegir fecha'
+                                          : DateFormat(
+                                              'dd/MM/yyyy',
+                                              'es_DO',
+                                            ).format(_specificDate!),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: _cashText,
+                                      minimumSize: const Size(132, 40),
+                                      side: const BorderSide(color: _cashLine),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Expanded(
+                          child: _buildMovementsContent(
+                            context,
+                            history,
+                            isMobile: false,
+                            showStats: true,
+                            listPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
         ),
       ),
@@ -665,65 +680,63 @@ class _CashMovementsHistoryScreenState
   }
 }
 
-class _MovementFilterButton extends StatelessWidget {
-  const _MovementFilterButton({
-    required this.activeCount,
-    required this.summary,
-    required this.compact,
-    required this.onPressed,
+class _MovementTypeSelector extends StatelessWidget {
+  const _MovementTypeSelector({
+    required this.selected,
+    required this.onChanged,
   });
 
-  final int activeCount;
-  final String summary;
-  final bool compact;
-  final VoidCallback onPressed;
+  final _MovementTypeFilter selected;
+  final ValueChanged<_MovementTypeFilter> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    final hasFilters = activeCount > 0;
+    return SegmentedButton<_MovementTypeFilter>(
+      segments: const [
+        ButtonSegment(value: _MovementTypeFilter.all, label: Text('Todos')),
+        ButtonSegment(
+          value: _MovementTypeFilter.inOnly,
+          label: Text('Entradas'),
+        ),
+        ButtonSegment(
+          value: _MovementTypeFilter.outOnly,
+          label: Text('Salidas'),
+        ),
+      ],
+      selected: {selected},
+      onSelectionChanged: (value) => onChanged(value.first),
+    );
+  }
+}
 
-    return Tooltip(
-      message: 'Filtros',
-      child: OutlinedButton.icon(
-        onPressed: onPressed,
-        icon: Badge(
-          isLabelVisible: hasFilters,
-          label: Text('$activeCount'),
-          child: const Icon(Icons.tune_rounded, size: 20),
+class _MovementDateSelector extends StatelessWidget {
+  const _MovementDateSelector({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final _MovementDateFilter selected;
+  final ValueChanged<_MovementDateFilter> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<_MovementDateFilter>(
+      segments: const [
+        ButtonSegment(value: _MovementDateFilter.today, label: Text('Hoy')),
+        ButtonSegment(
+          value: _MovementDateFilter.yesterday,
+          label: Text('Ayer'),
         ),
-        label: compact
-            ? const Text('Filtro')
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Filtros'),
-                  Text(
-                    summary,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: _cashMuted,
-                    ),
-                  ),
-                ],
-              ),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: hasFilters ? _cashBlue : _cashText,
-          backgroundColor: hasFilters ? const Color(0xFFEAF1FF) : Colors.white,
-          side: BorderSide(
-            color: hasFilters ? const Color(0xFF9FBCFF) : _cashLine,
-          ),
-          minimumSize: Size(compact ? 96 : 156, 48),
-          padding: EdgeInsets.symmetric(
-            horizontal: compact ? 12 : 14,
-            vertical: compact ? 0 : 6,
-          ),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ButtonSegment(value: _MovementDateFilter.week, label: Text('Semana')),
+        ButtonSegment(value: _MovementDateFilter.month, label: Text('Mes')),
+        ButtonSegment(
+          value: _MovementDateFilter.specific,
+          label: Text('Fecha'),
         ),
-      ),
+        ButtonSegment(value: _MovementDateFilter.all, label: Text('Todo')),
+      ],
+      selected: {selected},
+      onSelectionChanged: (value) => onChanged(value.first),
     );
   }
 }
@@ -732,24 +745,24 @@ class _CashMovementFilterDraft {
   const _CashMovementFilterDraft({
     required this.type,
     required this.date,
-    this.specificRange,
+    this.specificDate,
   });
 
   final _MovementTypeFilter type;
   final _MovementDateFilter date;
-  final DateTimeRange? specificRange;
+  final DateTime? specificDate;
 }
 
 class _CashMovementsFilterDrawer extends StatefulWidget {
   const _CashMovementsFilterDrawer({
     required this.initialType,
     required this.initialDate,
-    this.initialSpecificRange,
+    this.initialSpecificDate,
   });
 
   final _MovementTypeFilter initialType;
   final _MovementDateFilter initialDate;
-  final DateTimeRange? initialSpecificRange;
+  final DateTime? initialSpecificDate;
 
   @override
   State<_CashMovementsFilterDrawer> createState() =>
@@ -760,27 +773,25 @@ class _CashMovementsFilterDrawerState
     extends State<_CashMovementsFilterDrawer> {
   late _MovementTypeFilter _type;
   late _MovementDateFilter _date;
-  DateTimeRange? _specificRange;
+  DateTime? _specificDate;
 
   @override
   void initState() {
     super.initState();
     _type = widget.initialType;
     _date = widget.initialDate;
-    _specificRange = widget.initialSpecificRange ?? _last15DaysRange();
+    _specificDate = widget.initialSpecificDate;
   }
 
-  Future<DateTimeRange?> _pickSpecificRange() async {
+  Future<DateTime?> _pickSpecificDate() async {
     final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    return showDateRangePicker(
+    return showDatePicker(
       context: context,
-      initialDateRange:
-          _specificRange ?? DateTimeRange(start: today, end: today),
+      initialDate: _specificDate ?? now,
       firstDate: DateTime(now.year - 5),
       lastDate: DateTime(now.year + 1),
       locale: const Locale('es', 'DO'),
-      helpText: 'Filtrar por intervalo',
+      helpText: 'Filtrar por fecha',
       cancelText: 'Cancelar',
       confirmText: 'Aplicar',
     );
@@ -791,7 +802,7 @@ class _CashMovementsFilterDrawerState
       _CashMovementFilterDraft(
         type: _type,
         date: _date,
-        specificRange: _specificRange,
+        specificDate: _specificDate,
       ),
     );
   }
@@ -799,17 +810,14 @@ class _CashMovementsFilterDrawerState
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.sizeOf(context);
-    final isMobile = media.width < 700;
-    final width = isMobile
-        ? media.width
-        : (media.width * 0.34).clamp(360.0, 460.0);
+    final width = (media.width * 0.6).clamp(300.0, 430.0);
 
     return Dismissible(
       key: const ValueKey('cash-movements-filters-panel'),
       direction: DismissDirection.endToStart,
       onDismissed: (_) => Navigator.of(context).pop(),
       child: Material(
-        color: const Color(0xFFF8FBFF),
+        color: Colors.white,
         elevation: 18,
         borderRadius: BorderRadius.zero,
         clipBehavior: Clip.antiAlias,
@@ -822,16 +830,15 @@ class _CashMovementsFilterDrawerState
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: EdgeInsets.fromLTRB(isMobile ? 16 : 20, 18, 12, 14),
+                  padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
                   child: Row(
                     children: [
                       Container(
-                        width: 44,
-                        height: 44,
+                        width: 42,
+                        height: 42,
                         decoration: BoxDecoration(
                           color: const Color(0xFFEAF1FF),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFCFE0FF)),
+                          borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
                           Icons.filter_alt_rounded,
@@ -874,16 +881,10 @@ class _CashMovementsFilterDrawerState
                 const Divider(height: 1, color: AppColors.border),
                 Expanded(
                   child: ListView(
-                    padding: EdgeInsets.fromLTRB(
-                      isMobile ? 12 : 16,
-                      14,
-                      isMobile ? 12 : 16,
-                      14,
-                    ),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                     children: [
                       _CashFilterSection<_MovementTypeFilter>(
-                        title: 'Tipo de movimiento',
-                        subtitle: 'Filtra ingresos, salidas o ambos.',
+                        title: 'Tipo',
                         value: _type,
                         options: const [
                           _MovementTypeFilter.all,
@@ -895,8 +896,7 @@ class _CashMovementsFilterDrawerState
                       ),
                       const SizedBox(height: 16),
                       _CashFilterSection<_MovementDateFilter>(
-                        title: 'Rango de fecha',
-                        subtitle: 'Elige el periodo que quieres revisar.',
+                        title: 'Fecha',
                         value: _date,
                         options: const [
                           _MovementDateFilter.today,
@@ -909,10 +909,10 @@ class _CashMovementsFilterDrawerState
                         labelBuilder: _movementDateLabel,
                         onSelected: (value) async {
                           if (value == _MovementDateFilter.specific) {
-                            final picked = await _pickSpecificRange();
+                            final picked = await _pickSpecificDate();
                             if (picked == null || !mounted) return;
                             setState(() {
-                              _specificRange = picked;
+                              _specificDate = picked;
                               _date = value;
                             });
                             return;
@@ -925,16 +925,19 @@ class _CashMovementsFilterDrawerState
                           padding: const EdgeInsets.fromLTRB(8, 4, 0, 0),
                           child: OutlinedButton.icon(
                             onPressed: () async {
-                              final picked = await _pickSpecificRange();
+                              final picked = await _pickSpecificDate();
                               if (picked != null) {
-                                setState(() => _specificRange = picked);
+                                setState(() => _specificDate = picked);
                               }
                             },
                             icon: const Icon(Icons.event_rounded, size: 18),
                             label: Text(
-                              _specificRange == null
-                                  ? 'Elegir intervalo'
-                                  : '${DateFormat('dd/MM/yyyy', 'es_DO').format(_specificRange!.start)} - ${DateFormat('dd/MM/yyyy', 'es_DO').format(_specificRange!.end)}',
+                              _specificDate == null
+                                  ? 'Elegir fecha'
+                                  : DateFormat(
+                                      'dd/MM/yyyy',
+                                      'es_DO',
+                                    ).format(_specificDate!),
                             ),
                           ),
                         ),
@@ -942,12 +945,7 @@ class _CashMovementsFilterDrawerState
                   ),
                 ),
                 Container(
-                  padding: EdgeInsets.fromLTRB(
-                    isMobile ? 12 : 20,
-                    12,
-                    isMobile ? 12 : 20,
-                    18,
-                  ),
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
                   decoration: const BoxDecoration(
                     color: AppColors.surfaceAlt,
                     border: Border(top: BorderSide(color: AppColors.border)),
@@ -959,8 +957,7 @@ class _CashMovementsFilterDrawerState
                           onPressed: () => Navigator.of(context).pop(
                             const _CashMovementFilterDraft(
                               type: _MovementTypeFilter.all,
-                              date: _MovementDateFilter.specific,
-                              specificRange: null,
+                              date: _MovementDateFilter.today,
                             ),
                           ),
                           style: OutlinedButton.styleFrom(
@@ -997,7 +994,6 @@ class _CashMovementsFilterDrawerState
 class _CashFilterSection<T> extends StatelessWidget {
   const _CashFilterSection({
     required this.title,
-    required this.subtitle,
     required this.value,
     required this.options,
     required this.labelBuilder,
@@ -1005,7 +1001,6 @@ class _CashFilterSection<T> extends StatelessWidget {
   });
 
   final String title;
-  final String subtitle;
   final T value;
   final List<T> options;
   final String Function(T value) labelBuilder;
@@ -1018,98 +1013,61 @@ class _CashFilterSection<T> extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.border),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x080B3550),
-                blurRadius: 14,
-                offset: Offset(0, 4),
-              ),
-            ],
+        Text(
+          title,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                subtitle,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: AppColors.textMuted,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Column(
-                children: [
-                  for (var index = 0; index < options.length; index++) ...[
-                    if (index > 0) const SizedBox(height: 8),
-                    Material(
-                      color: optionEquals(options[index], value)
-                          ? const Color(0xFFEAF1FF)
-                          : const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(8),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: () => onSelected(options[index]),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: optionEquals(options[index], value)
-                                  ? const Color(0xFF9FBCFF)
-                                  : const Color(0xFFE2E8F0),
+        ),
+        const SizedBox(height: 8),
+        Column(
+          children: [
+            for (var index = 0; index < options.length; index++) ...[
+              if (index > 0) const SizedBox(height: 8),
+              Material(
+                color: optionEquals(options[index], value)
+                    ? theme.colorScheme.primaryContainer.withValues(alpha: 0.6)
+                    : theme.colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.25,
+                      ),
+                borderRadius: BorderRadius.circular(16),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () => onSelected(options[index]),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 14,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          optionEquals(options[index], value)
+                              ? Icons.circle_rounded
+                              : Icons.circle_outlined,
+                          size: 18,
+                          color: optionEquals(options[index], value)
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            labelBuilder(options[index]),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: optionEquals(options[index], value)
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
                             ),
                           ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                optionEquals(options[index], value)
-                                    ? Icons.check_circle_rounded
-                                    : Icons.radio_button_unchecked_rounded,
-                                size: 19,
-                                color: optionEquals(options[index], value)
-                                    ? AppColors.secondary
-                                    : AppColors.textMuted,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  labelBuilder(options[index]),
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: AppColors.textPrimary,
-                                    fontWeight:
-                                        optionEquals(options[index], value)
-                                        ? FontWeight.w900
-                                        : FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
-                ],
+                  ),
+                ),
               ),
             ],
-          ),
+          ],
         ),
       ],
     );
@@ -1123,7 +1081,7 @@ String _movementTypeLabel(_MovementTypeFilter filter) {
     case _MovementTypeFilter.all:
       return 'Todos';
     case _MovementTypeFilter.inOnly:
-      return 'Entradas';
+      return 'Entradas (ingresos)';
     case _MovementTypeFilter.outOnly:
       return 'Salidas';
   }
@@ -1140,7 +1098,7 @@ String _movementDateLabel(_MovementDateFilter filter) {
     case _MovementDateFilter.month:
       return 'Mes';
     case _MovementDateFilter.specific:
-      return 'Intervalo';
+      return 'Fecha específica';
     case _MovementDateFilter.all:
       return 'Todo';
   }
@@ -2227,15 +2185,9 @@ class _ExpenseHistoryRow extends StatelessWidget {
 }
 
 class _CashMovementRow extends StatelessWidget {
-  const _CashMovementRow({
-    required this.row,
-    this.selected = false,
-    this.onTap,
-  });
+  const _CashMovementRow({required this.row});
 
   final CashMovementModel row;
-  final bool selected;
-  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -2249,396 +2201,96 @@ class _CashMovementRow extends StatelessWidget {
     final label = isIn ? 'Ingreso' : 'Salida';
 
     return Container(
-      clipBehavior: Clip.antiAlias,
       padding: EdgeInsets.symmetric(
-        horizontal: isMobile ? 12 : 14,
-        vertical: isMobile ? 12 : 14,
+        horizontal: isMobile ? 12 : 12,
+        vertical: isMobile ? 12 : 12,
       ),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(isMobile ? 8 : 8),
-        border: Border.all(
-          color: selected ? desktopSalesAccent : const Color(0xFFDDE7EE),
-          width: selected ? 1.4 : 1,
-        ),
-        boxShadow: isMobile
-            ? const []
-            : const [
-                BoxShadow(
-                  color: Color(0x080B3550),
-                  blurRadius: 12,
-                  offset: Offset(0, 4),
-                ),
-              ],
+        borderRadius: isMobile ? BorderRadius.zero : BorderRadius.circular(13),
+        border: isMobile
+            ? const Border(bottom: BorderSide(color: _cashLine))
+            : Border.all(color: _cashLine),
       ),
-      child: InkWell(
-        onTap: onTap,
-        child: isMobile
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _MovementIcon(isIn: isIn, color: color),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _MovementText(row: row, label: label),
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerRight,
-                          child: Text(
-                            formatRdCurrencyAccounting(row.amount),
-                            style: TextStyle(
-                              color: color,
-                              fontWeight: FontWeight.w900,
-                            ),
+      child: isMobile
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _MovementIcon(isIn: isIn, color: color),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _MovementText(row: row, label: label),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          formatRdCurrencyAccounting(row.amount),
+                          style: TextStyle(
+                            color: color,
+                            fontWeight: FontWeight.w900,
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      _MovementTypePill(label: label, color: color),
-                      Text(
-                        date,
-                        style: const TextStyle(
-                          color: _cashMuted,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              )
-            : Row(
-                children: [
-                  Container(
-                    width: 4,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: color,
-                      borderRadius: BorderRadius.circular(999),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  _MovementIcon(isIn: isIn, color: color),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: _MovementText(row: row, label: label),
-                  ),
-                  Expanded(
-                    child: Text(
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    _MovementTypePill(label: label, color: color),
+                    Text(
                       date,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: _cashMuted,
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                  ),
-                  _MovementTypePill(label: label, color: color),
-                  const SizedBox(width: 16),
-                  SizedBox(
-                    width: 140,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 9,
-                      ),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        formatRdCurrencyAccounting(row.amount),
-                        textAlign: TextAlign.right,
-                        style: TextStyle(
-                          color: color,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-      ),
-    );
-  }
-}
-
-class _CashMovementDetailColumn extends StatelessWidget {
-  const _CashMovementDetailColumn({
-    required this.row,
-    required this.entries,
-    required this.exits,
-    required this.count,
-    required this.refreshing,
-  });
-
-  final CashMovementModel? row;
-  final double entries;
-  final double exits;
-  final int count;
-  final bool refreshing;
-
-  @override
-  Widget build(BuildContext context) {
-    final selected = row;
-    final isIn = selected?.isIn ?? true;
-    final accent = isIn ? _cashBlue : _danger;
-
-    return DesktopSalesPanel(
-      padding: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
-            child: Row(
+                  ],
+                ),
+              ],
+            )
+          : Row(
               children: [
+                _MovementIcon(isIn: isIn, color: color),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: _MovementText(row: row, label: label),
+                ),
                 Expanded(
                   child: Text(
-                    selected == null
-                        ? 'Detalle'
-                        : (selected.reason.trim().isEmpty
-                              ? (isIn ? 'Ingreso' : 'Salida')
-                              : selected.reason.trim()),
-                    maxLines: 2,
+                    date,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: desktopSalesText,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
+                      color: _cashMuted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
-                _MovementTypePill(
-                  label: selected == null
-                      ? (refreshing ? 'Cargando' : 'Lista')
-                      : isIn
-                      ? 'Entrada'
-                      : 'Salida',
-                  color: selected == null ? desktopSalesAccent : accent,
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: desktopSalesLine),
-          Expanded(
-            child: selected == null
-                ? const _CashPanelMessage(
-                    icon: Icons.payments_outlined,
-                    title: 'Selecciona un movimiento',
-                    detail: 'El detalle aparecerá fijo en esta columna.',
-                  )
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _CashDetailAmount(
-                          label: isIn ? 'Monto entrada' : 'Monto salida',
-                          value: formatRdCurrencyAccounting(selected.amount),
-                          color: accent,
-                        ),
-                        const SizedBox(height: 20),
-                        _CashDetailLine(
-                          label: 'Fecha',
-                          value: DateFormat(
-                            'dd/MM/yyyy HH:mm',
-                            'es_DO',
-                          ).format(selected.createdAt.toLocal()),
-                        ),
-                        _CashDetailLine(
-                          label: 'Usuario',
-                          value: selected.userName ?? 'Usuario',
-                        ),
-                        _CashDetailLine(
-                          label: 'Turno',
-                          value: selected.businessDate ?? 'Actual',
-                        ),
-                        _CashDetailLine(
-                          label: 'Tipo',
-                          value: selected.movementType,
-                        ),
-                        _CashDetailLine(
-                          label: 'Afecta ganancia',
-                          value: selected.affectsProfit ? 'Si' : 'No',
-                        ),
-                        _CashDetailLine(
-                          label: 'Estado turno',
-                          value: selected.sessionStatus ?? 'Sin estado',
-                        ),
-                      ],
-                    ),
+                _MovementTypePill(label: label, color: color),
+                const SizedBox(width: 16),
+                SizedBox(
+                  width: 140,
+                  child: Text(
+                    formatRdCurrencyAccounting(row.amount),
+                    textAlign: TextAlign.right,
+                    style: TextStyle(color: color, fontWeight: FontWeight.w900),
                   ),
-          ),
-          Container(
-            padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-            decoration: const BoxDecoration(
-              color: Color(0xFFF7FAFC),
-              border: Border(top: BorderSide(color: desktopSalesLine)),
-            ),
-            child: Column(
-              children: [
-                _CashDetailTotalRow(label: 'Movimientos', value: '$count'),
-                _CashDetailTotalRow(
-                  label: 'Entradas',
-                  value: formatRdCurrencyAccounting(entries),
-                ),
-                _CashDetailTotalRow(
-                  label: 'Salidas',
-                  value: formatRdCurrencyAccounting(exits),
-                ),
-                const Divider(height: 18, color: desktopSalesLine),
-                _CashDetailTotalRow(
-                  label: 'Neto vigente',
-                  value: formatRdCurrencyAccounting(entries - exits),
-                  strong: true,
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CashDetailAmount extends StatelessWidget {
-  const _CashDetailAmount({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.18)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: desktopSalesMuted,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: TextStyle(
-              color: color,
-              fontSize: 24,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CashDetailLine extends StatelessWidget {
-  const _CashDetailLine({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 124,
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: desktopSalesMuted,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                color: desktopSalesText,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CashDetailTotalRow extends StatelessWidget {
-  const _CashDetailTotalRow({
-    required this.label,
-    required this.value,
-    this.strong = false,
-  });
-
-  final String label;
-  final String value;
-  final bool strong;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                color: strong ? desktopSalesText : desktopSalesMuted,
-                fontWeight: strong ? FontWeight.w900 : FontWeight.w700,
-              ),
-            ),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              color: desktopSalesText,
-              fontWeight: strong ? FontWeight.w900 : FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

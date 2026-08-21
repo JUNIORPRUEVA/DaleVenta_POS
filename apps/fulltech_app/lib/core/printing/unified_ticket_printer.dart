@@ -353,13 +353,14 @@ class UnifiedTicketPrinter {
     required String ticketNumber,
     required String documentName,
     int? copies,
+    String? printerName,
   }) async {
     final settings = await _ref
         .read(printerSettingsRepositoryProvider)
         .getOrCreate();
     return _printWindowsRawEscPos(
       bytes: bytes,
-      printerName: settings.selectedPrinterName,
+      printerName: printerName ?? settings.selectedPrinterName,
       documentName: documentName,
       copies: copies ?? settings.copies,
       ticketNumber: ticketNumber,

@@ -279,6 +279,7 @@ class TicketRenderer {
     if (layout.warrantyPolicy.trim().isNotEmpty) {
       blank();
       add(sep);
+      add('POLITICA DE GARANTIA');
       for (final line in ReceiptTextUtils.wrap(layout.warrantyPolicy, width)) {
         add(line);
       }

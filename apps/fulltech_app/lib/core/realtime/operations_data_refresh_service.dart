@@ -30,6 +30,19 @@ class OperationsDataRefreshService {
     _permissionsSubscription = realtime.permissionsStream.listen((message) {
       unawaited(refreshPermissions(message));
     });
+    // Reacciona a login/logout para que la caja no arrastre estado de otra
+    // sesión/empresa entre inicios de sesión. El subscription se gestiona solo
+    // mientras viva este provider (ref.listen se limpia automáticamente).
+    _ref.listen<AuthState>(authStateProvider, (
+      previous,
+      next,
+    ) {
+      if (previous?.isAuthenticated == true && !next.isAuthenticated) {
+        _resetCashState();
+      } else if (previous?.isAuthenticated == false && next.isAuthenticated) {
+        refreshCash();
+      }
+    });
   }
 
   final Ref _ref;
@@ -46,6 +59,27 @@ class OperationsDataRefreshService {
 
   void refreshCash() {
     _ref.read(cashDataRefreshTickProvider.notifier).state++;
+    // IMPORTANTE: NO invalidar activeCashSessionControllerProvider aquí.
+    // Invalidarlo destruye (dispose) el notifier mientras una operación
+    // async (abrir/cerrar turno) puede estar en vuelo o mientras un diálogo
+    // conserva una referencia, provocando:
+    //   Bad state: Tried to use ActiveCashSessionController after 'dispose'.
+    // En su lugar se refresca el MISMO controller en sitio (sin recrearlo).
+    final controller = _ref
+        .read(activeCashSessionControllerProvider.notifier);
+    _ref.invalidate(cashGateStateProvider);
+    _ref.invalidate(activeCashSessionProvider);
+    _ref.invalidate(cashSummaryProvider);
+    _ref.invalidate(cashMovementsProvider);
+    _ref.invalidate(cashExpenseHistoryProvider);
+    _ref.invalidate(cashMovementHistoryProvider);
+    _ref.invalidate(cashTurnHistoryProvider);
+    if (controller.mounted) {
+      unawaited(controller.refresh());
+    }
+  }
+
+  void _resetCashState() {
     _ref.invalidate(activeCashSessionControllerProvider);
     _ref.invalidate(cashGateStateProvider);
     _ref.invalidate(activeCashSessionProvider);

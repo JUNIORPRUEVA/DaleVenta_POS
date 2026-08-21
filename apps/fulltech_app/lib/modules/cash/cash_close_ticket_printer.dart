@@ -1,17 +1,19 @@
 import 'dart:math' as math;
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
-import '../../core/printing/esc_pos/fullpos_esc_pos_receipt_renderer.dart';
+import '../../core/printing/esc_pos/fullpos_esc_pos_shift_close_renderer.dart';
+import '../../core/printing/esc_pos/shift_close_receipt_view_model.dart';
 import '../../core/printing/models/company_info.dart';
 import '../../core/printing/models/receipt_text_utils.dart';
 import '../../core/printing/models/ticket_layout_config.dart';
 import '../../core/printing/printing_platform_resolver.dart';
 import '../../core/printing/unified_ticket_printer.dart';
+import '../../features/settings/data/printer_settings_model.dart';
 import '../../features/settings/data/printer_settings_repository.dart';
 import 'cash_models.dart';
 
@@ -43,8 +45,11 @@ class CashCloseTicketSnapshot {
 class CashCloseTicketPrinter {
   CashCloseTicketPrinter(this._ref);
 
-  static const bool _useEscPosReceiptRenderer = bool.fromEnvironment(
-    'FULLPOS_ESC_POS_RECEIPT',
+  /// Rollback global: si se compila con `FULLPOS_FORCE_LEGACY_PDF=true` se
+  /// vuelve al PDF legacy aunque haya impresora térmica configurada
+  /// (debug/emergencia). Por defecto el cierre normal en Windows usa RAW.
+  static const bool _forceLegacyPdf = bool.fromEnvironment(
+    'FULLPOS_FORCE_LEGACY_PDF',
   );
 
   final Ref _ref;
@@ -54,15 +59,31 @@ class CashCloseTicketPrinter {
     bool automatic = true,
   }) async {
     final ticketNumber = _ticketNumber(snapshot);
-    if (_shouldUseWindowsRawEscPos) {
+    final settings = await _ref
+        .read(printerSettingsRepositoryProvider)
+        .getOrCreate();
+    if (await _shouldTryWindowsRawEscPos(settings)) {
+      final printerName = await _resolveWindowsPrinterName(settings);
       final bytes = await _buildCloseEscPos(snapshot, ticketNumber);
-      return _ref
+      debugPrint('[CASH PRINT] platform = Windows');
+      debugPrint('[CASH PRINT] renderer = FullPosEscPosShiftCloseRenderer');
+      debugPrint('[CASH PRINT] transport = Windows RAW ESC/POS');
+      debugPrint('[CASH PRINT] printer = $printerName');
+      debugPrint('[CASH PRINT] bytes = ${bytes.length}');
+      final rawResult = await _ref
           .read(unifiedTicketPrinterProvider)
           .printWindowsRawEscPosBytes(
             bytes: bytes,
             ticketNumber: ticketNumber,
             documentName: 'Cierre de turno $ticketNumber',
+            printerName: printerName,
           );
+      if (rawResult.success) {
+        debugPrint('[CASH PRINT] result = SUCCESS');
+        return rawResult;
+      }
+      debugPrint('[CASH PRINT] RAW ERROR = ${rawResult.message}');
+      debugPrint('[CASH PRINT] fallback = PDF legacy');
     }
     final pdf = await _buildClosePdf(snapshot, ticketNumber: ticketNumber);
     // El cierre de turno siempre imprime el ticket (térmico o diálogo del
@@ -90,15 +111,31 @@ class CashCloseTicketPrinter {
       suffix.length < 6 ? suffix.length : 6,
     );
     final ticketNumber = 'CIERRE-$ticketDate-$compactSuffix';
-    if (_shouldUseWindowsRawEscPos) {
+    final settings = await _ref
+        .read(printerSettingsRepositoryProvider)
+        .getOrCreate();
+    if (await _shouldTryWindowsRawEscPos(settings)) {
+      final printerName = await _resolveWindowsPrinterName(settings);
       final bytes = await _buildHistoryEscPos(row, ticketNumber);
-      return _ref
+      debugPrint('[CASH PRINT] platform = Windows');
+      debugPrint('[CASH PRINT] renderer = FullPosEscPosShiftCloseRenderer');
+      debugPrint('[CASH PRINT] transport = Windows RAW ESC/POS');
+      debugPrint('[CASH PRINT] printer = $printerName');
+      debugPrint('[CASH PRINT] bytes = ${bytes.length}');
+      final rawResult = await _ref
           .read(unifiedTicketPrinterProvider)
           .printWindowsRawEscPosBytes(
             bytes: bytes,
             ticketNumber: ticketNumber,
             documentName: 'Reimpresion cierre $ticketNumber',
+            printerName: printerName,
           );
+      if (rawResult.success) {
+        debugPrint('[CASH PRINT] result = SUCCESS');
+        return rawResult;
+      }
+      debugPrint('[CASH PRINT] RAW ERROR = ${rawResult.message}');
+      debugPrint('[CASH PRINT] fallback = PDF legacy');
     }
     final pdf = await _buildHistoryPdf(row, ticketNumber: ticketNumber);
     return _ref
@@ -145,9 +182,33 @@ class CashCloseTicketPrinter {
     ).buildHistory(row, ticketNumber: ticketNumber);
   }
 
-  bool get _shouldUseWindowsRawEscPos {
+  /// Política de cierre en Windows: usar el renderer profesional RAW ESC/POS
+  /// por defecto (con impresora disponible) y PDF legacy solo como fallback.
+  /// El antiguo gate por `FULLPOS_ESC_POS_RECEIPT` ya no condiciona el cierre.
+  Future<bool> _shouldTryWindowsRawEscPos(PrinterSettingsModel settings) async {
     final platform = _ref.read(printingPlatformResolverProvider).platform;
-    return _useEscPosReceiptRenderer && platform == PrintingPlatform.windows;
+    if (platform != PrintingPlatform.windows) return false;
+    if (_forceLegacyPdf) return false;
+    return (await _resolveWindowsPrinterName(settings)).isNotEmpty;
+  }
+
+  /// Resuelve el nombre de impresora para el cierre en Windows: primero la
+  /// impresora configurada en Ajustes; si no hay, la impresora por defecto del
+  /// sistema (así el cierre profesional se intenta sin configuración extra).
+  Future<String> _resolveWindowsPrinterName(
+    PrinterSettingsModel settings,
+  ) async {
+    final configured = (settings.selectedPrinterName ?? '').trim();
+    if (configured.isNotEmpty) return configured;
+    try {
+      final printers = await _ref
+          .read(unifiedTicketPrinterProvider)
+          .getAvailablePrinters();
+      if (printers.isEmpty) return '';
+      return printers.first.name;
+    } catch (_) {
+      return '';
+    }
   }
 
   Future<Uint8List> _buildCloseEscPos(
@@ -157,8 +218,8 @@ class CashCloseTicketPrinter {
     final company = await _ref
         .read(companyInfoRepositoryProvider)
         .getCurrentCompanyInfo();
-    return FullPosEscPosReceiptRenderer().renderTextLines(
-      _buildCloseEscPosLines(snapshot, ticketNumber, company),
+    return FullPosEscPosShiftCloseRenderer(cutPaper: true).render(
+      _closeViewModel(snapshot, ticketNumber: ticketNumber, company: company),
     );
   }
 
@@ -169,173 +230,118 @@ class CashCloseTicketPrinter {
     final company = await _ref
         .read(companyInfoRepositoryProvider)
         .getCurrentCompanyInfo();
-    return FullPosEscPosReceiptRenderer().renderTextLines(
-      _buildHistoryEscPosLines(row, ticketNumber, company),
+    return FullPosEscPosShiftCloseRenderer(cutPaper: true).render(
+      _historyViewModel(row, ticketNumber: ticketNumber, company: company),
     );
   }
 
-  List<String> _buildCloseEscPosLines(
-    CashCloseTicketSnapshot snapshot,
-    String ticketNumber,
-    CompanyInfo company,
-  ) {
-    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$ ');
-    final date = DateFormat('dd/MM/yyyy');
-    final time = DateFormat('h:mm a');
+  ShiftCloseReceiptViewModel _closeViewModel(
+    CashCloseTicketSnapshot snapshot, {
+    required String ticketNumber,
+    required CompanyInfo company,
+  }) {
     final active = snapshot.active;
-    final lines = <String>[
-      ..._escPosCompanyHeader(company),
-      _centerLine('CIERRE DE TURNO'),
-      _rule(),
-      _twoColumn('NO.', ticketNumber),
-      _twoColumn('FECHA CIERRE', date.format(snapshot.capturedAt.toLocal())),
-      _twoColumn('HORA CIERRE', time.format(snapshot.capturedAt.toLocal())),
-      if (snapshot.state.businessDate.trim().isNotEmpty)
-        _twoColumn('DIA NEGOCIO', snapshot.state.businessDate.trim()),
-      if (active != null) ...[
-        _twoColumn('CAJERO', active.userName),
-        _twoColumn('FECHA APERT.', date.format(active.openedAt.toLocal())),
-        _twoColumn('HORA APERT.', time.format(active.openedAt.toLocal())),
-        _twoColumn('TURNO', active.shiftId),
+    final summary = snapshot.summary;
+    return ShiftCloseReceiptViewModel(
+      company: company,
+      title: 'CIERRE DE TURNO',
+      ticketNumber: ticketNumber,
+      cashierName: active?.userName ?? '',
+      shiftId: active?.shiftId ?? '',
+      cashId: active?.cashId ?? '',
+      businessDate: snapshot.state.businessDate,
+      openedAt: active?.openedAt,
+      closedAt: snapshot.capturedAt,
+      capturedAt: snapshot.capturedAt,
+      showSalesDetails: true,
+      openingAmount: summary.openingAmount,
+      totalSales: summary.totalSales,
+      cashSales: summary.salesCashTotal,
+      transferSales: summary.salesTransferTotal,
+      manualCashIn: summary.cashInManual,
+      expenses: summary.totalExpenses,
+      manualCashOut: summary.cashOutManual,
+      withdrawals: summary.totalWithdrawals,
+      refunds: summary.refundsCash,
+      creditSales: summary.creditSalesTotal,
+      creditInitialCash: summary.creditInitialCash,
+      creditInitialTransfer: summary.creditInitialTransfer,
+      creditPaymentCash: summary.creditPaymentCash,
+      creditPaymentTransfer: summary.creditPaymentTransfer,
+      creditBalance: summary.creditBalanceTotal,
+      expectedCash: summary.expectedCash,
+      countedCash: snapshot.closingAmount,
+      difference: snapshot.difference,
+      ticketCount: summary.totalTickets,
+      refundCount: summary.totalRefunds,
+      categorySummaries: [
+        for (final category in summary.categorySummary)
+          ShiftCloseCategorySummary(
+            categoryName: category.category,
+            soldAmount: category.totalSold,
+            profitAmount: category.totalProfit,
+          ),
       ],
-      _rule(),
-      _centerLine('RESUMEN'),
-      _moneyLine('BASE INICIAL', money.format(snapshot.summary.openingAmount)),
-      _moneyLine('VENTAS BRUTAS', money.format(snapshot.summary.totalSales)),
-      if (snapshot.summary.salesCashTotal > 0)
-        _moneyLine('EFECTIVO', money.format(snapshot.summary.salesCashTotal)),
-      if (snapshot.summary.salesTransferTotal > 0)
-        _moneyLine(
-          'TRANSFERENCIA',
-          money.format(snapshot.summary.salesTransferTotal),
-        ),
-      if (snapshot.summary.creditSalesTotal > 0)
-        _moneyLine('CREDITOS', money.format(snapshot.summary.creditSalesTotal)),
-      if (snapshot.summary.cashInManual > 0)
-        _moneyLine('ENTRADAS', money.format(snapshot.summary.cashInManual)),
-      if (snapshot.summary.totalExpenses > 0)
-        _moneyLine('GASTOS', money.format(snapshot.summary.totalExpenses)),
-      if (snapshot.summary.cashOutManual > 0)
-        _moneyLine('SALIDAS', money.format(snapshot.summary.cashOutManual)),
-      if (snapshot.summary.totalWithdrawals > 0)
-        _moneyLine('RETIROS', money.format(snapshot.summary.totalWithdrawals)),
-      if (snapshot.summary.refundsCash > 0)
-        _moneyLine('DEVOLUCIONES', money.format(snapshot.summary.refundsCash)),
-      _rule(),
-      _centerLine('CUADRE FINAL'),
-      _moneyLine('ESPERADO', money.format(snapshot.summary.expectedCash)),
-      _moneyLine('DECLARADO', money.format(snapshot.closingAmount)),
-      _moneyLine('DIFERENCIA', money.format(snapshot.difference)),
-      _twoColumn('CANT. VENTAS', snapshot.summary.totalTickets.toString()),
-      if (snapshot.summary.totalRefunds > 0)
-        _twoColumn('DEVOLUCIONES', snapshot.summary.totalRefunds.toString()),
-      if ((snapshot.note ?? '').trim().isNotEmpty) ...[
-        _rule(),
-        'NOTA',
-        ..._wrapContent(snapshot.note!.trim()),
+      status: '',
+      note: snapshot.note,
+      movements: [
+        for (final movement in snapshot.movements)
+          ShiftCloseMovement(
+            label: _movementLabel(movement),
+            amount: movement.amount,
+            isIn: movement.isIn,
+            reason: movement.reason.trim().isEmpty
+                ? null
+                : movement.reason,
+          ),
       ],
-      _rule(),
-      _centerLine('FULLPOS CLOUD'),
-    ];
-    return lines;
+    );
   }
 
-  List<String> _buildHistoryEscPosLines(
-    CashSessionHistoryModel row,
-    String ticketNumber,
-    CompanyInfo company,
-  ) {
-    final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$ ');
-    final date = DateFormat('dd/MM/yyyy');
-    final time = DateFormat('h:mm a');
+  ShiftCloseReceiptViewModel _historyViewModel(
+    CashSessionHistoryModel row, {
+    required String ticketNumber,
+    required CompanyInfo company,
+  }) {
     final closedAt = row.closedAt;
-    return [
-      ..._escPosCompanyHeader(company),
-      _centerLine('REIMPRESION CIERRE'),
-      _rule(),
-      _twoColumn('NO.', ticketNumber),
-      _twoColumn('DIA NEGOCIO', row.businessDate),
-      _twoColumn('CAJERO', row.userName),
-      _twoColumn('FECHA APERT.', date.format(row.openedAt.toLocal())),
-      _twoColumn('HORA APERT.', time.format(row.openedAt.toLocal())),
-      if (closedAt != null) ...[
-        _twoColumn('FECHA CIERRE', date.format(closedAt.toLocal())),
-        _twoColumn('HORA CIERRE', time.format(closedAt.toLocal())),
-      ],
-      _twoColumn('ESTADO', row.status),
-      _rule(),
-      _moneyLine('BASE INICIAL', money.format(row.initialAmount)),
-      _moneyLine('ESPERADO', money.format(row.expectedAmount)),
-      _moneyLine('DECLARADO', money.format(row.closingAmount)),
-      _moneyLine('DIFERENCIA', money.format(row.difference)),
-      _rule(),
-      _centerLine('FULLPOS CLOUD'),
-    ];
+    return ShiftCloseReceiptViewModel(
+      company: company,
+      title: 'REIMPRESION CIERRE',
+      ticketNumber: ticketNumber,
+      cashierName: row.userName,
+      shiftId: '',
+      cashId: '',
+      businessDate: row.businessDate,
+      openedAt: row.openedAt,
+      closedAt: closedAt,
+      capturedAt: closedAt ?? row.openedAt,
+      showSalesDetails: false,
+      openingAmount: row.initialAmount,
+      totalSales: 0,
+      cashSales: 0,
+      transferSales: 0,
+      manualCashIn: 0,
+      expenses: 0,
+      manualCashOut: 0,
+      withdrawals: 0,
+      refunds: 0,
+      creditSales: 0,
+      creditInitialCash: 0,
+      creditInitialTransfer: 0,
+      creditPaymentCash: 0,
+      creditPaymentTransfer: 0,
+      creditBalance: 0,
+      expectedCash: row.expectedAmount,
+      countedCash: row.closingAmount,
+      difference: row.difference,
+      ticketCount: 0,
+      refundCount: 0,
+      categorySummaries: const [],
+      status: row.status,
+      note: null,
+      movements: null,
+    );
   }
-
-  List<String> _escPosCompanyHeader(CompanyInfo company) {
-    return [
-      _fitContent(company.name.toUpperCase()),
-      if (company.address.trim().isNotEmpty) _fitContent(company.address),
-      if (company.phone.trim().isNotEmpty) _fitContent('TEL: ${company.phone}'),
-      if (company.rnc.trim().isNotEmpty) _fitContent('RNC: ${company.rnc}'),
-      _rule(),
-    ];
-  }
-
-  static final ThermalPrinterProfile _escPosProfile =
-      ThermalPrinterProfile.mm80();
-
-  static String _rule() => '-' * _escPosProfile.usableChars;
-
-  static String _centerLine(String value) {
-    final clean = _fitContent(value);
-    final left = ((_escPosProfile.usableChars - clean.length) / 2).floor();
-    return clean
-        .padLeft(clean.length + left)
-        .padRight(_escPosProfile.usableChars);
-  }
-
-  static String _twoColumn(String label, String value) {
-    const gap = 2;
-    const rightWidth = 18;
-    final leftWidth = _contentWidth - gap - rightWidth;
-    final left = _fitContent(
-      label.toUpperCase(),
-      width: leftWidth,
-    ).padRight(leftWidth);
-    final right = _fitContent(
-      value.toUpperCase(),
-      width: rightWidth,
-    ).padLeft(rightWidth);
-    return '$left${' ' * gap}$right';
-  }
-
-  static String _moneyLine(String label, String value) {
-    const amountWidth = 14;
-    final labelWidth = _totalsWidth - amountWidth - 2;
-    final block =
-        '${_fitContent(label, width: labelWidth).padRight(labelWidth)}  ${_fitContent(value, width: amountWidth).padLeft(amountWidth)}';
-    return block.padLeft(_contentWidth);
-  }
-
-  static List<String> _wrapContent(String value) {
-    return ReceiptTextUtils.wrap(
-      value.trim(),
-      _contentWidth,
-    ).map(_fitContent).toList(growable: false);
-  }
-
-  static String _fitContent(String value, {int? width}) {
-    final target = width ?? _contentWidth;
-    final clean = value.replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (clean.length <= target) return clean;
-    if (target <= 3) return clean.substring(0, target);
-    return '${clean.substring(0, target - 3)}...';
-  }
-
-  static int get _contentWidth => _escPosProfile.usableChars;
-  static int get _totalsWidth => _escPosProfile.totalsBlockChars;
 
   List<String> buildHistoryLines(CashSessionHistoryModel row) {
     final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$ ');

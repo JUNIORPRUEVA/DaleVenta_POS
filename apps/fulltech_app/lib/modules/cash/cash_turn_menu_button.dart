@@ -34,16 +34,23 @@ class CashTurnMenuButton extends ConsumerWidget {
   }
 
   Future<void> _openCash(BuildContext context, WidgetRef ref) async {
-    final controller = ref.read(activeCashSessionControllerProvider.notifier);
     try {
       final opened = await showOpenCashDialog(
         context,
         onOpenShift: (amount) async {
+          // Releer el notifier en el punto de uso: el provider puede haberse
+          // recreado mientras el diálogo estuvo abierto, y usar una referencia
+          // vieja lanzaría 'Tried to use ActiveCashSessionController after
+          // dispose was called'.
+          final controller =
+              ref.read(activeCashSessionControllerProvider.notifier);
           await controller.open(amount);
         },
       );
       if (!context.mounted) return;
       if (opened == true) {
+        final controller =
+            ref.read(activeCashSessionControllerProvider.notifier);
         await controller.refresh();
         if (!context.mounted) return;
         showCashToast(context, 'Caja abierta');
@@ -62,7 +69,6 @@ class CashTurnMenuButton extends ConsumerWidget {
 
   Future<void> _closeCash(BuildContext context, WidgetRef ref) async {
     final repository = ref.read(cashRepositoryProvider);
-    final controller = ref.read(activeCashSessionControllerProvider.notifier);
     try {
       final summary = await repository.summary();
       if (!context.mounted) return;
@@ -70,11 +76,15 @@ class CashTurnMenuButton extends ConsumerWidget {
         context,
         expectedCash: summary.expectedCash,
         onCloseShift: (amount) {
+          final controller =
+              ref.read(activeCashSessionControllerProvider.notifier);
           return controller.close(amount);
         },
       );
       if (!context.mounted) return;
       if (result?.success != true) return;
+      final controller =
+          ref.read(activeCashSessionControllerProvider.notifier);
       await controller.refresh();
       if (!context.mounted) return;
       final printResult = result?.printResult;

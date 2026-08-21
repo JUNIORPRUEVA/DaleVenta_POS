@@ -234,6 +234,19 @@ class TicketBuilder {
                       metrics.smallFontSize,
                     ),
                   ],
+                  if (layout.warrantyPolicy.trim().isNotEmpty) ...[
+                    _lightRule(top: 5, bottom: 4),
+                    _sectionLabel(
+                      'POLITICA DE GARANTIA',
+                      fonts.bold,
+                      metrics.sectionFontSize,
+                    ),
+                    _wrappedText(
+                      layout.warrantyPolicy.trim(),
+                      fonts.regular,
+                      metrics.smallFontSize,
+                    ),
+                  ],
                   pw.SizedBox(height: 6),
                   pw.Text(
                     _upper(
@@ -1018,6 +1031,13 @@ class TicketBuilder {
     );
   }
 
+  double _warrantyOptionalHeight() {
+    final text = layout.warrantyPolicy.trim();
+    if (text.isEmpty) return 0;
+    final lines = ReceiptTextUtils.wrap(text, layout.printableChars).length;
+    return 26 + (lines * 8);
+  }
+
   double _estimatedSalesPageHeight(
     TicketData data,
     _ThermalSalesMetrics metrics,
@@ -1034,7 +1054,8 @@ class TicketBuilder {
     final optionalLines =
         ((data.note ?? '').trim().isNotEmpty ? 28 : 0) +
         (_isFiscalTicket(data) ? 34 : 0) +
-        (data.fiscalTaxEnabled ? 22 : 0);
+        (data.fiscalTaxEnabled ? 22 : 0) +
+        _warrantyOptionalHeight();
     final itemRows =
         data.items.length +
         data.items

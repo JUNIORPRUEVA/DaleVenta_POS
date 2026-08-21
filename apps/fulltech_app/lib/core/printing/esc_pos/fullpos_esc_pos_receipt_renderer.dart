@@ -5,108 +5,15 @@ import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:intl/intl.dart';
 
 import '../models/receipt_text_utils.dart';
+import 'esc_pos_layout.dart';
+import 'thermal_printer_profile.dart';
 import 'thermal_receipt_view_model.dart';
+
+export 'thermal_printer_profile.dart';
 
 abstract class ThermalReceiptRenderer {
   Future<Uint8List> render(ThermalReceiptViewModel receipt);
   List<String> previewLines(ThermalReceiptViewModel receipt);
-}
-
-class ThermalLayoutProfile {
-  const ThermalLayoutProfile({
-    required this.physicalChars,
-    required this.contentWidth,
-    required this.leftOuterPadding,
-    required this.rightOuterPadding,
-  }) : assert(physicalChars > 0),
-       assert(contentWidth > 0),
-       assert(leftOuterPadding >= 0),
-       assert(rightOuterPadding >= 0),
-       assert(
-         leftOuterPadding + contentWidth + rightOuterPadding <= physicalChars,
-       );
-
-  factory ThermalLayoutProfile.mm80({
-    int physicalChars = 64,
-    int contentWidth = 56,
-  }) {
-    final remaining = physicalChars - contentWidth;
-    final left = remaining ~/ 2;
-    return ThermalLayoutProfile(
-      physicalChars: physicalChars,
-      contentWidth: contentWidth,
-      leftOuterPadding: left,
-      rightOuterPadding: remaining - left,
-    );
-  }
-
-  final int physicalChars;
-  final int contentWidth;
-  final int leftOuterPadding;
-  final int rightOuterPadding;
-}
-
-class ThermalPrinterProfile {
-  const ThermalPrinterProfile({
-    required this.paperSize,
-    required this.paperWidthDots,
-    required this.fontAChars,
-    required this.layout,
-    required this.qtyChars,
-    required this.itemChars,
-    required this.priceChars,
-    required this.totalChars,
-    required this.totalsBlockChars,
-    this.name = '80mm-576',
-  });
-
-  factory ThermalPrinterProfile.mm80({
-    int paperWidthDots = 576,
-    int physicalChars = 64,
-    int contentWidth = 56,
-  }) {
-    final layout = ThermalLayoutProfile.mm80(
-      physicalChars: physicalChars,
-      contentWidth: contentWidth,
-    );
-    return ThermalPrinterProfile(
-      paperSize: PaperSize.mm80,
-      paperWidthDots: paperWidthDots,
-      fontAChars: 48,
-      layout: layout,
-      qtyChars: 4,
-      itemChars: 27,
-      priceChars: 10,
-      totalChars: 12,
-      totalsBlockChars: 36,
-    );
-  }
-
-  final String name;
-  final PaperSize paperSize;
-  final int paperWidthDots;
-  final int fontAChars;
-  final ThermalLayoutProfile layout;
-  final int qtyChars;
-  final int itemChars;
-  final int priceChars;
-  final int totalChars;
-  final int totalsBlockChars;
-
-  int get physicalChars => layout.physicalChars;
-  int get leftSafeChars => layout.leftOuterPadding;
-  int get rightSafeChars => layout.rightOuterPadding;
-  int get usableChars => layout.contentWidth;
-  int get contentWidth => layout.contentWidth;
-  int get printableChars => physicalChars - rightSafeChars;
-  int get printableFontBChars => printableChars;
-  int get usableFontAChars =>
-      fontAChars -
-      (leftSafeChars / 1.33).ceil() -
-      (rightSafeChars / 1.33).ceil();
-  int get printableFontAChars => fontAChars - (rightSafeChars / 1.33).ceil();
-  int get tableLineChars => qtyChars + itemChars + priceChars + totalChars + 3;
-  int get tableSlackChars => usableChars - tableLineChars;
 }
 
 class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
@@ -363,10 +270,7 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
       profile,
       codec: latin1,
     );
-    final normalB = PosStyles(
-      fontType: PosFontType.fontB,
-      codeTable: codeTable,
-    );
+    final normalB = EscPosLayout.normalB(codeTable: codeTable);
     final bytes = <int>[
       ...generator.reset(),
       ...generator.setGlobalCodeTable(codeTable),
@@ -397,17 +301,10 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
 
   List<_EscPosLine> _styledLines(ThermalReceiptViewModel receipt) {
     final lines = <_EscPosLine>[];
-    final normalA = PosStyles(codeTable: codeTable);
-    final boldA = PosStyles(bold: true, codeTable: codeTable);
-    final normalB = PosStyles(
-      fontType: PosFontType.fontB,
-      codeTable: codeTable,
-    );
-    final boldB = PosStyles(
-      bold: true,
-      fontType: PosFontType.fontB,
-      codeTable: codeTable,
-    );
+    final normalA = EscPosLayout.normalA(codeTable: codeTable);
+    final boldA = EscPosLayout.boldA(codeTable: codeTable);
+    final normalB = EscPosLayout.normalB(codeTable: codeTable);
+    final boldB = EscPosLayout.boldB(codeTable: codeTable);
 
     void addA(String text, {PosStyles? styles}) {
       final line = _withLeftSafe(
@@ -636,20 +533,10 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
         '${_padLeft(totalText, thermalProfile.totalChars)}';
   }
 
-  String _totalLine(String label, String amount) {
-    const amountWidth = 16;
-    const gap = 1;
-    final labelWidth = thermalProfile.totalsBlockChars - amountWidth - gap;
-    final block =
-        '${_padRight(label.toUpperCase(), labelWidth)}${' ' * gap}${_padLeft(amount, amountWidth)}';
-    return block.padLeft(thermalProfile.usableChars);
-  }
+  String _totalLine(String label, String amount) =>
+      EscPosLayout.totalLine(thermalProfile, label, amount);
 
-  String _totalSeparator() {
-    return ('-' * thermalProfile.totalsBlockChars).padLeft(
-      thermalProfile.usableChars,
-    );
-  }
+  String _totalSeparator() => EscPosLayout.totalSeparator(thermalProfile);
 
   String _paymentLine(String method, String amount) {
     return _totalLine('PAGO: ${_clean(method).toUpperCase()}', amount);
@@ -661,48 +548,29 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
     required String phone,
     required String rnc,
   }) {
-    final cleanName = _clean(companyName).toUpperCase();
-    final lines = <String>[
-      _fitSingleLine(cleanName, thermalProfile.usableChars),
-    ];
-    for (final value in [
-      address,
-      if (phone.trim().isNotEmpty) 'Tel: $phone',
-      if (rnc.trim().isNotEmpty) 'RNC: $rnc',
-    ]) {
-      final clean = _clean(value);
-      if (clean.isEmpty) continue;
-      lines.add(_fitSingleLine(clean, thermalProfile.usableChars));
-    }
-    return lines;
+    return EscPosLayout.companyHeaderLines(
+      thermalProfile,
+      companyName: companyName,
+      address: address,
+      phone: phone,
+      rnc: rnc,
+    );
   }
 
   String _twoColumnLine(String left, String right, {int rightWidth = 18}) {
-    const gap = 2;
-    final leftWidth = thermalProfile.usableChars - gap - rightWidth;
-    final leftText = _fitSingleLine(
-      _clean(left),
-      leftWidth,
-    ).padRight(leftWidth);
-    final rightText = _fitSingleLine(
-      _clean(right),
-      rightWidth,
-    ).padLeft(rightWidth);
-    return '$leftText${' ' * gap}$rightText';
+    return EscPosLayout.twoColumnLine(
+      thermalProfile,
+      left,
+      right,
+      rightWidth: rightWidth,
+    );
   }
 
-  String _centerContent(String value) {
-    final clean = _fitSingleLine(_clean(value), thermalProfile.usableChars);
-    final left = ((thermalProfile.usableChars - clean.length) / 2).floor();
-    return clean
-        .padLeft(clean.length + left)
-        .padRight(thermalProfile.usableChars);
-  }
+  String _centerContent(String value) =>
+      EscPosLayout.centerContent(thermalProfile, value);
 
-  String _withLeftSafe(String value) {
-    if (thermalProfile.leftSafeChars == 0) return value;
-    return '${' ' * thermalProfile.leftSafeChars}$value';
-  }
+  String _withLeftSafe(String value) =>
+      EscPosLayout.withLeftSafe(thermalProfile, value);
 
   _EscPosLine _safeEscPosLine(String text, PosStyles styles, int width) {
     final line = _withLeftSafe(_fitSingleLine(text, width));
@@ -733,34 +601,21 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
     return 'L${'.' * (thermalProfile.usableChars - 2)}R';
   }
 
-  String _fitSingleLine(String value, int width) {
-    final clean = value.replaceAll(RegExp(r'[\r\n\t]+'), ' ');
-    if (clean.length <= width) return clean;
-    if (width <= 3) return clean.substring(0, width);
-    return '${clean.substring(0, width - 3)}...';
-  }
+  String _fitSingleLine(String value, int width) =>
+      EscPosLayout.fitSingleLine(value, width);
 
-  String _padRight(String value, int width) {
-    final clean = _fitSingleLine(value, width);
-    return clean.padRight(width);
-  }
+  String _padRight(String value, int width) => EscPosLayout.padRight(value, width);
 
-  String _padLeft(String value, int width) {
-    final clean = _fitSingleLine(value, width);
-    return clean.padLeft(width);
-  }
+  String _padLeft(String value, int width) => EscPosLayout.padLeft(value, width);
 
-  String _rule(int width) => '-' * width;
+  String _rule(int width) => EscPosLayout.rule(thermalProfile, width);
 
-  String _clean(String value) {
-    return value.replaceAll(RegExp(r'\s+'), ' ').trim();
-  }
+  String _clean(String value) => EscPosLayout.clean(value);
 
-  String _money(double value) => ReceiptTextUtils.money(value);
+  String _money(double value) => EscPosLayout.money(value);
 
-  String _amount(double value) => _amountFormat.format(value);
+  String _amount(double value) => EscPosLayout.amount(value);
 
-  static final _amountFormat = NumberFormat('#,##0.00', 'en_US');
   static final _dateFormat = DateFormat('dd/MM/yyyy');
   static final _timeFormat = DateFormat('h:mm a');
 }

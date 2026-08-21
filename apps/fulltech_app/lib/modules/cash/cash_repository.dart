@@ -91,6 +91,12 @@ class CashRepository {
           'businessDate': state.businessDate,
           'canOperate': state.canOperate,
         });
+      } else {
+        // Si el backend reporta que NO hay turno abierto, limpiamos el caché
+        // local para no quedar con un "turno fantasma" que bloquee abrir/cerrar
+        // caja cuando después haya una falla de red o error 5xx.
+        await _cache.remove(_activeSessionCacheKey);
+        await _cache.remove(_pendingMovementsCacheKey);
       }
       return state;
     } on DioException catch (e) {
