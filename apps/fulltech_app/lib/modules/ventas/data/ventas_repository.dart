@@ -110,38 +110,58 @@ class VentasRepository {
     bool includeDeleted = false,
     int? limit,
   }) async {
+    final requestedLimit = (limit != null && limit > 0) ? limit : null;
     try {
-      final res = await _dio.get(
-        ApiRoutes.sales,
-        queryParameters: {
-          'from': _dateOnly(from),
-          'to': _dateOnly(to),
-          if ((userId ?? '').trim().isNotEmpty) 'userId': userId!.trim(),
-          if ((customerId ?? '').trim().isNotEmpty)
-            'customerId': customerId!.trim(),
-          if (includeDeleted) 'includeDeleted': 'true',
-          if (limit != null && limit > 0) 'limit': limit,
-        },
-        options: Options(extra: const {'skipLoader': true}),
-      );
-
-      final rows = res.data is List ? (res.data as List) : const [];
-      await _tryWriteCache(
-        _salesListCacheKey(
+      return await _requestSalesRows(
+        path: ApiRoutes.sales,
+        from: from,
+        to: to,
+        userId: userId,
+        customerId: customerId,
+        includeDeleted: includeDeleted,
+        limit: requestedLimit,
+        cacheKey: _salesListCacheKey(
           from: from,
           to: to,
           userId: userId,
           customerId: customerId,
           includeDeleted: includeDeleted,
-          limit: limit,
+          limit: requestedLimit,
         ),
-        {'items': rows},
       );
-      return rows
-          .whereType<Map>()
-          .map((e) => SaleModel.fromJson(e.cast<String, dynamic>()))
-          .toList();
-    } on DioException catch (e) {
+    } on DioException catch (e, stackTrace) {
+      _logRecentSalesError('GET ${ApiRoutes.sales}', e, stackTrace);
+      if (requestedLimit != null && _isLimitPropertyRejected(e)) {
+        // Compatibilidad temporal con backend anterior (version skew):
+        // el backend NO acepta `limit`; reintentamos UNA vez sin él y
+        // recortamos localmente. Solo aplica a este rechazo específico.
+        try {
+          final compatRows = await _requestSalesRows(
+            path: ApiRoutes.sales,
+            from: from,
+            to: to,
+            userId: userId,
+            customerId: customerId,
+            includeDeleted: includeDeleted,
+            limit: null,
+            cacheKey: _salesListCacheKey(
+              from: from,
+              to: to,
+              userId: userId,
+              customerId: customerId,
+              includeDeleted: includeDeleted,
+              limit: null,
+            ),
+          );
+          return compatRows.take(requestedLimit).toList(growable: false);
+        } on DioException catch (retryError, retryStack) {
+          _logRecentSalesError(
+            'GET ${ApiRoutes.sales} (compat retry sin limit)',
+            retryError,
+            retryStack,
+          );
+        }
+      }
       throw ApiException(
         _extractMessage(e.response?.data, 'No se pudieron cargar las ventas'),
         e.response?.statusCode,
@@ -181,36 +201,51 @@ class VentasRepository {
     bool includeDeleted = true,
     int? limit,
   }) async {
+    final requestedLimit = (limit != null && limit > 0) ? limit : null;
     try {
-      final res = await _dio.get(
-        ApiRoutes.salesInvoices,
-        queryParameters: {
-          'from': _dateOnly(from),
-          'to': _dateOnly(to),
-          if ((customerId ?? '').trim().isNotEmpty)
-            'customerId': customerId!.trim(),
-          if (includeDeleted) 'includeDeleted': 'true',
-          if (limit != null && limit > 0) 'limit': limit,
-        },
-        options: Options(extra: const {'skipLoader': true}),
-      );
-
-      final rows = res.data is List ? (res.data as List) : const [];
-      await _tryWriteCache(
-        _salesInvoicesCacheKey(
+      return await _requestSalesRows(
+        path: ApiRoutes.salesInvoices,
+        from: from,
+        to: to,
+        customerId: customerId,
+        includeDeleted: includeDeleted,
+        limit: requestedLimit,
+        cacheKey: _salesInvoicesCacheKey(
           from: from,
           to: to,
           customerId: customerId,
           includeDeleted: includeDeleted,
-          limit: limit,
+          limit: requestedLimit,
         ),
-        {'items': rows},
       );
-      return rows
-          .whereType<Map>()
-          .map((e) => SaleModel.fromJson(e.cast<String, dynamic>()))
-          .toList(growable: false);
-    } on DioException catch (e) {
+    } on DioException catch (e, stackTrace) {
+      _logRecentSalesError('GET ${ApiRoutes.salesInvoices}', e, stackTrace);
+      if (requestedLimit != null && _isLimitPropertyRejected(e)) {
+        try {
+          final compatRows = await _requestSalesRows(
+            path: ApiRoutes.salesInvoices,
+            from: from,
+            to: to,
+            customerId: customerId,
+            includeDeleted: includeDeleted,
+            limit: null,
+            cacheKey: _salesInvoicesCacheKey(
+              from: from,
+              to: to,
+              customerId: customerId,
+              includeDeleted: includeDeleted,
+              limit: null,
+            ),
+          );
+          return compatRows.take(requestedLimit).toList(growable: false);
+        } on DioException catch (retryError, retryStack) {
+          _logRecentSalesError(
+            'GET ${ApiRoutes.salesInvoices} (compat retry sin limit)',
+            retryError,
+            retryStack,
+          );
+        }
+      }
       final cached = await cachedInvoices(
         from: from,
         to: to,
@@ -1005,6 +1040,94 @@ class VentasRepository {
         stackTrace: stackTrace,
       );
     }
+  }
+
+  /// Ejecuta GET /sales o /sales/invoices con `limit` opcional, escribe la
+  /// caché y mapea a SaleModel. Lanza [DioException] hacia arriba.
+  Future<List<SaleModel>> _requestSalesRows({
+    required String path,
+    required DateTime from,
+    required DateTime to,
+    String? userId,
+    String? customerId,
+    required bool includeDeleted,
+    int? limit,
+    required String cacheKey,
+  }) async {
+    final requestedLimit = (limit != null && limit > 0) ? limit : null;
+    final query = <String, dynamic>{
+      'from': _dateOnly(from),
+      'to': _dateOnly(to),
+      if ((userId ?? '').trim().isNotEmpty) 'userId': userId!.trim(),
+      if ((customerId ?? '').trim().isNotEmpty) 'customerId': customerId!.trim(),
+      if (includeDeleted) 'includeDeleted': 'true',
+      if (requestedLimit != null) 'limit': requestedLimit,
+    };
+    TraceLog.log('RECENT_SALES', 'request GET $path params=$query');
+    final res = await _dio.get(
+      path,
+      queryParameters: query,
+      options: Options(extra: const {'skipLoader': true}),
+    );
+    final rows = res.data is List ? (res.data as List) : const [];
+    await _tryWriteCache(cacheKey, {'items': rows});
+    final mapped = rows
+        .whereType<Map>()
+        .map((e) => SaleModel.fromJson(e.cast<String, dynamic>()))
+        .toList(growable: false);
+    TraceLog.log(
+      'RECENT_SALES',
+      'response GET $path status=${res.statusCode} items=${mapped.length}',
+    );
+    return mapped;
+  }
+
+  /// Detecta SOLO el rechazo específico de la validación NestJS por
+  /// whitelist/forbidNonWhitelisted de la propiedad `limit` (version skew:
+  /// backend anterior sin el parámetro). NO cubre 401/403/500/timeouts/DB.
+  bool _isLimitPropertyRejected(DioException error) {
+    if (error.response?.statusCode != 400) return false;
+    final data = error.response?.data;
+    final messages = <String>[];
+    if (data is Map) {
+      final msg = data['message'];
+      if (msg is String) messages.add(msg);
+      if (msg is List) messages.addAll(msg.whereType<String>());
+    } else if (data is String) {
+      messages.add(data);
+    }
+    final joined = messages.join(' ').toLowerCase();
+    return joined.contains('limit should not exist') ||
+        joined.contains('property limit') ||
+        joined.contains('unknown property limit') ||
+        joined.contains('unknown argument limit') ||
+        joined.contains('unknown field limit');
+  }
+
+  void _logRecentSalesError(
+    String label,
+    DioException error,
+    StackTrace stackTrace,
+  ) {
+    var bodyPreview = 'n/a';
+    try {
+      final raw = error.response?.data;
+      if (raw != null) {
+        bodyPreview = raw is String ? raw : jsonEncode(raw);
+        if (bodyPreview.length > 600) {
+          bodyPreview = '${bodyPreview.substring(0, 600)}...';
+        }
+      }
+    } catch (_) {
+      bodyPreview = 'n/a';
+    }
+    TraceLog.log(
+      'RECENT_SALES',
+      'ERROR $label status=${error.response?.statusCode} '
+      'type=${error.type} message=${error.message ?? ''} body=$bodyPreview',
+      error: error,
+      stackTrace: stackTrace,
+    );
   }
 
   String _cacheKeyPart(String? value) {

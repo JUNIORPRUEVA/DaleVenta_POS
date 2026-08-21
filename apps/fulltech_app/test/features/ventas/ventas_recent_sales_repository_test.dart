@@ -147,6 +147,163 @@ void main() {
     expect(rows.single.id, 'sale-null');
     expect(rows.single.totalSold, 0);
   });
+
+  group('compatibilidad version skew por limit', () {
+    ResponseBody limitRejectOrData(RequestOptions options) {
+      if (options.queryParameters.containsKey('limit')) {
+        return jsonResponse({
+          'statusCode': 400,
+          'message': ['property limit should not exist'],
+          'error': 'Bad Request',
+        }, 400);
+      }
+      return jsonResponse(
+        List.generate(30, (i) => saleRow(id: 'sale-$i')),
+      );
+    }
+
+    test('listInvoices: backend viejo rechaza limit → reintenta UNA vez sin limit', () async {
+      final repository = buildRepository(limitRejectOrData);
+
+      final rows = await repository.listInvoices(
+        from: DateTime(2026, 8, 1),
+        to: DateTime(2026, 8, 20),
+        includeDeleted: true,
+        limit: 5,
+      );
+
+      expect(captured, hasLength(2));
+      expect(captured.first.queryParameters.containsKey('limit'), isTrue);
+      expect(captured.last.queryParameters.containsKey('limit'), isFalse);
+      expect(rows, hasLength(5));
+      expect(rows.first.id, 'sale-0');
+    });
+
+    test('listSales: backend viejo rechaza limit → reintenta UNA vez sin limit', () async {
+      final repository = buildRepository(limitRejectOrData);
+
+      final rows = await repository.listSales(
+        from: DateTime(2026, 8, 1),
+        to: DateTime(2026, 8, 20),
+        limit: 3,
+      );
+
+      expect(captured, hasLength(2));
+      expect(captured.first.queryParameters.containsKey('limit'), isTrue);
+      expect(captured.last.queryParameters.containsKey('limit'), isFalse);
+      expect(rows, hasLength(3));
+    });
+
+    test('error 500 NO dispara fallback de compatibilidad', () async {
+      final repository = buildRepository(
+        (options) => jsonResponse({'message': 'boom'}, 500),
+      );
+
+      await expectLater(
+        repository.listSales(
+          from: DateTime(2026, 8, 1),
+          to: DateTime(2026, 8, 20),
+          limit: 20,
+        ),
+        throwsA(isA<ApiException>()),
+      );
+
+      expect(captured, hasLength(1));
+    });
+
+    test('error 401 NO dispara fallback de compatibilidad', () async {
+      final repository = buildRepository(
+        (options) => jsonResponse({'message': 'Unauthorized'}, 401),
+      );
+
+      await expectLater(
+        repository.listSales(
+          from: DateTime(2026, 8, 1),
+          to: DateTime(2026, 8, 20),
+          limit: 20,
+        ),
+        throwsA(isA<ApiException>()),
+      );
+
+      expect(captured, hasLength(1));
+    });
+
+    test('timeout NO dispara fallback de compatibilidad', () async {
+      final repository = buildRepository(
+        (options) => throw DioException(
+          requestOptions: options,
+          type: DioExceptionType.receiveTimeout,
+        ),
+      );
+
+      await expectLater(
+        repository.listSales(
+          from: DateTime(2026, 8, 1),
+          to: DateTime(2026, 8, 20),
+          limit: 20,
+        ),
+        throwsA(isA<ApiException>()),
+      );
+
+      expect(captured, hasLength(1));
+    });
+  });
+
+  test('JSON de una venta B01 real (NCF/vencimiento/cajero/fiscal) parsea sin excepción', () async {
+    final repository = buildRepository(
+      (options) => jsonResponse([
+        {
+          'id': 'sale-b01',
+          'userId': 'user-1',
+          'user': {
+            'id': 'user-1',
+            'nombreCompleto': 'Yunior Lopez',
+            'email': 'yunior@test.do',
+          },
+          'totalSold': 25700,
+          'totalCost': 0,
+          'totalProfit': 25700,
+          'commissionAmount': 0,
+          'paymentMethod': 'cash',
+          'paymentCashAmount': 25700,
+          'paymentTransferAmount': 0,
+          'creditAmount': 0,
+          'creditPaidAmount': 0,
+          'creditBalance': 0,
+          'creditStatus': 'none',
+          'isDeleted': false,
+          'fiscalTaxEnabled': true,
+          'fiscalPriceMode': 'TAX_ADDED',
+          'taxableBase': 21779.66,
+          'taxAmount': 3920.34,
+          'exemptAmount': 0,
+          'discountAmount': 0,
+          'fiscalVoucherType': 'B01',
+          'ncf': 'B0100000003',
+          'ncfExpirationDate': '2026-12-31T00:00:00.000Z',
+          'fiscalCustomerTaxId': '133206111',
+          'fiscalCustomerName': 'Fune, srl',
+          'issuerNameSnapshot': 'FULLTECH, SRL',
+          'issuerTaxIdSnapshot': '133080206',
+          'items': <dynamic>[],
+        },
+      ]),
+    );
+
+    final rows = await repository.listInvoices(
+      from: DateTime(2026, 8, 1),
+      to: DateTime(2026, 8, 20),
+    );
+
+    expect(rows, hasLength(1));
+    final sale = rows.single;
+    expect(sale.userName, 'Yunior Lopez');
+    expect(sale.ncf, 'B0100000003');
+    expect(sale.ncfExpirationDate, DateTime.utc(2026, 12, 31));
+    expect(sale.fiscalVoucherType, 'B01');
+    expect(sale.fiscalCustomerTaxId, '133206111');
+    expect(sale.taxAmount, 3920.34);
+  });
 }
 
 class _FakeHttpClientAdapter implements HttpClientAdapter {
