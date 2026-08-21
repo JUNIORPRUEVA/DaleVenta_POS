@@ -186,6 +186,11 @@ class HtmlThermalReceiptPdfRenderer {
             voucherLabel.isEmpty ? 'FISCAL' : voucherLabel,
           ),
           if (ncf.isNotEmpty) _inlineText('NCF:', ncf),
+          if (receipt.ncfExpirationDate != null)
+            _inlineText(
+              'VENCE:',
+              DateFormat('dd/MM/yyyy').format(receipt.ncfExpirationDate!),
+            ),
         ],
       ),
     );

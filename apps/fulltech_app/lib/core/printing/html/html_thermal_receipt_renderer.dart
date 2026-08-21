@@ -362,6 +362,8 @@ body {
       '<div class="client-line"><strong>COMPROBANTE:</strong> ${_escape(voucherLabel.isEmpty ? 'FISCAL' : voucherLabel)}</div>',
       if (ncf.isNotEmpty)
         '<div class="client-line"><strong>NCF:</strong> ${_escape(ncf)}</div>',
+      if (receipt.ncfExpirationDate != null)
+        '<div class="client-line"><strong>VENCE:</strong> ${_escape(_date.format(receipt.ncfExpirationDate!))}</div>',
     ];
     return '''
     <section class="client">

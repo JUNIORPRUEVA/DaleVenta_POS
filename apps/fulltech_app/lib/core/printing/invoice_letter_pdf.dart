@@ -80,6 +80,10 @@ class InvoiceLetterPdf {
                     pw.Text('Comprobante: ${sale.fiscalVoucherType}'),
                   if ((sale.ncf ?? '').trim().isNotEmpty)
                     pw.Text('NCF: ${sale.ncf}'),
+                  if (sale.ncfExpirationDate != null)
+                    pw.Text(
+                      'Vencimiento: ${DateFormat('dd/MM/yyyy').format(sale.ncfExpirationDate!)}',
+                    ),
                   pw.Text(date.format(sale.saleDate ?? DateTime.now())),
                   if ((cashierName ?? sale.userName ?? '').trim().isNotEmpty)
                     pw.Text('Cajero: ${(cashierName ?? sale.userName)!}'),

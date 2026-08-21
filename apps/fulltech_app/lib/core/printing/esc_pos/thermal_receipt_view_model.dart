@@ -23,6 +23,7 @@ class ThermalReceiptViewModel {
     this.paymentMethod,
     this.ncf,
     this.fiscalVoucherType,
+    this.ncfExpirationDate,
     this.note,
     this.isCopy = false,
   });
@@ -46,6 +47,7 @@ class ThermalReceiptViewModel {
   final String? paymentMethod;
   final String? ncf;
   final String? fiscalVoucherType;
+  final DateTime? ncfExpirationDate;
   final String? note;
   final bool isCopy;
 
@@ -86,6 +88,7 @@ class ThermalReceiptViewModel {
       paymentMethod: _cleanOrNull(data.paymentMethod),
       ncf: _cleanOrNull(data.ncf),
       fiscalVoucherType: _cleanOrNull(data.fiscalVoucherType),
+      ncfExpirationDate: data.ncfExpirationDate,
       note: _cleanOrNull(data.note),
       isCopy: data.isCopy,
     );

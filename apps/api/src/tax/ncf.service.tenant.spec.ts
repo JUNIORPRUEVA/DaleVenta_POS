@@ -43,4 +43,52 @@ describe("NcfService tenant isolation", () => {
       },
     });
   });
+
+  it("reserveNextNcf returns the sequence validUntil (snapshot) scoped by company/type", async () => {
+    const validUntil = new Date("2026-12-31T00:00:00.000Z");
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([
+        {
+          id: "33333333-3333-4333-8333-333333333333",
+          company_id: user.companyId,
+          voucher_type: "B01",
+          prefix: "B01",
+          start_number: 1,
+          next_number: 3,
+          end_number: 100000,
+          valid_until: validUntil,
+          active: true,
+        },
+      ]),
+      ncfSequence: {
+        update: jest.fn().mockResolvedValue({}),
+      },
+      ncfAuditLog: {
+        create: jest.fn().mockResolvedValue({}),
+      },
+    };
+    const service = new NcfService({} as never);
+
+    const result = await service.reserveNextNcf(tx as never, {
+      companyId: user.companyId,
+      userId: user.id,
+      voucherType: "B01",
+    });
+
+    expect(tx.$queryRaw).toHaveBeenCalledWith(
+      expect.any(Array),
+      user.companyId,
+      "B01",
+    );
+    expect(result).toEqual({
+      ncf: "B0100000003",
+      sequenceId: "33333333-3333-4333-8333-333333333333",
+      type: "B01",
+      validUntil,
+    });
+    expect(tx.ncfSequence.update).toHaveBeenCalledWith({
+      where: { id: "33333333-3333-4333-8333-333333333333" },
+      data: { nextNumber: { increment: 1 } },
+    });
+  });
 });

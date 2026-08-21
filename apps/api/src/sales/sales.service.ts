@@ -895,6 +895,7 @@ export class SalesService {
             discountAmount: taxCalculation.discountAmount,
             fiscalVoucherType: requestedVoucherType,
             ncf: reservedNcf?.ncf ?? null,
+            ncfExpirationDate: reservedNcf?.validUntil ?? null,
             issuerNameSnapshot,
             issuerTaxIdSnapshot,
             issuerAddressSnapshot,
@@ -959,6 +960,13 @@ export class SalesService {
                 id: true,
                 nombre: true,
                 telefono: true,
+              },
+            },
+            user: {
+              select: {
+                id: true,
+                nombreCompleto: true,
+                email: true,
               },
             },
             items: true,

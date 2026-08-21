@@ -279,6 +279,66 @@ void main() {
     expect(bytes, contains(0xD1)); // Ñ
     expect(_cutCommandCount(bytes), 1);
   });
+
+  test('prints VENCE line when NCF expiration exists', () {
+    final lines = _renderer.previewLines(
+      _receipt(
+        ncf: 'B0100000003',
+        fiscalVoucherType: 'B01',
+        ncfExpirationDate: DateTime(2026, 12, 31),
+      ),
+    );
+
+    expect(lines.any((line) => line.contains('NCF: B0100000003')), isTrue);
+    expect(lines.any((line) => line.contains('VENCE: 31/12/2026')), isTrue);
+    expect(lines.any((line) => line.contains('COMPROBANTE: B01')), isTrue);
+  });
+
+  test('does not print VENCE line when there is no expiration', () {
+    final lines = _renderer.previewLines(
+      _receipt(
+        ncf: 'B0100000003',
+        fiscalVoucherType: 'B01',
+      ),
+    );
+
+    expect(lines.any((line) => line.contains('NCF: B0100000003')), isTrue);
+    expect(lines.where((line) => line.contains('VENCE')), isEmpty);
+  });
+
+  test('prints cashier name and falls back to No disponible only when empty', () {
+    final withCashier = _renderer.previewLines(
+      _receipt(),
+    );
+    expect(withCashier, contains(contains('Cajero: JUAN PÉREZ')));
+
+    final withoutCashier = FullPosEscPosReceiptRenderer(cutPaper: false)
+        .previewLines(
+          ThermalReceiptViewModel(
+            ticketNumber: '81472316',
+            dateTime: DateTime(2026, 8, 20, 19, 29),
+            documentTitle: 'FACTURA',
+            company: const CompanyInfo(
+              name: 'FULLTECH, SRL',
+              address: 'Centro Calle Beller 9 Local N2, Higüey',
+              phone: '809-555-0000',
+              rnc: '131000000',
+            ),
+            items: const [],
+            subtotal: 0,
+            productDiscount: 0,
+            generalDiscount: 0,
+            taxableBase: 0,
+            exemptAmount: 0,
+            taxAmount: 0,
+            total: 0,
+            fiscalTaxEnabled: false,
+            taxIncluded: false,
+            cashierName: null,
+          ),
+        );
+    expect(withoutCashier, contains(contains('Cajero: No disponible')));
+  });
 }
 
 final _renderer = FullPosEscPosReceiptRenderer(cutPaper: false);
@@ -307,6 +367,7 @@ ThermalReceiptViewModel _receipt({
   String? note,
   String? ncf,
   String? fiscalVoucherType,
+  DateTime? ncfExpirationDate,
 }) {
   return ThermalReceiptViewModel(
     ticketNumber: '81472316',
@@ -347,5 +408,6 @@ ThermalReceiptViewModel _receipt({
     note: note,
     ncf: ncf,
     fiscalVoucherType: fiscalVoucherType,
+    ncfExpirationDate: ncfExpirationDate,
   );
 }

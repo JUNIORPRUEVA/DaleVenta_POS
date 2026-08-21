@@ -472,6 +472,16 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
         _safeEscPosLine('NCF: $ncf', styles, thermalProfile.usableChars),
       );
     }
+    final expiration = receipt.ncfExpirationDate;
+    if (expiration != null) {
+      lines.add(
+        _safeEscPosLine(
+          'VENCE: ${_dateFormat.format(expiration)}',
+          styles,
+          thermalProfile.usableChars,
+        ),
+      );
+    }
   }
 
   List<String> _summaryLines(ThermalReceiptViewModel receipt) {

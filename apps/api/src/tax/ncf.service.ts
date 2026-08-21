@@ -137,7 +137,12 @@ export class NcfService {
         action: "RESERVED",
       },
     });
-    return { ncf, sequenceId: sequence.id, type };
+    return {
+      ncf,
+      sequenceId: sequence.id,
+      type,
+      validUntil: sequence.valid_until,
+    };
   }
 
   async markIssued(tx: Tx, params: {

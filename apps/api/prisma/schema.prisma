@@ -2254,6 +2254,7 @@ model Sale {
   discountAmount        Decimal   @default(0) @map("discount_amount") @db.Decimal(12, 2)
   fiscalVoucherType     String?   @map("fiscal_voucher_type")
   ncf                   String?   @map("ncf")
+  ncfExpirationDate     DateTime? @map("ncf_expiration_date")
   issuerNameSnapshot    String?   @map("issuer_name_snapshot") @db.Text
   issuerTaxIdSnapshot   String?   @map("issuer_tax_id_snapshot") @db.Text
   issuerAddressSnapshot String?   @map("issuer_address_snapshot") @db.Text

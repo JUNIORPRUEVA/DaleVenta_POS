@@ -265,6 +265,8 @@ pw.Widget _invoiceHeader({
                 statusText: statusText,
                 subtitle: fiscalSubtitle,
                 ncf: sale.ncf,
+                ncfExpirationDate: sale.ncfExpirationDate,
+                cashierName: sale.userName,
               ),
             ),
           ],
@@ -824,9 +826,12 @@ pw.Widget _documentFactsPanel({
   String? statusText,
   String? subtitle,
   String? ncf,
+  DateTime? ncfExpirationDate,
+  String? cashierName,
 }) {
   final cleanSubtitle = _clean(subtitle);
   final cleanNcf = _clean(ncf);
+  final cleanCashier = _clean(cashierName);
   return pw.Container(
     padding: const pw.EdgeInsets.fromLTRB(12, 10, 12, 10),
     decoration: pw.BoxDecoration(
@@ -867,6 +872,12 @@ pw.Widget _documentFactsPanel({
           pw.SizedBox(height: 4),
         ],
         if (cleanNcf.isNotEmpty) _factLine('NCF', cleanNcf),
+        if (ncfExpirationDate != null)
+          _factLine(
+            'Vencimiento',
+            DateFormat('dd/MM/yyyy').format(ncfExpirationDate),
+          ),
+        if (cleanCashier.isNotEmpty) _factLine('Cajero', cleanCashier),
         _factLine('Expedición', issuedText),
         if (statusText != null && statusText.trim().isNotEmpty) ...[
           pw.SizedBox(height: 5),

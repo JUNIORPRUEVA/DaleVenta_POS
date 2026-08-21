@@ -222,6 +222,7 @@ class SaleModel {
   final double discountAmount;
   final String? fiscalVoucherType;
   final String? ncf;
+  final DateTime? ncfExpirationDate;
   final String? issuerNameSnapshot;
   final String? issuerTaxIdSnapshot;
   final String? issuerAddressSnapshot;
@@ -263,6 +264,7 @@ class SaleModel {
     this.discountAmount = 0,
     this.fiscalVoucherType,
     this.ncf,
+    this.ncfExpirationDate,
     this.issuerNameSnapshot,
     this.issuerTaxIdSnapshot,
     this.issuerAddressSnapshot,
@@ -344,6 +346,11 @@ class SaleModel {
       discountAmount: _toDouble(json['discountAmount']),
       fiscalVoucherType: json['fiscalVoucherType']?.toString(),
       ncf: json['ncf']?.toString(),
+      ncfExpirationDate: json['ncfExpirationDate'] != null
+          ? DateTime.tryParse(json['ncfExpirationDate'].toString())
+          : json['ncf_expiration_date'] != null
+          ? DateTime.tryParse(json['ncf_expiration_date'].toString())
+          : null,
       issuerNameSnapshot: json['issuerNameSnapshot']?.toString(),
       issuerTaxIdSnapshot: json['issuerTaxIdSnapshot']?.toString(),
       issuerAddressSnapshot: json['issuerAddressSnapshot']?.toString(),

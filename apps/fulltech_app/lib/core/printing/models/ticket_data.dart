@@ -59,6 +59,7 @@ class TicketData {
     this.taxIncluded = false,
     this.ncf,
     this.fiscalVoucherType,
+    this.ncfExpirationDate,
     this.issuerName,
     this.issuerRnc,
     this.issuerPhone,
@@ -87,6 +88,7 @@ class TicketData {
   final bool taxIncluded;
   final String? ncf;
   final String? fiscalVoucherType;
+  final DateTime? ncfExpirationDate;
   final String? issuerName;
   final String? issuerRnc;
   final String? issuerPhone;
@@ -150,6 +152,7 @@ class TicketData {
       taxIncluded: sale.fiscalPriceMode == 'TAX_INCLUDED',
       ncf: sale.ncf,
       fiscalVoucherType: sale.fiscalVoucherType,
+      ncfExpirationDate: sale.ncfExpirationDate,
       issuerName: sale.issuerNameSnapshot,
       issuerRnc: sale.issuerTaxIdSnapshot,
       issuerPhone: sale.issuerPhoneSnapshot,

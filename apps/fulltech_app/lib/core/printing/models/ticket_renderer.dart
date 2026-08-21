@@ -169,6 +169,16 @@ class TicketRenderer {
       add(sep);
       add(ReceiptTextUtils.truncate(fiscalSubtitle(), width));
       add(ReceiptTextUtils.leftRight('NCF', data.ncf!.trim(), width));
+      final expiration = data.ncfExpirationDate;
+      if (expiration != null) {
+        add(
+          ReceiptTextUtils.leftRight(
+            'VENCE',
+            DateFormat('dd/MM/yyyy').format(expiration),
+            width,
+          ),
+        );
+      }
       final fiscalName = (data.client?.name ?? '').trim();
       if (fiscalName.isNotEmpty) {
         add(ReceiptTextUtils.leftRight('CLIENTE', fiscalName, width));
