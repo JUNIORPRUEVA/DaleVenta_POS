@@ -2,7 +2,6 @@ import { Type } from "class-transformer";
 import {
   ArrayMinSize,
   IsArray,
-  IsBoolean,
   IsIn,
   IsNumber,
   IsOptional,
@@ -70,16 +69,6 @@ export class CreateSaleDto {
   @IsOptional()
   @IsString()
   fiscalCustomerName?: string;
-
-  /**
-   * When true, the backend persists/reuses a master Client from the fiscal
-   * identification used in this sale (so it can be recovered by RNC later).
-   * This is a decision stored per ticket; it never consumes an extra NCF.
-   */
-  @IsOptional()
-  @Type(() => Boolean)
-  @IsBoolean()
-  saveFiscalCustomer?: boolean;
 
   @IsOptional()
   @IsIn(["cash", "transfer", "mixed", "credit"])

@@ -2654,7 +2654,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           fiscalCustomerName: _selectedFiscalVoucherType == null
               ? null
               : _selectedClientFiscalName,
-          saveFiscalCustomer: _selectedFiscalVoucherType != null,
           items: _cart,
         );
     ref.read(operationsDataRefreshProvider).refreshSalesAndCash();

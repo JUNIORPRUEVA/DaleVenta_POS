@@ -533,7 +533,6 @@ class VentasRepository {
     String? fiscalVoucherType,
     String? fiscalCustomerTaxId,
     String? fiscalCustomerName,
-    bool? saveFiscalCustomer,
     required List<SaleDraftItem> items,
   }) async {
     if (items.isEmpty) {
@@ -563,7 +562,6 @@ class VentasRepository {
         'fiscalCustomerTaxId': fiscalCustomerTaxId!.trim(),
       if ((fiscalCustomerName ?? '').trim().isNotEmpty)
         'fiscalCustomerName': fiscalCustomerName!.trim(),
-      if (saveFiscalCustomer == true) 'saveFiscalCustomer': true,
       'items': items.map((item) => item.toPayload()).toList(),
     };
 
@@ -581,7 +579,6 @@ class VentasRepository {
         fiscalVoucherType: fiscalVoucherType,
         fiscalCustomerTaxId: fiscalCustomerTaxId,
         fiscalCustomerName: fiscalCustomerName,
-        saveFiscalCustomer: saveFiscalCustomer,
         clientRequestId: clientRequestId,
         items: items,
       );
@@ -674,7 +671,6 @@ class VentasRepository {
     String? fiscalVoucherType,
     String? fiscalCustomerTaxId,
     String? fiscalCustomerName,
-    bool? saveFiscalCustomer,
     String? clientRequestId,
     required List<SaleDraftItem> items,
   }) async {
@@ -704,7 +700,6 @@ class VentasRepository {
           'fiscalCustomerTaxId': fiscalCustomerTaxId!.trim(),
         if ((fiscalCustomerName ?? '').trim().isNotEmpty)
           'fiscalCustomerName': fiscalCustomerName!.trim(),
-        if (saveFiscalCustomer == true) 'saveFiscalCustomer': true,
         'items': items.map((item) => item.toPayload()).toList(),
       },
     );
@@ -908,6 +903,31 @@ class VentasRepository {
     } on DioException catch (e) {
       throw ApiException(
         _extractMessage(e.response?.data, 'No se pudo crear el cliente'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  /// Actualiza/completa los datos fiscales de un Cliente existente
+  /// (PATCH /clients/:id). Respetado el ownership por empresa en el backend.
+  Future<ClienteModel> updateClientFiscal({
+    required String id,
+    String? taxId,
+    String? businessName,
+  }) async {
+    try {
+      final res = await _dio.patch(
+        ApiRoutes.clientDetail(id),
+        data: {
+          if ((taxId ?? '').trim().isNotEmpty) 'taxId': taxId!.trim(),
+          if ((businessName ?? '').trim().isNotEmpty)
+            'businessName': businessName!.trim(),
+        },
+      );
+      return ClienteModel.fromJson((res.data as Map).cast<String, dynamic>());
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(e.response?.data, 'No se pudo actualizar el cliente'),
         e.response?.statusCode,
       );
     }

@@ -283,7 +283,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   String _fiscalCustomerTaxId = '';
   String _fiscalCustomerName = '';
   String _fiscalVoucherType = '';
-  bool _saveFiscalCustomer = false;
   double _generalDiscountAmount = 0;
 
   String? _editingId;
@@ -1322,7 +1321,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       fiscalVoucherDueDate: null,
       fiscalCustomerTaxId: _fiscalCustomerTaxId,
       fiscalCustomerName: _fiscalCustomerName,
-      saveFiscalCustomer: _saveFiscalCustomer,
       globalDiscountAmount: _generalDiscountAmount,
       editingId: _editingId,
       editingCreatedAt: _editingCreatedAt,
@@ -1364,7 +1362,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _fiscalCustomerTaxId = draft.fiscalCustomerTaxId;
     _fiscalCustomerName = draft.fiscalCustomerName;
     _fiscalVoucherType = draft.fiscalVoucherType;
-    _saveFiscalCustomer = draft.saveFiscalCustomer;
     _generalDiscountAmount = draft.globalDiscountAmount;
     _editingId = draft.editingId;
     _editingCreatedAt = draft.editingCreatedAt;
@@ -1385,7 +1382,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _fiscalCustomerTaxId = '';
     _fiscalCustomerName = '';
     _fiscalVoucherType = '';
-    _saveFiscalCustomer = false;
     _generalDiscountAmount = 0;
     _editingId = null;
     _editingCreatedAt = null;
@@ -1421,7 +1417,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         _fiscalCustomerTaxId.trim().isNotEmpty ||
         _fiscalCustomerName.trim().isNotEmpty ||
         _fiscalVoucherType.trim().isNotEmpty ||
-        _saveFiscalCustomer ||
         _generalDiscountAmount != 0 ||
         (_editingId ?? '').trim().isNotEmpty ||
         _selectedCategories.isNotEmpty;
@@ -2122,7 +2117,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     final initialTaxId = _fiscalCustomerTaxId;
     final initialCustomerName = _fiscalCustomerName;
     final initialClientId = _selectedClientId;
-    final initialSaveFiscalCustomer = _saveFiscalCustomer;
     await showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -2177,7 +2171,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                         initialTaxId: initialTaxId,
                         initialCustomerName: initialCustomerName,
                         initialClientId: initialClientId,
-                        initialSaveFiscalCustomer: initialSaveFiscalCustomer,
+                        onSearchClients: _searchClientsForFiscalPanel,
                         onSave: (result) => _applyFiscalPanelResult(result),
                       ),
                     ),
@@ -2212,7 +2206,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       _fiscalVoucherType = result.voucherType;
       _fiscalCustomerTaxId = result.taxId;
       _fiscalCustomerName = result.customerName;
-      _saveFiscalCustomer = result.saveFiscalCustomer;
       final clientId = (result.clientId ?? '').trim();
       if (clientId.isNotEmpty) {
         final alreadySelected = clientId == (_selectedClientId ?? '');
@@ -2222,6 +2215,19 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         }
       }
     });
+  }
+
+  /// "Buscar en Clientes" del panel fiscal: reutiliza el MISMO panel de
+  /// clientes de Facturación y devuelve el estado fiscal sincronizado.
+  Future<_FiscalPanelSync?> _searchClientsForFiscalPanel() async {
+    await _openClientDialog();
+    if (!mounted) return null;
+    return _FiscalPanelSync(
+      voucherType: _fiscalVoucherType,
+      taxId: _fiscalCustomerTaxId,
+      customerName: _fiscalCustomerName,
+      clientId: _selectedClientId,
+    );
   }
 
   Future<void> _handleMobileQuickAction(_MobileQuickAction action) async {
@@ -3850,6 +3856,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                   _selectedClientId = null;
                                   _selectedClientName = 'Sin cliente';
                                   _selectedClientPhone = null;
+                                  _fiscalCustomerTaxId = '';
+                                  _fiscalCustomerName = '';
                                 });
                                 Navigator.pop(context);
                               },
@@ -5492,7 +5500,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               : _fiscalCustomerName.trim().isEmpty
               ? null
               : _fiscalCustomerName.trim(),
-          saveFiscalCustomer: _saveFiscalCustomer,
           items: saleItems,
         );
   }
@@ -6533,6 +6540,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                               _selectedClientId = null;
                               _selectedClientName = 'Sin cliente';
                               _selectedClientPhone = null;
+                              _fiscalCustomerTaxId = '';
+                              _fiscalCustomerName = '';
                             }),
                             onOpenHistory: _openRecentSalesPanel,
                             onOpenFiscalData: _shouldShowItbis
@@ -13263,14 +13272,28 @@ class _FiscalPanelResult {
     required this.voucherType,
     required this.taxId,
     required this.customerName,
-    required this.saveFiscalCustomer,
     this.clientId,
   });
 
   final String voucherType;
   final String taxId;
   final String customerName;
-  final bool saveFiscalCustomer;
+  final String? clientId;
+}
+
+/// Estado fiscal del ticket tras reutilizar el panel de Clientes
+/// (Buscar en Clientes).
+class _FiscalPanelSync {
+  const _FiscalPanelSync({
+    required this.voucherType,
+    required this.taxId,
+    required this.customerName,
+    this.clientId,
+  });
+
+  final String voucherType;
+  final String taxId;
+  final String customerName;
   final String? clientId;
 }
 
@@ -13280,7 +13303,7 @@ class _DesktopFiscalInvoicePanel extends ConsumerStatefulWidget {
     required this.initialTaxId,
     required this.initialCustomerName,
     required this.initialClientId,
-    required this.initialSaveFiscalCustomer,
+    required this.onSearchClients,
     required this.onSave,
   });
 
@@ -13288,7 +13311,7 @@ class _DesktopFiscalInvoicePanel extends ConsumerStatefulWidget {
   final String initialTaxId;
   final String initialCustomerName;
   final String? initialClientId;
-  final bool initialSaveFiscalCustomer;
+  final Future<_FiscalPanelSync?> Function() onSearchClients;
   final ValueChanged<_FiscalPanelResult> onSave;
 
   @override
@@ -13301,11 +13324,8 @@ class _DesktopFiscalInvoicePanelState
   late String _voucherType;
   late final TextEditingController _taxIdCtrl;
   late final TextEditingController _customerNameCtrl;
-  ClienteModel? _foundClient;
-  bool _searching = false;
-  late bool _saveAsClient;
-  Timer? _searchDebounce;
-  int _searchRequestId = 0;
+  late String? _clientId;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -13315,12 +13335,11 @@ class _DesktopFiscalInvoicePanelState
     _customerNameCtrl = TextEditingController(
       text: widget.initialCustomerName,
     );
-    _saveAsClient = widget.initialSaveFiscalCustomer;
+    _clientId = widget.initialClientId;
   }
 
   @override
   void dispose() {
-    _searchDebounce?.cancel();
     _taxIdCtrl.dispose();
     _customerNameCtrl.dispose();
     super.dispose();
@@ -13340,78 +13359,43 @@ class _DesktopFiscalInvoicePanelState
     return null;
   }
 
-  bool get _showSaveAsClient =>
-      _foundClient == null &&
-      _hasValidTaxId &&
-      _customerNameCtrl.text.trim().isNotEmpty;
-
   void _selectVoucher(String type) {
     setState(() => _voucherType = type.trim().toUpperCase());
   }
 
-  void _onTaxIdChanged(String value) {
+  void _syncCtrl(TextEditingController controller, String value) {
+    if (controller.text == value) return;
+    controller.text = value;
+    controller.selection = TextSelection.collapsed(offset: value.length);
+  }
+
+  /// Reutiliza el panel de CLIENTES existente (Busca, selecciona o crea un
+  /// cliente). Al seleccionar, sincroniza el ticket fiscal con ese cliente.
+  Future<void> _openClientSearch() async {
+    final sync = await widget.onSearchClients();
+    if (sync == null || !mounted) return;
     setState(() {
-      if (_foundClient != null &&
-          normalizeTaxId(_foundClient!.taxId) != normalizeTaxId(value)) {
-        _foundClient = null;
-      }
-    });
-    _scheduleTaxIdSearch(value);
-  }
-
-  void _scheduleTaxIdSearch(String value) {
-    _searchDebounce?.cancel();
-    final digits = normalizeTaxId(value);
-    if (digits.length < 6) {
-      setState(() {
-        _foundClient = null;
-        _searching = false;
-      });
-      return;
-    }
-    _searchDebounce = Timer(const Duration(milliseconds: 450), () {
-      _searchByTaxId(digits);
+      _voucherType = sync.voucherType.trim().toUpperCase();
+      _syncCtrl(_taxIdCtrl, sync.taxId);
+      _syncCtrl(_customerNameCtrl, sync.customerName);
+      _clientId = sync.clientId;
     });
   }
 
-  Future<void> _searchByTaxId(String digits) async {
-    final requestId = ++_searchRequestId;
-    if (mounted) setState(() => _searching = true);
-    try {
-      final clients = await ref
-          .read(ventasRepositoryProvider)
-          .searchClients(digits);
-      if (!mounted || requestId != _searchRequestId) return;
-      ClienteModel? match;
-      for (final client in clients) {
-        if (normalizeTaxId(client.taxId) == digits) {
-          match = client;
-          break;
-        }
-      }
-      if (!mounted || requestId != _searchRequestId) return;
-      setState(() {
-        _searching = false;
-        _foundClient = match;
-        if (match != null && _customerNameCtrl.text.trim().isEmpty) {
-          final businessName = match.businessName?.trim() ?? '';
-          final name = businessName.isNotEmpty
-              ? businessName
-              : match.nombre.trim();
-          _customerNameCtrl.text = name;
-          _customerNameCtrl.selection =
-              TextSelection.collapsed(offset: name.length);
-        }
-      });
-    } catch (_) {
-      if (!mounted || requestId != _searchRequestId) return;
-      setState(() {
-        _searching = false;
-        _foundClient = null;
-      });
+  Future<ClienteModel?> _findClientByRnc(
+    VentasRepository repo,
+    String digits,
+  ) async {
+    if (digits.length < 6) return null;
+    final clients = await repo.searchClients(digits);
+    for (final client in clients) {
+      if (normalizeTaxId(client.taxId) == digits) return client;
     }
+    return null;
   }
 
+  /// Guarda el cliente mediante el módulo de CLIENTES (create/update/reuse).
+  /// NUNCA emite venta ni consume NCF.
   Future<void> _finish() async {
     final message = _validationMessage;
     if (message != null) {
@@ -13420,47 +13404,63 @@ class _DesktopFiscalInvoicePanelState
       );
       return;
     }
-    final clientId = _foundClient?.id ?? widget.initialClientId;
-    widget.onSave(
-      _FiscalPanelResult(
-        voucherType: _voucherType,
-        taxId: _normalizedTaxId,
-        customerName: _customerNameCtrl.text.trim(),
-        saveFiscalCustomer: _saveAsClient,
-        clientId: clientId,
-      ),
-    );
-    if (mounted) Navigator.of(context).pop();
-  }
-
-  Future<void> _openClientSearch() async {
-    final selected = await showDialog<ClienteModel>(
-      context: context,
-      builder: (_) => const _FiscalClientSearchDialog(),
-    );
-    if (selected == null || !mounted) return;
-    final taxId = normalizeTaxId(selected.taxId);
-    final businessName = selected.businessName?.trim() ?? '';
-    final name = businessName.isNotEmpty
-        ? businessName
-        : selected.nombre.trim();
-    setState(() {
-      _taxIdCtrl.text = taxId;
-      _taxIdCtrl.selection = TextSelection.collapsed(offset: taxId.length);
-      _customerNameCtrl.text = name;
-      _customerNameCtrl.selection =
-          TextSelection.collapsed(offset: name.length);
-      _foundClient = selected;
-      _searchRequestId++;
-      _searchDebounce?.cancel();
-      _searching = false;
-    });
+    if (_saving) return;
+    final digits = _normalizedTaxId;
+    final name = _customerNameCtrl.text.trim();
+    setState(() => _saving = true);
+    try {
+      final repo = ref.read(ventasRepositoryProvider);
+      String? clientId = _clientId;
+      if (digits.isNotEmpty && name.isNotEmpty) {
+        if (clientId != null && clientId.trim().isNotEmpty) {
+          // Ya hay cliente seleccionado: completar/actualizar SUS datos fiscales.
+          await repo.updateClientFiscal(
+            id: clientId,
+            taxId: digits,
+            businessName: name,
+          );
+        } else {
+          // Sin cliente: buscar por RNC en la empresa activa; reutilizar o crear.
+          final match = await _findClientByRnc(repo, digits);
+          if (match != null) {
+            clientId = match.id;
+          } else {
+            final created = await repo.createQuickClient(
+              nombre: name,
+              telefono: '',
+              taxId: digits,
+              businessName: name,
+            );
+            clientId = created.id;
+          }
+        }
+      }
+      if (!mounted) return;
+      widget.onSave(
+        _FiscalPanelResult(
+          voucherType: _voucherType,
+          taxId: digits,
+          customerName: name,
+          clientId: clientId,
+        ),
+      );
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e is ApiException ? e.message : 'No se pudo guardar el cliente.',
+          ),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final border = Border.all(color: const Color(0xFFD3E0E7), width: 1.1);
     final config = ref.watch(productTaxUiConfigProvider).valueOrNull;
     final settings = config?.settings;
@@ -13475,8 +13475,6 @@ class _DesktopFiscalInvoicePanelState
     final selectedType = _voucherType;
     final fiscalDisabled = !taxEnabled || !ncfEnabled;
     final validationMessage = _validationMessage;
-    final showSaveAsClient = _showSaveAsClient;
-    final foundClient = _foundClient;
 
     return Container(
       height: double.infinity,
@@ -13637,7 +13635,7 @@ class _DesktopFiscalInvoicePanelState
                     const SizedBox(height: 8),
                     TextField(
                       controller: _taxIdCtrl,
-                      onChanged: _onTaxIdChanged,
+                      onChanged: (_) => setState(() {}),
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
                         labelText: 'RNC / Cédula (opcional)',
@@ -13645,57 +13643,6 @@ class _DesktopFiscalInvoicePanelState
                         isDense: true,
                       ),
                     ),
-                    if (_searching) ...[
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Buscando cliente por RNC…',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ] else if (foundClient != null) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEAF8EC),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFB7E0C2)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.check_circle_outline,
-                              size: 18,
-                              color: Color(0xFF1A7F37),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Cliente registrado: ${_clientLabel(foundClient)}',
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: const Color(0xFF0B5E23),
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
                     if (validationMessage != null) ...[
                       const SizedBox(height: 6),
                       Text(
@@ -13720,9 +13667,9 @@ class _DesktopFiscalInvoicePanelState
                     Align(
                       alignment: Alignment.centerLeft,
                       child: OutlinedButton.icon(
-                        onPressed: _openClientSearch,
+                        onPressed: _saving ? null : _openClientSearch,
                         icon: const Icon(Icons.search_rounded, size: 18),
-                        label: const Text('Buscar cliente fiscal'),
+                        label: const Text('Buscar en Clientes'),
                         style: OutlinedButton.styleFrom(
                           visualDensity: VisualDensity.compact,
                           foregroundColor: const Color(0xFF1957E6),
@@ -13730,40 +13677,6 @@ class _DesktopFiscalInvoicePanelState
                         ),
                       ),
                     ),
-                    if (showSaveAsClient) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FBFF),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFD3E0E7)),
-                        ),
-                        child: CheckboxListTile(
-                          dense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                          ),
-                          controlAffinity: ListTileControlAffinity.leading,
-                          value: _saveAsClient,
-                          onChanged: (value) => setState(
-                            () => _saveAsClient = value ?? false,
-                          ),
-                          title: Text(
-                            'Guardar como cliente para futuras ventas',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          subtitle: Text(
-                            'Se creará o reutilizará al emitir esta venta.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
@@ -13772,8 +13685,14 @@ class _DesktopFiscalInvoicePanelState
             SizedBox(
               height: 46,
               child: FilledButton.icon(
-                onPressed: _finish,
-                icon: const Icon(Icons.check_rounded),
+                onPressed: _saving ? null : _finish,
+                icon: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.check_rounded),
                 label: const Text('Guardar'),
                 style: FilledButton.styleFrom(
                   shape: const RoundedRectangleBorder(
@@ -13785,202 +13704,6 @@ class _DesktopFiscalInvoicePanelState
           ],
         ),
       ),
-    );
-  }
-
-  String _clientLabel(ClienteModel client) {
-    final businessName = client.businessName?.trim() ?? '';
-    final name = businessName.isNotEmpty ? businessName : client.nombre.trim();
-    final taxId = normalizeTaxId(client.taxId);
-    if (taxId.isEmpty) return name.isEmpty ? 'Cliente' : name;
-    return name.isEmpty ? taxId : '$name · $taxId';
-  }
-}
-
-class _FiscalClientSearchDialog extends ConsumerStatefulWidget {
-  const _FiscalClientSearchDialog();
-
-  @override
-  ConsumerState<_FiscalClientSearchDialog> createState() =>
-      _FiscalClientSearchDialogState();
-}
-
-class _FiscalClientSearchDialogState
-    extends ConsumerState<_FiscalClientSearchDialog> {
-  final _searchCtrl = TextEditingController();
-  final _focusNode = FocusNode();
-  Timer? _debounce;
-  int _requestId = 0;
-  List<ClienteModel> _results = const [];
-  bool _loading = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _focusNode.requestFocus();
-    });
-  }
-
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    _searchCtrl.dispose();
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  void _onChanged(String value) {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 350), () {
-      _search(value);
-    });
-  }
-
-  Future<void> _search(String value) async {
-    final query = value.trim();
-    final requestId = ++_requestId;
-    if (query.isEmpty) {
-      if (mounted) {
-        setState(() {
-          _results = const [];
-          _loading = false;
-          _error = null;
-        });
-      }
-      return;
-    }
-    if (mounted) {
-      setState(() {
-        _loading = true;
-        _error = null;
-      });
-    }
-    try {
-      final clients = await ref
-          .read(ventasRepositoryProvider)
-          .searchClients(query);
-      if (!mounted || requestId != _requestId) return;
-      setState(() {
-        _results = clients;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted || requestId != _requestId) return;
-      setState(() {
-        _loading = false;
-        _error = e is ApiException ? e.message : 'No se pudo buscar clientes.';
-      });
-    }
-  }
-
-  String _clientLabel(ClienteModel client) {
-    final businessName = client.businessName?.trim() ?? '';
-    final name = businessName.isNotEmpty ? businessName : client.nombre.trim();
-    final taxId = normalizeTaxId(client.taxId);
-    if (taxId.isEmpty) return name;
-    return name.isEmpty ? taxId : '$name · $taxId';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return AlertDialog(
-      title: const Text('Buscar cliente fiscal'),
-      content: SizedBox(
-        width: 400,
-        height: 420,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _searchCtrl,
-              focusNode: _focusNode,
-              onChanged: _onChanged,
-              onSubmitted: _search,
-              decoration: const InputDecoration(
-                labelText: 'Nombre o RNC/Cédula',
-                hintText: 'Ej: potatoes.dres, srl o 133020253',
-                prefixIcon: Icon(Icons.search_rounded),
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 20),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_error != null)
-              Padding(
-                padding: const EdgeInsets.all(10),
-                child: Text(
-                  _error!,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.error,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              )
-            else if (_results.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: Text(
-                    _searchCtrl.text.trim().isEmpty
-                        ? 'Escribe un nombre o RNC para buscar.'
-                        : 'No se encontraron clientes.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              )
-            else
-              Expanded(
-                child: ListView.separated(
-                  itemCount: _results.length,
-                  separatorBuilder: (context, index) => const Divider(
-                    height: 1,
-                  ),
-                  itemBuilder: (context, index) {
-                    final client = _results[index];
-                    return ListTile(
-                      dense: true,
-                      leading: const Icon(
-                        Icons.business_outlined,
-                        size: 20,
-                        color: Color(0xFF1957E6),
-                      ),
-                      title: Text(
-                        client.businessName?.trim().isNotEmpty == true
-                            ? client.businessName!.trim()
-                            : client.nombre,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        _clientLabel(client),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      onTap: () => Navigator.of(context).pop(client),
-                    );
-                  },
-                ),
-              ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancelar'),
-        ),
-      ],
     );
   }
 }
@@ -16222,7 +15945,6 @@ class _DesktopTicketDraft {
     required this.fiscalVoucherDueDate,
     required this.fiscalCustomerTaxId,
     required this.fiscalCustomerName,
-    required this.saveFiscalCustomer,
     required this.globalDiscountAmount,
     required this.editingId,
     required this.editingCreatedAt,
@@ -16256,7 +15978,6 @@ class _DesktopTicketDraft {
       fiscalVoucherDueDate: null,
       fiscalCustomerTaxId: '',
       fiscalCustomerName: '',
-      saveFiscalCustomer: false,
       globalDiscountAmount: 0,
       editingId: null,
       editingCreatedAt: null,
@@ -16282,7 +16003,6 @@ class _DesktopTicketDraft {
   final DateTime? fiscalVoucherDueDate;
   final String fiscalCustomerTaxId;
   final String fiscalCustomerName;
-  final bool saveFiscalCustomer;
   final double globalDiscountAmount;
   final String? editingId;
   final DateTime? editingCreatedAt;
@@ -16307,7 +16027,6 @@ class _DesktopTicketDraft {
     DateTime? fiscalVoucherDueDate,
     String? fiscalCustomerTaxId,
     String? fiscalCustomerName,
-    bool? saveFiscalCustomer,
     double? globalDiscountAmount,
     String? editingId,
     DateTime? editingCreatedAt,
@@ -16332,8 +16051,6 @@ class _DesktopTicketDraft {
       fiscalVoucherDueDate: fiscalVoucherDueDate ?? this.fiscalVoucherDueDate,
       fiscalCustomerTaxId: fiscalCustomerTaxId ?? this.fiscalCustomerTaxId,
       fiscalCustomerName: fiscalCustomerName ?? this.fiscalCustomerName,
-      saveFiscalCustomer:
-          saveFiscalCustomer ?? this.saveFiscalCustomer,
       globalDiscountAmount: globalDiscountAmount ?? this.globalDiscountAmount,
       editingId: editingId ?? this.editingId,
       editingCreatedAt: editingCreatedAt ?? this.editingCreatedAt,
@@ -16366,7 +16083,6 @@ class _DesktopTicketDraft {
     'fiscalVoucherDueDate': fiscalVoucherDueDate?.toIso8601String(),
     'fiscalCustomerTaxId': fiscalCustomerTaxId,
     'fiscalCustomerName': fiscalCustomerName,
-    'saveFiscalCustomer': saveFiscalCustomer,
     'globalDiscountAmount': globalDiscountAmount,
     'editingId': editingId,
     'editingCreatedAt': editingCreatedAt?.toIso8601String(),
@@ -16412,7 +16128,6 @@ class _DesktopTicketDraft {
       ),
       fiscalCustomerTaxId: (map['fiscalCustomerTaxId'] ?? '').toString(),
       fiscalCustomerName: (map['fiscalCustomerName'] ?? '').toString(),
-      saveFiscalCustomer: map['saveFiscalCustomer'] == true,
       globalDiscountAmount:
           (map['globalDiscountAmount'] as num?)?.toDouble() ?? 0,
       editingId: map['editingId']?.toString(),
