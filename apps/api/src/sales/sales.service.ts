@@ -791,14 +791,32 @@ export class SalesService {
     const requestedVoucherType = dto.fiscalVoucherType?.trim()
       ? this.ncf.normalizeType(dto.fiscalVoucherType)
       : null;
-    const fiscalCustomerTaxId =
-      dto.fiscalCustomerTaxId?.trim() ||
-      customerFiscalSnapshot?.taxId?.trim() ||
-      null;
-    const fiscalCustomerName =
-      dto.fiscalCustomerName?.trim() ||
+    const customerSnapshotTaxId = customerFiscalSnapshot?.taxId?.trim() || null;
+    const customerSnapshotName =
       customerFiscalSnapshot?.businessName?.trim() ||
       customerFiscalSnapshot?.nombre?.trim() ||
+      null;
+
+    if (
+      requestedVoucherType === "B01" &&
+      (!customerId || !customerFiscalSnapshot)
+    ) {
+      throw new BadRequestException(
+        "Para emitir un comprobante B01 debes seleccionar un cliente con RNC y razón social.",
+      );
+    }
+
+    const fiscalCustomerTaxId =
+      customerSnapshotTaxId ||
+      (requestedVoucherType === "B01"
+        ? null
+        : dto.fiscalCustomerTaxId?.trim()) ||
+      null;
+    const fiscalCustomerName =
+      customerSnapshotName ||
+      (requestedVoucherType === "B01"
+        ? null
+        : dto.fiscalCustomerName?.trim()) ||
       null;
 
     if (requestedVoucherType && !fiscalSettings.ncfEnabled) {
@@ -811,6 +829,14 @@ export class SalesService {
         customerTaxId: fiscalCustomerTaxId,
         customerBusinessName: fiscalCustomerName,
       });
+      if (
+        requestedVoucherType === "B01" &&
+        (!fiscalCustomerTaxId || !fiscalCustomerName)
+      ) {
+        throw new BadRequestException(
+          "Para emitir un comprobante B01 debes seleccionar un cliente con RNC y razón social.",
+        );
+      }
       if (requestedVoucherType === "B02") {
         // B02 is allowed for final consumers; customer fiscal data is optional.
       }
@@ -954,23 +980,7 @@ export class SalesService {
               })),
             },
           },
-          include: {
-            customer: {
-              select: {
-                id: true,
-                nombre: true,
-                telefono: true,
-              },
-            },
-            user: {
-              select: {
-                id: true,
-                nombreCompleto: true,
-                email: true,
-              },
-            },
-            items: true,
-          },
+          include: this.saleInclude(),
         });
 
         if (customerId) {

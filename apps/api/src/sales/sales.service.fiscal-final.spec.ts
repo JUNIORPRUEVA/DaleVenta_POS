@@ -18,6 +18,7 @@ describe("SalesService fiscal closure", () => {
     };
     const tx = {
       product: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      client: { update: jest.fn() },
       sale: { create: jest.fn().mockResolvedValue(createdSale) },
     };
     const prisma = {
@@ -25,7 +26,7 @@ describe("SalesService fiscal closure", () => {
         findFirst: jest.fn().mockResolvedValue({
           id: "22222222-2222-4222-8222-222222222222",
           companyId: user.companyId,
-          customerId: null,
+          customerId: "55555555-5555-4555-8555-555555555555",
           fiscalTaxEnabled: true,
           fiscalPriceMode: "TAX_INCLUDED",
           taxableBase: new Prisma.Decimal("21779.66"),
@@ -71,6 +72,16 @@ describe("SalesService fiscal closure", () => {
       },
       sale: { findFirst: jest.fn() },
       product: { findMany: jest.fn().mockResolvedValue([]) },
+      client: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "55555555-5555-4555-8555-555555555555",
+          nombre: "Fulltech",
+          telefono: "809-555-0000",
+          taxId: "101010101",
+          businessName: "FULLTECH SRL",
+          direccion: "Higuey",
+        }),
+      },
       cashSession: { findFirst: jest.fn().mockResolvedValue({ id: "cash-a" }) },
       $transaction: jest.fn((callback) => callback(tx)),
     };
@@ -107,8 +118,6 @@ describe("SalesService fiscal closure", () => {
     await service.create(user as never, {
       sourceQuotationId: "22222222-2222-4222-8222-222222222222",
       fiscalVoucherType: "B01",
-      fiscalCustomerTaxId: "101010101",
-      fiscalCustomerName: "FULLTECH SRL",
       expectedTotalSold: 25700,
       items: [
         { productName: "Stale", qty: 1, priceSoldUnit: 1, costUnitSnapshot: 0 },
@@ -122,6 +131,7 @@ describe("SalesService fiscal closure", () => {
       expect.objectContaining({
         data: expect.objectContaining({
           sourceQuotationId: "22222222-2222-4222-8222-222222222222",
+          customerId: "55555555-5555-4555-8555-555555555555",
           totalSold: new Prisma.Decimal("25700"),
           taxableBase: new Prisma.Decimal("21779.66"),
           taxAmount: new Prisma.Decimal("3920.34"),
@@ -134,6 +144,8 @@ describe("SalesService fiscal closure", () => {
           issuerTaxIdSnapshot: "133080206",
           issuerAddressSnapshot: "Higuey",
           issuerPhoneSnapshot: "809-000-0000",
+          fiscalCustomerTaxId: "101010101",
+          fiscalCustomerName: "FULLTECH SRL",
           items: expect.objectContaining({
             create: [
               expect.objectContaining({
@@ -149,6 +161,93 @@ describe("SalesService fiscal closure", () => {
         }),
       }),
     );
+  });
+
+  it("rejects B01 without a selected customer before reserving an NCF", async () => {
+    const prisma = {
+      cotizacion: { findFirst: jest.fn() },
+      company: {
+        findFirst: jest.fn().mockResolvedValue({ name: "Fallback SRL" }),
+      },
+      appConfig: {
+        findFirst: jest.fn().mockResolvedValue({
+          companyName: "FULLTECH, SRL",
+          rnc: "133080206",
+          address: "Higuey",
+          phone: "809-000-0000",
+        }),
+      },
+      sale: { findFirst: jest.fn() },
+      product: { findMany: jest.fn().mockResolvedValue([]) },
+      client: { findFirst: jest.fn() },
+      cashSession: { findFirst: jest.fn().mockResolvedValue({ id: "cash-a" }) },
+      $transaction: jest.fn(),
+    };
+    const ncf = {
+      normalizeType: jest.fn((type: string) => type.trim().toUpperCase()),
+      reserveNextNcf: jest.fn(),
+      markIssued: jest.fn(),
+    };
+    const calculatorService = {
+      calculate: jest.fn().mockReturnValue({
+        total: new Prisma.Decimal("1180"),
+        taxableBase: new Prisma.Decimal("1000"),
+        taxAmount: new Prisma.Decimal("180"),
+        exemptAmount: new Prisma.Decimal("0"),
+        discountAmount: new Prisma.Decimal("0"),
+        lines: [
+          {
+            index: 0,
+            grossAmount: new Prisma.Decimal("1180"),
+            discountAmount: new Prisma.Decimal("0"),
+            taxableBase: new Prisma.Decimal("1000"),
+            taxRate: new Prisma.Decimal("0.18"),
+            taxAmount: new Prisma.Decimal("180"),
+            exemptAmount: new Prisma.Decimal("0"),
+            taxIncluded: true,
+            taxExempt: false,
+            lineTotal: new Prisma.Decimal("1180"),
+          },
+        ],
+      }),
+      validateFiscalCustomer: jest.fn(),
+    };
+    const service = new SalesService(
+      prisma as never,
+      { get: jest.fn().mockReturnValue("") } as never,
+      { emitCompany: jest.fn() } as never,
+      {
+        getCompanyFiscalSettings: jest.fn().mockResolvedValue({
+          taxEnabled: true,
+          defaultTaxRate: new Prisma.Decimal("0.18"),
+          pricesIncludeTax: true,
+          ncfEnabled: true,
+        }),
+        resolvePriceMode: jest.fn().mockReturnValue("TAX_INCLUDED"),
+        calculatorService,
+      } as never,
+      ncf as never,
+    );
+
+    await expect(
+      service.create(user as never, {
+        fiscalVoucherType: "B01",
+        fiscalCustomerTaxId: "101010101",
+        fiscalCustomerName: "DTO ONLY SRL",
+        expectedTotalSold: 1180,
+        items: [
+          {
+            productName: "Servicio",
+            qty: 1,
+            priceSoldUnit: 1180,
+            costUnitSnapshot: 0,
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(ncf.reserveNextNcf).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it("does not convert the same quotation twice", async () => {

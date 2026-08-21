@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { SalesService } from "./sales.service";
 
 describe("SalesService fiscal print data (cashier + NCF expiration)", () => {
@@ -17,6 +18,7 @@ describe("SalesService fiscal print data (cashier + NCF expiration)", () => {
       userId: user.id,
     };
     const tx = {
+      client: { update: jest.fn() },
       sale: { create: jest.fn().mockResolvedValue(createdSale) },
     };
     const prisma = {
@@ -30,6 +32,16 @@ describe("SalesService fiscal print data (cashier + NCF expiration)", () => {
       },
       company: { findFirst: jest.fn().mockResolvedValue({ name: "FALLBACK" }) },
       product: { findMany: jest.fn().mockResolvedValue([]) },
+      client: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "55555555-5555-4555-8555-555555555555",
+          nombre: "Fulltech",
+          telefono: "809-555-0000",
+          taxId: "101010101",
+          businessName: "FULLTECH SRL",
+          direccion: "Higuey",
+        }),
+      },
       cashSession: {
         findFirst: jest.fn().mockResolvedValue({ id: "cash-a" }),
       },
@@ -91,9 +103,8 @@ describe("SalesService fiscal print data (cashier + NCF expiration)", () => {
     const { tx, ncf, service } = build();
 
     const result = await service.create(user as never, {
+      customerId: "55555555-5555-4555-8555-555555555555",
       fiscalVoucherType: "B01",
-      fiscalCustomerTaxId: "101010101",
-      fiscalCustomerName: "FULLTECH SRL",
       items: [
         {
           productName: "Servicio",

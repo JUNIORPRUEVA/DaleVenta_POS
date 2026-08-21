@@ -19,6 +19,7 @@ import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/pdf_action_menu.dart';
+import '../../features/settings/data/printer_settings_repository.dart';
 import '../cash/cash_dialogs.dart';
 import 'application/ventas_controller.dart';
 import 'data/ventas_repository.dart';
@@ -1153,7 +1154,14 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
     final company = await ref
         .read(companySettingsRepositoryProvider)
         .getCachedSettings();
-    final pdfBytes = await buildSaleInvoicePdf(sale: sale, company: company);
+    final printerSettings = await ref
+        .read(printerSettingsRepositoryProvider)
+        .getOrCreate();
+    final pdfBytes = await buildSaleInvoicePdf(
+      sale: sale,
+      company: company,
+      warrantyPolicy: printerSettings.warrantyPolicy,
+    );
     if (!context.mounted) return;
     final fileName =
         'factura_${_shortSaleId(sale.id).replaceAll(' ', '_')}.pdf';

@@ -65,6 +65,7 @@ import '../ventas/sales_models.dart';
 import '../ventas/utils/sales_pdf_service.dart';
 import '../ventas/widgets/recent_sales_panel.dart';
 import '../../features/contabilidad/data/contabilidad_repository.dart';
+import '../../features/settings/data/printer_settings_repository.dart';
 import 'ai/application/quotation_ai_controller.dart';
 import 'ai/domain/models/ai_warning.dart';
 import 'ai/domain/models/quotation_context.dart';
@@ -5056,7 +5057,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   Future<void> _openRecentSalePdf(SaleModel sale) async {
     final company = await _getCompanySettingsForPdf();
-    final bytes = await buildSaleInvoicePdf(sale: sale, company: company);
+    final printerSettings = await ref
+        .read(printerSettingsRepositoryProvider)
+        .getOrCreate();
+    final bytes = await buildSaleInvoicePdf(
+      sale: sale,
+      company: company,
+      warrantyPolicy: printerSettings.warrantyPolicy,
+    );
     if (!mounted) return;
     final filename = 'factura_${_saleShortId(sale).replaceAll('...', '')}.pdf';
 

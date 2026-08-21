@@ -11,7 +11,6 @@ import '../../../core/company/company_settings_model.dart';
 import '../../../core/utils/money_formatters.dart';
 import '../sales_models.dart';
 
-final PdfColor _pageBackground = PdfColors.white;
 final PdfColor _borderColor = PdfColor.fromHex('#E2E8F0');
 final PdfColor _panelBorder = PdfColor.fromHex('#D8E1EA');
 final PdfColor _softFill = PdfColor.fromHex('#F8FAFC');
@@ -20,6 +19,48 @@ final PdfColor _headingBlack = PdfColor.fromHex('#111827');
 final PdfColor _textPrimary = PdfColor.fromHex('#1D2430');
 final PdfColor _textMuted = PdfColor.fromHex('#6C7685');
 final PdfColor _accentBlue = PdfColor.fromHex('#1957E6');
+
+// Métricas de layout (pt) para anclar los totales al fondo útil de la página.
+const double _marginLr = 34; // ~12 mm
+const double _marginTop = 30;
+const double _marginBottom = 26;
+const double _headerEstimatedHeight = 78;
+const double _footerEstimatedHeight = 16;
+const double _clientEstimatedHeight = 82;
+const double _bottomZoneEstimatedHeight = 180;
+const double _tableHeaderRowHeight = 22;
+const double _tableBodyRowHeight = 21;
+const double _safetyBuffer = 26;
+const double _maxSpacer = 250;
+const double _minSpacer = 12;
+
+/// Espacio flexible para empujar el pie comercial hacia el fondo cuando el
+/// contenido cabe en una sola página. Con muchas filas devuelve un valor
+/// pequeño para que la zona inferior fluya naturalmente a la última página.
+double _flexSpacerFor(int itemCount, PdfPageFormat format) {
+  final bodyArea =
+      format.height - _marginTop - _marginBottom -
+      _headerEstimatedHeight - _footerEstimatedHeight;
+  final used =
+      _clientEstimatedHeight +
+      _tableHeaderRowHeight +
+      (itemCount * _tableBodyRowHeight) +
+      _bottomZoneEstimatedHeight;
+  final remaining = bodyArea - _safetyBuffer - used;
+  if (remaining <= 0) return _minSpacer;
+  return remaining.clamp(_minSpacer, _maxSpacer).toDouble();
+}
+
+String invoicePdfPaymentMethodLabel(String method) {
+  return switch (method.trim().toLowerCase()) {
+    'cash' => 'Efectivo',
+    'card' || 'tarjeta' => 'Tarjeta',
+    'transfer' || 'transferencia' => 'Transferencia',
+    'mixed' || 'mixto' => 'Mixto',
+    'credit' || 'credito' => 'Crédito',
+    _ => method.trim().isEmpty ? 'Efectivo' : method.trim(),
+  };
+}
 
 Future<Uint8List> buildSalesSummaryPdf({
   required String employeeName,
@@ -138,6 +179,7 @@ Future<void> downloadSalesSummaryPdf({
 Future<Uint8List> buildSaleInvoicePdf({
   required SaleModel sale,
   CompanySettings? company,
+  String? warrantyPolicy,
 }) async {
   final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
   final dateFmt = DateFormat('dd/MM/yyyy h:mm a', 'es_DO');
@@ -147,7 +189,8 @@ Future<Uint8List> buildSaleInvoicePdf({
     sale.issuerNameSnapshot,
     fallback: _fallback(company?.companyName, fallback: 'FULLTECH'),
   );
-  final invoiceCode = _buildInvoiceCode(sale.id);
+  final invoiceCode = invoicePdfCode(sale.id);
+  final warranty = _clean(warrantyPolicy);
 
   final doc = pw.Document(title: 'Factura $invoiceCode', author: companyName);
 
@@ -155,11 +198,8 @@ Future<Uint8List> buildSaleInvoicePdf({
     pw.MultiPage(
       pageTheme: pw.PageTheme(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.fromLTRB(26, 24, 26, 22),
-        buildBackground: (_) => pw.FullPage(
-          ignoreMargins: true,
-          child: pw.Container(color: _pageBackground),
-        ),
+        // Márgenes reales A4 (~12 mm laterales): contenido ~186 mm de ancho.
+        margin: pw.EdgeInsets.fromLTRB(_marginLr, _marginTop, _marginLr, _marginBottom),
       ),
       header: (context) => _invoiceHeader(
         company: company,
@@ -167,13 +207,18 @@ Future<Uint8List> buildSaleInvoicePdf({
         sale: sale,
         invoiceCode: invoiceCode,
         dateFmt: dateFmt,
-        isContinuation: context.pageNumber > 1,
       ),
       footer: (context) => _pageFooter(context.pageNumber, context.pagesCount),
       build: (_) => [
+        _invoiceClientSection(sale),
         _invoiceDetailSection(sale, money, qtyFmt),
-        pw.SizedBox(height: _bottomAnchorGap(sale.items.length)),
-        _invoiceBottomSection(sale, money),
+        pw.SizedBox(
+          // El formato SIEMPRE es A4 (fijado en pageTheme); el contexto de
+          // MultiPage no expone el pageFormat en el cuerpo, así que lo
+          // calculamos directamente contra A4.
+          height: _flexSpacerFor(sale.items.length, PdfPageFormat.a4),
+        ),
+        _invoiceBottomSection(sale, money, warrantyPolicy: warranty),
       ],
     ),
   );
@@ -187,7 +232,6 @@ pw.Widget _invoiceHeader({
   required SaleModel sale,
   required String invoiceCode,
   required DateFormat dateFmt,
-  required bool isContinuation,
 }) {
   final companyName = _fallback(
     sale.issuerNameSnapshot,
@@ -205,96 +249,80 @@ pw.Widget _invoiceHeader({
     sale.issuerAddressSnapshot,
     fallback: _clean(company?.address),
   );
-  final customerName = _fallback(
-    sale.fiscalCustomerName ?? sale.customerName,
-    fallback: 'Consumidor Final',
-  );
-  final customerPhone = _fallback(
-    sale.customerPhoneSnapshot ?? sale.customerPhone,
-    fallback: 'No registrado',
-  );
   final statusText = sale.isDeleted ? 'Factura devuelta' : null;
-  final fiscalLabel = _invoiceDocumentLabel(sale);
-  final fiscalSubtitle = _invoiceFiscalSubtitle(sale);
+  final fiscalLabel = invoicePdfDocumentLabel(sale);
 
-  return _panel(
-    margin: const pw.EdgeInsets.only(bottom: 14),
-    padding: const pw.EdgeInsets.fromLTRB(0, 4, 0, 10),
-    child: pw.Column(
+  return pw.Container(
+    padding: const pw.EdgeInsets.only(bottom: 12),
+    decoration: pw.BoxDecoration(
+      border: pw.Border(bottom: pw.BorderSide(color: _softLine)),
+    ),
+    child: pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Row(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Expanded(
-              flex: 6,
-              child: pw.Row(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  _logoBox(companyName: companyName, logoImage: logoImage),
-                  pw.SizedBox(width: 12),
-                  pw.Expanded(
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text(
-                          companyName,
-                          style: pw.TextStyle(
-                            fontSize: 17,
-                            fontWeight: pw.FontWeight.bold,
-                            color: _textPrimary,
-                          ),
-                        ),
-                        pw.SizedBox(height: 4),
-                        if (rnc.isNotEmpty) _companyLine('RNC: $rnc'),
-                        if (phone.isNotEmpty) _companyLine('Tel: $phone'),
-                        if (address.isNotEmpty) _companyLine(address),
-                      ],
+        pw.Expanded(
+          flex: 6,
+          child: pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              _logoBox(companyName: companyName, logoImage: logoImage),
+              pw.SizedBox(width: 14),
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      companyName,
+                      style: pw.TextStyle(
+                        fontSize: 17,
+                        fontWeight: pw.FontWeight.bold,
+                        color: _textPrimary,
+                      ),
                     ),
-                  ),
-                ],
+                    pw.SizedBox(height: 5),
+                    if (rnc.isNotEmpty) _companyLine('RNC: $rnc'),
+                    if (phone.isNotEmpty) _companyLine('Tel: $phone'),
+                    if (address.isNotEmpty) _companyLine('Dirección: $address'),
+                  ],
+                ),
               ),
-            ),
-            pw.SizedBox(width: 16),
-            pw.SizedBox(
-              width: 215,
-              child: _documentFactsPanel(
-                documentLabel: fiscalLabel,
-                code: invoiceCode,
-                issuedText: dateFmt.format(sale.saleDate ?? DateTime.now()),
-                statusText: statusText,
-                subtitle: fiscalSubtitle,
-                ncf: sale.ncf,
-                ncfExpirationDate: sale.ncfExpirationDate,
-                cashierName: sale.userName,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
-        pw.SizedBox(height: 14),
-        pw.Container(height: 1.2, color: _softLine),
-        pw.SizedBox(height: 10),
+        pw.SizedBox(width: 18),
         pw.SizedBox(
-          width: 325,
-          child: _personInfoPanel(
-            title: 'DATOS DEL CLIENTE',
-            primary: customerName,
-            secondary: customerPhone,
-            document: sale.fiscalCustomerTaxId,
+          width: 250,
+          child: _documentFactsPanel(
+            documentLabel: fiscalLabel,
+            code: invoiceCode,
+            issuedText: dateFmt.format(sale.saleDate ?? DateTime.now()),
+            statusText: statusText,
+            ncf: sale.ncf,
+            ncfExpirationDate: sale.ncfExpirationDate,
+            cashierName: sale.userName,
           ),
         ),
-        if (isContinuation) ...[
-          pw.SizedBox(height: 8),
-          pw.Text(
-            'Continuación de la factura',
-            style: pw.TextStyle(
-              fontSize: 8,
-              color: _textMuted,
-              fontStyle: pw.FontStyle.italic,
-            ),
-          ),
-        ],
       ],
+    ),
+  );
+}
+
+pw.Widget _invoiceClientSection(SaleModel sale) {
+  final name = _fallback(
+    sale.fiscalCustomerName ?? sale.customerName,
+    fallback: 'Consumidor final',
+  );
+  final doc = _clean(sale.fiscalCustomerTaxId);
+  final phone = _clean(sale.customerPhoneSnapshot ?? sale.customerPhone);
+  final address = _clean(sale.customerAddressSnapshot);
+  return pw.Container(
+    padding: const pw.EdgeInsets.fromLTRB(0, 12, 0, 4),
+    child: _personInfoPanel(
+      title: 'DATOS DEL CLIENTE',
+      primary: name,
+      secondary: phone.isEmpty ? null : phone,
+      document: doc.isEmpty ? null : doc,
+      address: address.isEmpty ? null : address,
     ),
   );
 }
@@ -304,113 +332,38 @@ pw.Widget _invoiceDetailSection(
   NumberFormat money,
   NumberFormat qtyFmt,
 ) {
-  if (sale.fiscalTaxEnabled) {
-    return _fiscalInvoiceDetailSection(sale, money, qtyFmt);
-  }
+  final fiscal = sale.fiscalTaxEnabled;
+  // Proporciones afinadas: Total más ancho (12%) para que RD$1,250,000.00
+  // quepa SIEMPRE en una línea; ITBIS 11% para montos reales (18%).
+  // Desc/Cant/Precio/Descuento/Base/ITBIS/Total = 34/6/12/13/12/11/12.
+  final columnWidths = fiscal
+      ? const <int, pw.TableColumnWidth>{
+          0: pw.FlexColumnWidth(34),
+          1: pw.FlexColumnWidth(6),
+          2: pw.FlexColumnWidth(12),
+          3: pw.FlexColumnWidth(13),
+          4: pw.FlexColumnWidth(12),
+          5: pw.FlexColumnWidth(11),
+          6: pw.FlexColumnWidth(12),
+        }
+      : const <int, pw.TableColumnWidth>{
+          0: pw.FlexColumnWidth(40),
+          1: pw.FlexColumnWidth(8),
+          2: pw.FlexColumnWidth(18),
+          3: pw.FlexColumnWidth(16),
+          4: pw.FlexColumnWidth(18),
+        };
 
   final tableRows = <pw.TableRow>[
     pw.TableRow(
       decoration: pw.BoxDecoration(color: _headingBlack),
       children: [
-        _headerCell('Descripcion', align: pw.TextAlign.left),
+        _headerCell('Descripción', align: pw.TextAlign.left),
         _headerCell('Cant.'),
-        _headerCell('Unitario', align: pw.TextAlign.right),
-        _headerCell('Importe', align: pw.TextAlign.right),
-      ],
-    ),
-  ];
-
-  if (sale.items.isEmpty) {
-    tableRows.add(
-      pw.TableRow(
-        children: [
-          _emptyCell('No hay productos registrados en esta factura.'),
-          _emptyCell(''),
-          _emptyCell(''),
-          _emptyCell(''),
-        ],
-      ),
-    );
-  } else {
-    for (final item in sale.items) {
-      tableRows.add(
-        pw.TableRow(
-          children: [
-            _bodyCell(
-              item.productNameSnapshot.trim().isEmpty
-                  ? 'Producto sin descripción'
-                  : item.productNameSnapshot.trim(),
-              align: pw.TextAlign.left,
-              bold: true,
-            ),
-            _bodyCell(qtyFmt.format(item.qty), align: pw.TextAlign.center),
-            _bodyCell(
-              money.format(item.priceSoldUnit),
-              align: pw.TextAlign.right,
-            ),
-            _bodyCell(
-              money.format(item.subtotalSold),
-              align: pw.TextAlign.right,
-            ),
-          ],
-        ),
-      );
-    }
-  }
-
-  return pw.Container(
-    padding: const pw.EdgeInsets.fromLTRB(0, 10, 0, 10),
-    child: pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Text(
-          'Detalle de ventas',
-          style: pw.TextStyle(
-            fontSize: 10.5,
-            fontWeight: pw.FontWeight.bold,
-            color: _textPrimary,
-          ),
-        ),
-        pw.SizedBox(height: 8),
-        pw.Container(
-          decoration: pw.BoxDecoration(
-            border: pw.Border.all(color: _panelBorder, width: 0.45),
-            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
-          ),
-          child: pw.Table(
-            border: pw.TableBorder(
-              horizontalInside: pw.BorderSide(color: _borderColor, width: 0.55),
-            ),
-            columnWidths: const {
-              0: pw.FlexColumnWidth(5.45),
-              1: pw.FlexColumnWidth(0.75),
-              2: pw.FlexColumnWidth(1.65),
-              3: pw.FlexColumnWidth(1.7),
-            },
-            children: tableRows,
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-pw.Widget _fiscalInvoiceDetailSection(
-  SaleModel sale,
-  NumberFormat money,
-  NumberFormat qtyFmt,
-) {
-  final modeLabel = sale.fiscalPriceMode == 'TAX_ADDED'
-      ? 'ITBIS se agrega al precio.'
-      : 'Precios con ITBIS incluido.';
-  final tableRows = <pw.TableRow>[
-    pw.TableRow(
-      decoration: pw.BoxDecoration(color: _headingBlack),
-      children: [
-        _headerCell('Descripcion', align: pw.TextAlign.left),
-        _headerCell('Cant.'),
-        _headerCell('Base', align: pw.TextAlign.right),
-        _headerCell('ITBIS', align: pw.TextAlign.right),
+        _headerCell('Precio', align: pw.TextAlign.right),
+        _headerCell('Descuento', align: pw.TextAlign.right),
+        if (fiscal) _headerCell('Base', align: pw.TextAlign.right),
+        if (fiscal) _headerCell('ITBIS', align: pw.TextAlign.right),
         _headerCell('Total', align: pw.TextAlign.right),
       ],
     ),
@@ -424,6 +377,8 @@ pw.Widget _fiscalInvoiceDetailSection(
           _emptyCell(''),
           _emptyCell(''),
           _emptyCell(''),
+          if (fiscal) _emptyCell(''),
+          if (fiscal) _emptyCell(''),
           _emptyCell(''),
         ],
       ),
@@ -434,217 +389,242 @@ pw.Widget _fiscalInvoiceDetailSection(
       final description = item.productNameSnapshot.trim().isEmpty
           ? 'Producto sin descripción'
           : item.productNameSnapshot.trim();
+      final discount = item.lineDiscountAmount > 0
+          ? '-${money.format(item.lineDiscountAmount)}'
+          : '';
+      final baseValue = item.taxableBase > 0 ? item.taxableBase : item.exemptAmount;
       tableRows.add(
         pw.TableRow(
           children: [
             _bodyCell(
-              isExempt ? '$description\nExento' : description,
+              isExempt && fiscal ? '$description  [EXENTO]' : description,
               align: pw.TextAlign.left,
               bold: true,
             ),
             _bodyCell(qtyFmt.format(item.qty), align: pw.TextAlign.center),
-            _bodyCell(
-              money.format(
-                item.taxableBase > 0 ? item.taxableBase : item.exemptAmount,
-              ),
-              align: pw.TextAlign.right,
+            _moneyCell(money.format(item.priceSoldUnit)),
+            _moneyCell(
+              discount,
+              textColor: item.lineDiscountAmount > 0
+                  ? PdfColor.fromHex('#B42318')
+                  : null,
             ),
-            _bodyCell(money.format(item.taxAmount), align: pw.TextAlign.right),
-            _bodyCell(
-              money.format(item.subtotalSold),
-              align: pw.TextAlign.right,
-            ),
+            if (fiscal) _moneyCell(money.format(baseValue)),
+            if (fiscal) _moneyCell(money.format(item.taxAmount)),
+            _moneyCell(money.format(item.subtotalSold)),
           ],
         ),
       );
-      if (item.lineDiscountAmount > 0) {
-        tableRows.add(
-          pw.TableRow(
-            children: [
-              _bodyCell(
-                'Descuento aplicado',
-                align: pw.TextAlign.left,
-                textColor: PdfColor.fromHex('#B42318'),
-              ),
-              _bodyCell(''),
-              _bodyCell(''),
-              _bodyCell(''),
-              _bodyCell(
-                '-${money.format(item.lineDiscountAmount)}',
-                align: pw.TextAlign.right,
-                textColor: PdfColor.fromHex('#B42318'),
-              ),
-            ],
-          ),
-        );
-      }
     }
   }
 
   return pw.Container(
-    padding: const pw.EdgeInsets.fromLTRB(0, 10, 0, 10),
-    child: pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Row(
-          children: [
-            pw.Text(
-              'Detalle fiscal de factura',
-              style: pw.TextStyle(
-                fontSize: 10.5,
-                fontWeight: pw.FontWeight.bold,
-                color: _textPrimary,
-              ),
-            ),
-            pw.Spacer(),
-            pw.Text(
-              modeLabel,
-              style: pw.TextStyle(fontSize: 7.6, color: _textMuted),
-            ),
-          ],
+    padding: const pw.EdgeInsets.fromLTRB(0, 10, 0, 4),
+    child: pw.Container(
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: _panelBorder, width: 0.45),
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+      ),
+      child: pw.Table(
+        border: pw.TableBorder(
+          horizontalInside: pw.BorderSide(color: _borderColor, width: 0.55),
         ),
-        pw.SizedBox(height: 8),
-        pw.Container(
-          decoration: pw.BoxDecoration(
-            border: pw.Border.all(color: _panelBorder, width: 0.45),
-            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
-          ),
-          child: pw.Table(
-            border: pw.TableBorder(
-              horizontalInside: pw.BorderSide(color: _borderColor, width: 0.55),
-            ),
-            columnWidths: const {
-              0: pw.FlexColumnWidth(5.15),
-              1: pw.FlexColumnWidth(0.72),
-              2: pw.FlexColumnWidth(1.42),
-              3: pw.FlexColumnWidth(1.35),
-              4: pw.FlexColumnWidth(1.55),
-            },
-            children: tableRows,
-          ),
-        ),
-      ],
+        columnWidths: columnWidths,
+        children: tableRows,
+      ),
     ),
   );
 }
 
-pw.Widget _invoiceBottomSection(SaleModel sale, NumberFormat money) {
-  final note = (sale.note ?? '').trim();
+pw.Widget _invoiceBottomSection(
+  SaleModel sale,
+  NumberFormat money, {
+  String? warrantyPolicy,
+}) {
+  final note = invoicePdfNoteText(sale.note);
+  final warranty = _clean(warrantyPolicy);
   return pw.Row(
     crossAxisAlignment: pw.CrossAxisAlignment.start,
     children: [
       pw.Expanded(
-        child: _panel(
-          padding: const pw.EdgeInsets.fromLTRB(14, 14, 14, 14),
-          fillColor: _softFill,
-          showBorder: true,
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              if (note.isNotEmpty) ...[
-                pw.Text(
-                  'Notas',
-                  style: pw.TextStyle(
-                    fontSize: 11,
-                    fontWeight: pw.FontWeight.bold,
-                    color: _textPrimary,
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            _panel(
+              padding: const pw.EdgeInsets.fromLTRB(14, 12, 14, 12),
+              fillColor: _softFill,
+              showBorder: true,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'FORMA DE PAGO',
+                    style: pw.TextStyle(
+                      fontSize: 7.8,
+                      fontWeight: pw.FontWeight.bold,
+                      color: _textMuted,
+                    ),
                   ),
-                ),
-                pw.SizedBox(height: 8),
-                pw.Text(
-                  note,
-                  style: pw.TextStyle(
-                    fontSize: 9.5,
-                    color: _textPrimary,
-                    lineSpacing: 2,
+                  pw.SizedBox(height: 5),
+                  pw.Text(
+                    invoicePdfPaymentMethodLabel(sale.paymentMethod),
+                    style: pw.TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: pw.FontWeight.bold,
+                      color: _textPrimary,
+                    ),
                   ),
-                ),
-                pw.Padding(
-                  padding: const pw.EdgeInsets.symmetric(vertical: 9),
-                  child: pw.Container(height: 1, color: _softLine),
-                ),
-              ],
-              pw.Text(
-                'Gracias por preferirnos.',
-                style: pw.TextStyle(
-                  fontSize: 9.3,
-                  color: _textMuted,
-                  fontStyle: pw.FontStyle.italic,
+                ],
+              ),
+            ),
+            if (warranty.isNotEmpty) ...[
+              pw.SizedBox(height: 10),
+              _panel(
+                padding: const pw.EdgeInsets.fromLTRB(14, 12, 14, 12),
+                fillColor: _softFill,
+                showBorder: true,
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'TÉRMINOS DE GARANTÍA',
+                      style: pw.TextStyle(
+                        fontSize: 7.8,
+                        fontWeight: pw.FontWeight.bold,
+                        color: _textMuted,
+                      ),
+                    ),
+                    pw.SizedBox(height: 6),
+                    pw.Text(
+                      warranty,
+                      style: pw.TextStyle(
+                        fontSize: 8.5,
+                        color: _textPrimary,
+                        lineSpacing: 2,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
-          ),
+            if (note.isNotEmpty) ...[
+              pw.SizedBox(height: 10),
+              _panel(
+                padding: const pw.EdgeInsets.fromLTRB(14, 12, 14, 12),
+                fillColor: _softFill,
+                showBorder: true,
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'NOTAS',
+                      style: pw.TextStyle(
+                        fontSize: 7.8,
+                        fontWeight: pw.FontWeight.bold,
+                        color: _textMuted,
+                      ),
+                    ),
+                    pw.SizedBox(height: 6),
+                    pw.Text(
+                      note,
+                      style: pw.TextStyle(
+                        fontSize: 8.5,
+                        color: _textPrimary,
+                        lineSpacing: 2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
         ),
       ),
       pw.SizedBox(width: 14),
-      pw.SizedBox(width: 228, child: _invoiceTotalsPanel(sale, money)),
+      pw.SizedBox(width: 270, child: _invoiceTotalsPanel(sale, money)),
     ],
   );
 }
 
 pw.Widget _invoiceTotalsPanel(SaleModel sale, NumberFormat money) {
-  final subtotal = sale.fiscalTaxEnabled
+  final fiscal = sale.fiscalTaxEnabled;
+  final productDiscount = sale.items.fold<double>(
+    0,
+    (sum, item) => sum + item.lineDiscountAmount,
+  );
+  final generalDiscount =
+      (sale.discountAmount - productDiscount).clamp(0, double.infinity).toDouble();
+  final subtotal = fiscal
       ? sale.taxableBase + sale.exemptAmount
       : sale.items.fold(0.0, (sum, item) => sum + item.subtotalSold);
   return _panel(
-    padding: const pw.EdgeInsets.fromLTRB(14, 14, 14, 14),
+    padding: const pw.EdgeInsets.fromLTRB(14, 12, 14, 12),
     fillColor: _softFill,
     showBorder: true,
     child: pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(
-          'Totales',
+          'TOTALES',
           style: pw.TextStyle(
-            fontSize: 11,
+            fontSize: 9,
             fontWeight: pw.FontWeight.bold,
-            color: _textPrimary,
+            color: _textMuted,
           ),
         ),
-        pw.SizedBox(height: 10),
-        if (!sale.fiscalTaxEnabled || subtotal > 0)
+        pw.SizedBox(height: 8),
+        if (!fiscal || subtotal > 0)
           _pdfTotalLine('Subtotal', money.format(subtotal)),
-        if (sale.discountAmount > 0)
-          _pdfTotalLine('Descuento', '-${money.format(sale.discountAmount)}'),
-        if (sale.fiscalTaxEnabled && sale.fiscalPriceMode == 'TAX_INCLUDED')
-          _pdfTotalLine('Precios con ITBIS incluido', ''),
-        if (sale.fiscalTaxEnabled && sale.exemptAmount > 0)
+        if (productDiscount > 0)
+          _pdfTotalLine(
+            'Descuentos por productos',
+            '-${money.format(productDiscount)}',
+            amountColor: PdfColor.fromHex('#B42318'),
+          ),
+        if (generalDiscount > 0)
+          _pdfTotalLine(
+            'Descuento general',
+            '-${money.format(generalDiscount)}',
+            amountColor: PdfColor.fromHex('#B42318'),
+          ),
+        if (fiscal && sale.exemptAmount > 0)
           _pdfTotalLine('Monto exento', money.format(sale.exemptAmount)),
-        if (sale.fiscalTaxEnabled && sale.taxableBase > 0)
+        if (fiscal && sale.taxableBase > 0)
           _pdfTotalLine('Base imponible', money.format(sale.taxableBase)),
-        if (sale.fiscalTaxEnabled && sale.taxAmount > 0)
+        if (fiscal && sale.taxAmount > 0)
           _pdfTotalLine('ITBIS', money.format(sale.taxAmount)),
         pw.Padding(
           padding: const pw.EdgeInsets.symmetric(vertical: 8),
           child: pw.Container(height: 1, color: _softLine),
         ),
-        pw.Container(
-          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-          decoration: pw.BoxDecoration(
-            color: PdfColors.white,
-            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-          ),
-          child: pw.Row(
-            children: [
-              pw.Expanded(
-                child: pw.Text(
-                  'TOTAL GENERAL',
-                  style: pw.TextStyle(
-                    fontSize: 10.2,
-                    fontWeight: pw.FontWeight.bold,
-                    color: _textPrimary,
-                  ),
-                ),
-              ),
-              pw.Text(
-                money.format(sale.totalSold),
+        pw.Row(
+          children: [
+            pw.Expanded(
+              child: pw.Text(
+                'TOTAL GENERAL',
                 style: pw.TextStyle(
-                  fontSize: 11.6,
+                  fontSize: 10.2,
                   fontWeight: pw.FontWeight.bold,
-                  color: _accentBlue,
+                  color: _textPrimary,
                 ),
               ),
-            ],
+            ),
+            pw.Text(
+              money.format(sale.totalSold),
+              style: pw.TextStyle(
+                fontSize: 11.6,
+                fontWeight: pw.FontWeight.bold,
+                color: _accentBlue,
+              ),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 5),
+        pw.Align(
+          alignment: pw.Alignment.centerRight,
+          child: pw.Text(
+            'Cant. ítems: ${sale.items.length}',
+            style: pw.TextStyle(fontSize: 7.5, color: _textMuted),
           ),
         ),
       ],
@@ -683,10 +663,6 @@ pw.Widget _pageFooter(int pageNumber, int totalPages) {
     padding: const pw.EdgeInsets.only(top: 6),
     child: pw.Row(
       children: [
-        pw.Text(
-          'Documento comercial',
-          style: pw.TextStyle(fontSize: 8, color: _textMuted),
-        ),
         pw.Spacer(),
         pw.Text(
           'Página $pageNumber de $totalPages',
@@ -713,7 +689,7 @@ Future<pw.MemoryImage?> _resolveCompanyLogo(CompanySettings? company) async {
   }
 }
 
-String _buildInvoiceCode(String id) {
+String invoicePdfCode(String id) {
   final token = _buildFileToken(id, length: 8, fallback: 'MANUAL');
   return 'FAC-$token';
 }
@@ -737,30 +713,29 @@ String _fallback(String? value, {required String fallback}) {
 
 String _clean(String? value) => (value ?? '').trim();
 
-String _invoiceDocumentLabel(SaleModel sale) {
+/// Nota de la factura sin líneas de pago duplicadas: el checkout añade
+/// `Pago: <método>` a la nota, pero el método ya se muestra en el bloque
+/// "FORMA DE PAGO".
+String invoicePdfNoteText(String? note) {
+  final raw = _clean(note);
+  if (raw.isEmpty) return '';
+  final lines = raw
+      .split('\n')
+      .map((line) => line.trim())
+      .where((line) => !line.toLowerCase().startsWith('pago:'))
+      .toList();
+  return lines.join('\n').trim();
+}
+
+String invoicePdfDocumentLabel(SaleModel sale) {
   final voucherType = _clean(sale.fiscalVoucherType).toUpperCase();
-  if (_clean(sale.ncf).isNotEmpty ||
-      voucherType == 'B01' ||
-      voucherType == 'B02') {
-    return 'FACTURA FISCAL';
+  if (voucherType == 'B02') {
+    return 'FACTURA / CONSUMIDOR FINAL';
+  }
+  if (voucherType == 'B01' || _clean(sale.ncf).isNotEmpty) {
+    return 'FACTURA / CRÉDITO FISCAL';
   }
   return 'FACTURA';
-}
-
-String _invoiceFiscalSubtitle(SaleModel sale) {
-  final voucherType = _clean(sale.fiscalVoucherType).toUpperCase();
-  return switch (voucherType) {
-    'B01' => 'B01 - CRÉDITO FISCAL',
-    'B02' => 'B02 - CONSUMIDOR FINAL',
-    _ => '',
-  };
-}
-
-double _bottomAnchorGap(int itemCount) {
-  final gap = 176 - (itemCount * 14);
-  if (gap < 18) return 18;
-  if (gap > 132) return 132;
-  return gap.toDouble();
 }
 
 pw.Widget _panel({
@@ -922,10 +897,12 @@ pw.Widget _personInfoPanel({
   required String primary,
   String? secondary,
   String? document,
+  String? address,
   String title = 'DATOS',
 }) {
   final phone = (secondary ?? '').trim();
   final doc = (document ?? '').trim();
+  final addr = (address ?? '').trim();
   return pw.Container(
     padding: const pw.EdgeInsets.fromLTRB(14, 11, 14, 11),
     decoration: pw.BoxDecoration(
@@ -953,6 +930,10 @@ pw.Widget _personInfoPanel({
         if (phone.isNotEmpty) ...[
           pw.SizedBox(height: 6),
           _personLine('Teléfono', phone),
+        ],
+        if (addr.isNotEmpty) ...[
+          pw.SizedBox(height: 6),
+          _personLine('Dirección', addr),
         ],
       ],
     ),
@@ -986,7 +967,7 @@ pw.Widget _personLine(String label, String value, {bool strong = false}) {
 
 pw.Widget _headerCell(String text, {pw.TextAlign align = pw.TextAlign.center}) {
   return pw.Container(
-    padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+    padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
     alignment: align == pw.TextAlign.left
         ? pw.Alignment.centerLeft
         : align == pw.TextAlign.right
@@ -997,7 +978,7 @@ pw.Widget _headerCell(String text, {pw.TextAlign align = pw.TextAlign.center}) {
       textAlign: align,
       style: pw.TextStyle(
         color: PdfColors.white,
-        fontSize: 7.6,
+        fontSize: 7.4,
         fontWeight: pw.FontWeight.bold,
       ),
     ),
@@ -1009,9 +990,15 @@ pw.Widget _bodyCell(
   pw.TextAlign align = pw.TextAlign.left,
   bool bold = false,
   PdfColor? textColor,
+  bool noWrap = false,
+  double horizontalPadding = 6,
+  double fontSize = 7.6,
 }) {
   return pw.Container(
-    padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+    padding: pw.EdgeInsets.symmetric(
+      horizontal: horizontalPadding,
+      vertical: 6,
+    ),
     alignment: align == pw.TextAlign.center
         ? pw.Alignment.center
         : align == pw.TextAlign.right
@@ -1020,12 +1007,28 @@ pw.Widget _bodyCell(
     child: pw.Text(
       text,
       textAlign: align,
+      // Nunca partir un importe: una sola línea.
+      maxLines: noWrap ? 1 : null,
+      softWrap: noWrap ? false : null,
       style: pw.TextStyle(
-        fontSize: 8.1,
+        fontSize: fontSize,
         color: textColor ?? _textPrimary,
         fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
       ),
     ),
+  );
+}
+
+/// Celda monetaria del detalle: fuente ligeramente menor (7.0), padding
+/// reducido y SIEMPRE en una sola línea (sin wrap ni salto de línea).
+pw.Widget _moneyCell(String text, {PdfColor? textColor}) {
+  return _bodyCell(
+    text,
+    align: pw.TextAlign.right,
+    textColor: textColor,
+    noWrap: true,
+    horizontalPadding: 4,
+    fontSize: 7.0,
   );
 }
 
@@ -1036,7 +1039,11 @@ pw.Widget _emptyCell(String text) {
   );
 }
 
-pw.Widget _pdfTotalLine(String label, String value) {
+pw.Widget _pdfTotalLine(
+  String label,
+  String value, {
+  PdfColor? amountColor,
+}) {
   return pw.Padding(
     padding: const pw.EdgeInsets.symmetric(vertical: 3),
     child: pw.Row(
@@ -1047,7 +1054,13 @@ pw.Widget _pdfTotalLine(String label, String value) {
             style: pw.TextStyle(fontSize: 9.1, color: _textPrimary),
           ),
         ),
-        pw.Text(value, style: pw.TextStyle(fontSize: 9.1, color: _textPrimary)),
+        pw.Text(
+          value,
+          style: pw.TextStyle(
+            fontSize: 9.1,
+            color: amountColor ?? _textPrimary,
+          ),
+        ),
       ],
     ),
   );

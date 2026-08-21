@@ -18,6 +18,7 @@ import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/fulltech_page_header.dart';
+import '../../features/settings/data/printer_settings_repository.dart';
 
 import '../../core/widgets/pdf_action_menu.dart';
 import '../cash/cash_dialogs.dart';
@@ -346,7 +347,14 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     final company = await ref
         .read(companySettingsRepositoryProvider)
         .getCachedSettings();
-    return buildSaleInvoicePdf(sale: sale, company: company);
+    final printerSettings = await ref
+        .read(printerSettingsRepositoryProvider)
+        .getOrCreate();
+    return buildSaleInvoicePdf(
+      sale: sale,
+      company: company,
+      warrantyPolicy: printerSettings.warrantyPolicy,
+    );
   }
 
   String _buildClientInvoiceWhatsAppMessage(SaleModel sale, String pdfUrl) {

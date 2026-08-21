@@ -1403,12 +1403,21 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                   if (fiscalVoucherLoading || fiscalVoucherOptions.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
-                      child: _FiscalVoucherSelectorButton(
-                        selectedType: _selectedFiscalVoucherType,
-                        options: fiscalVoucherOptions,
-                        loading: fiscalVoucherLoading,
-                        onPressed: () =>
-                            _openFiscalVoucherPicker(fiscalVoucherOptions),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _FiscalVoucherSelectorButton(
+                            selectedType: _selectedFiscalVoucherType,
+                            options: fiscalVoucherOptions,
+                            loading: fiscalVoucherLoading,
+                            onPressed: () =>
+                                _openFiscalVoucherPicker(fiscalVoucherOptions),
+                          ),
+                          if (_b01ClientRequirementMissing) ...[
+                            const SizedBox(height: 4),
+                            const _B01ClientRequirementNotice(),
+                          ],
+                        ],
                       ),
                     ),
                   const SizedBox(height: 3),
@@ -1432,7 +1441,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                           label: Text(
                             hasClient
                                 ? _selectedClient!.nombre
-                                : 'Cliente requerido',
+                                : 'Consumidor final',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -1527,7 +1536,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                       const SizedBox(width: 8),
                       Expanded(
                         child: FilledButton.icon(
-                          onPressed: _saving || !hasClient || _cart.isEmpty
+                          onPressed: _saving || _cart.isEmpty
                               ? null
                               : _saveSale,
                           icon: _saving
@@ -1621,9 +1630,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                       onTap: _openClientPickerDialog,
                       onClear: () => setState(() {
                         _selectedClient = null;
-                        if (_selectedFiscalVoucherType == 'B01') {
-                          _selectedFiscalVoucherType = null;
-                        }
                       }),
                     ),
                     SizedBox(height: compactVertical ? 4 : 6),
@@ -1827,6 +1833,10 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                         onPressed: () =>
                             _openFiscalVoucherPicker(fiscalVoucherOptions),
                       ),
+                      if (_b01ClientRequirementMissing) ...[
+                        const SizedBox(height: 4),
+                        const _B01ClientRequirementNotice(),
+                      ],
                       const SizedBox(height: 4),
                     ],
                     Padding(
@@ -1858,7 +1868,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                     children: [
                       Expanded(
                         child: FilledButton(
-                          onPressed: _saving || !hasClient || _cart.isEmpty
+                          onPressed: _saving || _cart.isEmpty
                               ? null
                               : _saveSale,
                           style: FilledButton.styleFrom(
@@ -1997,10 +2007,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       setState(() => _selectedFiscalVoucherType = null);
       return;
     }
-    if (normalized == 'B01' && !isB01FiscalClientValid(_selectedClientTaxId)) {
-      await _showB01ClientRequiredDialog();
-      return;
-    }
     setState(() => _selectedFiscalVoucherType = normalized);
   }
 
@@ -2013,13 +2019,17 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     return name == null || name.isEmpty ? null : name;
   }
 
+  bool get _b01ClientRequirementMissing =>
+      _selectedFiscalVoucherType == 'B01' &&
+      !isB01FiscalClientValid(_selectedClientTaxId, _selectedClientFiscalName);
+
   Future<void> _showB01ClientRequiredDialog() async {
     final shouldSelectClient = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Datos fiscales requeridos'),
         content: const Text(
-          'Para emitir un B01 debes seleccionar un cliente con RNC.',
+          'Para emitir un comprobante B01 debes seleccionar un cliente con RNC y razón social.',
         ),
         actions: [
           TextButton(
@@ -2083,7 +2093,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                 controller: searchCtrl,
                 onSubmitted: (_) => runSearch(setDialogState),
                 decoration: InputDecoration(
-                  hintText: 'Buscar por nombre o teléfono',
+                  hintText: 'Buscar por nombre, razón social, RNC o teléfono',
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
                     onPressed: () => runSearch(setDialogState),
@@ -2109,13 +2119,20 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                           itemBuilder: (context, index) {
                             final c = rows[index];
                             final taxId = c.taxId?.trim();
+                            final businessName = c.businessName?.trim();
+                            final details = [
+                              if (businessName != null &&
+                                  businessName.isNotEmpty)
+                                businessName,
+                              if (c.telefono.trim().isNotEmpty) c.telefono,
+                              if (taxId != null && taxId.isNotEmpty)
+                                'RNC: $taxId',
+                            ].join(' · ');
                             return ListTile(
                               dense: true,
                               title: Text(c.nombre),
                               subtitle: Text(
-                                taxId == null || taxId.isEmpty
-                                    ? c.telefono
-                                    : '${c.telefono} · RNC: $taxId',
+                                details.isEmpty ? 'Sin datos fiscales' : details,
                               ),
                               trailing: TextButton.icon(
                                 onPressed: () {
@@ -2152,10 +2169,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     if (selected != null && mounted) {
       setState(() {
         _selectedClient = selected;
-        if (_selectedFiscalVoucherType == 'B01' &&
-            !isB01FiscalClientValid(selected.taxId)) {
-          _selectedFiscalVoucherType = null;
-        }
       });
     }
   }
@@ -2545,18 +2558,21 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       return;
     }
 
-    if (_selectedClient == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Debes seleccionar un cliente')),
-      );
-      return;
-    }
-
     if (_selectedFiscalVoucherType == 'B01' &&
-        !isB01FiscalClientValid(_selectedClientTaxId)) {
+        !isB01FiscalClientValid(
+          _selectedClientTaxId,
+          _selectedClientFiscalName,
+        )) {
       await _showB01ClientRequiredDialog();
       return;
     }
+
+    debugPrint(
+      '[FISCAL] voucherType=${_selectedFiscalVoucherType ?? 'none'} '
+      'customerId=${_selectedClient?.id ?? 'none'} '
+      'customerTaxId=${_selectedClientTaxId ?? 'none'} '
+      'customerLegalName=${_selectedClientFiscalName ?? 'none'}',
+    );
 
     final taxSummary = _cartTaxSummary(
       ref.read(productTaxUiConfigProvider).valueOrNull,
@@ -2572,6 +2588,11 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     try {
       final created = await _createSaleWithAuthorizationFallback(payment);
       if (created != null) {
+        debugPrint(
+          '[SALE PRINT] cashierSnapshot=${created.userName ?? 'none'} '
+          'ncf=${created.ncf ?? 'none'} '
+          'ncfExpiration=${created.ncfExpirationDate?.toIso8601String() ?? 'none'}',
+        );
         final printResult = await ref
             .read(unifiedTicketPrinterProvider)
             .printSaleTicket(sale: created, items: created.items);
@@ -2637,9 +2658,9 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     final sale = await ref
         .read(ventasRepositoryProvider)
         .createSale(
-          customerId: _selectedClient!.id,
-          customerName: _selectedClient!.nombre,
-          customerPhone: _selectedClient!.telefono,
+          customerId: _selectedClient?.id,
+          customerName: _selectedClient?.nombre,
+          customerPhone: _selectedClient?.telefono,
           note: _noteCtrl.text,
           paymentMethod: payment.method,
           paymentCashAmount: payment.cashAmount,
@@ -2648,12 +2669,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
             ref.read(productTaxUiConfigProvider).valueOrNull,
           ).total,
           fiscalVoucherType: _selectedFiscalVoucherType,
-          fiscalCustomerTaxId: _selectedFiscalVoucherType == null
-              ? null
-              : _selectedClientTaxId,
-          fiscalCustomerName: _selectedFiscalVoucherType == null
-              ? null
-              : _selectedClientFiscalName,
           items: _cart,
         );
     ref.read(operationsDataRefreshProvider).refreshSalesAndCash();
@@ -3047,6 +3062,32 @@ class _FiscalVoucherSelectorButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         textStyle: const TextStyle(fontSize: 11),
       ),
+    );
+  }
+}
+
+class _B01ClientRequirementNotice extends StatelessWidget {
+  const _B01ClientRequirementNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.error;
+    return Row(
+      children: [
+        Icon(Icons.info_outline_rounded, size: 14, color: color),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Text(
+            'Requiere un cliente con RNC y razón social.',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

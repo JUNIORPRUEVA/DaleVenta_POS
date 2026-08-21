@@ -72,9 +72,10 @@ String normalizeTaxId(String? input) {
   return raw.replaceAll(RegExp(r'\D'), '');
 }
 
-bool isB01FiscalClientValid(String? taxId) {
+bool isB01FiscalClientValid(String? taxId, [String? fiscalName]) {
   final digits = normalizeTaxId(taxId);
-  return digits.length >= 9;
+  final name = (fiscalName ?? '').trim();
+  return digits.length >= 9 && name.isNotEmpty;
 }
 
 String fiscalVoucherLabel(String? type) {

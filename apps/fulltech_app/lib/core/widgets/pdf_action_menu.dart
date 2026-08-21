@@ -8,7 +8,6 @@ import '../utils/pdf_file_actions.dart';
 enum PdfDocumentAction {
   print('Imprimir', Icons.print_rounded),
   share('Compartir PDF', Icons.ios_share_rounded),
-  shareClient('Compartir con cliente', Icons.person_outline_rounded),
   save('Guardar en descargas', Icons.download_rounded);
 
   const PdfDocumentAction(this.label, this.icon);
@@ -24,7 +23,7 @@ class PdfActionMenu extends StatelessWidget {
     required this.fileName,
     this.compact = false,
     this.onShareWithClient,
-    this.shareClientLabel = 'Compartir con cliente',
+    this.shareClientLabel = '',
   });
 
   final Uint8List bytes;
@@ -45,26 +44,22 @@ class PdfActionMenu extends StatelessWidget {
       onSelected: (action) => _runAction(context, action),
       itemBuilder: (context) => [
         for (final action in PdfDocumentAction.values)
-          if (action != PdfDocumentAction.shareClient ||
-              onShareWithClient != null)
-            PopupMenuItem<PdfDocumentAction>(
-              value: action,
-              child: Row(
-                children: [
-                  Icon(action.icon, size: 18, color: const Color(0xFF0F7C92)),
-                  const SizedBox(width: 10),
-                  Text(
-                    action == PdfDocumentAction.shareClient
-                        ? shareClientLabel
-                        : action.label,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF1D2430),
-                    ),
+          PopupMenuItem<PdfDocumentAction>(
+            value: action,
+            child: Row(
+              children: [
+                Icon(action.icon, size: 18, color: const Color(0xFF1957E6)),
+                const SizedBox(width: 10),
+                Text(
+                  action.label,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF1D2430),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
+          ),
       ],
       child: Container(
         padding: EdgeInsets.symmetric(
@@ -72,7 +67,7 @@ class PdfActionMenu extends StatelessWidget {
           vertical: compact ? 9 : 11,
         ),
         decoration: BoxDecoration(
-          color: const Color(0xFF0F7C92),
+          color: const Color(0xFF1957E6),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
@@ -105,9 +100,6 @@ class PdfActionMenu extends StatelessWidget {
         return;
       case PdfDocumentAction.share:
         await Printing.sharePdf(bytes: bytes, filename: fileName);
-        return;
-      case PdfDocumentAction.shareClient:
-        await onShareWithClient?.call(context);
         return;
       case PdfDocumentAction.save:
         final saved = await savePdfBytes(bytes: bytes, fileName: fileName);

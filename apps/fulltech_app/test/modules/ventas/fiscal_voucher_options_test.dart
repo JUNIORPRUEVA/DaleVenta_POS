@@ -66,25 +66,27 @@ void main() {
       );
     });
 
-    test('B01 requires a fiscal customer id with at least 9 digits', () {
-      expect(isB01FiscalClientValid(null), isFalse);
-      expect(isB01FiscalClientValid(''), isFalse);
-      expect(isB01FiscalClientValid('12345678'), isFalse);
-      expect(isB01FiscalClientValid('101-01010-1'), isTrue);
+    test('B01 requires RNC and fiscal name', () {
+      expect(isB01FiscalClientValid(null, 'FULLTECH SRL'), isFalse);
+      expect(isB01FiscalClientValid('', 'FULLTECH SRL'), isFalse);
+      expect(isB01FiscalClientValid('12345678', 'FULLTECH SRL'), isFalse);
+      expect(isB01FiscalClientValid('101-01010-1', 'FULLTECH SRL'), isTrue);
+      expect(isB01FiscalClientValid('101010101', ''), isFalse);
+      expect(isB01FiscalClientValid('101010101'), isFalse);
     });
 
     test('B01 accepts a plain 9-digit RNC like 133020253', () {
-      expect(isB01FiscalClientValid('133020253'), isTrue);
+      expect(isB01FiscalClientValid('133020253', 'FULLTECH SRL'), isTrue);
     });
 
     test('B01 accepts a dashed RNC that normalizes to 9 digits', () {
-      expect(isB01FiscalClientValid('1-33-02025-3'), isTrue);
-      expect(isB01FiscalClientValid('1 33 02025 3'), isTrue);
+      expect(isB01FiscalClientValid('1-33-02025-3', 'FULLTECH SRL'), isTrue);
+      expect(isB01FiscalClientValid('1 33 02025 3', 'FULLTECH SRL'), isTrue);
     });
 
     test('B01 rejects 8 or fewer normalized digits', () {
-      expect(isB01FiscalClientValid('13302025'), isFalse);
-      expect(isB01FiscalClientValid('1-33-0202-5'), isFalse);
+      expect(isB01FiscalClientValid('13302025', 'FULLTECH SRL'), isFalse);
+      expect(isB01FiscalClientValid('1-33-0202-5', 'FULLTECH SRL'), isFalse);
     });
   });
 
