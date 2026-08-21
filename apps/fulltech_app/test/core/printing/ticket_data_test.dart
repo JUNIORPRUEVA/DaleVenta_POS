@@ -124,7 +124,7 @@ void main() {
     expect(lines, contains('..............................'));
   });
 
-  test('normal ticket does not add fiscal block without voucher and NCF', () {
+  test('normal ticket shows fiscal snapshots without voucher and NCF', () {
     final ticket = TicketData(
       ticketNumber: 'FV-NORMAL',
       dateTime: DateTime(2026, 8, 18, 10),
@@ -146,9 +146,159 @@ void main() {
 
     expect(text, isNot(contains('B01 - CREDITO FISCAL')));
     expect(text, isNot(contains('NCF')));
-    expect(text, isNot(contains('Base imponible')));
-    expect(text, isNot(contains('ITBIS 18%')));
+    expect(text, contains('Base imponible'));
+    expect(text, contains('ITBIS'));
+    expect(text, contains('RD\$ 180.00'));
     expect(text, contains('TOTAL'));
+  });
+
+  test(
+    'tax-enabled normal invoice prints ordered tax totals without NCF block',
+    () {
+      final ticket = TicketData(
+        ticketNumber: 'FV-TAX',
+        dateTime: DateTime(2026, 8, 20, 10),
+        client: const ClientInfo(name: 'Consumidor Final'),
+        fiscalTaxEnabled: true,
+        items: const [
+          TicketItemData(
+            name: 'Producto gravado',
+            qty: 1,
+            unitPrice: 2500,
+            total: 2950,
+            taxableBase: 2500,
+            taxAmount: 450,
+            taxExempt: false,
+          ),
+        ],
+        subtotal: 2500,
+        taxableBase: 2500,
+        itbis: 450,
+        total: 2950,
+      );
+
+      final lines = const TicketRenderer(
+        layout: _layout80,
+        company: _company,
+      ).buildLines(ticket);
+      final text = lines.join('\n');
+
+      expect(text, isNot(contains('NCF')));
+      expect(text, contains('Base imponible'));
+      expect(text, contains('ITBIS'));
+      expect(text, contains('RD\$ 450.00'));
+      expect(text.indexOf('Base imponible'), lessThan(text.indexOf('ITBIS')));
+      expect(text.indexOf('ITBIS'), lessThan(text.indexOf('TOTAL')));
+    },
+  );
+
+  test(
+    'tax-enabled exempt invoice prints exempt amount without zero ITBIS',
+    () {
+      final ticket = TicketData(
+        ticketNumber: 'FV-EXEMPT',
+        dateTime: DateTime(2026, 8, 20, 10),
+        fiscalTaxEnabled: true,
+        items: const [
+          TicketItemData(
+            name: 'Producto exento',
+            qty: 1,
+            unitPrice: 900,
+            total: 900,
+            exemptAmount: 900,
+            taxExempt: true,
+          ),
+        ],
+        subtotal: 900,
+        exemptAmount: 900,
+        itbis: 0,
+        total: 900,
+      );
+
+      final lines = const TicketRenderer(
+        layout: _layout80,
+        company: _company,
+      ).buildLines(ticket);
+      final text = lines.join('\n');
+
+      expect(text, contains('Monto exento'));
+      expect(text, contains('RD\$ 900.00'));
+      expect(text, isNot(contains('ITBIS')));
+      expect(text, isNot(contains('RD\$ 0.00')));
+    },
+  );
+
+  test(
+    'TicketData.fromSale carries tax-enabled flag and mixed fiscal subtotal',
+    () {
+      final sale = _saleWithFiscalSnapshots();
+      final ticket = TicketData.fromSale(sale);
+
+      expect(ticket.fiscalTaxEnabled, isTrue);
+      expect(ticket.resolvedSubtotal, 3400);
+      expect(ticket.taxableBase, 2500);
+      expect(ticket.exemptAmount, 900);
+      expect(ticket.itbis, 450);
+    },
+  );
+
+  test('TicketData.fromSale separates line and general discounts', () {
+    final sale = _saleWithFiscalSnapshots(
+      discountAmount: 300,
+      lineDiscountAmount: 100,
+    );
+
+    final ticket = TicketData.fromSale(sale);
+
+    expect(ticket.productDiscount, 100);
+    expect(ticket.generalDiscount, 200);
+    expect(ticket.discount, 300);
+
+    final text = const TicketRenderer(
+      layout: _layout80,
+      company: _company,
+    ).buildLines(ticket).join('\n');
+
+    expect(text, contains('Desc. productos'));
+    expect(text, contains('-RD\$ 100.00'));
+    expect(text, contains('Desc. general'));
+    expect(text, contains('-RD\$ 200.00'));
+  });
+
+  test('TicketRenderer does not print empty customer phone placeholders', () {
+    final text = const TicketRenderer(layout: _layout80, company: _company)
+        .buildLines(
+          TicketData(
+            ticketNumber: 'FV-CLIENT',
+            dateTime: DateTime(2026, 8, 20, 10),
+            client: const ClientInfo(name: 'Consumidor Final'),
+            items: const [
+              TicketItemData(
+                name: 'Producto',
+                qty: 1,
+                unitPrice: 100,
+                total: 100,
+              ),
+            ],
+            total: 100,
+          ),
+        )
+        .join('\n');
+
+    expect(text, contains('Cliente'));
+    expect(text, contains('Consumidor Final'));
+    expect(text, isNot(contains('Tel.')));
+    expect(text, isNot(contains(' -')));
+  });
+
+  test('TicketData.fromSale sanitizes pending cashier marker', () {
+    final sale = _saleWithFiscalSnapshots(userName: 'Pendiente de sincronizar');
+
+    expect(
+      TicketData.fromSale(sale, cashierNameOverride: 'Maria Perez').cashierName,
+      'Maria Perez',
+    );
+    expect(TicketData.fromSale(sale).cashierName, 'No disponible');
   });
 
   test('B01 ticket prints fiscal block and snapshot totals', () {
@@ -158,6 +308,7 @@ void main() {
       client: const ClientInfo(name: 'CANATECH SRL', document: '132588312'),
       fiscalVoucherType: 'B01',
       ncf: 'B0100000014',
+      fiscalTaxEnabled: true,
       taxIncluded: true,
       items: const [
         TicketItemData(
@@ -283,6 +434,7 @@ void main() {
       client: const ClientInfo(name: 'Consumidor Final'),
       fiscalVoucherType: 'B02',
       ncf: 'B0200000014',
+      fiscalTaxEnabled: true,
       items: const [
         TicketItemData(name: 'Producto', qty: 1, unitPrice: 500, total: 500),
       ],
@@ -346,3 +498,82 @@ const _layout80 = TicketLayoutConfig(
   rightMargin: 0,
   sectionSeparatorStyle: 'dashed',
 );
+
+SaleModel _saleWithFiscalSnapshots({
+  String userName = 'Caja',
+  double discountAmount = 0,
+  double lineDiscountAmount = 0,
+}) {
+  return SaleModel(
+    id: 'sale-fiscal-mixed',
+    userId: 'user-1',
+    userName: userName,
+    customerId: null,
+    customerName: 'Consumidor Final',
+    customerPhone: '',
+    saleDate: DateTime(2026, 8, 20, 10),
+    note: '',
+    totalSold: 3850,
+    totalCost: 0,
+    totalProfit: 3400,
+    commissionAmount: 0,
+    paymentMethod: 'cash',
+    paymentCashAmount: 3850,
+    paymentTransferAmount: 0,
+    creditAmount: 0,
+    creditPaidAmount: 0,
+    creditBalance: 0,
+    creditStatus: 'none',
+    isDeleted: false,
+    deletedAt: null,
+    fiscalTaxEnabled: true,
+    fiscalPriceMode: 'TAX_ADDED',
+    taxableBase: 2500,
+    taxAmount: 450,
+    exemptAmount: 900,
+    discountAmount: discountAmount,
+    items: [
+      SaleItemModel(
+        id: 'item-exempt',
+        productId: 'product-exempt',
+        productNameSnapshot: 'Producto exento',
+        productImageSnapshot: null,
+        qty: 1,
+        priceSoldUnit: 900,
+        costUnitSnapshot: 0,
+        subtotalSold: 900,
+        subtotalCost: 0,
+        profit: 900,
+        category: null,
+        grossAmount: 900,
+        lineDiscountAmount: lineDiscountAmount,
+        taxableBase: 0,
+        taxRate: 0,
+        taxAmount: 0,
+        exemptAmount: 900,
+        taxIncluded: false,
+        taxExempt: true,
+      ),
+      SaleItemModel(
+        id: 'item-taxable',
+        productId: 'product-taxable',
+        productNameSnapshot: 'Producto gravado',
+        productImageSnapshot: null,
+        qty: 1,
+        priceSoldUnit: 2500,
+        costUnitSnapshot: 0,
+        subtotalSold: 2950,
+        subtotalCost: 0,
+        profit: 2500,
+        category: null,
+        grossAmount: 2500,
+        taxableBase: 2500,
+        taxRate: 0.18,
+        taxAmount: 450,
+        exemptAmount: 0,
+        taxIncluded: false,
+        taxExempt: false,
+      ),
+    ],
+  );
+}

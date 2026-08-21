@@ -50,6 +50,23 @@ void main() {
     });
 
     test(
+      'builds tax-enabled normal invoice PDF without requiring NCF',
+      () async {
+        final sale = _goldenSale(voucherType: '', ncf: '');
+        final bytes = await buildSaleInvoicePdf(
+          sale: sale,
+          company: _company(),
+        );
+
+        expect(bytes.length, greaterThan(1000));
+        expect(sale.fiscalTaxEnabled, isTrue);
+        expect(sale.ncf, '');
+        expect(sale.taxableBase, 21779.66);
+        expect(sale.taxAmount, 3920.34);
+      },
+    );
+
+    test(
       'builds B02 invoice PDF without requiring customer fiscal data',
       () async {
         final sale = _goldenSale(

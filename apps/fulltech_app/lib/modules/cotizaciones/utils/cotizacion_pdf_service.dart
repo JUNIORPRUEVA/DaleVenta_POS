@@ -7,31 +7,36 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
-import '../../../core/utils/pdf_file_actions.dart';
 import '../../../core/company/company_settings_model.dart';
+import '../../../core/tax/product_tax_preview_calculator.dart';
+import '../../../core/utils/pdf_file_actions.dart';
 import '../cotizacion_models.dart';
 
 final PdfColor _pageBackground = PdfColors.white;
-final PdfColor _borderColor = PdfColor.fromHex('#E2E8F0');
-final PdfColor _panelBorder = PdfColor.fromHex('#D8E1EA');
+final PdfColor _borderColor = PdfColor.fromHex('#D9E2EC');
+final PdfColor _panelBorder = PdfColor.fromHex('#CBD5E1');
 final PdfColor _softFill = PdfColor.fromHex('#F8FAFC');
-final PdfColor _softLine = PdfColor.fromHex('#E6ECF2');
-final PdfColor _headingBlack = PdfColor.fromHex('#111827');
-final PdfColor _textPrimary = PdfColor.fromHex('#1D2430');
-final PdfColor _textMuted = PdfColor.fromHex('#6C7685');
+final PdfColor _softLine = PdfColor.fromHex('#E2E8F0');
+final PdfColor _headingBlack = PdfColor.fromHex('#0F172A');
+final PdfColor _textPrimary = PdfColor.fromHex('#172033');
+final PdfColor _textMuted = PdfColor.fromHex('#64748B');
 final PdfColor _accentBlue = PdfColor.fromHex('#1957E6');
+final PdfColor _danger = PdfColor.fromHex('#B42318');
 
 Future<Uint8List> buildCotizacionPdf({
   required CotizacionModel cotizacion,
   CompanySettings? company,
 }) async {
+  final viewData = buildCotizacionPdfViewData(
+    cotizacion: cotizacion,
+    company: company,
+  );
   final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
   final dateFmt = DateFormat('dd/MM/yyyy h:mm a', 'es_DO');
   final qtyFmt = NumberFormat('#,##0.##', 'es_DO');
   final logoImage = await _resolveCompanyLogo(company);
-  final companyName = _fallback(company?.companyName, fallback: 'FULLTECH');
 
-  final doc = pw.Document(title: 'Cotización', author: companyName);
+  final doc = pw.Document(title: 'Cotización', author: viewData.company.name);
 
   doc.addPage(
     pw.MultiPage(
@@ -44,18 +49,19 @@ Future<Uint8List> buildCotizacionPdf({
         ),
       ),
       header: (context) => _pageHeader(
-        company: company,
+        company: viewData.company,
+        quote: viewData.quote,
+        customer: viewData.customer,
         logoImage: logoImage,
-        cotizacion: cotizacion,
         dateFmt: dateFmt,
-        documentLabel: 'COTIZACIÓN',
-        isContinuation: context.pageNumber > 1,
+        pageNumber: context.pageNumber,
+        pagesCount: context.pagesCount,
       ),
       footer: (context) => _pageFooter(context.pageNumber, context.pagesCount),
       build: (_) => [
-        _detailSection(cotizacion, money, qtyFmt),
-        pw.SizedBox(height: _bottomAnchorGap(cotizacion.items.length)),
-        _bottomSection(cotizacion, money),
+        ..._detailSection(viewData, money, qtyFmt),
+        pw.SizedBox(height: 14),
+        _bottomSection(viewData, money),
       ],
     ),
   );
@@ -63,40 +69,192 @@ Future<Uint8List> buildCotizacionPdf({
   return doc.save();
 }
 
-pw.Widget _pageHeader({
-  required CompanySettings? company,
-  required pw.MemoryImage? logoImage,
+CotizacionPdfViewData buildCotizacionPdfViewData({
   required CotizacionModel cotizacion,
-  required DateFormat dateFmt,
-  required String documentLabel,
-  required bool isContinuation,
+  CompanySettings? company,
 }) {
-  final companyName = _fallback(company?.companyName, fallback: 'FULLTECH');
-  final quoteCode = _buildQuoteCode(cotizacion.id);
-  final rnc = _clean(company?.rnc);
-  final phone = _clean(company?.phone);
-  final address = _clean(company?.address);
-  final customerName = _fallback(
-    cotizacion.customerName,
-    fallback: 'Cliente no especificado',
+  final fiscal = cotizacion.hasFiscalSnapshot;
+  final subtotal = _roundMoney(
+    fiscal
+        ? cotizacion.items.fold<double>(
+            0,
+            (sum, item) => sum + (item.effectiveOriginalUnitPrice * item.qty),
+          )
+        : cotizacion.subtotalBeforeDiscount,
   );
-  final customerPhone = _fallback(
-    cotizacion.customerPhone,
-    fallback: 'No registrado',
+  final productDiscount = _roundMoney(
+    cotizacion.items.fold<double>(0, (sum, item) => sum + item.discountAmount),
   );
-  final issuedAt = cotizacion.createdAt;
-  final expiresAt = issuedAt.add(const Duration(days: 15));
-  final taxText = cotizacion.hasFiscalSnapshot && cotizacion.taxAmount > 0
-      ? cotizacion.fiscalPriceMode == 'TAX_ADDED'
-            ? 'ITBIS se agrega al precio'
-            : 'Precios con ITBIS incluido'
-      : cotizacion.includeItbis
-      ? '${(cotizacion.itbisRate * 100).toStringAsFixed(0)}% ITBIS'
+  final netRevenue = _roundMoney(
+    fiscal
+        ? cotizacion.taxableBase + cotizacion.exemptAmount
+        : cotizacion.subtotal,
+  );
+  final totalNetDiscount = _roundMoney(
+    fiscal ? subtotal - netRevenue : cotizacion.discountAmount,
+  );
+  final inferredGeneralDiscount = _roundMoney(
+    totalNetDiscount - productDiscount,
+  );
+  final generalDiscount = _roundMoney(
+    inferredGeneralDiscount > 0
+        ? inferredGeneralDiscount
+        : cotizacion.globalDiscountAmount,
+  );
+  final shouldCalculateLineFiscal =
+      fiscal &&
+      cotizacion.items.any(
+        (item) =>
+            item.taxableBase <= 0 &&
+            item.exemptAmount <= 0 &&
+            item.taxAmount <= 0,
+      );
+  final calculatedFiscal = shouldCalculateLineFiscal
+      ? ProductTaxPreviewCalculator.calculateCart(
+          lines: [
+            for (final item in cotizacion.items)
+              ProductCartTaxLineInput(
+                price: item.unitPrice,
+                quantity: item.qty,
+                taxTreatment: item.taxTreatment,
+                taxRate: item.taxRate > 0 ? item.taxRate : null,
+                taxPriceMode: item.taxPriceMode.trim().toUpperCase() == 'NO_TAX'
+                    ? cotizacion.fiscalPriceMode
+                    : item.taxPriceMode,
+              ),
+          ],
+          companyTaxEnabled: true,
+          companyPricesIncludeTax: cotizacion.fiscalPriceMode == 'TAX_INCLUDED',
+          companyDefaultTaxRate: cotizacion.itbisRate,
+          globalDiscountAmount: generalDiscount,
+        )
       : null;
+  final rows = cotizacion.items
+      .toList(growable: false)
+      .asMap()
+      .entries
+      .map((entry) {
+        final index = entry.key;
+        final item = entry.value;
+        final calculatedLine = calculatedFiscal?.lines[index];
+        final gross = _roundMoney(
+          calculatedLine?.grossAmount ??
+              (fiscal && item.grossAmount > 0
+                  ? item.grossAmount
+                  : item.effectiveOriginalUnitPrice * item.qty),
+        );
+        final calculatedPreview = calculatedLine?.preview;
+        final productLineDiscount = _roundMoney(item.discountAmount);
+        final displayedLineDiscount = _roundMoney(
+          productLineDiscount > 0
+              ? productLineDiscount
+              : item.lineDiscountAmount > 0
+              ? item.lineDiscountAmount
+              : 0,
+        );
+        final fallbackLineTotal = _roundMoney(item.unitPrice * item.qty);
+        final total = _roundMoney(calculatedPreview?.finalAmount ?? item.total);
+        final taxable = fiscal
+            ? _roundMoney(calculatedPreview?.baseAmount ?? item.taxableBase)
+            : 0.0;
+        final exempt = fiscal
+            ? _roundMoney(calculatedPreview?.exemptAmount ?? item.exemptAmount)
+            : cotizacion.includeItbis
+            ? 0.0
+            : fallbackLineTotal;
+        final base = fiscal
+            ? _roundMoney(taxable > 0 ? taxable : exempt)
+            : fallbackLineTotal;
+        final tax = fiscal
+            ? _roundMoney(calculatedPreview?.taxAmount ?? item.taxAmount)
+            : 0.0;
+        final treatment = _normalizeTaxTreatment(item.taxTreatment);
+        final taxLabel = fiscal
+            ? item.taxExempt || item.exemptAmount > 0 || treatment == 'EXEMPT'
+                  ? 'Exento'
+                  : item.taxIncluded
+                  ? 'Gravado incl.'
+                  : 'Gravado + ITBIS'
+            : cotizacion.includeItbis
+            ? 'ITBIS ${_percent(cotizacion.itbisRate)}'
+            : 'Sin impuesto';
+
+        return CotizacionPdfLineData(
+          description: _fallback(
+            item.nombre,
+            fallback: 'Producto sin descripción',
+          ),
+          quantity: item.qty,
+          unitPrice: _roundMoney(item.effectiveOriginalUnitPrice),
+          grossAmount: gross,
+          lineDiscountAmount: displayedLineDiscount,
+          productDiscountAmount: productLineDiscount,
+          taxableBase: taxable,
+          exemptAmount: exempt,
+          baseAmount: base,
+          taxAmount: tax,
+          total: total,
+          taxLabel: taxLabel,
+        );
+      })
+      .toList(growable: false);
+
+  return CotizacionPdfViewData(
+    company: CotizacionPdfCompanyData(
+      name: _fallback(company?.companyName, fallback: 'FULLTECH'),
+      rnc: _clean(company?.rnc),
+      phone: _clean(company?.phone),
+      address: _clean(company?.address),
+    ),
+    customer: CotizacionPdfCustomerData(
+      name: _customerDisplayName(cotizacion.customerName),
+      taxId: _clean(cotizacion.customerTaxId),
+      phone: _clean(cotizacion.customerPhone),
+      address: _clean(cotizacion.customerAddress),
+      email: _clean(cotizacion.customerEmail),
+    ),
+    quote: CotizacionPdfQuoteData(
+      code: _buildQuoteCode(cotizacion.id),
+      issuedAt: cotizacion.createdAt,
+      expiresAt: cotizacion.createdAt.add(const Duration(days: 15)),
+      fiscalCondition: _fiscalCondition(cotizacion),
+    ),
+    lines: rows,
+    totals: CotizacionPdfTotalsData(
+      subtotal: subtotal,
+      productDiscount: productDiscount,
+      generalDiscount: generalDiscount,
+      exemptAmount: _roundMoney(fiscal ? cotizacion.exemptAmount : 0),
+      taxableBase: _roundMoney(fiscal ? cotizacion.taxableBase : 0),
+      taxAmount: _roundMoney(cotizacion.itbisAmount),
+      total: _roundMoney(cotizacion.total),
+      fiscalEnabled: fiscal,
+    ),
+    note: cotizacion.note.trim(),
+  );
+}
+
+pw.Widget _pageHeader({
+  required CotizacionPdfCompanyData company,
+  required CotizacionPdfQuoteData quote,
+  required CotizacionPdfCustomerData customer,
+  required pw.MemoryImage? logoImage,
+  required DateFormat dateFmt,
+  required int pageNumber,
+  required int pagesCount,
+}) {
+  if (pageNumber > 1) {
+    return _continuationHeader(
+      company: company,
+      quote: quote,
+      pageNumber: pageNumber,
+      pagesCount: pagesCount,
+    );
+  }
 
   return _panel(
-    margin: const pw.EdgeInsets.only(bottom: 14),
-    padding: const pw.EdgeInsets.fromLTRB(0, 4, 0, 10),
+    margin: const pw.EdgeInsets.only(bottom: 13),
+    padding: const pw.EdgeInsets.fromLTRB(0, 2, 0, 10),
     child: pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -104,18 +262,17 @@ pw.Widget _pageHeader({
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
             pw.Expanded(
-              flex: 6,
               child: pw.Row(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  _logoBox(companyName: companyName, logoImage: logoImage),
+                  _logoBox(companyName: company.name, logoImage: logoImage),
                   pw.SizedBox(width: 12),
                   pw.Expanded(
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text(
-                          companyName,
+                          company.name,
                           style: pw.TextStyle(
                             fontSize: 17,
                             fontWeight: pw.FontWeight.bold,
@@ -123,9 +280,12 @@ pw.Widget _pageHeader({
                           ),
                         ),
                         pw.SizedBox(height: 4),
-                        if (rnc.isNotEmpty) _companyLine('RNC: $rnc'),
-                        if (phone.isNotEmpty) _companyLine('Tel: $phone'),
-                        if (address.isNotEmpty) _companyLine(address),
+                        if (company.rnc.isNotEmpty)
+                          _companyLine('RNC: ${company.rnc}'),
+                        if (company.phone.isNotEmpty)
+                          _companyLine('Tel: ${company.phone}'),
+                        if (company.address.isNotEmpty)
+                          _companyLine(company.address),
                       ],
                     ),
                   ),
@@ -134,40 +294,81 @@ pw.Widget _pageHeader({
             ),
             pw.SizedBox(width: 16),
             pw.SizedBox(
-              width: 215,
+              width: 222,
               child: _quoteFactsPanel(
-                documentLabel: documentLabel,
-                quoteCode: quoteCode,
-                issuedText: dateFmt.format(issuedAt),
-                expiresText: dateFmt.format(expiresAt),
-                validityText: 'Válida por 15 días',
-                taxText: taxText,
+                quoteCode: quote.code,
+                issuedText: dateFmt.format(quote.issuedAt),
+                expiresText: dateFmt.format(quote.expiresAt),
+                taxText: quote.fiscalCondition,
               ),
             ),
           ],
         ),
-        pw.SizedBox(height: 14),
-        pw.Container(height: 1.2, color: _softLine),
-        pw.SizedBox(height: 10),
-        pw.SizedBox(
-          width: 325,
-          child: _personInfoPanel(
-            title: 'DATOS DEL CLIENTE',
-            primary: customerName,
-            secondary: customerPhone,
+        pw.SizedBox(height: 12),
+        pw.Container(height: 1.1, color: _softLine),
+        pw.SizedBox(height: 9),
+        _customerPanel(customer),
+      ],
+    ),
+  );
+}
+
+pw.Widget _continuationHeader({
+  required CotizacionPdfCompanyData company,
+  required CotizacionPdfQuoteData quote,
+  required int pageNumber,
+  required int pagesCount,
+}) {
+  final pageText = pagesCount > 0
+      ? 'Página $pageNumber de $pagesCount'
+      : 'Página $pageNumber';
+  return pw.Container(
+    margin: const pw.EdgeInsets.only(bottom: 10),
+    padding: const pw.EdgeInsets.only(bottom: 6),
+    decoration: pw.BoxDecoration(
+      border: pw.Border(bottom: pw.BorderSide(color: _softLine, width: 1)),
+    ),
+    child: pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.end,
+      children: [
+        pw.Expanded(
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                company.name,
+                style: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                  color: _textPrimary,
+                ),
+              ),
+              pw.SizedBox(height: 2),
+              pw.Text(
+                'Cotización · Continuación',
+                style: pw.TextStyle(fontSize: 8, color: _textMuted),
+              ),
+            ],
           ),
         ),
-        if (isContinuation) ...[
-          pw.SizedBox(height: 8),
-          pw.Text(
-            'Continuación de la cotización',
-            style: pw.TextStyle(
-              fontSize: 8,
-              color: _textMuted,
-              fontStyle: pw.FontStyle.italic,
+        pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.end,
+          children: [
+            pw.Text(
+              quote.code,
+              style: pw.TextStyle(
+                fontSize: 9,
+                fontWeight: pw.FontWeight.bold,
+                color: _textPrimary,
+              ),
             ),
-          ),
-        ],
+            pw.SizedBox(height: 2),
+            pw.Text(
+              pageText,
+              style: pw.TextStyle(fontSize: 8, color: _textMuted),
+            ),
+          ],
+        ),
       ],
     ),
   );
@@ -179,7 +380,7 @@ pw.Widget _pageFooter(int pageNumber, int totalPages) {
     child: pw.Row(
       children: [
         pw.Text(
-          'Documento comercial',
+          'FullPOS Cloud',
           style: pw.TextStyle(fontSize: 8, color: _textMuted),
         ),
         pw.Spacer(),
@@ -192,268 +393,151 @@ pw.Widget _pageFooter(int pageNumber, int totalPages) {
   );
 }
 
-pw.Widget _detailSection(
-  CotizacionModel cotizacion,
+List<pw.Widget> _detailSection(
+  CotizacionPdfViewData data,
   NumberFormat money,
   NumberFormat qtyFmt,
 ) {
-  if (cotizacion.hasFiscalSnapshot) {
-    return _fiscalQuoteDetailSection(cotizacion, money, qtyFmt);
-  }
-
-  final tableRows = <pw.TableRow>[
-    pw.TableRow(
-      decoration: pw.BoxDecoration(color: _headingBlack),
-      children: [
-        _headerCell('Descripcion', align: pw.TextAlign.left),
-        _headerCell('Cant.'),
-        _headerCell('Unitario', align: pw.TextAlign.right),
-        _headerCell('Importe', align: pw.TextAlign.right),
-      ],
-    ),
-  ];
-
-  if (cotizacion.items.isEmpty) {
-    tableRows.add(
-      pw.TableRow(
-        children: [
-          _emptyCell('No hay productos registrados en esta cotización.'),
-          _emptyCell(''),
-          _emptyCell(''),
-          _emptyCell(''),
-        ],
-      ),
-    );
-  } else {
-    for (final item in cotizacion.items) {
-      tableRows.add(
-        pw.TableRow(
-          children: [
-            _bodyCell(
-              item.nombre.trim().isEmpty
-                  ? 'Producto sin descripción'
-                  : item.nombre.trim(),
-              align: pw.TextAlign.left,
-              bold: true,
-            ),
-            _bodyCell(qtyFmt.format(item.qty), align: pw.TextAlign.center),
-            _bodyCell(money.format(item.unitPrice), align: pw.TextAlign.right),
-            _bodyCell(money.format(item.total), align: pw.TextAlign.right),
-          ],
-        ),
-      );
-    }
-  }
-
-  return pw.Container(
-    padding: const pw.EdgeInsets.fromLTRB(0, 10, 0, 10),
-    child: pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Text(
-          'Detalle de ventas',
-          style: pw.TextStyle(
-            fontSize: 10.5,
-            fontWeight: pw.FontWeight.bold,
-            color: _textPrimary,
-          ),
-        ),
-        pw.SizedBox(height: 8),
-        pw.Container(
-          decoration: pw.BoxDecoration(
-            border: pw.Border.all(color: _panelBorder, width: 0.45),
-            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
-          ),
-          child: pw.Table(
-            border: pw.TableBorder(
-              horizontalInside: pw.BorderSide(color: _borderColor, width: 0.55),
-            ),
-            columnWidths: const {
-              0: pw.FlexColumnWidth(5.45),
-              1: pw.FlexColumnWidth(0.75),
-              2: pw.FlexColumnWidth(1.65),
-              3: pw.FlexColumnWidth(1.7),
-            },
-            children: tableRows,
-          ),
-        ),
-      ],
-    ),
+  final hasProductDiscount = data.lines.any(
+    (item) => item.productDiscountAmount > 0,
   );
-}
-
-pw.Widget _fiscalQuoteDetailSection(
-  CotizacionModel cotizacion,
-  NumberFormat money,
-  NumberFormat qtyFmt,
-) {
-  final modeLabel = cotizacion.fiscalPriceMode == 'TAX_ADDED'
-      ? 'ITBIS se agrega al precio. Importes de línea guardados.'
-      : 'Precios con ITBIS incluido. Importes de línea guardados.';
-  final tableRows = <pw.TableRow>[
+  final rows = <pw.TableRow>[
     pw.TableRow(
+      repeat: true,
       decoration: pw.BoxDecoration(color: _headingBlack),
       children: [
-        _headerCell('Descripcion', align: pw.TextAlign.left),
+        _headerCell('Descripción', align: pw.TextAlign.left),
         _headerCell('Cant.'),
-        _headerCell('Base', align: pw.TextAlign.right),
+        _headerCell('Precio unidad', align: pw.TextAlign.right),
+        if (hasProductDiscount)
+          _headerCell('Descuento', align: pw.TextAlign.right),
         _headerCell('ITBIS', align: pw.TextAlign.right),
         _headerCell('Total', align: pw.TextAlign.right),
       ],
     ),
   ];
 
-  if (cotizacion.items.isEmpty) {
-    tableRows.add(
+  if (data.lines.isEmpty) {
+    rows.add(
       pw.TableRow(
         children: [
-          _emptyCell('No hay productos registrados en esta cotización.'),
-          _emptyCell(''),
-          _emptyCell(''),
-          _emptyCell(''),
-          _emptyCell(''),
+          _bodyCell('No hay productos registrados en esta cotización.'),
+          _bodyCell(''),
+          _bodyCell(''),
+          if (hasProductDiscount) _bodyCell(''),
+          _bodyCell(''),
+          _bodyCell(''),
         ],
       ),
     );
   } else {
-    for (final item in cotizacion.items) {
-      final isExempt = item.taxExempt || item.exemptAmount > 0;
-      final description = item.nombre.trim().isEmpty
-          ? 'Producto sin descripción'
-          : item.nombre.trim();
-      tableRows.add(
+    for (var index = 0; index < data.lines.length; index++) {
+      final item = data.lines[index];
+      rows.add(
         pw.TableRow(
+          decoration: pw.BoxDecoration(
+            color: index.isOdd ? PdfColor.fromHex('#FBFDFF') : PdfColors.white,
+          ),
           children: [
+            _descriptionCell(item.description),
+            _bodyCell(qtyFmt.format(item.quantity), align: pw.TextAlign.center),
+            _bodyCell(money.format(item.unitPrice), align: pw.TextAlign.right),
+            if (hasProductDiscount)
+              _bodyCell(
+                item.productDiscountAmount > 0
+                    ? '-${money.format(item.productDiscountAmount)}'
+                    : '-',
+                align: pw.TextAlign.right,
+                textColor: item.productDiscountAmount > 0
+                    ? _danger
+                    : _textMuted,
+              ),
+            _bodyCell(money.format(item.taxAmount), align: pw.TextAlign.right),
             _bodyCell(
-              isExempt ? '$description\nExento' : description,
-              align: pw.TextAlign.left,
+              money.format(item.total),
+              align: pw.TextAlign.right,
               bold: true,
             ),
-            _bodyCell(qtyFmt.format(item.qty), align: pw.TextAlign.center),
-            _bodyCell(
-              money.format(
-                item.taxableBase > 0 ? item.taxableBase : item.exemptAmount,
-              ),
-              align: pw.TextAlign.right,
-            ),
-            _bodyCell(money.format(item.taxAmount), align: pw.TextAlign.right),
-            _bodyCell(money.format(item.total), align: pw.TextAlign.right),
           ],
         ),
       );
-      if (item.lineDiscountAmount > 0) {
-        tableRows.add(
-          pw.TableRow(
-            children: [
-              _bodyCell(
-                'Descuento aplicado',
-                align: pw.TextAlign.left,
-                textColor: PdfColor.fromHex('#B42318'),
-              ),
-              _bodyCell(''),
-              _bodyCell(''),
-              _bodyCell(''),
-              _bodyCell(
-                '-${money.format(item.lineDiscountAmount)}',
-                align: pw.TextAlign.right,
-                textColor: PdfColor.fromHex('#B42318'),
-              ),
-            ],
-          ),
-        );
-      }
     }
   }
 
-  return pw.Container(
-    padding: const pw.EdgeInsets.fromLTRB(0, 10, 0, 10),
-    child: pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Row(
-          children: [
-            pw.Text(
-              'Detalle fiscal de cotización',
-              style: pw.TextStyle(
-                fontSize: 10.5,
-                fontWeight: pw.FontWeight.bold,
-                color: _textPrimary,
-              ),
-            ),
-            pw.Spacer(),
-            pw.Text(
-              modeLabel,
-              style: pw.TextStyle(fontSize: 7.6, color: _textMuted),
-            ),
-          ],
-        ),
-        pw.SizedBox(height: 8),
-        pw.Container(
-          decoration: pw.BoxDecoration(
-            border: pw.Border.all(color: _panelBorder, width: 0.45),
-            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
-          ),
-          child: pw.Table(
-            border: pw.TableBorder(
-              horizontalInside: pw.BorderSide(color: _borderColor, width: 0.55),
-            ),
-            columnWidths: const {
-              0: pw.FlexColumnWidth(5.15),
-              1: pw.FlexColumnWidth(0.72),
-              2: pw.FlexColumnWidth(1.42),
-              3: pw.FlexColumnWidth(1.35),
-              4: pw.FlexColumnWidth(1.55),
-            },
-            children: tableRows,
-          ),
-        ),
-      ],
+  return [
+    pw.Text(
+      'Detalle de productos',
+      style: pw.TextStyle(
+        fontSize: 10.8,
+        fontWeight: pw.FontWeight.bold,
+        color: _textPrimary,
+      ),
     ),
-  );
+    pw.SizedBox(height: 8),
+    pw.Table(
+      border: pw.TableBorder(
+        top: pw.BorderSide(color: _panelBorder, width: 0.45),
+        bottom: pw.BorderSide(color: _panelBorder, width: 0.45),
+        left: pw.BorderSide(color: _panelBorder, width: 0.45),
+        right: pw.BorderSide(color: _panelBorder, width: 0.45),
+        horizontalInside: pw.BorderSide(color: _borderColor, width: 0.45),
+      ),
+      columnWidths: _detailColumnWidths(hasProductDiscount),
+      children: rows,
+    ),
+  ];
 }
 
-pw.Widget _bottomSection(CotizacionModel cotizacion, NumberFormat money) {
-  final note = cotizacion.note.trim();
+Map<int, pw.TableColumnWidth> _detailColumnWidths(bool hasProductDiscount) {
+  if (hasProductDiscount) {
+    return const {
+      0: pw.FlexColumnWidth(3.45),
+      1: pw.FlexColumnWidth(0.62),
+      2: pw.FlexColumnWidth(1.1),
+      3: pw.FlexColumnWidth(1.02),
+      4: pw.FlexColumnWidth(0.92),
+      5: pw.FlexColumnWidth(1.12),
+    };
+  }
+  return const {
+    0: pw.FlexColumnWidth(4.1),
+    1: pw.FlexColumnWidth(0.7),
+    2: pw.FlexColumnWidth(1.2),
+    3: pw.FlexColumnWidth(1.0),
+    4: pw.FlexColumnWidth(1.2),
+  };
+}
+
+pw.Widget _bottomSection(CotizacionPdfViewData data, NumberFormat money) {
   return pw.Row(
     crossAxisAlignment: pw.CrossAxisAlignment.start,
     children: [
       pw.Expanded(
         child: _panel(
-          padding: const pw.EdgeInsets.fromLTRB(14, 14, 14, 14),
+          padding: const pw.EdgeInsets.fromLTRB(14, 13, 14, 13),
           fillColor: _softFill,
           showBorder: true,
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              if (note.isNotEmpty) ...[
-                pw.Text(
-                  'Notas',
-                  style: pw.TextStyle(
-                    fontSize: 11,
-                    fontWeight: pw.FontWeight.bold,
-                    color: _textPrimary,
-                  ),
-                ),
-                pw.SizedBox(height: 8),
-                pw.Text(
-                  note,
-                  style: pw.TextStyle(
-                    fontSize: 9.5,
-                    color: _textPrimary,
-                    lineSpacing: 2,
-                  ),
-                ),
-                pw.Padding(
-                  padding: const pw.EdgeInsets.symmetric(vertical: 9),
-                  child: pw.Container(height: 1, color: _softLine),
-                ),
-              ],
               pw.Text(
-                'Gracias por preferirnos.',
+                'Notas',
                 style: pw.TextStyle(
-                  fontSize: 9.3,
-                  color: _textMuted,
-                  fontStyle: pw.FontStyle.italic,
+                  fontSize: 10.5,
+                  fontWeight: pw.FontWeight.bold,
+                  color: _textPrimary,
+                ),
+              ),
+              pw.SizedBox(height: 7),
+              pw.Text(
+                data.note.isEmpty ? 'Gracias por preferirnos.' : data.note,
+                style: pw.TextStyle(
+                  fontSize: 9,
+                  color: data.note.isEmpty ? _textMuted : _textPrimary,
+                  fontStyle: data.note.isEmpty
+                      ? pw.FontStyle.italic
+                      : pw.FontStyle.normal,
+                  lineSpacing: 2,
                 ),
               ),
             ],
@@ -461,59 +545,54 @@ pw.Widget _bottomSection(CotizacionModel cotizacion, NumberFormat money) {
         ),
       ),
       pw.SizedBox(width: 14),
-      pw.SizedBox(width: 228, child: _totalsPanel(cotizacion, money)),
+      pw.SizedBox(width: 238, child: _totalsPanel(data.totals, money)),
     ],
   );
 }
 
-pw.Widget _totalsPanel(CotizacionModel cotizacion, NumberFormat money) {
+pw.Widget _totalsPanel(CotizacionPdfTotalsData totals, NumberFormat money) {
+  final showTaxRows =
+      totals.fiscalEnabled ||
+      totals.taxableBase > 0 ||
+      totals.exemptAmount > 0 ||
+      totals.taxAmount > 0;
+
   return _panel(
-    padding: const pw.EdgeInsets.fromLTRB(14, 14, 14, 14),
+    padding: const pw.EdgeInsets.fromLTRB(14, 13, 14, 13),
     fillColor: _softFill,
     showBorder: true,
     child: pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(
-          'Totales',
+          'Resumen',
           style: pw.TextStyle(
-            fontSize: 11,
+            fontSize: 10.8,
             fontWeight: pw.FontWeight.bold,
             color: _textPrimary,
           ),
         ),
-        pw.SizedBox(height: 10),
-        if (cotizacion.hasFiscalSnapshot) ...[
-          if (cotizacion.discountAmount > 0)
-            _totalLine(
-              'Descuento',
-              '-${money.format(cotizacion.discountAmount)}',
-              valueColor: PdfColor.fromHex('#B42318'),
-            ),
-          if (cotizacion.taxableBase > 0)
-            _totalLine('Base imponible', money.format(cotizacion.taxableBase)),
-          if (cotizacion.exemptAmount > 0)
-            _totalLine('Exento', money.format(cotizacion.exemptAmount)),
-          if (cotizacion.itbisAmount > 0)
-            _totalLine('ITBIS', money.format(cotizacion.itbisAmount)),
-        ] else ...[
+        pw.SizedBox(height: 9),
+        _totalLine('Subtotal', money.format(totals.subtotal)),
+        if (totals.productDiscount > 0)
           _totalLine(
-            'Subtotal',
-            money.format(cotizacion.subtotalBeforeDiscount),
+            'Descuentos por productos',
+            '-${money.format(totals.productDiscount)}',
+            valueColor: _danger,
           ),
-          if (cotizacion.hasDiscount)
-            _totalLine(
-              'Descuento aplicado',
-              '-${money.format(cotizacion.discountAmount)}',
-              valueColor: PdfColor.fromHex('#B42318'),
-            ),
-          if (cotizacion.hasDiscount)
-            _totalLine(
-              'Subtotal con descuento',
-              money.format(cotizacion.subtotal),
-            ),
-          if (cotizacion.itbisAmount > 0)
-            _totalLine('ITBIS', money.format(cotizacion.itbisAmount)),
+        if (totals.generalDiscount > 0)
+          _totalLine(
+            'Descuento general',
+            '-${money.format(totals.generalDiscount)}',
+            valueColor: _danger,
+          ),
+        if (showTaxRows) ...[
+          if (totals.exemptAmount > 0)
+            _totalLine('Monto exento', money.format(totals.exemptAmount)),
+          if (totals.taxableBase > 0)
+            _totalLine('Base imponible', money.format(totals.taxableBase)),
+          if (totals.taxAmount > 0)
+            _totalLine('ITBIS', money.format(totals.taxAmount)),
         ],
         pw.Padding(
           padding: const pw.EdgeInsets.symmetric(vertical: 8),
@@ -529,18 +608,18 @@ pw.Widget _totalsPanel(CotizacionModel cotizacion, NumberFormat money) {
             children: [
               pw.Expanded(
                 child: pw.Text(
-                  'TOTAL COTIZADO',
+                  'TOTAL',
                   style: pw.TextStyle(
-                    fontSize: 10.2,
+                    fontSize: 10.4,
                     fontWeight: pw.FontWeight.bold,
                     color: _textPrimary,
                   ),
                 ),
               ),
               pw.Text(
-                money.format(cotizacion.total),
+                money.format(totals.total),
                 style: pw.TextStyle(
-                  fontSize: 11.6,
+                  fontSize: 12,
                   fontWeight: pw.FontWeight.bold,
                   color: _accentBlue,
                 ),
@@ -632,11 +711,35 @@ String _fallback(String? value, {required String fallback}) {
 
 String _clean(String? value) => (value ?? '').trim();
 
-double _bottomAnchorGap(int itemCount) {
-  final gap = 176 - (itemCount * 14);
-  if (gap < 18) return 18;
-  if (gap > 132) return 132;
-  return gap.toDouble();
+String _customerDisplayName(String? value) {
+  final cleaned = _clean(value);
+  final normalized = cleaned.toLowerCase();
+  if (cleaned.isEmpty ||
+      normalized == 'sin cliente' ||
+      normalized == 'cliente no especificado') {
+    return 'Consumidor final';
+  }
+  return cleaned;
+}
+
+double _roundMoney(double value) => (value * 100).round() / 100;
+
+String _normalizeTaxTreatment(String value) => value.trim().toUpperCase();
+
+String _percent(double rate) => '${(rate * 100).toStringAsFixed(0)}%';
+
+String _fiscalCondition(CotizacionModel cotizacion) {
+  if (!cotizacion.hasFiscalSnapshot && !cotizacion.includeItbis) {
+    return 'Impuestos desactivados';
+  }
+  if (cotizacion.fiscalPriceMode == 'TAX_ADDED') {
+    return 'ITBIS agregado al precio';
+  }
+  if (cotizacion.fiscalPriceMode == 'TAX_INCLUDED') {
+    return 'Precios con ITBIS incluido';
+  }
+  if (cotizacion.includeItbis) return 'ITBIS ${_percent(cotizacion.itbisRate)}';
+  return 'Sin impuesto';
 }
 
 pw.Widget _panel({
@@ -665,8 +768,8 @@ pw.Widget _logoBox({
   required pw.MemoryImage? logoImage,
 }) {
   return pw.Container(
-    width: 62,
-    height: 62,
+    width: 60,
+    height: 60,
     padding: const pw.EdgeInsets.all(8),
     decoration: pw.BoxDecoration(
       color: _softFill,
@@ -691,17 +794,15 @@ pw.Widget _logoBox({
 pw.Widget _companyLine(String text) {
   return pw.Padding(
     padding: const pw.EdgeInsets.only(bottom: 2),
-    child: pw.Text(text, style: pw.TextStyle(fontSize: 8.5, color: _textMuted)),
+    child: pw.Text(text, style: pw.TextStyle(fontSize: 8.4, color: _textMuted)),
   );
 }
 
 pw.Widget _quoteFactsPanel({
-  required String documentLabel,
   required String quoteCode,
   required String issuedText,
   required String expiresText,
-  required String validityText,
-  String? taxText,
+  required String taxText,
 }) {
   return pw.Container(
     padding: const pw.EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -714,9 +815,9 @@ pw.Widget _quoteFactsPanel({
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(
-          documentLabel,
+          'COTIZACIÓN',
           style: pw.TextStyle(
-            fontSize: 8.4,
+            fontSize: 8.2,
             fontWeight: pw.FontWeight.bold,
             color: _accentBlue,
           ),
@@ -725,7 +826,7 @@ pw.Widget _quoteFactsPanel({
         pw.Text(
           quoteCode,
           style: pw.TextStyle(
-            fontSize: 12,
+            fontSize: 12.4,
             fontWeight: pw.FontWeight.bold,
             color: _textPrimary,
           ),
@@ -733,12 +834,65 @@ pw.Widget _quoteFactsPanel({
         pw.SizedBox(height: 6),
         _factLine('Expedición', issuedText),
         _factLine('Vencimiento', expiresText),
-        _factLine('Tiempo', validityText),
-        if (taxText != null && taxText.trim().isNotEmpty) ...[
-          pw.SizedBox(height: 5),
-          pw.Text(taxText, style: pw.TextStyle(fontSize: 8, color: _textMuted)),
-        ],
+        _factLine('Condición', taxText),
       ],
+    ),
+  );
+}
+
+pw.Widget _customerPanel(CotizacionPdfCustomerData customer) {
+  final cleanName = customer.name.trim();
+  final isFinalConsumer =
+      cleanName.isEmpty ||
+      cleanName.toLowerCase() == 'sin cliente' ||
+      cleanName.toLowerCase() == 'cliente no especificado' ||
+      cleanName.toLowerCase() == 'consumidor final';
+  final rows = <pw.Widget>[
+    if (isFinalConsumer)
+      _plainCustomerName('Consumidor final')
+    else ...[
+      _personLine('Nombre', cleanName, strong: true),
+      if (customer.taxId.isNotEmpty) _personLine('RNC/Cédula', customer.taxId),
+      if (customer.phone.isNotEmpty) _personLine('Teléfono', customer.phone),
+      if (customer.address.isNotEmpty)
+        _personLine('Dirección', customer.address),
+      if (customer.email.isNotEmpty) _personLine('Correo', customer.email),
+    ],
+  ];
+
+  return pw.Container(
+    width: double.infinity,
+    padding: const pw.EdgeInsets.fromLTRB(14, 10, 14, 10),
+    decoration: pw.BoxDecoration(
+      color: _softFill,
+      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
+      border: pw.Border.all(color: _panelBorder, width: 0.45),
+    ),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          'DATOS DEL CLIENTE',
+          style: pw.TextStyle(
+            fontSize: 7.6,
+            fontWeight: pw.FontWeight.bold,
+            color: _accentBlue,
+          ),
+        ),
+        pw.SizedBox(height: 6),
+        pw.Wrap(spacing: 18, runSpacing: 5, children: rows),
+      ],
+    ),
+  );
+}
+
+pw.Widget _plainCustomerName(String value) {
+  return pw.Text(
+    value,
+    style: pw.TextStyle(
+      fontSize: 9,
+      color: _textPrimary,
+      fontWeight: pw.FontWeight.bold,
     ),
   );
 }
@@ -750,86 +904,62 @@ pw.Widget _factLine(String label, String value) {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.SizedBox(
-          width: 58,
+          width: 62,
           child: pw.Text(
             label,
-            style: pw.TextStyle(fontSize: 7.6, color: _textMuted),
+            style: pw.TextStyle(fontSize: 7.5, color: _textMuted),
           ),
         ),
         pw.Expanded(
           child: pw.Text(
             value,
-            style: pw.TextStyle(fontSize: 8.2, color: _textPrimary),
+            style: pw.TextStyle(fontSize: 8.1, color: _textPrimary),
           ),
         ),
-      ],
-    ),
-  );
-}
-
-pw.Widget _personInfoPanel({
-  required String primary,
-  String? secondary,
-  String title = 'DATOS',
-}) {
-  final phone = (secondary ?? '').trim();
-  return pw.Container(
-    padding: const pw.EdgeInsets.fromLTRB(14, 11, 14, 11),
-    decoration: pw.BoxDecoration(
-      color: _softFill,
-      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
-      border: pw.Border.all(color: _panelBorder, width: 0.45),
-    ),
-    child: pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Text(
-          title,
-          style: pw.TextStyle(
-            fontSize: 7.6,
-            fontWeight: pw.FontWeight.bold,
-            color: _accentBlue,
-          ),
-        ),
-        pw.SizedBox(height: 7),
-        _personLine('Nombre', primary, strong: true),
-        if (phone.isNotEmpty) ...[
-          pw.SizedBox(height: 6),
-          _personLine('Teléfono', phone),
-        ],
       ],
     ),
   );
 }
 
 pw.Widget _personLine(String label, String value, {bool strong = false}) {
-  return pw.Row(
-    crossAxisAlignment: pw.CrossAxisAlignment.start,
-    children: [
-      pw.SizedBox(
-        width: 58,
-        child: pw.Text(
-          label,
-          style: pw.TextStyle(fontSize: 8.1, color: _textMuted),
-        ),
-      ),
-      pw.Expanded(
-        child: pw.Text(
-          value,
-          style: pw.TextStyle(
-            fontSize: 8.8,
-            color: strong ? _textPrimary : _textMuted,
-            fontWeight: strong ? pw.FontWeight.bold : pw.FontWeight.normal,
+  return pw.SizedBox(
+    width: 235,
+    child: pw.RichText(
+      text: pw.TextSpan(
+        style: pw.TextStyle(fontSize: 8.2, color: _textMuted),
+        children: [
+          pw.TextSpan(text: '$label: '),
+          pw.TextSpan(
+            text: value,
+            style: pw.TextStyle(
+              color: strong ? _textPrimary : _textMuted,
+              fontWeight: strong ? pw.FontWeight.bold : pw.FontWeight.normal,
+            ),
           ),
-        ),
+        ],
       ),
-    ],
+    ),
+  );
+}
+
+pw.Widget _descriptionCell(String description) {
+  return pw.Container(
+    padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+    alignment: pw.Alignment.centerLeft,
+    child: pw.Text(
+      description,
+      style: pw.TextStyle(
+        fontSize: 8,
+        color: _textPrimary,
+        fontWeight: pw.FontWeight.bold,
+      ),
+    ),
   );
 }
 
 pw.Widget _headerCell(String text, {pw.TextAlign align = pw.TextAlign.center}) {
   return pw.Container(
-    padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+    padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
     alignment: align == pw.TextAlign.left
         ? pw.Alignment.centerLeft
         : align == pw.TextAlign.right
@@ -840,7 +970,7 @@ pw.Widget _headerCell(String text, {pw.TextAlign align = pw.TextAlign.center}) {
       textAlign: align,
       style: pw.TextStyle(
         color: PdfColors.white,
-        fontSize: 7.6,
+        fontSize: 7.2,
         fontWeight: pw.FontWeight.bold,
       ),
     ),
@@ -854,7 +984,7 @@ pw.Widget _bodyCell(
   PdfColor? textColor,
 }) {
   return pw.Container(
-    padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+    padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 7),
     alignment: align == pw.TextAlign.center
         ? pw.Alignment.center
         : align == pw.TextAlign.right
@@ -864,18 +994,11 @@ pw.Widget _bodyCell(
       text,
       textAlign: align,
       style: pw.TextStyle(
-        fontSize: 8.1,
+        fontSize: 7.6,
         color: textColor ?? _textPrimary,
         fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
       ),
     ),
-  );
-}
-
-pw.Widget _emptyCell(String text) {
-  return pw.Container(
-    padding: const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 7),
-    child: pw.Text(text, style: pw.TextStyle(fontSize: 8, color: _textMuted)),
   );
 }
 
@@ -887,13 +1010,14 @@ pw.Widget _totalLine(String label, String value, {PdfColor? valueColor}) {
         pw.Expanded(
           child: pw.Text(
             label,
-            style: pw.TextStyle(fontSize: 9.1, color: _textPrimary),
+            style: pw.TextStyle(fontSize: 8.8, color: _textPrimary),
           ),
         ),
         pw.Text(
           value,
+          textAlign: pw.TextAlign.right,
           style: pw.TextStyle(
-            fontSize: 9.1,
+            fontSize: 8.8,
             color: valueColor ?? _textPrimary,
             fontWeight: valueColor != null
                 ? pw.FontWeight.bold
@@ -903,4 +1027,118 @@ pw.Widget _totalLine(String label, String value, {PdfColor? valueColor}) {
       ],
     ),
   );
+}
+
+class CotizacionPdfViewData {
+  const CotizacionPdfViewData({
+    required this.company,
+    required this.customer,
+    required this.quote,
+    required this.lines,
+    required this.totals,
+    this.note = '',
+  });
+
+  final CotizacionPdfCompanyData company;
+  final CotizacionPdfCustomerData customer;
+  final CotizacionPdfQuoteData quote;
+  final List<CotizacionPdfLineData> lines;
+  final CotizacionPdfTotalsData totals;
+  final String note;
+}
+
+class CotizacionPdfCompanyData {
+  const CotizacionPdfCompanyData({
+    required this.name,
+    required this.rnc,
+    required this.phone,
+    required this.address,
+  });
+
+  final String name;
+  final String rnc;
+  final String phone;
+  final String address;
+}
+
+class CotizacionPdfCustomerData {
+  const CotizacionPdfCustomerData({
+    required this.name,
+    required this.taxId,
+    required this.phone,
+    required this.address,
+    required this.email,
+  });
+
+  final String name;
+  final String taxId;
+  final String phone;
+  final String address;
+  final String email;
+}
+
+class CotizacionPdfQuoteData {
+  const CotizacionPdfQuoteData({
+    required this.code,
+    required this.issuedAt,
+    required this.expiresAt,
+    required this.fiscalCondition,
+  });
+
+  final String code;
+  final DateTime issuedAt;
+  final DateTime expiresAt;
+  final String fiscalCondition;
+}
+
+class CotizacionPdfLineData {
+  const CotizacionPdfLineData({
+    required this.description,
+    required this.quantity,
+    required this.unitPrice,
+    required this.grossAmount,
+    required this.lineDiscountAmount,
+    required this.productDiscountAmount,
+    required this.taxableBase,
+    required this.exemptAmount,
+    required this.baseAmount,
+    required this.taxAmount,
+    required this.total,
+    required this.taxLabel,
+  });
+
+  final String description;
+  final double quantity;
+  final double unitPrice;
+  final double grossAmount;
+  final double lineDiscountAmount;
+  final double productDiscountAmount;
+  final double taxableBase;
+  final double exemptAmount;
+  final double baseAmount;
+  final double taxAmount;
+  final double total;
+  final String taxLabel;
+}
+
+class CotizacionPdfTotalsData {
+  const CotizacionPdfTotalsData({
+    required this.subtotal,
+    required this.productDiscount,
+    required this.generalDiscount,
+    required this.exemptAmount,
+    required this.taxableBase,
+    required this.taxAmount,
+    required this.total,
+    required this.fiscalEnabled,
+  });
+
+  final double subtotal;
+  final double productDiscount;
+  final double generalDiscount;
+  final double exemptAmount;
+  final double taxableBase;
+  final double taxAmount;
+  final double total;
+  final bool fiscalEnabled;
 }

@@ -140,4 +140,63 @@ describe("SalesService tenant isolation", () => {
       include: expect.any(Object),
     });
   });
+
+  it("falls back to a compatible sale list instead of returning empty on schema mismatch", async () => {
+    const fallbackSale = {
+      id: "44444444-4444-4444-8444-444444444444",
+      userId: user.id,
+      customerId: null,
+      saleDate: new Date("2026-08-20T12:00:00.000Z"),
+      note: null,
+      totalSold: 3300,
+      totalCost: 0,
+      totalProfit: 3300,
+      commissionAmount: 330,
+      paymentMethod: "cash",
+      paymentCashAmount: 3300,
+      paymentTransferAmount: 0,
+      creditAmount: 0,
+      creditPaidAmount: 0,
+      creditBalance: 0,
+      creditStatus: "none",
+      isDeleted: false,
+      deletedAt: null,
+    };
+    const prisma = {
+      sale: {
+        findMany: jest
+          .fn()
+          .mockRejectedValueOnce({ code: "P2022" })
+          .mockResolvedValueOnce([fallbackSale]),
+      },
+    };
+    const service = serviceWith(prisma);
+
+    await expect(
+      service.listInvoices(
+        user as never,
+        "2026-08-01",
+        "2026-08-20",
+        undefined,
+        true,
+      ),
+    ).resolves.toEqual([fallbackSale]);
+
+    expect(prisma.sale.findMany).toHaveBeenCalledTimes(2);
+    expect(prisma.sale.findMany).toHaveBeenLastCalledWith({
+      where: {
+        companyId: user.companyId,
+        saleDate: {
+          gte: new Date("2026-08-01T04:00:00.000Z"),
+          lt: new Date("2026-08-21T04:00:00.000Z"),
+        },
+      },
+      orderBy: { saleDate: "desc" },
+      select: expect.objectContaining({
+        id: true,
+        totalSold: true,
+        saleDate: true,
+      }),
+    });
+  });
 });

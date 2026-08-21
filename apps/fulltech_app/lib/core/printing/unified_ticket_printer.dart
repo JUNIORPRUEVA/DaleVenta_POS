@@ -273,20 +273,27 @@ class UnifiedTicketPrinter {
     bool isCopy = false,
   }) {
     final user = _ref.read(authStateProvider).user;
-    final authCashierName = (user?.nombreCompleto ?? '').trim().isNotEmpty
+    final authCashierName = _usableCashierName(user?.nombreCompleto)
         ? user!.nombreCompleto.trim()
         : (user?.email ?? '').trim();
+    final saleCashierName = (sale.userName ?? '').trim();
+    final cashierName = _usableCashierName(saleCashierName)
+        ? saleCashierName
+        : authCashierName;
     return printTicket(
       TicketData.fromSale(
         sale,
         items: items,
         isCopy: isCopy,
-        cashierNameOverride: (sale.userName ?? '').trim().isNotEmpty
-            ? sale.userName
-            : authCashierName,
+        cashierNameOverride: cashierName,
       ),
       overrideCopies: copies,
     );
+  }
+
+  bool _usableCashierName(String? value) {
+    final normalized = (value ?? '').trim().toLowerCase();
+    return normalized.isNotEmpty && normalized != 'pendiente de sincronizar';
   }
 
   Future<PrintTicketResult> autoPrintSale({

@@ -251,6 +251,9 @@ class CotizacionModel {
   final String? customerId;
   final String customerName;
   final String? customerPhone;
+  final String? customerTaxId;
+  final String? customerAddress;
+  final String? customerEmail;
   final String note;
   final bool includeItbis;
   final double itbisRate;
@@ -274,6 +277,9 @@ class CotizacionModel {
     required this.customerId,
     required this.customerName,
     required this.customerPhone,
+    this.customerTaxId,
+    this.customerAddress,
+    this.customerEmail,
     required this.note,
     required this.includeItbis,
     required this.itbisRate,
@@ -324,6 +330,9 @@ class CotizacionModel {
     String? customerId,
     String? customerName,
     String? customerPhone,
+    String? customerTaxId,
+    String? customerAddress,
+    String? customerEmail,
     String? note,
     bool? includeItbis,
     double? itbisRate,
@@ -347,6 +356,9 @@ class CotizacionModel {
       customerId: customerId ?? this.customerId,
       customerName: customerName ?? this.customerName,
       customerPhone: customerPhone ?? this.customerPhone,
+      customerTaxId: customerTaxId ?? this.customerTaxId,
+      customerAddress: customerAddress ?? this.customerAddress,
+      customerEmail: customerEmail ?? this.customerEmail,
       note: note ?? this.note,
       includeItbis: includeItbis ?? this.includeItbis,
       itbisRate: itbisRate ?? this.itbisRate,
@@ -372,6 +384,9 @@ class CotizacionModel {
     'customerId': customerId,
     'customerName': customerName,
     'customerPhone': customerPhone,
+    'customerTaxId': customerTaxId,
+    'customerAddress': customerAddress,
+    'customerEmail': customerEmail,
     'note': note,
     'includeItbis': includeItbis,
     'itbisRate': itbisRate,
@@ -400,6 +415,18 @@ class CotizacionModel {
       customerId: map['customerId']?.toString(),
       customerName: (map['customerName'] ?? '').toString(),
       customerPhone: map['customerPhone']?.toString(),
+      customerTaxId:
+          (map['customerTaxId'] ??
+                  map['fiscalCustomerTaxId'] ??
+                  map['rnc'] ??
+                  map['taxId'])
+              ?.toString(),
+      customerAddress:
+          (map['customerAddress'] ?? map['customerDireccion'] ?? map['address'])
+              ?.toString(),
+      customerEmail:
+          (map['customerEmail'] ?? map['customerCorreo'] ?? map['email'])
+              ?.toString(),
       note: (map['note'] ?? '').toString(),
       includeItbis: map['includeItbis'] == true,
       itbisRate: (map['itbisRate'] as num?)?.toDouble() ?? 0.18,
@@ -456,6 +483,25 @@ class CotizacionModel {
       customerId: map['customerId']?.toString(),
       customerName: (map['customerName'] ?? '').toString(),
       customerPhone: map['customerPhone']?.toString(),
+      customerTaxId:
+          (map['customerTaxId'] ??
+                  map['fiscalCustomerTaxId'] ??
+                  map['customerRnc'] ??
+                  map['rnc'] ??
+                  map['taxId'])
+              ?.toString(),
+      customerAddress:
+          (map['customerAddress'] ??
+                  map['customerDireccion'] ??
+                  map['direccion'] ??
+                  map['address'])
+              ?.toString(),
+      customerEmail:
+          (map['customerEmail'] ??
+                  map['customerCorreo'] ??
+                  map['correo'] ??
+                  map['email'])
+              ?.toString(),
       note: (map['note'] ?? '').toString(),
       includeItbis: map['includeItbis'] == true,
       itbisRate: _asDouble(map['itbisRate'], 0.18),

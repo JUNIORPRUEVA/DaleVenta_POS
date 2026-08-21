@@ -18,8 +18,8 @@ class TicketBuilder {
   static const double _thermal58WidthMm = 58;
   static const int _thermal80PrintWidthDots = 576;
   static const int _thermal58PrintWidthDots = 384;
-  static const int _thermal80RightPaddingDots = 72;
-  static const int _thermal58RightPaddingDots = 42;
+  static const int _thermal80RightPaddingDots = 36;
+  static const int _thermal58RightPaddingDots = 28;
   static const double _thermalVerticalPadding = 2.0;
   static const double _thermalPageMaxHeight = 2000 * PdfPageFormat.mm;
   static const double _hairline = 0.55;
@@ -48,20 +48,53 @@ class TicketBuilder {
     final executableDir = kIsWeb
         ? ''
         : File(Platform.resolvedExecutable).parent.path;
-    final regular = loadFont([
-      'assets/fonts/RobotoMono-Regular.ttf',
-      if (executableDir.isNotEmpty)
-        '$executableDir/data/flutter_assets/assets/fonts/RobotoMono-Regular.ttf',
-      if (executableDir.isNotEmpty)
-        '$executableDir/flutter_assets/assets/fonts/RobotoMono-Regular.ttf',
-    ]);
-    final bold = loadFont([
-      'assets/fonts/RobotoMono-Medium.ttf',
-      if (executableDir.isNotEmpty)
-        '$executableDir/data/flutter_assets/assets/fonts/RobotoMono-Medium.ttf',
-      if (executableDir.isNotEmpty)
-        '$executableDir/flutter_assets/assets/fonts/RobotoMono-Medium.ttf',
-    ]);
+    final regularCandidates = preferSans
+        ? [
+            'assets/fonts/manrope/Manrope-Regular.ttf',
+            if (executableDir.isNotEmpty)
+              '$executableDir/data/flutter_assets/assets/fonts/manrope/Manrope-Regular.ttf',
+            if (executableDir.isNotEmpty)
+              '$executableDir/flutter_assets/assets/fonts/manrope/Manrope-Regular.ttf',
+            'assets/fonts/RobotoMono-Regular.ttf',
+            if (executableDir.isNotEmpty)
+              '$executableDir/data/flutter_assets/assets/fonts/RobotoMono-Regular.ttf',
+            if (executableDir.isNotEmpty)
+              '$executableDir/flutter_assets/assets/fonts/RobotoMono-Regular.ttf',
+          ]
+        : [
+            'assets/fonts/RobotoMono-Regular.ttf',
+            if (executableDir.isNotEmpty)
+              '$executableDir/data/flutter_assets/assets/fonts/RobotoMono-Regular.ttf',
+            if (executableDir.isNotEmpty)
+              '$executableDir/flutter_assets/assets/fonts/RobotoMono-Regular.ttf',
+          ];
+    final boldCandidates = preferSans
+        ? [
+            'assets/fonts/manrope/Manrope-SemiBold.ttf',
+            'assets/fonts/manrope/Manrope-Bold.ttf',
+            if (executableDir.isNotEmpty)
+              '$executableDir/data/flutter_assets/assets/fonts/manrope/Manrope-SemiBold.ttf',
+            if (executableDir.isNotEmpty)
+              '$executableDir/data/flutter_assets/assets/fonts/manrope/Manrope-Bold.ttf',
+            if (executableDir.isNotEmpty)
+              '$executableDir/flutter_assets/assets/fonts/manrope/Manrope-SemiBold.ttf',
+            if (executableDir.isNotEmpty)
+              '$executableDir/flutter_assets/assets/fonts/manrope/Manrope-Bold.ttf',
+            'assets/fonts/RobotoMono-Medium.ttf',
+            if (executableDir.isNotEmpty)
+              '$executableDir/data/flutter_assets/assets/fonts/RobotoMono-Medium.ttf',
+            if (executableDir.isNotEmpty)
+              '$executableDir/flutter_assets/assets/fonts/RobotoMono-Medium.ttf',
+          ]
+        : [
+            'assets/fonts/RobotoMono-Medium.ttf',
+            if (executableDir.isNotEmpty)
+              '$executableDir/data/flutter_assets/assets/fonts/RobotoMono-Medium.ttf',
+            if (executableDir.isNotEmpty)
+              '$executableDir/flutter_assets/assets/fonts/RobotoMono-Medium.ttf',
+          ];
+    final regular = loadFont(regularCandidates);
+    final bold = loadFont(boldCandidates);
 
     if (regular != null && bold != null) {
       return (regular: regular, bold: bold);
@@ -160,7 +193,7 @@ class TicketBuilder {
 
   Future<Uint8List> _buildStructuredSalesPdf(TicketData data) async {
     final doc = pw.Document(author: 'FullTech', title: data.ticketNumber);
-    final fonts = _loadThermalFonts();
+    final fonts = _loadThermalFonts(preferSans: true);
     final metrics = _salesMetrics();
     final pageHeight = _estimatedSalesPageHeight(data, metrics);
 
@@ -181,8 +214,6 @@ class TicketBuilder {
                 crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                 mainAxisSize: pw.MainAxisSize.min,
                 children: [
-                  if (layout.showLogo && company.logoBytes != null)
-                    _logo(size: metrics.logoSize),
                   _companyBlock(fonts, metrics),
                   _invoiceIdentityBlock(data, fonts, metrics),
                   if (_hasClientInfo(data)) ...[
@@ -269,37 +300,53 @@ class TicketBuilder {
 
     return pw.Padding(
       padding: const pw.EdgeInsets.only(bottom: 5),
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.center,
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text(
-            rows.first,
-            textAlign: pw.TextAlign.center,
-            style: pw.TextStyle(
-              font: fonts.bold,
-              fontSize: metrics.companyFontSize,
-              height: 1.03,
+          if (layout.showLogo && company.logoBytes != null) ...[
+            pw.Image(
+              pw.MemoryImage(company.logoBytes!),
+              width: metrics.logoSize,
+              height: metrics.logoSize,
+              fit: pw.BoxFit.contain,
             ),
-            maxLines: 2,
-          ),
-          pw.SizedBox(height: 2.5),
-          ...rows
-              .skip(1)
-              .map(
-                (row) => pw.Padding(
-                  padding: const pw.EdgeInsets.only(bottom: 1),
-                  child: pw.Text(
-                    _upper(row),
-                    textAlign: pw.TextAlign.center,
-                    style: pw.TextStyle(
-                      font: fonts.regular,
-                      fontSize: metrics.headerFontSize,
-                      height: 1.05,
-                    ),
-                    maxLines: 2,
+            pw.SizedBox(width: 5),
+          ],
+          pw.Expanded(
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  rows.first,
+                  textAlign: pw.TextAlign.left,
+                  style: pw.TextStyle(
+                    font: fonts.bold,
+                    fontSize: metrics.companyFontSize,
+                    height: 1.03,
                   ),
+                  maxLines: 2,
                 ),
-              ),
+                pw.SizedBox(height: 2),
+                ...rows
+                    .skip(1)
+                    .map(
+                      (row) => pw.Padding(
+                        padding: const pw.EdgeInsets.only(bottom: 0.8),
+                        child: pw.Text(
+                          _upper(row),
+                          textAlign: pw.TextAlign.left,
+                          style: pw.TextStyle(
+                            font: fonts.regular,
+                            fontSize: metrics.headerFontSize,
+                            height: 1.04,
+                          ),
+                          maxLines: 2,
+                        ),
+                      ),
+                    ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -379,9 +426,12 @@ class TicketBuilder {
   ) {
     final client = data.client;
     if (client == null) return pw.SizedBox();
+    final phone = client.phone.trim();
+    final document = client.document.trim();
     final rows = <({String label, String value})>[
       (label: 'CLIENTE', value: _upper(_cleanClientName(client.name))),
-      (label: 'TEL.', value: _emptyAsDash(client.phone)),
+      if (document.isNotEmpty) (label: 'RNC', value: _upper(document)),
+      if (phone.isNotEmpty) (label: 'TEL.', value: _upper(phone)),
     ];
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -445,11 +495,6 @@ class TicketBuilder {
   String _cleanClientName(String value) {
     final clean = value.trim();
     return clean.isEmpty ? 'CONSUMIDOR FINAL' : clean;
-  }
-
-  String _emptyAsDash(String value) {
-    final clean = value.trim();
-    return clean.isEmpty ? '-' : _upper(clean);
   }
 
   pw.Widget _rightMeta(
@@ -593,13 +638,8 @@ class TicketBuilder {
       metrics.tableFontSize,
       columns.amount,
     );
-    final itemName = _fitText(
-      item.name.trim().isEmpty ? 'PRODUCTO' : _upper(item.name.trim()),
-      metrics.tableFontSize,
-      columns.item,
-    );
     return pw.Row(
-      crossAxisAlignment: pw.CrossAxisAlignment.center,
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         _cell(
           qty,
@@ -609,7 +649,12 @@ class TicketBuilder {
           align: pw.TextAlign.center,
         ),
         _gap(columns),
-        _cell(itemName, columns.item, fonts.regular, metrics.tableFontSize),
+        _itemNameCell(
+          item.name.trim().isEmpty ? 'PRODUCTO' : item.name.trim(),
+          columns.item,
+          fonts.regular,
+          metrics.tableFontSize,
+        ),
         _gap(columns),
         _cell(
           price,
@@ -686,6 +731,26 @@ class TicketBuilder {
     );
   }
 
+  pw.Widget _itemNameCell(
+    String text,
+    double width,
+    pw.Font font,
+    double fontSize,
+  ) {
+    final fitted = _fitText(_upper(text), fontSize, width);
+    return pw.SizedBox(
+      width: width,
+      child: pw.Text(
+        fitted,
+        textAlign: pw.TextAlign.left,
+        maxLines: 1,
+        softWrap: false,
+        overflow: pw.TextOverflow.clip,
+        style: pw.TextStyle(font: font, fontSize: fontSize, height: 1.0),
+      ),
+    );
+  }
+
   pw.Widget _gap(_TicketColumns columns) => pw.SizedBox(width: columns.gap);
 
   String _fitText(String text, double fontSize, double maxWidth) {
@@ -708,19 +773,19 @@ class TicketBuilder {
   }
 
   double _textWidth(String text, double fontSize) {
-    // The ticket uses monospaced thermal-friendly fonts. A conservative
-    // advance factor prevents product names from pushing numeric columns.
-    return text.runes.length * fontSize * 0.62;
+    // Conservative average for the compact receipt fonts. It keeps numeric
+    // columns protected without forcing product names to wrap.
+    return text.runes.length * fontSize * 0.54;
   }
 
   String _lineMoney(double value) {
-    return ReceiptTextUtils.money(value).replaceFirst('RD\$ ', '');
+    return ReceiptTextUtils.money(value).replaceFirst('RD\$ ', 'RD\$');
   }
 
   String _fitMoney(String value, double fontSize, double maxWidth) {
     final clean = _upper(value).replaceAll(RegExp(r'\s+'), ' ').trim();
     if (_textWidth(clean, fontSize) <= maxWidth) return clean;
-    final compact = clean.replaceFirst('RD\$ ', '');
+    final compact = clean.replaceFirst('RD\$ ', '').replaceFirst('RD\$', '');
     if (_textWidth(compact, fontSize) <= maxWidth) return compact;
     return _fitText(compact, fontSize, maxWidth);
   }
@@ -731,23 +796,55 @@ class TicketBuilder {
     _ThermalSalesMetrics metrics,
   ) {
     final rows = <({String label, String value, bool bold})>[];
+    final showFiscalTotals =
+        layout.showItbis &&
+        (data.fiscalTaxEnabled ||
+            data.taxableBase > 0 ||
+            data.exemptAmount > 0 ||
+            data.itbis > 0) &&
+        (data.taxableBase > 0 || data.exemptAmount > 0 || data.itbis > 0);
     if (layout.showSubtotalItbisTotal) {
       rows.add((
         label: 'SUBTOTAL',
         value: ReceiptTextUtils.money(data.resolvedSubtotal),
         bold: false,
       ));
-      if (_isFiscalTicket(data) && data.taxIncluded && data.itbis > 0) {
-        rows.add((label: 'ITBIS INCLUIDO', value: '', bold: false));
+      if (layout.showDiscounts) {
+        if (data.productDiscount > 0) {
+          rows.add((
+            label: 'DESC. PRODUCTOS',
+            value: '-${ReceiptTextUtils.money(data.productDiscount)}',
+            bold: false,
+          ));
+        }
+        if (data.generalDiscount > 0) {
+          rows.add((
+            label: 'DESC. GENERAL',
+            value: '-${ReceiptTextUtils.money(data.generalDiscount)}',
+            bold: false,
+          ));
+        }
+        if (data.productDiscount <= 0 &&
+            data.generalDiscount <= 0 &&
+            data.discount > 0) {
+          rows.add((
+            label: 'DESCUENTO',
+            value: '-${ReceiptTextUtils.money(data.discount)}',
+            bold: false,
+          ));
+        }
       }
-      if (layout.showDiscounts && data.discount > 0) {
-        rows.add((
-          label: 'DESCUENTO',
-          value: '-${ReceiptTextUtils.money(data.discount)}',
-          bold: false,
-        ));
-      }
-      if (_isFiscalTicket(data) && layout.showItbis && data.itbis > 0) {
+      if (showFiscalTotals) {
+        if (data.taxIncluded && data.itbis > 0) {
+          rows.add((label: 'ITBIS INCLUIDO', value: '', bold: false));
+        }
+        if (data.exemptAmount > 0) {
+          rows.add((
+            label: 'MONTO EXENTO',
+            value: ReceiptTextUtils.money(data.exemptAmount),
+            bold: false,
+          ));
+        }
         if (data.taxableBase > 0) {
           rows.add((
             label: 'BASE IMP.',
@@ -755,18 +852,13 @@ class TicketBuilder {
             bold: false,
           ));
         }
-        if (data.exemptAmount > 0) {
+        if (data.itbis > 0) {
           rows.add((
-            label: 'EXENTO',
-            value: ReceiptTextUtils.money(data.exemptAmount),
+            label: 'ITBIS',
+            value: ReceiptTextUtils.money(data.itbis),
             bold: false,
           ));
         }
-        rows.add((
-          label: 'ITBIS 18%',
-          value: ReceiptTextUtils.money(data.itbis),
-          bold: false,
-        ));
       }
     }
     return pw.Column(
@@ -797,7 +889,7 @@ class TicketBuilder {
     return pw.Align(
       alignment: pw.Alignment.centerRight,
       child: pw.SizedBox(
-        width: metrics.totalsColumnWidth,
+        width: metrics.contentWidth,
         child: pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
@@ -816,7 +908,7 @@ class TicketBuilder {
               fonts,
               metrics.grandTotalFontSize,
               bold: true,
-              valueWidth: metrics.totalsValueWidth + 8,
+              valueWidth: metrics.totalsValueWidth,
             ),
           ],
         ),
@@ -832,13 +924,13 @@ class TicketBuilder {
     return pw.Align(
       alignment: pw.Alignment.centerRight,
       child: pw.SizedBox(
-        width: metrics.totalsColumnWidth,
+        width: metrics.contentWidth,
         child: _moneyRow(
           'PAGO',
           _upper(payment),
           fonts,
           metrics.subtotalFontSize,
-          valueWidth: metrics.totalsValueWidth + 12,
+          valueWidth: metrics.totalsValueWidth,
         ),
       ),
     );
@@ -910,16 +1002,16 @@ class TicketBuilder {
       invoiceTitleFontSize: baseFont + (is58 ? 1.4 : 2.0),
       metaFontSize: baseFont,
       sectionFontSize: baseFont,
-      tableFontSize: baseFont - (is58 ? 0.2 : 0.05),
-      smallFontSize: baseFont - 0.25,
-      subtotalFontSize: baseFont - 0.3,
+      tableFontSize: baseFont - (is58 ? 0.8 : 1.0),
+      smallFontSize: baseFont - 0.7,
+      subtotalFontSize: baseFont - 0.55,
       totalFontSize: baseFont,
-      grandTotalFontSize: baseFont + (is58 ? 1.8 : 2.6),
+      grandTotalFontSize: baseFont + (is58 ? 0.8 : 1.0),
       footerFontSize: baseFont - 0.1,
       itemGap: is58 ? 2 : 2.5,
       totalsTopGap: is58 ? 12 : 18,
-      totalsColumnWidth: contentWidth * (is58 ? 0.80 : 0.70),
-      totalsValueWidth: contentWidth * (is58 ? 0.43 : 0.39),
+      totalsColumnWidth: contentWidth,
+      totalsValueWidth: contentWidth * (is58 ? 0.50 : 0.52),
       dateColumnWidth: contentWidth * (is58 ? 0.42 : 0.38),
     );
   }
@@ -941,7 +1033,8 @@ class TicketBuilder {
     final optionalLines =
         ((data.note ?? '').trim().isNotEmpty ? 28 : 0) +
         (layout.warrantyPolicy.trim().isNotEmpty ? 32 : 0) +
-        (_isFiscalTicket(data) ? 34 : 0);
+        (_isFiscalTicket(data) ? 34 : 0) +
+        (data.fiscalTaxEnabled ? 22 : 0);
     final itemRows =
         data.items.length +
         data.items
@@ -1154,12 +1247,12 @@ class _TicketColumns {
     final gap = width >= 190 ? 2.0 : 1.6;
     final available = width - (gap * 3);
     if (width >= 190) {
-      const qty = 20.0;
-      const price = 43.0;
-      const amount = 55.0;
+      const qty = 16.0;
+      const price = 50.0;
+      const amount = 54.0;
       return _TicketColumns(
         qty: qty,
-        item: math.max(70.0, available - qty - price - amount),
+        item: math.max(86.0, available - qty - price - amount),
         price: price,
         amount: amount,
         gap: gap,

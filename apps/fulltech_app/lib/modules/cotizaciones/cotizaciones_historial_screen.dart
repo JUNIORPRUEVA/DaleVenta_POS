@@ -711,60 +711,24 @@ class _CotizacionesHistorialScreenState
                               style: TextStyle(fontWeight: FontWeight.w700),
                             ),
                           ),
-                          PopupMenuButton<_QuotePdfShareAction>(
-                            enabled: !busy,
-                            tooltip: 'Opciones para compartir',
-                            position: PopupMenuPosition.under,
-                            offset: const Offset(0, 8),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            onSelected: (action) =>
-                                unawaited(runShareAction(action)),
-                            itemBuilder: (context) => [
-                              for (final action in _QuotePdfShareAction.values)
-                                PopupMenuItem<_QuotePdfShareAction>(
-                                  value: action,
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        action.icon,
-                                        size: 18,
-                                        color: const Color(0xFF0F7C92),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Text(
-                                        action.label,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                    ],
+                          TextButton.icon(
+                            onPressed: busy
+                                ? null
+                                : () => unawaited(
+                                    runShareAction(
+                                      _QuotePdfShareAction.sharePdf,
+                                    ),
                                   ),
-                                ),
-                            ],
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 8,
-                              ),
-                              child: Row(
-                                children: [
-                                  if (busy)
-                                    const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  else
-                                    const Icon(Icons.ios_share_outlined),
-                                  const SizedBox(width: 8),
-                                  const Text('Compartir'),
-                                ],
-                              ),
-                            ),
+                            icon: busy
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.ios_share_outlined),
+                            label: const Text('Compartir'),
                           ),
                           IconButton(
                             onPressed: () => Navigator.pop(context),

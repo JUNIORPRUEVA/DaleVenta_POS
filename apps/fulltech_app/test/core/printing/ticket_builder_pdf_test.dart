@@ -158,6 +158,42 @@ void main() {
           );
       expect(bytes.length, greaterThan(1000));
     });
+
+    test('builds tax-enabled invoice totals without NCF', () async {
+      final bytes = await _builder().buildPdf(
+        TicketData(
+          ticketNumber: 'FV-TAX-NO-NCF',
+          dateTime: DateTime(2026, 8, 20, 10),
+          fiscalTaxEnabled: true,
+          items: const [
+            TicketItemData(
+              name: 'Producto exento',
+              qty: 1,
+              unitPrice: 900,
+              total: 900,
+              exemptAmount: 900,
+              taxExempt: true,
+            ),
+            TicketItemData(
+              name: 'Producto gravado',
+              qty: 1,
+              unitPrice: 2500,
+              total: 2950,
+              taxableBase: 2500,
+              taxAmount: 450,
+              taxExempt: false,
+            ),
+          ],
+          subtotal: 3400,
+          taxableBase: 2500,
+          exemptAmount: 900,
+          itbis: 450,
+          total: 3850,
+        ),
+      );
+
+      expect(bytes.length, greaterThan(1000));
+    });
   });
 }
 

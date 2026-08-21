@@ -642,6 +642,8 @@ class VentasRepository {
       await _syncQueue.refreshStats();
       return _optimisticSale(
         id: localId,
+        userId: userId,
+        userName: _displayNameFromUserSnapshot(user),
         customerId: normalizedCustomerId.isEmpty ? null : normalizedCustomerId,
         customerName: customerName,
         customerPhone: customerPhone,
@@ -714,6 +716,8 @@ class VentasRepository {
 
   SaleModel _optimisticSale({
     required String id,
+    required String userId,
+    required String userName,
     String? customerId,
     String? customerName,
     String? customerPhone,
@@ -760,8 +764,8 @@ class VentasRepository {
 
     return SaleModel(
       id: id,
-      userId: '',
-      userName: 'Pendiente de sincronizar',
+      userId: userId,
+      userName: userName,
       customerId: customerId,
       customerName: customerName,
       customerPhone: customerPhone,
@@ -784,6 +788,14 @@ class VentasRepository {
       deletedAt: null,
       items: saleItems,
     );
+  }
+
+  String _displayNameFromUserSnapshot(dynamic user) {
+    final name = (user?.nombreCompleto ?? '').toString().trim();
+    if (name.isNotEmpty) return name;
+    final email = (user?.email ?? '').toString().trim();
+    if (email.isNotEmpty) return email;
+    return 'No disponible';
   }
 
   Future<List<ProductModel>> fetchProducts({bool forceRefresh = false}) async {

@@ -50,9 +50,12 @@ class TicketData {
     this.paymentMethod,
     this.subtotal,
     this.discount = 0,
+    this.productDiscount = 0,
+    this.generalDiscount = 0,
     this.itbis = 0,
     this.taxableBase = 0,
     this.exemptAmount = 0,
+    this.fiscalTaxEnabled = false,
     this.taxIncluded = false,
     this.ncf,
     this.fiscalVoucherType,
@@ -75,9 +78,12 @@ class TicketData {
   final String? paymentMethod;
   final double? subtotal;
   final double discount;
+  final double productDiscount;
+  final double generalDiscount;
   final double itbis;
   final double taxableBase;
   final double exemptAmount;
+  final bool fiscalTaxEnabled;
   final bool taxIncluded;
   final String? ncf;
   final String? fiscalVoucherType;
@@ -100,7 +106,17 @@ class TicketData {
     String? cashierNameOverride,
   }) {
     final List<SaleItemModel> saleItems = items ?? sale.items;
-    final cashierName = (cashierNameOverride ?? sale.userName ?? '').trim();
+    final cashierName = _resolveCashierName(
+      cashierNameOverride: cashierNameOverride,
+      saleCashierName: sale.userName,
+    );
+    final productDiscount = saleItems.fold<double>(
+      0,
+      (sum, item) => sum + item.lineDiscountAmount,
+    );
+    final generalDiscount = (sale.discountAmount - productDiscount)
+        .clamp(0, double.infinity)
+        .toDouble();
     return TicketData(
       ticketNumber: _invoiceNumber(sale.id),
       dateTime: sale.saleDate ?? DateTime.now(),
@@ -121,13 +137,16 @@ class TicketData {
           )
           .toList(growable: false),
       total: sale.totalSold,
-      subtotal: sale.fiscalTaxEnabled && sale.taxableBase > 0
-          ? sale.taxableBase
+      subtotal: sale.fiscalTaxEnabled
+          ? sale.taxableBase + sale.exemptAmount
           : saleItems.fold<double>(0, (sum, item) => sum + item.subtotalSold),
       itbis: sale.taxAmount,
       taxableBase: sale.taxableBase,
       exemptAmount: sale.exemptAmount,
+      fiscalTaxEnabled: sale.fiscalTaxEnabled,
       discount: sale.discountAmount,
+      productDiscount: productDiscount,
+      generalDiscount: generalDiscount,
       taxIncluded: sale.fiscalPriceMode == 'TAX_INCLUDED',
       ncf: sale.ncf,
       fiscalVoucherType: sale.fiscalVoucherType,
@@ -141,7 +160,7 @@ class TicketData {
         phone: sale.customerPhoneSnapshot ?? sale.customerPhone ?? '',
         document: sale.fiscalCustomerTaxId ?? '',
       ),
-      cashierName: cashierName.isEmpty ? 'Cajero' : cashierName,
+      cashierName: cashierName,
       note: sale.note,
       type: sale.isDeleted ? TicketType.refund : TicketType.sale,
       isCopy: isCopy,
@@ -196,6 +215,22 @@ class TicketData {
     final compact = id.replaceAll('-', '');
     if (compact.length >= 8) return compact.substring(0, 8).toUpperCase();
     return compact.toUpperCase();
+  }
+
+  static String _resolveCashierName({
+    required String? cashierNameOverride,
+    required String? saleCashierName,
+  }) {
+    final override = (cashierNameOverride ?? '').trim();
+    if (_isUsableCashierName(override)) return override;
+    final saleName = (saleCashierName ?? '').trim();
+    if (_isUsableCashierName(saleName)) return saleName;
+    return 'No disponible';
+  }
+
+  static bool _isUsableCashierName(String value) {
+    final normalized = value.trim().toLowerCase();
+    return normalized.isNotEmpty && normalized != 'pendiente de sincronizar';
   }
 
   static String _paymentDescription(SaleModel sale) {

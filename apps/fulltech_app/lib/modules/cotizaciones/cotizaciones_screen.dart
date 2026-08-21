@@ -4638,61 +4638,24 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                   style: TextStyle(fontWeight: FontWeight.w700),
                                 ),
                               ),
-                              PopupMenuButton<_QuotePdfShareAction>(
-                                enabled: !busy,
-                                tooltip: 'Opciones para compartir',
-                                position: PopupMenuPosition.under,
-                                offset: const Offset(0, 8),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                onSelected: (action) =>
-                                    unawaited(runShareAction(action)),
-                                itemBuilder: (context) => [
-                                  for (final action
-                                      in _QuotePdfShareAction.values)
-                                    PopupMenuItem<_QuotePdfShareAction>(
-                                      value: action,
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            action.icon,
-                                            size: 18,
-                                            color: const Color(0xFF0F7C92),
-                                          ),
-                                          const SizedBox(width: 10),
-                                          Text(
-                                            action.label,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                        ],
+                              TextButton.icon(
+                                onPressed: busy
+                                    ? null
+                                    : () => unawaited(
+                                        runShareAction(
+                                          _QuotePdfShareAction.sharePdf,
+                                        ),
                                       ),
-                                    ),
-                                ],
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 8,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      if (downloadingPdf)
-                                        const SizedBox(
-                                          width: 18,
-                                          height: 18,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                      else
-                                        const Icon(Icons.ios_share_outlined),
-                                      const SizedBox(width: 8),
-                                      const Text('Compartir'),
-                                    ],
-                                  ),
-                                ),
+                                icon: downloadingPdf
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(Icons.ios_share_outlined),
+                                label: const Text('Compartir'),
                               ),
                               IconButton(
                                 onPressed: () => Navigator.pop(context),
@@ -5001,8 +4964,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         return Align(
           alignment: Alignment.centerRight,
           child: _RecentSalesPanel(
-            loadSales: () =>
-                repo.listInvoices(from: from, to: to, includeDeleted: true),
+            loadSales: () async {
+              final invoices = await repo.listInvoices(
+                from: from,
+                to: to,
+                includeDeleted: true,
+              );
+              if (invoices.isNotEmpty) return invoices;
+              return repo.listSales(from: from, to: to, includeDeleted: true);
+            },
             money: _money,
             dateLabel: _saleDateLabel,
             shortId: _saleShortId,
@@ -10510,7 +10480,10 @@ class _RecentSalesPanelState extends State<_RecentSalesPanel> {
   }
 
   void _reload() {
-    setState(() => _future = widget.loadSales());
+    final nextLoad = widget.loadSales();
+    setState(() {
+      _future = nextLoad;
+    });
   }
 
   @override

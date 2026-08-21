@@ -399,8 +399,8 @@ pw.Widget _fiscalInvoiceDetailSection(
   NumberFormat qtyFmt,
 ) {
   final modeLabel = sale.fiscalPriceMode == 'TAX_ADDED'
-      ? 'ITBIS se agrega al precio. Importes de línea guardados.'
-      : 'Precios con ITBIS incluido. Importes de línea guardados.';
+      ? 'ITBIS se agrega al precio.'
+      : 'Precios con ITBIS incluido.';
   final tableRows = <pw.TableRow>[
     pw.TableRow(
       decoration: pw.BoxDecoration(color: _headingBlack),
@@ -581,8 +581,8 @@ pw.Widget _invoiceBottomSection(SaleModel sale, NumberFormat money) {
 }
 
 pw.Widget _invoiceTotalsPanel(SaleModel sale, NumberFormat money) {
-  final subtotal = sale.fiscalTaxEnabled && sale.taxableBase > 0
-      ? sale.taxableBase
+  final subtotal = sale.fiscalTaxEnabled
+      ? sale.taxableBase + sale.exemptAmount
       : sale.items.fold(0.0, (sum, item) => sum + item.subtotalSold);
   return _panel(
     padding: const pw.EdgeInsets.fromLTRB(14, 14, 14, 14),
@@ -601,18 +601,17 @@ pw.Widget _invoiceTotalsPanel(SaleModel sale, NumberFormat money) {
         ),
         pw.SizedBox(height: 10),
         if (!sale.fiscalTaxEnabled || subtotal > 0)
-          _pdfTotalLine(
-            sale.fiscalTaxEnabled ? 'Base imponible' : 'Subtotal',
-            money.format(subtotal),
-          ),
-        if (sale.fiscalTaxEnabled && sale.fiscalPriceMode == 'TAX_INCLUDED')
-          _pdfTotalLine('Precios con ITBIS incluido', ''),
-        if (sale.fiscalTaxEnabled && sale.taxAmount > 0)
-          _pdfTotalLine('ITBIS', money.format(sale.taxAmount)),
-        if (sale.fiscalTaxEnabled && sale.exemptAmount > 0)
-          _pdfTotalLine('Exento', money.format(sale.exemptAmount)),
+          _pdfTotalLine('Subtotal', money.format(subtotal)),
         if (sale.discountAmount > 0)
           _pdfTotalLine('Descuento', '-${money.format(sale.discountAmount)}'),
+        if (sale.fiscalTaxEnabled && sale.fiscalPriceMode == 'TAX_INCLUDED')
+          _pdfTotalLine('Precios con ITBIS incluido', ''),
+        if (sale.fiscalTaxEnabled && sale.exemptAmount > 0)
+          _pdfTotalLine('Monto exento', money.format(sale.exemptAmount)),
+        if (sale.fiscalTaxEnabled && sale.taxableBase > 0)
+          _pdfTotalLine('Base imponible', money.format(sale.taxableBase)),
+        if (sale.fiscalTaxEnabled && sale.taxAmount > 0)
+          _pdfTotalLine('ITBIS', money.format(sale.taxAmount)),
         pw.Padding(
           padding: const pw.EdgeInsets.symmetric(vertical: 8),
           child: pw.Container(height: 1, color: _softLine),

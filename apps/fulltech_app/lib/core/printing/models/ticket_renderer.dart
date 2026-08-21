@@ -48,6 +48,15 @@ class TicketRenderer {
           (data.ncf ?? '').trim().isNotEmpty;
     }
 
+    bool showFiscalTotals() {
+      return layout.showItbis &&
+          (data.fiscalTaxEnabled ||
+              data.taxableBase > 0 ||
+              data.exemptAmount > 0 ||
+              data.itbis > 0) &&
+          (data.taxableBase > 0 || data.exemptAmount > 0 || data.itbis > 0);
+    }
+
     String fiscalSubtitle() {
       final voucher = (data.fiscalVoucherType ?? '').trim().toUpperCase();
       return switch (voucher) {
@@ -207,26 +216,50 @@ class TicketRenderer {
     add(sep);
     if (layout.showSubtotalItbisTotal) {
       addMoneyLine('Subtotal', data.resolvedSubtotal);
-      if (data.taxIncluded && data.itbis > 0) {
-        if (isFiscalTicket()) add('ITBIS incluido');
+      if (layout.showDiscounts) {
+        if (data.productDiscount > 0) {
+          add(
+            ReceiptTextUtils.leftRight(
+              'Desc. productos',
+              '-${ReceiptTextUtils.money(data.productDiscount)}',
+              width,
+            ),
+          );
+        }
+        if (data.generalDiscount > 0) {
+          add(
+            ReceiptTextUtils.leftRight(
+              'Desc. general',
+              '-${ReceiptTextUtils.money(data.generalDiscount)}',
+              width,
+            ),
+          );
+        }
+        if (data.productDiscount <= 0 &&
+            data.generalDiscount <= 0 &&
+            data.discount > 0) {
+          add(
+            ReceiptTextUtils.leftRight(
+              'Descuento',
+              '-${ReceiptTextUtils.money(data.discount)}',
+              width,
+            ),
+          );
+        }
       }
-      if (layout.showDiscounts && data.discount > 0) {
-        add(
-          ReceiptTextUtils.leftRight(
-            'Descuento',
-            '-${ReceiptTextUtils.money(data.discount)}',
-            width,
-          ),
-        );
-      }
-      if (isFiscalTicket() && layout.showItbis && data.itbis > 0) {
-        if (data.taxableBase > 0) {
-          addMoneyLine('Base imponible', data.taxableBase);
+      if (showFiscalTotals()) {
+        if (data.taxIncluded && data.itbis > 0) {
+          add('ITBIS incluido');
         }
         if (data.exemptAmount > 0) {
           addMoneyLine('Monto exento', data.exemptAmount);
         }
-        addMoneyLine('ITBIS 18%', data.itbis);
+        if (data.taxableBase > 0) {
+          addMoneyLine('Base imponible', data.taxableBase);
+        }
+        if (data.itbis > 0) {
+          addMoneyLine('ITBIS', data.itbis);
+        }
       }
     }
     addMoneyLine('TOTAL', data.total);

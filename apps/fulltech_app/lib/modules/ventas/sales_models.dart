@@ -422,9 +422,6 @@ class SaleDraftItem {
       'qty': qty,
       'priceSoldUnit': priceSoldUnit,
       if (productId == null) 'costUnitSnapshot': costUnitSnapshot,
-      'taxTreatment': effectiveTaxTreatment,
-      if (effectiveTaxRate != null) 'taxRate': effectiveTaxRate,
-      if (effectiveTaxPriceMode != null) 'taxPriceMode': effectiveTaxPriceMode,
     };
   }
 

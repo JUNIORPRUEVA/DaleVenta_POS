@@ -96,6 +96,49 @@ export class SalesService {
     } satisfies Prisma.SaleInclude;
   }
 
+  private compatibleSaleListSelect() {
+    return {
+      id: true,
+      userId: true,
+      customerId: true,
+      saleDate: true,
+      note: true,
+      totalSold: true,
+      totalCost: true,
+      totalProfit: true,
+      commissionAmount: true,
+      paymentMethod: true,
+      paymentCashAmount: true,
+      paymentTransferAmount: true,
+      creditAmount: true,
+      creditPaidAmount: true,
+      creditBalance: true,
+      creditStatus: true,
+      isDeleted: true,
+      deletedAt: true,
+    } satisfies Prisma.SaleSelect;
+  }
+
+  private async findManySalesWithFallback(
+    where: Prisma.SaleWhereInput,
+    include: Prisma.SaleInclude,
+  ) {
+    try {
+      return await this.prisma.sale.findMany({
+        where,
+        orderBy: { saleDate: "desc" },
+        include,
+      });
+    } catch (error) {
+      if (!this.isSchemaMismatch(error)) throw error;
+      return this.prisma.sale.findMany({
+        where,
+        orderBy: { saleDate: "desc" },
+        select: this.compatibleSaleListSelect(),
+      });
+    }
+  }
+
   private isSchemaMismatch(error: unknown) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       return error.code === "P2021" || error.code === "P2022";
@@ -220,20 +263,12 @@ export class SalesService {
       ...this.buildDateRange(from, to),
     };
 
-    try {
-      return await this.prisma.sale.findMany({
-        where,
-        orderBy: { saleDate: "desc" },
-        include: {
-          customer: this.saleInclude().customer,
-          user: this.saleInclude().user,
-          items: this.saleInclude().items,
-        },
-      });
-    } catch (error) {
-      if (!this.isSchemaMismatch(error)) throw error;
-      return [];
-    }
+    const include = this.saleInclude();
+    return this.findManySalesWithFallback(where, {
+      customer: include.customer,
+      user: include.user,
+      items: include.items,
+    });
   }
 
   async listInvoices(
@@ -252,16 +287,7 @@ export class SalesService {
       ...this.buildDateRange(from, to),
     };
 
-    try {
-      return await this.prisma.sale.findMany({
-        where,
-        orderBy: { saleDate: "desc" },
-        include: this.saleInclude(),
-      });
-    } catch (error) {
-      if (!this.isSchemaMismatch(error)) throw error;
-      return [];
-    }
+    return this.findManySalesWithFallback(where, this.saleInclude());
   }
 
   async listByUser(
@@ -1435,16 +1461,7 @@ export class SalesService {
       creditStatus: includePaid ? { in: ["open", "paid"] } : "open",
     };
 
-    try {
-      return await this.prisma.sale.findMany({
-        where,
-        orderBy: { saleDate: "desc" },
-        include: this.saleInclude(),
-      });
-    } catch (error) {
-      if (!this.isSchemaMismatch(error)) throw error;
-      return [];
-    }
+    return this.findManySalesWithFallback(where, this.saleInclude());
   }
 
   async addCreditPayment(

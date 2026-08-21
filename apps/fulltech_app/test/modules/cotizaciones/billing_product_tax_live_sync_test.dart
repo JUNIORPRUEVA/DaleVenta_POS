@@ -63,26 +63,32 @@ void main() {
     );
   });
 
-  test('Facturacion envia EXEMPT en payload de venta', () {
-    const item = SaleDraftItem(
-      productId: '11111111-1111-4111-8111-111111111111',
-      name: 'Producto fiscal',
-      imageUrl: null,
-      isExternal: false,
-      qty: 1,
-      priceSoldUnit: 2500,
-      costUnitSnapshot: 1000,
-      taxTreatment: 'EXEMPT',
-      taxRate: null,
-      taxPriceMode: 'NO_TAX',
-    );
+  test(
+    'Facturacion no envia campos fiscales rechazados en payload de venta',
+    () {
+      const item = SaleDraftItem(
+        productId: '11111111-1111-4111-8111-111111111111',
+        name: 'Producto fiscal',
+        imageUrl: null,
+        isExternal: false,
+        qty: 1,
+        priceSoldUnit: 2500,
+        costUnitSnapshot: 1000,
+        taxTreatment: 'EXEMPT',
+        taxRate: null,
+        taxPriceMode: 'NO_TAX',
+      );
 
-    final payload = item.toPayload();
+      final payload = item.toPayload();
 
-    expect(payload['taxTreatment'], 'EXEMPT');
-    expect(payload.containsKey('taxRate'), isFalse);
-    expect(payload['taxPriceMode'], 'NO_TAX');
-  });
+      expect(payload['productId'], '11111111-1111-4111-8111-111111111111');
+      expect(payload['qty'], 1);
+      expect(payload['priceSoldUnit'], 2500);
+      expect(payload.containsKey('taxTreatment'), isFalse);
+      expect(payload.containsKey('taxRate'), isFalse);
+      expect(payload.containsKey('taxPriceMode'), isFalse);
+    },
+  );
 
   test('Facturacion INHERIT aplica ITBIS de empresa', () {
     final item = buildBillingItemFromProduct(_product(taxTreatment: 'INHERIT'));
