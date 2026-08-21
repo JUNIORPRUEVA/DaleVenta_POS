@@ -14,6 +14,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CatalogRealtimeRelayService } from "../products/catalog-realtime-relay.service";
 import { TaxService } from "../tax/tax.service";
 import { NcfService } from "../tax/ncf.service";
+import { normalizeTaxId } from "../common/utils/normalize-tax-id";
 import {
   isAdminLike,
   requireTenant,
@@ -973,6 +974,17 @@ export class SalesService {
           });
         }
 
+        // Persist the fiscal customer as a REUSABLE Client (master data) so a
+        // later sale can recover it by RNC/Cédula. Best effort: never blocks a
+        // successfully emitted sale, and never consumes an extra NCF.
+        await this.ensureFiscalClientForSale(tx, {
+          companyId,
+          userId: user.id,
+          customerId,
+          taxId: fiscalCustomerTaxId,
+          name: fiscalCustomerName,
+        });
+
         return sale;
       });
       this.emitSaleEvent(companyId, "sale.created", sale.id, {
@@ -999,6 +1011,80 @@ export class SalesService {
       if (!this.isSchemaMismatch(error)) throw error;
       throw new BadRequestException(
         "El módulo de ventas no está sincronizado con la base de datos.",
+      );
+    }
+  }
+
+  /**
+   * Reuses or creates a persistent Client for a fiscal sale that identified
+   * its customer (e.g. B01 with RNC/Cédula + razón social). Best effort:
+   * a failure here never fails the sale nor consumes an extra NCF.
+   */
+  private async ensureFiscalClientForSale(
+    tx: Prisma.TransactionClient,
+    params: {
+      companyId: string;
+      userId: string;
+      customerId: string | null;
+      taxId: string | null;
+      name: string | null;
+    },
+  ): Promise<void> {
+    const { companyId, userId, customerId, taxId, name } = params;
+    const normalizedTaxId = normalizeTaxId(taxId);
+    const normalizedName = name?.trim() ?? "";
+    if (!normalizedTaxId || !normalizedName) return;
+
+    try {
+      // 1) A linked client exists: fill missing fiscal data on it.
+      if (customerId) {
+        const linked = await tx.client.findFirst({
+          where: { id: customerId, companyId, isDeleted: false },
+        });
+        if (linked) {
+          const updates: Prisma.ClientUncheckedUpdateInput = {};
+          if (!linked.taxId) updates.taxId = normalizedTaxId;
+          if (!linked.businessName && !linked.taxIdType) {
+            updates.businessName = normalizedName;
+          }
+          if (Object.keys(updates).length > 0) {
+            await tx.client.update({ where: { id: linked.id }, data: updates });
+          }
+          return;
+        }
+      }
+
+      // 2) Reuse an existing active client with the same normalized document.
+      const existing = await tx.client.findFirst({
+        where: { companyId, isDeleted: false, taxId: normalizedTaxId },
+      });
+      if (existing) {
+        const updates: Prisma.ClientUncheckedUpdateInput = {};
+        if (!existing.businessName) updates.businessName = normalizedName;
+        if (!existing.nombre?.trim()) updates.nombre = normalizedName;
+        if (Object.keys(updates).length > 0) {
+          await tx.client.update({ where: { id: existing.id }, data: updates });
+        }
+        return;
+      }
+
+      // 3) Create a reusable client from the fiscal snapshot.
+      await tx.client.create({
+        data: {
+          nombre: normalizedName,
+          telefono: "",
+          businessName: normalizedName,
+          taxId: normalizedTaxId,
+          taxIdType: "RNC",
+          ownerId: userId,
+          companyId,
+          lastActivityAt: new Date(),
+        },
+      });
+    } catch (error) {
+      console.error(
+        "[SALES_FISCAL_CLIENT] No se pudo registrar el cliente fiscal reutilizable:",
+        error,
       );
     }
   }

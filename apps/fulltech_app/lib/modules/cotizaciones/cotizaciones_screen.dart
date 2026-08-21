@@ -13461,6 +13461,30 @@ class _DesktopFiscalInvoicePanelState
     if (mounted) Navigator.of(context).pop();
   }
 
+  Future<void> _openClientSearch() async {
+    final selected = await showDialog<ClienteModel>(
+      context: context,
+      builder: (_) => const _FiscalClientSearchDialog(),
+    );
+    if (selected == null || !mounted) return;
+    final taxId = normalizeTaxId(selected.taxId);
+    final businessName = selected.businessName?.trim() ?? '';
+    final name = businessName.isNotEmpty
+        ? businessName
+        : selected.nombre.trim();
+    setState(() {
+      _taxIdCtrl.text = taxId;
+      _taxIdCtrl.selection = TextSelection.collapsed(offset: taxId.length);
+      _customerNameCtrl.text = name;
+      _customerNameCtrl.selection =
+          TextSelection.collapsed(offset: name.length);
+      _foundClient = selected;
+      _searchRequestId++;
+      _searchDebounce?.cancel();
+      _searching = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -13720,6 +13744,20 @@ class _DesktopFiscalInvoicePanelState
                         isDense: true,
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton.icon(
+                        onPressed: _openClientSearch,
+                        icon: const Icon(Icons.search_rounded, size: 18),
+                        label: const Text('Buscar cliente fiscal'),
+                        style: OutlinedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          foregroundColor: const Color(0xFF1957E6),
+                          side: const BorderSide(color: Color(0xFFB8CCFF)),
+                        ),
+                      ),
+                    ),
                     if (showSaveAsClient) ...[
                       const SizedBox(height: 8),
                       Container(
@@ -13788,6 +13826,194 @@ class _DesktopFiscalInvoicePanelState
     final taxId = normalizeTaxId(client.taxId);
     if (taxId.isEmpty) return name.isEmpty ? 'Cliente' : name;
     return name.isEmpty ? taxId : '$name · $taxId';
+  }
+}
+
+class _FiscalClientSearchDialog extends ConsumerStatefulWidget {
+  const _FiscalClientSearchDialog();
+
+  @override
+  ConsumerState<_FiscalClientSearchDialog> createState() =>
+      _FiscalClientSearchDialogState();
+}
+
+class _FiscalClientSearchDialogState
+    extends ConsumerState<_FiscalClientSearchDialog> {
+  final _searchCtrl = TextEditingController();
+  final _focusNode = FocusNode();
+  Timer? _debounce;
+  int _requestId = 0;
+  List<ClienteModel> _results = const [];
+  bool _loading = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchCtrl.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _onChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      _search(value);
+    });
+  }
+
+  Future<void> _search(String value) async {
+    final query = value.trim();
+    final requestId = ++_requestId;
+    if (query.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _results = const [];
+          _loading = false;
+          _error = null;
+        });
+      }
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
+    try {
+      final clients = await ref
+          .read(ventasRepositoryProvider)
+          .searchClients(query);
+      if (!mounted || requestId != _requestId) return;
+      setState(() {
+        _results = clients;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted || requestId != _requestId) return;
+      setState(() {
+        _loading = false;
+        _error = e is ApiException ? e.message : 'No se pudo buscar clientes.';
+      });
+    }
+  }
+
+  String _clientLabel(ClienteModel client) {
+    final businessName = client.businessName?.trim() ?? '';
+    final name = businessName.isNotEmpty ? businessName : client.nombre.trim();
+    final taxId = normalizeTaxId(client.taxId);
+    if (taxId.isEmpty) return name;
+    return name.isEmpty ? taxId : '$name · $taxId';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('Buscar cliente fiscal'),
+      content: SizedBox(
+        width: 400,
+        height: 420,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _searchCtrl,
+              focusNode: _focusNode,
+              onChanged: _onChanged,
+              onSubmitted: _search,
+              decoration: const InputDecoration(
+                labelText: 'Nombre o RNC/Cédula',
+                hintText: 'Ej: potatoes.dres, srl o 133020253',
+                prefixIcon: Icon(Icons.search_rounded),
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_error != null)
+              Padding(
+                padding: const EdgeInsets.all(10),
+                child: Text(
+                  _error!,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.error,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              )
+            else if (_results.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: Text(
+                    _searchCtrl.text.trim().isEmpty
+                        ? 'Escribe un nombre o RNC para buscar.'
+                        : 'No se encontraron clientes.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              )
+            else
+              Expanded(
+                child: ListView.separated(
+                  itemCount: _results.length,
+                  separatorBuilder: (context, index) => const Divider(
+                    height: 1,
+                  ),
+                  itemBuilder: (context, index) {
+                    final client = _results[index];
+                    return ListTile(
+                      dense: true,
+                      leading: const Icon(
+                        Icons.business_outlined,
+                        size: 20,
+                        color: Color(0xFF1957E6),
+                      ),
+                      title: Text(
+                        client.businessName?.trim().isNotEmpty == true
+                            ? client.businessName!.trim()
+                            : client.nombre,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        _clientLabel(client),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      onTap: () => Navigator.of(context).pop(client),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+      ],
+    );
   }
 }
 
