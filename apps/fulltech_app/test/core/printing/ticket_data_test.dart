@@ -146,7 +146,7 @@ void main() {
 
     expect(text, isNot(contains('B01 - CREDITO FISCAL')));
     expect(text, isNot(contains('NCF')));
-    expect(text, contains('Base imponible'));
+    expect(text, contains('Monto gravado'));
     expect(text, contains('ITBIS'));
     expect(text, contains('RD\$ 180.00'));
     expect(text, contains('TOTAL'));
@@ -184,10 +184,10 @@ void main() {
       final text = lines.join('\n');
 
       expect(text, isNot(contains('NCF')));
-      expect(text, contains('Base imponible'));
+      expect(text, contains('Monto gravado'));
       expect(text, contains('ITBIS'));
       expect(text, contains('RD\$ 450.00'));
-      expect(text.indexOf('Base imponible'), lessThan(text.indexOf('ITBIS')));
+      expect(text.indexOf('Monto gravado'), lessThan(text.indexOf('ITBIS')));
       expect(text.indexOf('ITBIS'), lessThan(text.indexOf('TOTAL')));
     },
   );

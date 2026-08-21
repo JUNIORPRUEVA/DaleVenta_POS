@@ -405,6 +405,7 @@ class MobilePrintService {
     required List<String> lines,
     required Uint8List pdfBytes,
     required String documentName,
+    Uint8List? rawBytes,
     Uint8List? logoBytes,
     bool printLogo = false,
     bool forceSystemPrint = false,
@@ -430,6 +431,7 @@ class MobilePrintService {
         return await _printBluetooth(
           lines: lines,
           settings: settings,
+          rawBytes: rawBytes,
           logoBytes: logoBytes,
           printLogo: printLogo,
         );
@@ -440,6 +442,7 @@ class MobilePrintService {
         return await _printNetwork(
           lines: lines,
           settings: settings,
+          rawBytes: rawBytes,
           logoBytes: logoBytes,
           printLogo: printLogo,
         );
@@ -484,6 +487,7 @@ class MobilePrintService {
   Future<MobilePrintServiceResult> _printNetwork({
     required List<String> lines,
     required MobilePrinterSettingsModel settings,
+    Uint8List? rawBytes,
     Uint8List? logoBytes,
     bool printLogo = false,
   }) async {
@@ -506,12 +510,14 @@ class MobilePrintService {
         settings.networkPort,
         timeout: Duration(seconds: settings.timeoutSeconds),
       );
-      final bytes = _escPos.buildTicketBytes(
-        lines: lines,
-        settings: settings,
-        logoBytes: logoBytes,
-        printLogo: printLogo || settings.printLogo,
-      );
+      final bytes =
+          rawBytes ??
+          _escPos.buildTicketBytes(
+            lines: lines,
+            settings: settings,
+            logoBytes: logoBytes,
+            printLogo: printLogo || settings.printLogo,
+          );
       socket.add(bytes);
       await socket.flush().timeout(Duration(seconds: settings.timeoutSeconds));
       await socket.close();
@@ -538,6 +544,7 @@ class MobilePrintService {
   Future<MobilePrintServiceResult> _printBluetooth({
     required List<String> lines,
     required MobilePrinterSettingsModel settings,
+    Uint8List? rawBytes,
     Uint8List? logoBytes,
     bool printLogo = false,
     bool allowAutoRecovery = true,
@@ -562,12 +569,14 @@ class MobilePrintService {
           clearLastError: true,
         ),
       );
-      final bytes = _escPos.buildTicketBytes(
-        lines: lines,
-        settings: effectiveSettings,
-        logoBytes: logoBytes,
-        printLogo: printLogo || effectiveSettings.printLogo,
-      );
+      final bytes =
+          rawBytes ??
+          _escPos.buildTicketBytes(
+            lines: lines,
+            settings: effectiveSettings,
+            logoBytes: logoBytes,
+            printLogo: printLogo || effectiveSettings.printLogo,
+          );
       await _disconnectPluginBluetooth();
       var nativeOk = await _nativeWrite(
         address: effectiveSettings.bluetoothAddress.trim(),

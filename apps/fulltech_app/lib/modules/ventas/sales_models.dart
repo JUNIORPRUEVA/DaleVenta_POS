@@ -293,9 +293,18 @@ class SaleModel {
     String? userName;
     if (user is Map) {
       userName =
-          user['nombreCompleto']?.toString() ?? user['email']?.toString();
+          user['nombreCompleto']?.toString() ??
+          user['fullName']?.toString() ??
+          user['name']?.toString() ??
+          user['email']?.toString();
     }
-    userName ??= json['userName']?.toString();
+    userName ??=
+        json['userName']?.toString() ??
+        json['cashierName']?.toString() ??
+        json['cashierNameSnapshot']?.toString() ??
+        json['sellerName']?.toString() ??
+        json['createdByUserName']?.toString() ??
+        json['createdByName']?.toString();
 
     return SaleModel(
       id: (json['id'] ?? '').toString(),

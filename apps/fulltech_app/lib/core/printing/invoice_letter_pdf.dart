@@ -132,7 +132,7 @@ class InvoiceLetterPdf {
               child: pw.Column(
                 children: [
                   _total(
-                    sale.fiscalTaxEnabled ? 'Base imponible' : 'Subtotal',
+                    sale.fiscalTaxEnabled ? 'Monto gravado' : 'Subtotal',
                     money.format(subtotal),
                   ),
                   if (sale.fiscalTaxEnabled &&

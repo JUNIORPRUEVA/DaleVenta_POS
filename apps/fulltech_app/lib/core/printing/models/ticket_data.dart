@@ -106,7 +106,7 @@ class TicketData {
     String? cashierNameOverride,
   }) {
     final List<SaleItemModel> saleItems = items ?? sale.items;
-    final cashierName = _resolveCashierName(
+    final cashierName = resolveCashierDisplayName(
       cashierNameOverride: cashierNameOverride,
       saleCashierName: sale.userName,
     );
@@ -217,7 +217,13 @@ class TicketData {
     return compact.toUpperCase();
   }
 
-  static String _resolveCashierName({
+  /// Resolves the cashier label from sale snapshots only.
+  ///
+  /// Priority:
+  /// 1. Explicit override used by callers that already loaded the sale snapshot.
+  /// 2. The persisted sale user/cashier name parsed into [SaleModel.userName].
+  /// 3. A stable fallback when historical data has no valid cashier snapshot.
+  static String resolveCashierDisplayName({
     required String? cashierNameOverride,
     required String? saleCashierName,
   }) {

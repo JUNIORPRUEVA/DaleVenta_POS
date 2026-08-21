@@ -255,7 +255,7 @@ class TicketRenderer {
           addMoneyLine('Monto exento', data.exemptAmount);
         }
         if (data.taxableBase > 0) {
-          addMoneyLine('Base imponible', data.taxableBase);
+          addMoneyLine('Monto gravado', data.taxableBase);
         }
         if (data.itbis > 0) {
           addMoneyLine('ITBIS', data.itbis);

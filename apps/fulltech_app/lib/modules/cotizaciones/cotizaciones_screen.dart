@@ -1462,19 +1462,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     return allowed;
   }
 
-  List<String> _fiscalSaleNoteLines() {
-    if (!_quoteTaxEnabled) return const [];
-    return [
-      'Cotización con impuestos automáticos',
-      if (_fiscalCustomerTaxId.trim().isNotEmpty)
-        'RNC/Cédula: ${_fiscalCustomerTaxId.trim()}',
-      if (_fiscalCustomerName.trim().isNotEmpty)
-        'Razón social: ${_fiscalCustomerName.trim()}',
-      if (_shouldShowItbis)
-        'ITBIS ${(_quoteTaxSummary.defaultRate * 100).toStringAsFixed(0)}%: ${_money(_taxAmount)}',
-    ];
-  }
-
   void _commitEditorChange(VoidCallback changes) {
     setState(() {
       changes();
@@ -5286,7 +5273,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         : _checkoutPaymentLabel(checkout.method);
     final saleNote = [
       if (_note.trim().isNotEmpty) _note.trim(),
-      ..._fiscalSaleNoteLines(),
       if (paymentLabel != null) 'Pago: $paymentLabel',
     ].join('\n');
 

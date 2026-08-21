@@ -1,5 +1,4 @@
-import 'dart:typed_data';
-
+import 'package:flutter/foundation.dart';
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 
@@ -106,6 +105,13 @@ class ThermalPrinterService {
     final normalizedCount = count.clamp(1, 5);
     try {
       for (var i = 0; i < normalizedCount; i++) {
+        debugPrint(
+          '[PRINT] entering ThermalPrinterService.printDocument copy ${i + 1}/$normalizedCount',
+        );
+        debugPrint('[PRINT] output pdf bytes received = ${bytes.length}');
+        debugPrint(
+          '[PRINT] entering Printing.directPrintPdf printer="${status.printer!.name}"',
+        );
         await Printing.directPrintPdf(
           printer: status.printer!,
           name: '${documentName}_${DateTime.now().millisecondsSinceEpoch}',
