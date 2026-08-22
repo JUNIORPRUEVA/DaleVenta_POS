@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -54,43 +55,192 @@ String resolveCashError(Object error) {
   return text;
 }
 
+OverlayEntry? _cashToastEntry;
+
+/// Notificación flotante en la esquina superior derecha, con el mismo patrón
+/// que las demás notificaciones superiores de FULLPOS. Se inserta en el overlay
+/// raíz para quedar por encima de drawers/paneles, auto-cierra y no bloquea la
+/// interacción.
 void showCashToast(
   BuildContext context,
   String message, {
   bool isError = false,
+  String? detail,
+  OverlayState? overlay,
 }) {
   if (!context.mounted) return;
-  final messenger = ScaffoldMessenger.maybeOf(context);
-  if (messenger == null) return;
-  final width = MediaQuery.sizeOf(context).width;
-  final toastWidth = width < 620 ? width - 28 : 430.0;
-  final left = width < 620 ? 14.0 : width - toastWidth - 16;
-  messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
+  // `Overlay.maybeOf(..., rootOverlay: true)` solo busca ancestros. Cuando el
+  // contexto es el del Navigator raíz (cuyo propio Overlay es un descendiente),
+  // se puede pasar el overlay capturado previamente para que el toast se
+  // muestre igualmente por encima de drawers/paneles.
+  final targetOverlay = overlay ?? Overlay.maybeOf(context, rootOverlay: true);
+  if (targetOverlay == null) return;
+
+  // Reemplazar un toast anterior aún visible (su State cancela su timer al
+  // desmontarse).
+  _cashToastEntry?.remove();
+  _cashToastEntry = null;
+
+  final topPadding = MediaQuery.viewPaddingOf(context).top + 14;
+  late final OverlayEntry entry;
+  entry = OverlayEntry(
+    builder: (context) {
+      return Positioned(
+        top: topPadding,
+        right: 18,
+        child: _CashTopToast(
+          title: message,
+          message: detail,
+          isError: isError,
+          onClose: () {
+            entry.remove();
+            if (_cashToastEntry == entry) _cashToastEntry = null;
+          },
+        ),
+      );
+    },
+  );
+  _cashToastEntry = entry;
+  targetOverlay.insert(entry);
+}
+
+class _CashTopToast extends StatefulWidget {
+  const _CashTopToast({
+    required this.title,
+    required this.message,
+    required this.isError,
+    required this.onClose,
+  });
+
+  final String title;
+  final String? message;
+  final bool isError;
+  final VoidCallback onClose;
+
+  @override
+  State<_CashTopToast> createState() => _CashTopToastState();
+}
+
+class _CashTopToastState extends State<_CashTopToast> {
+  Timer? _autoCloseTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _autoCloseTimer =
+        Timer(const Duration(milliseconds: 3200), widget.onClose);
+  }
+
+  @override
+  void dispose() {
+    _autoCloseTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = widget.isError
+        ? const Color(0xFFB42318)
+        : const Color(0xFF059669);
+    return Material(
+      color: Colors.transparent,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440, minWidth: 300),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
             color: Colors.white,
-            fontSize: 13,
-            height: 1.25,
-            fontWeight: FontWeight.w700,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: accent.withValues(alpha: 0.38)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 24,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Stack(
+              children: [
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(height: 3, color: accent),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 8, 14),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: 0.13),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          widget.isError
+                              ? Icons.error_outline_rounded
+                              : Icons.check_circle_outline_rounded,
+                          color: accent,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              widget.title,
+                              maxLines: widget.message == null ? 3 : 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xFF0F172A),
+                                fontWeight: FontWeight.w900,
+                                fontSize: 14,
+                              ),
+                            ),
+                            if (widget.message != null &&
+                                widget.message!.trim().isNotEmpty) ...[
+                              const SizedBox(height: 3),
+                              Text(
+                                widget.message!,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Color(0xFF475569),
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.3,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        tooltip: 'Cerrar',
+                        onPressed: widget.onClose,
+                        icon: const Icon(Icons.close_rounded, size: 18),
+                        color: const Color(0xFF94A3B8),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        behavior: SnackBarBehavior.floating,
-        margin: EdgeInsets.fromLTRB(left, 0, 16, 18),
-        width: null,
-        elevation: 10,
-        duration: const Duration(seconds: 3),
-        backgroundColor: isError
-            ? const Color(0xFF991B1B)
-            : const Color(0xFF082F3E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
+  }
 }
 
 Future<bool?> showOpenCashDialog(

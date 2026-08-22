@@ -42,10 +42,24 @@ import 'data/ventas_repository.dart';
 import 'fiscal_voucher_options.dart';
 import 'sales_models.dart';
 
-final posNcfSequencesProvider =
-    FutureProvider.autoDispose<List<NcfSequenceModel>>((ref) async {
-      return ref.watch(contabilidadRepositoryProvider).listNcfSequences();
-    });
+/// Secuencias NCF de la empresa actual.
+///
+/// No es `autoDispose`: se mantiene vivo durante la sesión para no volver a
+/// consultar `/ncf/sequences` en cada entrada al POS. Al depender de
+/// `authStateProvider` se recarga automáticamente al cambiar de empresa,
+/// hacer logout o iniciar sesión con otra empresa (aislamiento multiempresa).
+///
+/// NOTA FISCAL: esta lista es solo informativa (tipos, prefijos, estado). El
+/// siguiente número NCF asignado a una venta se reserva SIEMPRE en el backend
+/// con incremento atómico transaccional (`NcfService.reserveNextNcf`), por lo
+/// que esta caché en memoria nunca garantiza ni duplica numeración fiscal.
+final posNcfSequencesProvider = FutureProvider<List<NcfSequenceModel>>((ref) {
+  final companyId = ref.watch(authStateProvider).user?.companyId ?? '';
+  if (companyId.isEmpty) {
+    return Future.value(const <NcfSequenceModel>[]);
+  }
+  return ref.watch(contabilidadRepositoryProvider).listNcfSequences();
+});
 
 class RegistrarVentaScreen extends ConsumerStatefulWidget {
   const RegistrarVentaScreen({super.key});

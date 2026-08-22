@@ -21,6 +21,7 @@ import '../routing/routes.dart';
 import '../routing/route_access.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
+import '../utils/money_formatters.dart';
 import 'app_navigation.dart';
 
 const String _drawerCloseTurnAction = '__drawer_close_turn__';
@@ -358,15 +359,22 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
 
   Future<void> _openMovementDialog(BuildContext context, String type) async {
     final rootContext = Navigator.of(context, rootNavigator: true).context;
+    // Capturar el overlay ANTES de cerrar el drawer. El overlay del drawer es
+    // el overlay raíz (sigue montado aunque el drawer se destruya), mientras
+    // que el contexto del Navigator raíz no puede resolverlo por sí mismo.
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    // Capturar el controller ANTES de cerrar el drawer. Al hacer
+    // `Navigator.pop(context)` el drawer se destruye, y usar `ref` (WidgetRef
+    // del drawer) después lanzaría:
+    //   Bad state: Cannot use "ref" after the widget was disposed.
+    final controller =
+        ref.read(activeCashSessionControllerProvider.notifier);
     Navigator.pop(context);
     await Future<void>.delayed(Duration.zero);
     if (!rootContext.mounted) return;
     final input = await showCashMovementDialog(rootContext, type: type);
     if (input == null || !rootContext.mounted) return;
     try {
-      // Releer el notifier justo en el punto de uso (tras pop/diálogo/await).
-      final controller =
-          ref.read(activeCashSessionControllerProvider.notifier);
       await controller.addMovement(
         type: type,
         amount: input.amount,
@@ -378,16 +386,28 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
       showCashToast(
         rootContext,
         type == 'IN' ? 'Ingreso registrado' : 'Salida registrada',
+        detail: type == 'IN'
+            ? 'Se agregaron ${formatRdCurrencyAccounting(input.amount)} a la caja.'
+            : 'Se retiraron ${formatRdCurrencyAccounting(input.amount)} de la caja.',
+        overlay: overlay,
       );
     } catch (error) {
       if (!rootContext.mounted) return;
-      showCashToast(rootContext, resolveCashError(error), isError: true);
+      showCashToast(rootContext, resolveCashError(error),
+          isError: true, overlay: overlay);
     }
   }
 
   Future<void> _closeTurnFromDrawer(BuildContext context) async {
     final rootContext = Navigator.of(context, rootNavigator: true).context;
     final repository = ref.read(cashRepositoryProvider);
+    // Capturar el overlay ANTES de cerrar el drawer (el overlay raíz sigue
+    // montado aunque el drawer se destruya tras el pop).
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    // Capturar el controller ANTES de cerrar el drawer: el ref del drawer
+    // queda invalidado al destruirse el drawer tras el pop.
+    final controller =
+        ref.read(activeCashSessionControllerProvider.notifier);
     Navigator.pop(context);
     await Future<void>.delayed(Duration.zero);
     if (!rootContext.mounted) return;
@@ -398,15 +418,9 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
       final result = await showCloseShiftDialog(
         rootContext,
         expectedCash: summary.expectedCash,
-        onCloseShift: (amount) {
-          final controller =
-              ref.read(activeCashSessionControllerProvider.notifier);
-          return controller.close(amount);
-        },
+        onCloseShift: (amount) => controller.close(amount),
       );
       if (!rootContext.mounted || result?.success != true) return;
-      final controller =
-          ref.read(activeCashSessionControllerProvider.notifier);
       await controller.refresh();
       if (!rootContext.mounted) return;
       final printResult = result?.printResult;
@@ -415,10 +429,11 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
           : printResult.success
           ? 'Turno cerrado e impreso'
           : 'Turno cerrado. ${printResult.message}';
-      showCashToast(rootContext, message);
+      showCashToast(rootContext, message, overlay: overlay);
     } catch (error) {
       if (!rootContext.mounted) return;
-      showCashToast(rootContext, resolveCashError(error), isError: true);
+      showCashToast(rootContext, resolveCashError(error),
+          isError: true, overlay: overlay);
     }
   }
 

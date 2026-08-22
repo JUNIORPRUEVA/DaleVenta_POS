@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as express from 'express';
 import type { Request, Response, NextFunction } from 'express';
+import compression from 'compression';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -36,6 +37,26 @@ async function bootstrap() {
 
   const config = app.get(ConfigService);
   const bodySizeLimit = (config.get<string>('BODY_SIZE_LIMIT') ?? '10mb').trim() || '10mb';
+
+  // HTTP compression (gzip/deflate/br) for JSON/text responses.
+  // The default filter (expressjs/compression) only compresses compressible
+  // content-types and skips already-encoded payloads, so images/media/PDF are
+  // left untouched. Sets Content-Encoding and Vary: Accept-Encoding itself.
+  app.use(
+    compression({
+      threshold: 1024,
+      filter: (req: Request, res: Response) => {
+        const type = res.getHeader('Content-Type');
+        if (typeof type !== 'string') return false;
+        // Compress only JSON/text-like payloads. Never compress images, PDFs,
+        // binaries or already-compressed media (already handled by the default
+        // filter, but kept explicit for safety).
+        return /(json|text|javascript|xml|svg)/i.test(type);
+      },
+    }),
+  );
+  // eslint-disable-next-line no-console
+  console.log('[http] compression enabled (gzip/deflate/br, threshold=1024)');
 
   app.use(express.json({ limit: bodySizeLimit }));
   app.use(express.urlencoded({ extended: true, limit: bodySizeLimit }));

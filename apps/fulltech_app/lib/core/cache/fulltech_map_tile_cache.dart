@@ -2,6 +2,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
+import 'cache_repair.dart';
+
 class FulltechMapTileCacheManager {
   static const _key = 'fulltechMapTilesV1';
   static CacheManager? _instance;
@@ -14,6 +16,7 @@ class FulltechMapTileCacheManager {
         _key,
         stalePeriod: const Duration(days: 45),
         maxNrOfCacheObjects: 8000,
+        repo: buildCacheInfoRepositoryForPlatform(_key),
       ),
     );
   }

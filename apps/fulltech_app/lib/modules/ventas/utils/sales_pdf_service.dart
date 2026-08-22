@@ -20,37 +20,6 @@ final PdfColor _textPrimary = PdfColor.fromHex('#1D2430');
 final PdfColor _textMuted = PdfColor.fromHex('#6C7685');
 final PdfColor _accentBlue = PdfColor.fromHex('#1957E6');
 
-// Métricas de layout (pt) para anclar los totales al fondo útil de la página.
-const double _marginLr = 34; // ~12 mm
-const double _marginTop = 30;
-const double _marginBottom = 26;
-const double _headerEstimatedHeight = 78;
-const double _footerEstimatedHeight = 16;
-const double _clientEstimatedHeight = 82;
-const double _bottomZoneEstimatedHeight = 180;
-const double _tableHeaderRowHeight = 22;
-const double _tableBodyRowHeight = 21;
-const double _safetyBuffer = 26;
-const double _maxSpacer = 250;
-const double _minSpacer = 12;
-
-/// Espacio flexible para empujar el pie comercial hacia el fondo cuando el
-/// contenido cabe en una sola página. Con muchas filas devuelve un valor
-/// pequeño para que la zona inferior fluya naturalmente a la última página.
-double _flexSpacerFor(int itemCount, PdfPageFormat format) {
-  final bodyArea =
-      format.height - _marginTop - _marginBottom -
-      _headerEstimatedHeight - _footerEstimatedHeight;
-  final used =
-      _clientEstimatedHeight +
-      _tableHeaderRowHeight +
-      (itemCount * _tableBodyRowHeight) +
-      _bottomZoneEstimatedHeight;
-  final remaining = bodyArea - _safetyBuffer - used;
-  if (remaining <= 0) return _minSpacer;
-  return remaining.clamp(_minSpacer, _maxSpacer).toDouble();
-}
-
 String invoicePdfPaymentMethodLabel(String method) {
   return switch (method.trim().toLowerCase()) {
     'cash' => 'Efectivo',
@@ -198,8 +167,9 @@ Future<Uint8List> buildSaleInvoicePdf({
     pw.MultiPage(
       pageTheme: pw.PageTheme(
         pageFormat: PdfPageFormat.a4,
-        // Márgenes reales A4 (~12 mm laterales): contenido ~186 mm de ancho.
-        margin: pw.EdgeInsets.fromLTRB(_marginLr, _marginTop, _marginLr, _marginBottom),
+        // Márgenes idénticos a la plantilla de COTIZACIÓN (26/24/26/22):
+        // mismo ancho de contenido y misma distribución de secciones.
+        margin: const pw.EdgeInsets.fromLTRB(26, 24, 26, 22),
       ),
       header: (context) => _invoiceHeader(
         company: company,
@@ -207,17 +177,14 @@ Future<Uint8List> buildSaleInvoicePdf({
         sale: sale,
         invoiceCode: invoiceCode,
         dateFmt: dateFmt,
+        pageNumber: context.pageNumber,
+        pagesCount: context.pagesCount,
       ),
       footer: (context) => _pageFooter(context.pageNumber, context.pagesCount),
       build: (_) => [
         _invoiceClientSection(sale),
         _invoiceDetailSection(sale, money, qtyFmt),
-        pw.SizedBox(
-          // El formato SIEMPRE es A4 (fijado en pageTheme); el contexto de
-          // MultiPage no expone el pageFormat en el cuerpo, así que lo
-          // calculamos directamente contra A4.
-          height: _flexSpacerFor(sale.items.length, PdfPageFormat.a4),
-        ),
+        pw.SizedBox(height: 14),
         _invoiceBottomSection(sale, money, warrantyPolicy: warranty),
       ],
     ),
@@ -232,11 +199,21 @@ pw.Widget _invoiceHeader({
   required SaleModel sale,
   required String invoiceCode,
   required DateFormat dateFmt,
+  required int pageNumber,
+  required int pagesCount,
 }) {
   final companyName = _fallback(
     sale.issuerNameSnapshot,
     fallback: _fallback(company?.companyName, fallback: 'FULLTECH'),
   );
+  if (pageNumber > 1) {
+    return _invoiceContinuationHeader(
+      companyName: companyName,
+      invoiceCode: invoiceCode,
+      pageNumber: pageNumber,
+      pagesCount: pagesCount,
+    );
+  }
   final rnc = _fallback(
     sale.issuerTaxIdSnapshot,
     fallback: _clean(company?.rnc),
@@ -307,6 +284,69 @@ pw.Widget _invoiceHeader({
   );
 }
 
+/// Cabecera compacta para páginas 2+ (misma estructura que la cotización):
+/// evita repetir el encabezado completo y deja espacio para la tabla/totales.
+pw.Widget _invoiceContinuationHeader({
+  required String companyName,
+  required String invoiceCode,
+  required int pageNumber,
+  required int pagesCount,
+}) {
+  final pageText = pagesCount > 0
+      ? 'Página $pageNumber de $pagesCount'
+      : 'Página $pageNumber';
+  return pw.Container(
+    margin: const pw.EdgeInsets.only(bottom: 10),
+    padding: const pw.EdgeInsets.only(bottom: 6),
+    decoration: pw.BoxDecoration(
+      border: pw.Border(bottom: pw.BorderSide(color: _softLine, width: 1)),
+    ),
+    child: pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.end,
+      children: [
+        pw.Expanded(
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                companyName,
+                style: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                  color: _textPrimary,
+                ),
+              ),
+              pw.SizedBox(height: 2),
+              pw.Text(
+                'Factura · Continuación',
+                style: pw.TextStyle(fontSize: 8, color: _textMuted),
+              ),
+            ],
+          ),
+        ),
+        pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.end,
+          children: [
+            pw.Text(
+              invoiceCode,
+              style: pw.TextStyle(
+                fontSize: 9,
+                fontWeight: pw.FontWeight.bold,
+                color: _textPrimary,
+              ),
+            ),
+            pw.SizedBox(height: 2),
+            pw.Text(
+              pageText,
+              style: pw.TextStyle(fontSize: 8, color: _textMuted),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
 pw.Widget _invoiceClientSection(SaleModel sale) {
   final name = _fallback(
     sale.fiscalCustomerName ?? sale.customerName,
@@ -356,6 +396,7 @@ pw.Widget _invoiceDetailSection(
 
   final tableRows = <pw.TableRow>[
     pw.TableRow(
+      repeat: true,
       decoration: pw.BoxDecoration(color: _headingBlack),
       children: [
         _headerCell('Descripción', align: pw.TextAlign.left),

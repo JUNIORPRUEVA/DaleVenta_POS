@@ -252,6 +252,20 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
     _showClientNotice('Cliente creado', created.nombre);
   }
 
+  Future<void> _openEditClientFlow(ClienteModel client) async {
+    final updated = await openClienteFormAdaptive(
+      context,
+      clienteId: client.id,
+      returnSavedClient: true,
+    );
+    if (updated == null || !mounted) return;
+    setState(() {
+      _selectedClientId = updated.id;
+    });
+    await ref.read(clientesControllerProvider.notifier).refresh();
+    _showClientNotice('Cliente actualizado', updated.nombre);
+  }
+
   void _showClientNotice(String title, String message, {bool isError = false}) {
     _noticeEntry?.remove();
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
@@ -793,6 +807,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                                   : () => context.push(
                                       Routes.clienteDetail(client.id),
                                     ),
+                              onEdit: () => _openEditClientFlow(client),
                             );
                           },
                         ),
@@ -819,12 +834,14 @@ class _ClienteCard extends ConsumerWidget {
     this.compact = false,
     this.selected = false,
     this.onTap,
+    this.onEdit,
   });
 
   final ClienteModel client;
   final bool compact;
   final bool selected;
   final VoidCallback? onTap;
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -897,6 +914,13 @@ class _ClienteCard extends ConsumerWidget {
                     ),
                   ),
                 ),
+                if (onEdit != null) ...[
+                  const SizedBox(width: 6),
+                  _ClientRowEditButton(
+                    onPressed: onEdit!,
+                    tooltip: 'Editar cliente',
+                  ),
+                ],
                 if (client.isDeleted) ...[
                   const SizedBox(width: 8),
                   Text(
@@ -980,6 +1004,13 @@ class _ClienteCard extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 10),
+              if (onEdit != null) ...[
+                _ClientRowEditButton(
+                  onPressed: onEdit!,
+                  tooltip: 'Editar cliente',
+                ),
+                const SizedBox(width: 4),
+              ],
               Icon(
                 Icons.chevron_right_rounded,
                 size: 18,
@@ -989,6 +1020,29 @@ class _ClienteCard extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ClientRowEditButton extends StatelessWidget {
+  const _ClientRowEditButton({
+    required this.onPressed,
+    required this.tooltip,
+  });
+
+  final VoidCallback onPressed;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      icon: const Icon(Icons.edit_outlined, size: 15),
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 26, height: 26),
+      color: const Color(0xFF1957E6),
     );
   }
 }

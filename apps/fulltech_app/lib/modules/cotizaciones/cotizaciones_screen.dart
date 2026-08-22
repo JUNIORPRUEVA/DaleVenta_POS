@@ -718,11 +718,13 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       final matchId = match.id;
       final matchName = match.nombre;
       final matchPhone = match.telefono;
+      final matchModel = match;
 
       setState(() {
         _selectedClientId = matchId;
         _selectedClientName = matchName;
         _selectedClientPhone = matchPhone;
+        _applyClientFiscalPrefill(matchModel);
         _writeActiveDesktopDraft();
       });
       _schedulePersistEditorDraft();
@@ -1228,6 +1230,26 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   bool get _quoteTaxEnabled => _quoteTaxSummary.taxEnabled;
 
+  /// True cuando la empresa tiene habilitado el flujo fiscal completo
+  /// (Utilizar impuestos y comprobantes/NCF activos). Fuente de verdad:
+  /// `companySettingsProvider` (taxEnabled + ncfEnabled), scoped por empresa.
+  bool get _fiscalFlowEnabled {
+    final settings = _currentTaxConfig?.settings;
+    return shouldShowFiscalVoucherControl(
+      taxEnabled: settings?.taxEnabled == true,
+      ncfEnabled: settings?.ncfEnabled == true,
+    );
+  }
+
+  /// Tipo de comprobante fiscal EFECTIVO del ticket. Si la empresa tiene
+  /// impuestos/comprobantes OFF (Utilizar impuestos = OFF), el ticket se
+  /// comporta SIEMPRE como Normal: se ignora y se limpia cualquier estado
+  /// fiscal obsoleto del draft, y NO se reserva ni consume NCF al cobrar.
+  String get _effectiveFiscalVoucherType {
+    if (!_fiscalFlowEnabled) return '';
+    return _fiscalVoucherType.trim().toUpperCase();
+  }
+
   double get _subtotal {
     final summary = _quoteTaxSummary;
     if (!summary.taxEnabled) {
@@ -1318,7 +1340,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       selectedClientPhone: _selectedClientPhone,
       note: _note,
       includeItbis: includeItbis ?? _quoteTaxEnabled,
-      fiscalVoucherType: _fiscalVoucherType,
+      // Persiste el tipo EFECTIVO: si impuestos/comprobantes están OFF, se
+      // guarda como Normal y no se conserva estado fiscal obsoleto en el draft.
+      fiscalVoucherType: _effectiveFiscalVoucherType,
       fiscalVoucherNumber: '',
       fiscalVoucherDueDate: null,
       fiscalCustomerTaxId: _fiscalCustomerTaxId,
@@ -1363,7 +1387,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _note = draft.note;
     _fiscalCustomerTaxId = draft.fiscalCustomerTaxId;
     _fiscalCustomerName = draft.fiscalCustomerName;
-    _fiscalVoucherType = draft.fiscalVoucherType;
+    // Fuente de verdad = configuración de empresa. Si la empresa tiene
+    // impuestos/comprobantes OFF, un draft fiscal obsoleto (B01) se limpia:
+    // el ticket queda como venta Normal (sin NCF ni RNC fiscal obligatorio).
+    _fiscalVoucherType = _fiscalFlowEnabled
+        ? draft.fiscalVoucherType.trim().toUpperCase()
+        : '';
     _generalDiscountAmount = draft.globalDiscountAmount;
     _editingId = draft.editingId;
     _editingCreatedAt = draft.editingCreatedAt;
@@ -1418,7 +1447,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         _note.trim().isNotEmpty ||
         _fiscalCustomerTaxId.trim().isNotEmpty ||
         _fiscalCustomerName.trim().isNotEmpty ||
-        _fiscalVoucherType.trim().isNotEmpty ||
+        _effectiveFiscalVoucherType.trim().isNotEmpty ||
         _generalDiscountAmount != 0 ||
         (_editingId ?? '').trim().isNotEmpty ||
         _selectedCategories.isNotEmpty;
@@ -1429,13 +1458,32 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   String? get _fiscalVoucherValidationMessage {
-    final type = _fiscalVoucherType.trim().toUpperCase();
+    final type = _effectiveFiscalVoucherType;
     if (type.isEmpty) return null;
-    if (type == 'B01' && !isB01FiscalClientValid(_fiscalCustomerTaxId)) {
-      return 'Para emitir B01 debes indicar RNC/Cédula del cliente (mínimo 9 dígitos).';
+    if (type == 'B01') {
+      final hasClient =
+          (_selectedClientId ?? '').trim().isNotEmpty &&
+          _selectedClientName.trim() != 'Sin cliente';
+      if (!hasClient) {
+        return 'Selecciona un cliente para emitir esta factura fiscal.';
+      }
+      if (!isB01FiscalClientValid(_fiscalCustomerTaxId, _fiscalCustomerName)) {
+        return 'El cliente seleccionado debe tener RNC/Cédula para emitir esta factura fiscal.';
+      }
     }
     return null;
   }
+
+  String get _fiscalInvoiceLabel {
+    final type = _effectiveFiscalVoucherType;
+    return type.isEmpty ? 'Factura normal' : 'Fiscal · $type';
+  }
+
+  /// True cuando el ticket activo usa un comprobante que exige identificación
+  /// fiscal del cliente (ej. B01), por lo que Nombre y RNC/Cédula son
+  /// obligatorios al crear/editar el cliente desde Facturación.
+  bool get _activeTicketRequiresFiscalCustomer =>
+      _effectiveFiscalVoucherType == 'B01';
 
   Future<bool> _ensurePosActionPermission(
     AppPermission permission,
@@ -2085,21 +2133,24 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
   }
 
-  /// Prellena los datos fiscales del cliente (RNC y nombre) solo si el
-  /// usuario aún no escribió nada en el panel fiscal.
+  /// Sincroniza los datos fiscales del ticket (RNC y nombre) con el cliente
+  /// seleccionado. El RNC/Nombre fiscal SIEMPRE refleja el campo real del
+  /// cliente actual (fuente de verdad), de modo que una edición del cliente
+  /// se refleja de inmediato y no se conservan snapshots viejos.
   void _applyClientFiscalPrefill(ClienteModel client) {
     final taxId = client.taxId?.trim() ?? '';
     final businessName = client.businessName?.trim() ?? '';
     final clientName = client.nombre.trim();
-    if (_fiscalCustomerTaxId.trim().isEmpty && taxId.isNotEmpty) {
-      _fiscalCustomerTaxId = taxId;
-    }
-    if (_fiscalCustomerName.trim().isEmpty) {
-      if (clientName.isNotEmpty && clientName != 'Sin cliente') {
-        _fiscalCustomerName = clientName;
-      } else if (businessName.isNotEmpty) {
-        _fiscalCustomerName = businessName;
-      }
+    // El RNC/Nombre fiscal del ticket refleja SIEMPRE al cliente seleccionado
+    // (fuente de verdad = campo real del cliente), evitando snapshots viejos o
+    // copias desactualizadas tras editar el cliente.
+    _fiscalCustomerTaxId = taxId;
+    if (clientName.isNotEmpty && clientName != 'Sin cliente') {
+      _fiscalCustomerName = clientName;
+    } else if (businessName.isNotEmpty) {
+      _fiscalCustomerName = businessName;
+    } else {
+      _fiscalCustomerName = '';
     }
   }
 
@@ -2109,16 +2160,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       final allowed = await _ensureFiscalInvoicePermission();
       if (!allowed || !mounted) return;
     }
-    if (_fiscalCustomerName.trim().isEmpty) {
-      _commitEditorChange(() {
-        final clientName = _selectedClientName.trim();
-        _fiscalCustomerName = clientName == 'Sin cliente' ? '' : clientName;
-      });
-    }
-    final initialVoucherType = _fiscalVoucherType;
-    final initialTaxId = _fiscalCustomerTaxId;
-    final initialCustomerName = _fiscalCustomerName;
-    final initialClientId = _selectedClientId;
+    final initialVoucherType = _effectiveFiscalVoucherType;
     await showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -2170,10 +2212,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     Expanded(
                       child: _DesktopFiscalInvoicePanel(
                         initialVoucherType: initialVoucherType,
-                        initialTaxId: initialTaxId,
-                        initialCustomerName: initialCustomerName,
-                        initialClientId: initialClientId,
-                        onSearchClients: _searchClientsForFiscalPanel,
                         onSave: (result) => _applyFiscalPanelResult(result),
                       ),
                     ),
@@ -2202,34 +2240,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   /// Aplica el resultado del panel fiscal al ticket activo (fuente única) y
-  /// persiste en el draft. Vincula el cliente si el panel lo resolvió.
+  /// persiste en el draft. El panel solo define el tipo de comprobante.
   void _applyFiscalPanelResult(_FiscalPanelResult result) {
     _commitEditorChange(() {
       _fiscalVoucherType = result.voucherType;
-      _fiscalCustomerTaxId = result.taxId;
-      _fiscalCustomerName = result.customerName;
-      final clientId = (result.clientId ?? '').trim();
-      if (clientId.isNotEmpty) {
-        final alreadySelected = clientId == (_selectedClientId ?? '');
-        _selectedClientId = clientId;
-        if (!alreadySelected && result.customerName.trim().isNotEmpty) {
-          _selectedClientName = result.customerName.trim();
-        }
-      }
     });
-  }
-
-  /// "Buscar en Clientes" del panel fiscal: reutiliza el MISMO panel de
-  /// clientes de Facturación y devuelve el estado fiscal sincronizado.
-  Future<_FiscalPanelSync?> _searchClientsForFiscalPanel() async {
-    await _openClientDialog();
-    if (!mounted) return null;
-    return _FiscalPanelSync(
-      voucherType: _fiscalVoucherType,
-      taxId: _fiscalCustomerTaxId,
-      customerName: _fiscalCustomerName,
-      clientId: _selectedClientId,
-    );
   }
 
   Future<void> _handleMobileQuickAction(_MobileQuickAction action) async {
@@ -3638,6 +3653,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     context,
                     clienteId: clienteId,
                     useRootNavigator: true,
+                    requireFiscalData: _activeTicketRequiresFiscalCustomer,
                   );
                 }
 
@@ -3666,6 +3682,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                 clienteId: clienteId,
                                 returnSavedClient: true,
                                 compactDialog: true,
+                                requireFiscalData:
+                                    _activeTicketRequiresFiscalCustomer,
                               ),
                             ),
                           ),
@@ -3709,6 +3727,36 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   setStateDialog(() {
                     loading = false;
                     error = '$e';
+                  });
+                }
+              }
+
+              /// Abre el formulario del cliente en modo edición (mismo id) y,
+              /// al guardar, refresca la fila del panel con los datos actualizados
+              /// sin crear ni duplicar el cliente. Respeta el owner/companyId
+              /// activo porque reutiliza `openClientFormDrawer`/`ClienteFormScreen`.
+              Future<void> editClientFromRow(ClienteModel client) async {
+                final updated = await openClientFormDrawer(
+                  clienteId: client.id,
+                );
+                if (!mounted ||
+                    !dialogOpen ||
+                    !context.mounted ||
+                    updated == null) {
+                  return;
+                }
+                setStateDialog(() {
+                  final idx = clients.indexWhere((c) => c.id == updated.id);
+                  if (idx >= 0) {
+                    clients = [...clients]..[idx] = updated;
+                  }
+                  detailClient = null;
+                });
+                if ((_selectedClientId ?? '').trim() == updated.id) {
+                  _commitEditorChange(() {
+                    _selectedClientName = updated.nombre;
+                    _selectedClientPhone = updated.telefono;
+                    _applyClientFiscalPrefill(updated);
                   });
                 }
               }
@@ -3958,15 +4006,52 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                           });
                                           Navigator.pop(context);
                                         },
-                                        trailing: TextButton.icon(
-                                          onPressed: () => setStateDialog(() {
-                                            detailClient = client;
-                                          }),
-                                          icon: const Icon(
-                                            Icons.open_in_new_rounded,
-                                            size: 16,
-                                          ),
-                                          label: const Text('Ver'),
+                                        trailing: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            TextButton.icon(
+                                              onPressed: () => setStateDialog(
+                                                () {
+                                                  detailClient = client;
+                                                },
+                                              ),
+                                              style: TextButton.styleFrom(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                    ),
+                                                minimumSize: const Size(0, 36),
+                                                tapTargetSize:
+                                                    MaterialTapTargetSize
+                                                        .shrinkWrap,
+                                              ),
+                                              icon: const Icon(
+                                                Icons.open_in_new_rounded,
+                                                size: 16,
+                                              ),
+                                              label: const Text('Ver'),
+                                            ),
+                                            const SizedBox(width: 2),
+                                            TextButton.icon(
+                                              onPressed: () =>
+                                                  editClientFromRow(client),
+                                              style: TextButton.styleFrom(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                    ),
+                                                minimumSize: const Size(0, 36),
+                                                tapTargetSize:
+                                                    MaterialTapTargetSize
+                                                        .shrinkWrap,
+                                              ),
+                                              icon: const Icon(
+                                                Icons.edit_outlined,
+                                                size: 16,
+                                              ),
+                                              label: const Text('Editar'),
+                                            ),
+                                          ],
                                         ),
                                       );
                                     },
@@ -4023,15 +4108,35 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                           });
                                           Navigator.pop(context);
                                         },
-                                        trailing: IconButton(
-                                          tooltip: 'Ver cliente',
-                                          onPressed: () => setStateDialog(() {
-                                            detailClient = client;
-                                          }),
-                                          iconSize: 20,
-                                          icon: const Icon(
-                                            Icons.open_in_new_rounded,
-                                          ),
+                                        trailing: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            IconButton(
+                                              tooltip: 'Ver cliente',
+                                              onPressed: () => setStateDialog(
+                                                () {
+                                                  detailClient = client;
+                                                },
+                                              ),
+                                              iconSize: 20,
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              icon: const Icon(
+                                                Icons.open_in_new_rounded,
+                                              ),
+                                            ),
+                                            IconButton(
+                                              tooltip: 'Editar cliente',
+                                              onPressed: () =>
+                                                  editClientFromRow(client),
+                                              iconSize: 20,
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              icon: const Icon(
+                                                Icons.edit_outlined,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       );
                                     },
@@ -5482,7 +5587,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     required String saleNote,
     required List<SaleDraftItem> saleItems,
   }) {
-    final voucherType = _fiscalVoucherType.trim().toUpperCase();
+    // Tipo fiscal EFECTIVO: con impuestos/comprobantes OFF queda vacío → la
+    // venta se guarda como Normal y NO se reserva ni consume NCF en el backend.
+    final voucherType = _effectiveFiscalVoucherType;
     return ref
         .read(ventasRepositoryProvider)
         .createSale(
@@ -5653,6 +5760,25 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
   }
 
+  bool _isBillingItemExempt(CotizacionItem item) {
+    final config = _currentTaxConfig;
+    final settings = config?.settings;
+    final taxEnabled = settings?.taxEnabled == true;
+    if (!taxEnabled) return false;
+    final pricesIncludeTax = settings?.pricesIncludeTax ?? true;
+    final defaultRate = config?.defaultRate ?? settings?.defaultTaxRate ?? 0.18;
+    return ProductTaxPreviewCalculator.calculate(
+      price: item.unitPrice,
+      quantity: item.qty,
+      companyTaxEnabled: taxEnabled,
+      companyPricesIncludeTax: pricesIncludeTax,
+      companyDefaultTaxRate: defaultRate,
+      taxTreatment: item.taxTreatment,
+      taxRate: item.taxRate > 0 ? item.taxRate : null,
+      taxPriceMode: item.taxPriceMode,
+    ).exempt;
+  }
+
   Widget _buildTicketLine({
     required CotizacionItem item,
     required int index,
@@ -5669,6 +5795,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       money: _money,
       showCost: isAdmin,
       outOfStock: outOfStock,
+      exempt: _isBillingItemExempt(item),
       onEditLine: () => _openLineEditor(index),
       onChangePrice: (value) => _setUnitPrice(index, value),
       onEdit: item.isExternal
@@ -6220,7 +6347,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                       _openMobileFiscalInvoicePanel(authorized: true),
                     ),
                     child: Text(
-                      'ITBIS ${_money(_taxAmount)}',
+                      '$_fiscalInvoiceLabel · ITBIS ${_money(_taxAmount)}',
                       style: const TextStyle(
                         color: Color(0xFF2563EB),
                         fontSize: 11,
@@ -6566,6 +6693,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                     ),
                                   )
                                 : null,
+                            fiscalLabel: _fiscalInvoiceLabel,
                             hasNote: _note.trim().isNotEmpty,
                             onOpenNote: _openNoteDialog,
                             onClear: !_hasEditorContent
@@ -6592,6 +6720,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                   (official.stock == null ||
                                       official.stock! <= 0);
                             },
+                            isItemExempt: _isBillingItemExempt,
                             onRemoveItem: (index) {
                               if (index < 0 || index >= _items.length) return;
                               _commitEditorChange(() => _items.removeAt(index));
@@ -12423,6 +12552,7 @@ class _DesktopQuotePanel extends StatelessWidget {
     required this.onClearClient,
     required this.onOpenHistory,
     required this.onOpenFiscalData,
+    required this.fiscalLabel,
     required this.hasNote,
     required this.onOpenNote,
     required this.onClear,
@@ -12434,6 +12564,7 @@ class _DesktopQuotePanel extends StatelessWidget {
     required this.onEditLine,
     required this.onEditExternalItem,
     required this.isOutOfStock,
+    required this.isItemExempt,
     required this.onRemoveItem,
   });
 
@@ -12454,6 +12585,7 @@ class _DesktopQuotePanel extends StatelessWidget {
   final VoidCallback onClearClient;
   final VoidCallback onOpenHistory;
   final VoidCallback? onOpenFiscalData;
+  final String fiscalLabel;
   final bool hasNote;
   final VoidCallback onOpenNote;
   final VoidCallback? onClear;
@@ -12465,6 +12597,7 @@ class _DesktopQuotePanel extends StatelessWidget {
   final ValueChanged<int> onEditLine;
   final ValueChanged<int> onEditExternalItem;
   final bool Function(CotizacionItem item) isOutOfStock;
+  final bool Function(CotizacionItem item) isItemExempt;
   final ValueChanged<int> onRemoveItem;
 
   @override
@@ -12706,6 +12839,7 @@ class _DesktopQuotePanel extends StatelessWidget {
                           item: item,
                           money: money,
                           outOfStock: isOutOfStock(item),
+                          exempt: isItemExempt(item),
                           onEditLine: () => onEditLine(index),
                           onMinus: () => onMinusQty(index),
                           onPlus: () => onPlusQty(index),
@@ -12878,13 +13012,28 @@ class _DesktopQuotePanel extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (includeItbis) ...[
-                          IconButton(
-                            tooltip: 'Datos fiscales',
+                          TextButton.icon(
                             onPressed: onOpenFiscalData,
-                            icon: const Icon(Icons.receipt_long_outlined),
-                            color: const Color(0xFF1957E6),
+                            icon: const Icon(
+                              Icons.receipt_long_outlined,
+                              size: 16,
+                            ),
+                            label: Text(
+                              fiscalLabel,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF1957E6),
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                            ),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 4),
                         ],
                         _DesktopPanelSwitchAction(
                           icon: Icons.sticky_note_2_outlined,
@@ -12921,50 +13070,18 @@ class _DesktopQuotePanel extends StatelessWidget {
 }
 
 class _FiscalPanelResult {
-  const _FiscalPanelResult({
-    required this.voucherType,
-    required this.taxId,
-    required this.customerName,
-    this.clientId,
-  });
+  const _FiscalPanelResult({required this.voucherType});
 
   final String voucherType;
-  final String taxId;
-  final String customerName;
-  final String? clientId;
-}
-
-/// Estado fiscal del ticket tras reutilizar el panel de Clientes
-/// (Buscar en Clientes).
-class _FiscalPanelSync {
-  const _FiscalPanelSync({
-    required this.voucherType,
-    required this.taxId,
-    required this.customerName,
-    this.clientId,
-  });
-
-  final String voucherType;
-  final String taxId;
-  final String customerName;
-  final String? clientId;
 }
 
 class _DesktopFiscalInvoicePanel extends ConsumerStatefulWidget {
   const _DesktopFiscalInvoicePanel({
     required this.initialVoucherType,
-    required this.initialTaxId,
-    required this.initialCustomerName,
-    required this.initialClientId,
-    required this.onSearchClients,
     required this.onSave,
   });
 
   final String initialVoucherType;
-  final String initialTaxId;
-  final String initialCustomerName;
-  final String? initialClientId;
-  final Future<_FiscalPanelSync?> Function() onSearchClients;
   final ValueChanged<_FiscalPanelResult> onSave;
 
   @override
@@ -12974,146 +13091,41 @@ class _DesktopFiscalInvoicePanel extends ConsumerStatefulWidget {
 
 class _DesktopFiscalInvoicePanelState
     extends ConsumerState<_DesktopFiscalInvoicePanel> {
+  late String _invoiceType;
   late String _voucherType;
-  late final TextEditingController _taxIdCtrl;
-  late final TextEditingController _customerNameCtrl;
-  late String? _clientId;
-  bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-    _voucherType = widget.initialVoucherType.trim().toUpperCase();
-    _taxIdCtrl = TextEditingController(text: widget.initialTaxId);
-    _customerNameCtrl = TextEditingController(
-      text: widget.initialCustomerName,
-    );
-    _clientId = widget.initialClientId;
+    final initial = widget.initialVoucherType.trim().toUpperCase();
+    _voucherType = initial;
+    _invoiceType = initial.isEmpty ? 'normal' : 'fiscal';
   }
 
-  @override
-  void dispose() {
-    _taxIdCtrl.dispose();
-    _customerNameCtrl.dispose();
-    super.dispose();
-  }
-
-  bool get _b01Selected => _voucherType == 'B01';
-
-  bool get _hasValidTaxId => isB01FiscalClientValid(_taxIdCtrl.text);
-
-  String get _normalizedTaxId => normalizeTaxId(_taxIdCtrl.text);
-
-  String? get _validationMessage {
-    if (!_b01Selected) return null;
-    if (!_hasValidTaxId) {
-      return 'El B01 requiere RNC/Cédula del cliente (mínimo 9 dígitos).';
-    }
-    return null;
+  void _selectInvoiceType(String type) {
+    setState(() {
+      _invoiceType = type;
+      if (type == 'normal') {
+        _voucherType = '';
+      }
+    });
   }
 
   void _selectVoucher(String type) {
     setState(() => _voucherType = type.trim().toUpperCase());
   }
 
-  void _syncCtrl(TextEditingController controller, String value) {
-    if (controller.text == value) return;
-    controller.text = value;
-    controller.selection = TextSelection.collapsed(offset: value.length);
-  }
+  bool _closing = false;
 
-  /// Reutiliza el panel de CLIENTES existente (Busca, selecciona o crea un
-  /// cliente). Al seleccionar, sincroniza el ticket fiscal con ese cliente.
-  Future<void> _openClientSearch() async {
-    final sync = await widget.onSearchClients();
-    if (sync == null || !mounted) return;
-    setState(() {
-      _voucherType = sync.voucherType.trim().toUpperCase();
-      _syncCtrl(_taxIdCtrl, sync.taxId);
-      _syncCtrl(_customerNameCtrl, sync.customerName);
-      _clientId = sync.clientId;
-    });
-  }
-
-  Future<ClienteModel?> _findClientByRnc(
-    VentasRepository repo,
-    String digits,
-  ) async {
-    if (digits.length < 6) return null;
-    final clients = await repo.searchClients(digits);
-    for (final client in clients) {
-      if (normalizeTaxId(client.taxId) == digits) return client;
-    }
-    return null;
-  }
-
-  /// Guarda el cliente mediante el módulo de CLIENTES (create/update/reuse).
-  /// NUNCA emite venta ni consume NCF.
-  Future<void> _finish() async {
-    final message = _validationMessage;
-    if (message != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
-      return;
-    }
-    if (_saving) return;
-    final digits = _normalizedTaxId;
-    final name = _customerNameCtrl.text.trim();
-    setState(() => _saving = true);
-    try {
-      final repo = ref.read(ventasRepositoryProvider);
-      String? clientId = _clientId;
-      if (digits.isNotEmpty && name.isNotEmpty) {
-        if (clientId != null && clientId.trim().isNotEmpty) {
-          // Ya hay cliente seleccionado: completar/actualizar SUS datos fiscales.
-          await repo.updateClientFiscal(
-            id: clientId,
-            taxId: digits,
-            nombre: name,
-          );
-        } else {
-          // Sin cliente: buscar por RNC en la empresa activa; reutilizar o crear.
-          final match = await _findClientByRnc(repo, digits);
-          if (match != null) {
-            clientId = match.id;
-          } else {
-            final created = await repo.createQuickClient(
-              nombre: name,
-              telefono: '',
-              taxId: digits,
-            );
-            clientId = created.id;
-          }
-        }
-      }
-      if (!mounted) return;
-      widget.onSave(
-        _FiscalPanelResult(
-          voucherType: _voucherType,
-          taxId: digits,
-          customerName: name,
-          clientId: clientId,
-        ),
-      );
-      Navigator.of(context).pop();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e is ApiException ? e.message : 'No se pudo guardar el cliente.',
-          ),
-        ),
-      );
-    }
+  void _finish() {
+    if (_closing) return;
+    _closing = true;
+    widget.onSave(_FiscalPanelResult(voucherType: _voucherType));
+    Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final border = Border.all(color: const Color(0xFFD3E0E7), width: 1.1);
     final config = ref.watch(productTaxUiConfigProvider).valueOrNull;
     final settings = config?.settings;
     final taxEnabled = settings?.taxEnabled == true;
@@ -13124,236 +13136,258 @@ class _DesktopFiscalInvoicePanelState
       ncfEnabled: ncfEnabled,
       configuredTypes: sequences.map((sequence) => sequence.voucherType),
     );
-    final selectedType = _voucherType;
     final fiscalDisabled = !taxEnabled || !ncfEnabled;
-    final validationMessage = _validationMessage;
+    final showFiscal = _invoiceType == 'fiscal';
+    // Fuente de verdad: con "Utilizar impuestos" OFF NO se ofrece la opción
+    // Fiscal (el ticket es siempre Normal / sin comprobante fiscal).
+    final showFiscalOption = taxEnabled;
 
-    return Container(
-      height: double.infinity,
-      decoration: const BoxDecoration(
-        color: Color(0xFFF8FBFF),
-        border: Border(right: BorderSide(color: Color(0xFFD3E0E7))),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x260B2A3A),
-            blurRadius: 28,
-            offset: Offset(10, 0),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: border,
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEAF1FF),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.fact_check_outlined,
-                      color: Color(0xFF1957E6),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+          _finish();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Container(
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          color: Color(0xFFF8FBFF),
+          border: Border(right: BorderSide(color: Color(0xFFD3E0E7))),
+          boxShadow: [
+            BoxShadow(
+              color: Color(0x260B2A3A),
+              blurRadius: 28,
+              offset: Offset(10, 0),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: ListView(
+                  padding: EdgeInsets.zero,
+                  children: [
+                    const _SectionHeader('Tipo de factura'),
+                    const SizedBox(height: 10),
+                    Row(
                       children: [
-                        Text(
-                          'Datos fiscales',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF132337),
+                        Expanded(
+                          child: _InvoiceTypeTile(
+                            label: 'Normal',
+                            icon: Icons.receipt_outlined,
+                            selected: _invoiceType == 'normal',
+                            onTap: () => _selectInvoiceType('normal'),
                           ),
                         ),
-                        SizedBox(height: 2),
-                        Text(
-                          'La cotización no emite NCF',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF647985),
+                        if (showFiscalOption) ...[
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _InvoiceTypeTile(
+                              label: 'Fiscal',
+                              icon: Icons.fact_check_outlined,
+                              selected: showFiscal,
+                              onTap: () => _selectInvoiceType('fiscal'),
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: border,
-                ),
-                child: ListView(
-                  children: [
-                    const Text(
-                      'El NCF se asigna únicamente al convertir y emitir la venta desde el backend.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF647985),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    const Text(
-                      'COMPROBANTE',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF647985),
-                        letterSpacing: 0.4,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    if (fiscalDisabled)
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFFBEB),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFF7D070)),
+                    const SizedBox(height: 16),
+                    if (showFiscal) ...[
+                      const _SectionHeader('Tipo de comprobante'),
+                      const SizedBox(height: 10),
+                      if (fiscalDisabled)
+                        const _InfoBlock(
+                          icon: Icons.warning_amber_rounded,
+                          message:
+                              'Los comprobantes fiscales están desactivados. Actívalos en Configuración de empresa.',
+                          color: Color(0xFFFFFBEB),
+                          borderColor: Color(0xFFF7D070),
+                          textColor: Color(0xFF7A4B00),
+                        )
+                      else if (options.isEmpty)
+                        const _InfoBlock(
+                          icon: Icons.info_outline_rounded,
+                          message:
+                              'No hay secuencias NCF activas configuradas para B01/B02.',
+                          color: Color(0xFFF8FBFF),
+                          borderColor: Color(0xFFD3E0E7),
+                        )
+                      else
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final option in options)
+                              _VoucherChoiceChip(
+                                label: option.label,
+                                selected: _voucherType == option.type,
+                                onTap: () => _selectVoucher(option.type),
+                              ),
+                          ],
                         ),
-                        child: Text(
-                          'Los comprobantes fiscales están desactivados. Actívalos en Configuración de empresa.',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: const Color(0xFF7A4B00),
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      )
-                    else if (options.isEmpty)
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FBFF),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFD3E0E7)),
-                        ),
-                        child: Text(
-                          'No hay secuencias NCF activas configuradas para B01/B02.',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      )
-                    else
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _VoucherChoiceChip(
-                            label: fiscalVoucherNoneLabel,
-                            selected: selectedType.isEmpty,
-                            onTap: () => _selectVoucher(''),
-                          ),
-                          for (final option in options)
-                            _VoucherChoiceChip(
-                              label: option.label,
-                              selected: selectedType == option.type,
-                              onTap: () => _selectVoucher(option.type),
-                            ),
-                        ],
+                      const SizedBox(height: 12),
+                      const _InfoBlock(
+                        icon: Icons.assignment_outlined,
+                        message: 'El NCF se asigna al emitir la venta.',
+                        color: Color(0xFFEAF1FF),
+                        borderColor: Color(0xFFB8CCFF),
+                        textColor: Color(0xFF1957E6),
                       ),
-                    const SizedBox(height: 14),
-                    const Text(
-                      'CLIENTE FISCAL',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF647985),
-                        letterSpacing: 0.4,
+                    ] else
+                      const _InfoBlock(
+                        icon: Icons.receipt_long_outlined,
+                        message: 'Venta sin comprobante fiscal.',
+                        color: Color(0xFFF8FBFF),
+                        borderColor: Color(0xFFD3E0E7),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _taxIdCtrl,
-                      onChanged: (_) => setState(() {}),
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'RNC / Cédula (opcional)',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                    ),
-                    if (validationMessage != null) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        validationMessage,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.error,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _customerNameCtrl,
-                      onChanged: (_) => setState(() {}),
-                      decoration: const InputDecoration(
-                        labelText: 'Nombre / cliente fiscal',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: OutlinedButton.icon(
-                        onPressed: _saving ? null : _openClientSearch,
-                        icon: const Icon(Icons.search_rounded, size: 18),
-                        label: const Text('Buscar en Clientes'),
-                        style: OutlinedButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          foregroundColor: const Color(0xFF1957E6),
-                          side: const BorderSide(color: Color(0xFFB8CCFF)),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              height: 46,
-              child: FilledButton.icon(
-                onPressed: _saving ? null : _finish,
-                icon: _saving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.check_rounded),
-                label: const Text('Guardar'),
-                style: FilledButton.styleFrom(
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 46,
+                child: FilledButton.icon(
+                  onPressed: _finish,
+                  icon: const Icon(Icons.check_rounded),
+                  label: const Text('Guardar'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF1957E6),
+                    foregroundColor: Colors.white,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(8)),
+                    ),
                   ),
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: const TextStyle(
+        fontSize: 10.5,
+        fontWeight: FontWeight.w900,
+        color: Color(0xFF647985),
+        letterSpacing: 0.8,
+      ),
+    );
+  }
+}
+
+class _InfoBlock extends StatelessWidget {
+  const _InfoBlock({
+    required this.message,
+    required this.color,
+    required this.borderColor,
+    this.icon = Icons.info_outline_rounded,
+    this.textColor = const Color(0xFF5B6B7A),
+  });
+
+  final String message;
+  final Color color;
+  final Color borderColor;
+  final IconData icon;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: borderColor, width: 1),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: textColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: textColor,
+                height: 1.25,
+              ),
             ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InvoiceTypeTile extends StatelessWidget {
+  const _InvoiceTypeTile({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? const Color(0xFF1957E6) : const Color(0xFF52697A);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFFEAF1FF) : Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected
+                  ? const Color(0xFF1957E6)
+                  : const Color(0xFFD3E0E7),
+              width: selected ? 1.4 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -14825,6 +14859,7 @@ class _DesktopTicketItem extends StatefulWidget {
     required this.item,
     required this.money,
     required this.outOfStock,
+    required this.exempt,
     required this.onEditLine,
     required this.onMinus,
     required this.onPlus,
@@ -14836,6 +14871,7 @@ class _DesktopTicketItem extends StatefulWidget {
   final CotizacionItem item;
   final String Function(double) money;
   final bool outOfStock;
+  final bool exempt;
   final VoidCallback onEditLine;
   final VoidCallback onMinus;
   final VoidCallback onPlus;
@@ -14968,6 +15004,28 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                             fontWeight: FontWeight.w900,
                             height: 1,
                             letterSpacing: 0,
+                          ),
+                        ),
+                      ),
+                    if (widget.exempt)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE7F6EC),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'EXENTO',
+                          style: TextStyle(
+                            color: Color(0xFF15803D),
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w800,
+                            height: 1.1,
+                            letterSpacing: 0.4,
                           ),
                         ),
                       ),
@@ -15805,6 +15863,7 @@ class _TicketCompactItem extends StatefulWidget {
     required this.money,
     required this.showCost,
     required this.outOfStock,
+    required this.exempt,
     required this.onEditLine,
     required this.onChangePrice,
     required this.onEdit,
@@ -15815,6 +15874,7 @@ class _TicketCompactItem extends StatefulWidget {
   final String Function(double) money;
   final bool showCost;
   final bool outOfStock;
+  final bool exempt;
   final VoidCallback onEditLine;
   final ValueChanged<double> onChangePrice;
   final VoidCallback? onEdit;
@@ -15888,6 +15948,28 @@ class _TicketCompactItemState extends State<_TicketCompactItem> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (widget.exempt)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE7F6EC),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'EXENTO',
+                          style: TextStyle(
+                            color: Color(0xFF15803D),
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w800,
+                            height: 1.1,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                      ),
                     Text(
                       item.nombre,
                       maxLines: 1,

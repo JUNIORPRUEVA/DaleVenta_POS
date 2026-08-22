@@ -2,20 +2,34 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 import '../utils/product_image_url.dart';
+import 'cache_repair.dart';
 
 class FulltechImageCacheManager {
   static const _key = 'fulltechProductImagesV5';
   static const _defaultThumbnailSize = 320;
 
+  // Instancia estable (singleton) creada una sola vez. Se usa un repositorio
+  // de metadatos auto-recuperable para que un índice JSON vacío/corrupto se
+  // reconstruya limpio al abrir en vez de reportar `FormatException`.
+  static CacheManager? _instance;
+
   // Product images are versioned by URL/cache key. Thirty days keeps the POS
   // fast across restarts without allowing the disk cache to grow indefinitely.
-  static final CacheManager instance = CacheManager(
-    Config(
-      _key,
-      stalePeriod: const Duration(days: 30),
-      maxNrOfCacheObjects: 1200,
-    ),
-  );
+  static CacheManager get instance {
+    var manager = _instance;
+    if (manager == null) {
+      manager = CacheManager(
+        Config(
+          _key,
+          stalePeriod: const Duration(days: 30),
+          maxNrOfCacheObjects: 1200,
+          repo: buildCacheInfoRepositoryForPlatform(_key),
+        ),
+      );
+      _instance = manager;
+    }
+    return manager;
+  }
 
   static Future<void> warmImageUrls(
     Iterable<String?> urls, {

@@ -575,6 +575,7 @@ export class ProductsService {
       const products = await this.prisma.product.findMany({
         where: { companyId },
         orderBy: { nombre: "asc" },
+        select: this.catalogProductSelect(),
       });
       return products.map((p) => this.mapProduct(p));
     } catch (error) {
@@ -582,6 +583,7 @@ export class ProductsService {
       const products = await this.prisma.product.findMany({
         where: { companyId },
         orderBy: { nombre: "asc" },
+        select: this.catalogProductSelect(),
       });
       return products.map((p) => this.mapProduct(p));
     }
@@ -776,6 +778,34 @@ export class ProductsService {
     return {
       ok: true,
       deletedProducts: deleted.count,
+    };
+  }
+
+  /**
+   * Explicit SELECT for the catalog listing (/products).
+   *
+   * Keeps every column the response contract needs (all consumed by the
+   * Flutter POS + PWA clients) and only skips columns the mobile/desktop/web
+   * clients never read (raw storage metadata). The output shape produced by
+   * mapProduct() is unchanged for consumed fields; the skipped ones were
+   * already emitted as null for products without images.
+   */
+  private catalogProductSelect(): Prisma.ProductSelect {
+    return {
+      id: true,
+      companyId: true,
+      nombre: true,
+      codigo: true,
+      categoria: true,
+      costo: true,
+      precio: true,
+      stock: true,
+      taxTreatment: true,
+      taxRate: true,
+      taxPriceMode: true,
+      imagen: true,
+      imageKey: true,
+      imageUpdatedAt: true,
     };
   }
 

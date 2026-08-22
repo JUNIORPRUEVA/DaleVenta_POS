@@ -172,6 +172,9 @@ class ActiveCashSessionController
     String movementType = 'expense',
     bool? affectsProfit,
   }) async {
+    // El notifier pudo haberse recreado (dispose) mientras una operación
+    // async/diálogo estaba en vuelo. Evitar tocar un controller muerto.
+    if (!mounted) return;
     final repo = ref.read(cashRepositoryProvider);
     await repo.addMovement(
       type: type,

@@ -3741,6 +3741,8 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
   final _qtyCtrl = TextEditingController(text: '1');
   final _noteCtrl = TextEditingController();
   bool _saving = false;
+  OverlayEntry? _noticeEntry;
+  Timer? _noticeTimer;
 
   @override
   void initState() {
@@ -3758,6 +3760,8 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
 
   @override
   void dispose() {
+    _noticeTimer?.cancel();
+    _noticeEntry?.remove();
     _searchCtrl.dispose();
     _qtyCtrl.dispose();
     _noteCtrl.dispose();
@@ -3852,23 +3856,32 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
 
   Future<void> _applyAdjustment() async {
     if (!widget.canAddStock) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No tienes permiso para ajustar stock')),
+      _showTopNotice(
+        title: 'Sin permiso',
+        message: 'No tienes permiso para ajustar stock.',
+        icon: Icons.lock_outline_rounded,
+        accent: const Color(0xFFB45309),
       );
       return;
     }
     final selected =
         _selected ?? (_products.isNotEmpty ? _products.first : null);
     if (selected == null || _quantity <= 0 || !_quantity.isFinite) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ingresa una cantidad mayor que cero')),
+      _showTopNotice(
+        title: 'Cantidad inválida',
+        message: 'Ingresa una cantidad mayor que cero.',
+        icon: Icons.warning_amber_rounded,
+        accent: const Color(0xFFB45309),
       );
       return;
     }
     final nextStock = _previewStock(selected);
     if (nextStock < 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('El stock no puede quedar negativo')),
+      _showTopNotice(
+        title: 'Stock insuficiente',
+        message: 'El stock no puede quedar negativo.',
+        icon: Icons.warning_amber_rounded,
+        accent: const Color(0xFFB45309),
       );
       return;
     }
@@ -3876,12 +3889,10 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
     try {
       await widget.onSetStock(selected, nextStock);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Stock actualizado: ${selected.nombre} ahora tiene ${_stockText(nextStock)}',
-          ),
-        ),
+      _showTopNotice(
+        title: 'Stock actualizado',
+        message:
+            '${selected.nombre} ahora tiene ${_stockText(nextStock)} unidades.',
       );
       _noteCtrl.clear();
       _qtyCtrl.text = '1';
@@ -3895,12 +3906,57 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo ajustar stock: $e')));
+      _showTopNotice(
+        title: 'No se pudo ajustar stock',
+        message: '$e',
+        icon: Icons.error_outline_rounded,
+        accent: const Color(0xFFB42318),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  void _hideTopNotice() {
+    _noticeTimer?.cancel();
+    _noticeTimer = null;
+    _noticeEntry?.remove();
+    _noticeEntry = null;
+  }
+
+  /// Notificación tipo toast en la parte SUPERIOR, insertada en el overlay
+  /// raíz para quedar SIEMPRE por encima del panel lateral "Ajustar stock".
+  /// Auto-cierra, permite 2-3 líneas y no bloquea la interacción.
+  void _showTopNotice({
+    required String title,
+    required String message,
+    IconData icon = Icons.check_circle_outline_rounded,
+    Color accent = const Color(0xFF059669),
+  }) {
+    if (!mounted) return;
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    if (overlay == null) return;
+    _hideTopNotice();
+    final topPadding = MediaQuery.viewPaddingOf(context).top + 16;
+    late final OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (context) {
+        return Positioned(
+          top: topPadding,
+          right: 18,
+          child: _TopNoticeToast(
+            title: title,
+            message: message,
+            icon: icon,
+            accent: accent,
+            onClose: _hideTopNotice,
+          ),
+        );
+      },
+    );
+    _noticeEntry = entry;
+    overlay.insert(entry);
+    _noticeTimer = Timer(const Duration(milliseconds: 3400), _hideTopNotice);
   }
 
   @override
@@ -4165,6 +4221,115 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
           ),
         );
       },
+    );
+  }
+}
+
+class _TopNoticeToast extends StatelessWidget {
+  const _TopNoticeToast({
+    required this.title,
+    required this.message,
+    required this.icon,
+    required this.accent,
+    required this.onClose,
+  });
+
+  final String title;
+  final String message;
+  final IconData icon;
+  final Color accent;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480, minWidth: 320),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: accent.withValues(alpha: 0.38)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 24,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Stack(
+              children: [
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(height: 3, color: accent),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 8, 14),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: 0.13),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(icon, color: accent, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xFF0F172A),
+                                fontWeight: FontWeight.w900,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              message,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xFF475569),
+                                fontWeight: FontWeight.w600,
+                                height: 1.3,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        tooltip: 'Cerrar',
+                        onPressed: onClose,
+                        icon: const Icon(Icons.close_rounded, size: 18),
+                        color: const Color(0xFF94A3B8),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

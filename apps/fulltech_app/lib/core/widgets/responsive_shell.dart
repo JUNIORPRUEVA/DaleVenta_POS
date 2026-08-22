@@ -22,6 +22,7 @@ import '../routing/route_access.dart';
 import '../routing/routes.dart';
 import '../theme/role_branding.dart';
 import '../utils/date_time_formatters.dart';
+import '../utils/money_formatters.dart';
 import 'app_drawer.dart';
 import 'app_navigation.dart';
 import 'user_avatar.dart';
@@ -761,6 +762,9 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
       showCashToast(
         context,
         type == 'IN' ? 'Ingreso registrado' : 'Salida registrada',
+        detail: type == 'IN'
+            ? 'Se agregaron ${formatRdCurrencyAccounting(input.amount)} a la caja.'
+            : 'Se retiraron ${formatRdCurrencyAccounting(input.amount)} de la caja.',
       );
     } catch (error) {
       if (!mounted) return;

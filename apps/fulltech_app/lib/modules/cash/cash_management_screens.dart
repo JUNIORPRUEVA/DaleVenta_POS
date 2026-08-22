@@ -93,8 +93,8 @@ class _CashExpenseScreenState extends ConsumerState<CashExpenseScreen> {
             movementType: 'expense',
             affectsProfit: true,
           );
-      ref.invalidate(cashExpenseHistoryProvider);
       if (!mounted) return;
+      ref.invalidate(cashExpenseHistoryProvider);
       showCashToast(context, 'Gasto registrado');
       _amountController.text = '0.00';
       _reasonController.clear();
@@ -239,12 +239,15 @@ class _CashMovementsHistoryScreenState
             movementType: input.movementType,
             affectsProfit: input.affectsProfit,
           );
+      if (!mounted) return;
       ref.invalidate(cashMovementHistoryProvider);
       ref.invalidate(cashExpenseHistoryProvider);
-      if (!mounted) return;
       showCashToast(
         context,
         type == 'IN' ? 'Ingreso registrado' : 'Salida registrada',
+        detail: type == 'IN'
+            ? 'Se agregaron ${formatRdCurrencyAccounting(input.amount)} a la caja.'
+            : 'Se retiraron ${formatRdCurrencyAccounting(input.amount)} de la caja.',
       );
     } catch (error) {
       if (!mounted) return;

@@ -122,10 +122,12 @@ class CashBoxScreen extends ConsumerWidget {
     WidgetRef ref,
     String type,
   ) async {
+    // Capturar el controller ANTES del await: si la pantalla se destruye
+    // mientras el diálogo está abierto, usar `ref` (WidgetRef) después
+    // lanzaría 'Cannot use "ref" after the widget was disposed'.
+    final controller = ref.read(activeCashSessionControllerProvider.notifier);
     final input = await showCashMovementDialog(context, type: type);
     if (input == null) return;
-    // Releer el notifier justo en el punto de uso (tras el diálogo/await).
-    final controller = ref.read(activeCashSessionControllerProvider.notifier);
     await controller.addMovement(
       type: type,
       amount: input.amount,

@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/env.dart';
 import '../auth/token_storage.dart';
+import '../cache/cache_repair.dart';
 import '../cache/fulltech_cache_manager.dart';
 import '../debug/trace_log.dart';
 import '../offline/offline_store.dart';
@@ -19,6 +20,10 @@ class AppStorageScopeGuard {
     if (isFlutterTest) return;
 
     try {
+      // Recupera el índice JSON del DefaultCacheManager (avatares/facturas) si
+      // quedó vacío/corrupto, ANTES de que cualquier imagen lo lea.
+      await CacheInfoFileGuard.repairDefaultCacheManagerInfo();
+
       final prefs = await SharedPreferences.getInstance();
       final current = await _currentScope();
       final previous = prefs.getString(_scopeKey);
