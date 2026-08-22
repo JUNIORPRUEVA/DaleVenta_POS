@@ -142,13 +142,13 @@ void main() {
     },
   );
 
-  test('updateClientFiscal PATCHes the CLIENTES endpoint with taxId and businessName', () async {
+  test('updateClientFiscal PATCHes the CLIENTES endpoint with taxId and nombre', () async {
     final repository = buildRepository();
 
     await repository.updateClientFiscal(
       id: 'client-1',
       taxId: '133020253',
-      businessName: 'Potatoes Dres, SRL',
+      nombre: 'Potatoes Dres, SRL',
     );
 
     final request = captured.single;
@@ -156,7 +156,7 @@ void main() {
     expect(request.path, '/clients/client-1');
     final data = request.data as Map<String, dynamic>;
     expect(data['taxId'], '133020253');
-    expect(data['businessName'], 'Potatoes Dres, SRL');
+    expect(data['nombre'], 'Potatoes Dres, SRL');
   });
 }
 

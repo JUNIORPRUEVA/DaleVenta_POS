@@ -960,15 +960,14 @@ class VentasRepository {
   Future<ClienteModel> updateClientFiscal({
     required String id,
     String? taxId,
-    String? businessName,
+    String? nombre,
   }) async {
     try {
       final res = await _dio.patch(
         ApiRoutes.clientDetail(id),
         data: {
           if ((taxId ?? '').trim().isNotEmpty) 'taxId': taxId!.trim(),
-          if ((businessName ?? '').trim().isNotEmpty)
-            'businessName': businessName!.trim(),
+          if ((nombre ?? '').trim().isNotEmpty) 'nombre': nombre!.trim(),
         },
       );
       return ClienteModel.fromJson((res.data as Map).cast<String, dynamic>());

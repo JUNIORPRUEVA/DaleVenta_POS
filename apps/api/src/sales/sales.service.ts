@@ -793,8 +793,8 @@ export class SalesService {
       : null;
     const customerSnapshotTaxId = customerFiscalSnapshot?.taxId?.trim() || null;
     const customerSnapshotName =
-      customerFiscalSnapshot?.businessName?.trim() ||
       customerFiscalSnapshot?.nombre?.trim() ||
+      customerFiscalSnapshot?.businessName?.trim() ||
       null;
 
     if (
@@ -802,7 +802,7 @@ export class SalesService {
       (!customerId || !customerFiscalSnapshot)
     ) {
       throw new BadRequestException(
-        "Para emitir un comprobante B01 debes seleccionar un cliente con RNC y razón social.",
+        "Para emitir un comprobante B01 debes seleccionar un cliente con RNC/Cédula y nombre.",
       );
     }
 
@@ -834,7 +834,7 @@ export class SalesService {
         (!fiscalCustomerTaxId || !fiscalCustomerName)
       ) {
         throw new BadRequestException(
-          "Para emitir un comprobante B01 debes seleccionar un cliente con RNC y razón social.",
+          "Para emitir un comprobante B01 debes seleccionar un cliente con RNC/Cédula y nombre.",
         );
       }
       if (requestedVoucherType === "B02") {

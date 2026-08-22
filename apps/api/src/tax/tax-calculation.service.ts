@@ -207,7 +207,7 @@ export class TaxCalculationService {
 
     if (!(params.customerTaxId ?? "").trim() || !(params.customerBusinessName ?? "").trim()) {
       throw new BadRequestException(
-        "El comprobante fiscal seleccionado requiere RNC/cedula y razon social del cliente.",
+        "El comprobante fiscal seleccionado requiere RNC/cédula y nombre del cliente.",
       );
     }
   }

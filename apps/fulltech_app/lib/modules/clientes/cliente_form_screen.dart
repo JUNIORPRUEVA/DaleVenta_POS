@@ -1,20 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:latlong2/latlong.dart';
-import 'package:validators/validators.dart' as validators;
 
 import '../../core/auth/auth_provider.dart';
-import '../../core/auth/auth_repository.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/routing/routes.dart';
-import '../../core/utils/safe_url_launcher.dart';
-import '../../core/widgets/app_navigation.dart';
 import '../../core/widgets/app_drawer.dart';
+import '../../core/widgets/app_navigation.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import 'application/clientes_controller.dart';
-import 'client_location_utils.dart';
 import 'cliente_model.dart';
 
 Future<ClienteModel?> openClienteFormAdaptive(
@@ -114,10 +108,7 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
   final _nombreCtrl = TextEditingController();
   final _telefonoCtrl = TextEditingController();
   final _direccionCtrl = TextEditingController();
-  final _locationUrlCtrl = TextEditingController();
-  final _correoCtrl = TextEditingController();
   final _taxIdCtrl = TextEditingController();
-  final _businessNameCtrl = TextEditingController();
 
   bool _loadingInitial = false;
   ClienteModel? _cliente;
@@ -135,10 +126,7 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
     _nombreCtrl.dispose();
     _telefonoCtrl.dispose();
     _direccionCtrl.dispose();
-    _locationUrlCtrl.dispose();
-    _correoCtrl.dispose();
     _taxIdCtrl.dispose();
-    _businessNameCtrl.dispose();
     super.dispose();
   }
 
@@ -155,10 +143,7 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
         _nombreCtrl.text = cliente.nombre;
         _telefonoCtrl.text = cliente.telefono;
         _direccionCtrl.text = cliente.direccion ?? '';
-        _locationUrlCtrl.text = cliente.locationUrl ?? '';
-        _correoCtrl.text = cliente.correo ?? '';
         _taxIdCtrl.text = cliente.taxId ?? '';
-        _businessNameCtrl.text = cliente.businessName ?? '';
       });
     } catch (_) {
       if (!mounted) return;
@@ -184,10 +169,10 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
             nombre: _nombreCtrl.text,
             telefono: _telefonoCtrl.text,
             direccion: _direccionCtrl.text,
-            locationUrl: normalizeClientLocationUrl(_locationUrlCtrl.text),
-            correo: _correoCtrl.text,
+            locationUrl: _cliente?.locationUrl,
+            correo: _cliente?.correo,
             taxId: _taxIdCtrl.text,
-            businessName: _businessNameCtrl.text,
+            businessName: _cliente?.businessName,
             taxIdType: _taxIdCtrl.text.trim().isEmpty ? null : 'RNC',
           );
       if (!mounted) return;
@@ -218,18 +203,7 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(clientesControllerProvider);
     final user = ref.watch(authStateProvider).user;
-    final normalizedLocationUrl = normalizeClientLocationUrl(
-      _locationUrlCtrl.text,
-    );
-    final locationPreview = parseClientLocationPreview(normalizedLocationUrl);
-    final locationUri = Uri.tryParse(normalizedLocationUrl);
-    final formContent = _buildFormContent(
-      context,
-      state: state,
-      normalizedLocationUrl: normalizedLocationUrl,
-      locationPreview: locationPreview,
-      locationUri: locationUri,
-    );
+    final formContent = _buildFormContent(context, state: state);
 
     if (widget.compactDialog) {
       final theme = Theme.of(context);
@@ -352,9 +326,6 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
   Widget _buildFormContent(
     BuildContext context, {
     required ClientesState state,
-    required String normalizedLocationUrl,
-    required ClientLocationPreview locationPreview,
-    required Uri? locationUri,
   }) {
     return Form(
       key: _formKey,
@@ -410,79 +381,11 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
           ),
           const SizedBox(height: 12),
           TextFormField(
-            controller: _locationUrlCtrl,
-            keyboardType: TextInputType.url,
-            decoration: InputDecoration(
-              labelText: 'Link de ubicacion',
-              hintText: 'https://maps.google.com/...',
-              suffixIcon: IconButton(
-                tooltip: 'Abrir link',
-                onPressed: normalizedLocationUrl.isEmpty
-                    ? null
-                    : () async {
-                        final uri = locationUri;
-                        if (uri == null) return;
-                        await safeOpenUrl(context, uri);
-                      },
-                icon: const Icon(Icons.open_in_new_rounded),
-              ),
-            ),
-            onChanged: (_) => setState(() {}),
-            validator: (value) {
-              final normalized = normalizeClientLocationUrl(value);
-              if (normalized.isEmpty) return null;
-              final uri = Uri.tryParse(normalized);
-              final looksValid =
-                  uri != null &&
-                  uri.hasScheme &&
-                  (uri.host.isNotEmpty || uri.scheme == 'geo');
-              if (!looksValid) {
-                return 'Ingresa un link de ubicacion valido';
-              }
-              return null;
-            },
-          ),
-          if (normalizedLocationUrl.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            _LocationPreviewCard(
-              locationUrl: normalizedLocationUrl,
-              latitude: locationPreview.latitude,
-              longitude: locationPreview.longitude,
-            ),
-          ],
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _correoCtrl,
-            keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(
-              labelText: 'Correo',
-              hintText: 'Opcional',
-            ),
-            validator: (value) {
-              final text = (value ?? '').trim();
-              if (text.isEmpty) return null;
-              if (!validators.isEmail(text)) {
-                return 'Correo invalido';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
             controller: _taxIdCtrl,
             keyboardType: TextInputType.number,
             decoration: const InputDecoration(
               labelText: 'RNC / cedula fiscal',
               hintText: 'Opcional para comprobante B01',
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _businessNameCtrl,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              labelText: 'Razon social',
-              hintText: 'Opcional',
             ),
           ),
           const SizedBox(height: 20),
@@ -511,132 +414,6 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _LocationPreviewCard extends ConsumerWidget {
-  const _LocationPreviewCard({
-    required this.locationUrl,
-    this.latitude,
-    this.longitude,
-  });
-
-  final String locationUrl;
-  final double? latitude;
-  final double? longitude;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final uri = Uri.tryParse(locationUrl);
-    final directPreview = ClientLocationPreview(
-      latitude: latitude,
-      longitude: longitude,
-      resolvedUrl: locationUrl,
-    );
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Vista previa de ubicacion',
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            FutureBuilder<ClientLocationPreview>(
-              future: resolveClientLocationPreview(
-                locationUrl,
-                dio: ref.read(dioProvider),
-              ),
-              initialData: directPreview,
-              builder: (context, snapshot) {
-                final preview = snapshot.data ?? directPreview;
-
-                if (preview.hasCoordinates) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: SizedBox(
-                          height: 180,
-                          child: FlutterMap(
-                            options: MapOptions(
-                              initialCenter: LatLng(
-                                preview.latitude!,
-                                preview.longitude!,
-                              ),
-                              initialZoom: 15,
-                              interactionOptions: const InteractionOptions(
-                                flags: InteractiveFlag.none,
-                              ),
-                            ),
-                            children: [
-                              TileLayer(
-                                urlTemplate:
-                                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                                userAgentPackageName: 'com.fulltech.app',
-                              ),
-                              MarkerLayer(
-                                markers: [
-                                  Marker(
-                                    point: LatLng(
-                                      preview.latitude!,
-                                      preview.longitude!,
-                                    ),
-                                    width: 40,
-                                    height: 40,
-                                    child: Icon(
-                                      Icons.location_pin,
-                                      color: theme.colorScheme.error,
-                                      size: 40,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '${preview.latitude!.toStringAsFixed(6)}, ${preview.longitude!.toStringAsFixed(6)}',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ],
-                  );
-                }
-
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    child: LinearProgressIndicator(),
-                  );
-                }
-
-                return Text(
-                  'El enlace se guardara, pero no se pudieron extraer coordenadas para mostrar el mapa aqui.',
-                  style: theme.textTheme.bodyMedium,
-                );
-              },
-            ),
-            if (uri != null) ...[
-              const SizedBox(height: 8),
-              FilledButton.tonalIcon(
-                onPressed: () => safeOpenUrl(context, uri),
-                icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                label: const Text('Abrir enlace'),
-              ),
-            ],
-          ],
-        ),
       ),
     );
   }

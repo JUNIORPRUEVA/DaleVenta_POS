@@ -2013,24 +2013,22 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   String? get _selectedClientTaxId => _selectedClient?.taxId?.trim();
 
   String? get _selectedClientFiscalName {
-    final businessName = _selectedClient?.businessName?.trim();
-    if (businessName != null && businessName.isNotEmpty) return businessName;
     final name = _selectedClient?.nombre.trim();
-    return name == null || name.isEmpty ? null : name;
+    if (name != null && name.isNotEmpty) return name;
+    final businessName = _selectedClient?.businessName?.trim();
+    return businessName == null || businessName.isEmpty ? null : businessName;
   }
 
   bool get _b01ClientRequirementMissing =>
       _selectedFiscalVoucherType == 'B01' &&
       !isB01FiscalClientValid(_selectedClientTaxId, _selectedClientFiscalName);
 
-  Future<void> _showB01ClientRequiredDialog() async {
+  Future<void> _showB01ClientRequiredDialog(String message) async {
     final shouldSelectClient = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Datos fiscales requeridos'),
-        content: const Text(
-          'Para emitir un comprobante B01 debes seleccionar un cliente con RNC y razón social.',
-        ),
+        content: Text(message),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -2093,7 +2091,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                 controller: searchCtrl,
                 onSubmitted: (_) => runSearch(setDialogState),
                 decoration: InputDecoration(
-                  hintText: 'Buscar por nombre, razón social, RNC o teléfono',
+                  hintText: 'Buscar por nombre, RNC o teléfono',
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
                     onPressed: () => runSearch(setDialogState),
@@ -2119,11 +2117,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                           itemBuilder: (context, index) {
                             final c = rows[index];
                             final taxId = c.taxId?.trim();
-                            final businessName = c.businessName?.trim();
                             final details = [
-                              if (businessName != null &&
-                                  businessName.isNotEmpty)
-                                businessName,
                               if (c.telefono.trim().isNotEmpty) c.telefono,
                               if (taxId != null && taxId.isNotEmpty)
                                 'RNC: $taxId',
@@ -2464,7 +2458,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
     final taxIdCtrl = TextEditingController();
-    final businessNameCtrl = TextEditingController();
 
     final ok = await showDialog<bool>(
       context: context,
@@ -2491,14 +2484,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                 hintText: 'Opcional para B01',
               ),
             ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: businessNameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Razón social',
-                hintText: 'Opcional',
-              ),
-            ),
           ],
         ),
         actions: [
@@ -2523,7 +2508,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
             nombre: nameCtrl.text,
             telefono: phoneCtrl.text,
             taxId: taxIdCtrl.text,
-            businessName: businessNameCtrl.text,
           );
       if (!mounted) return;
       setState(() {
@@ -2558,13 +2542,27 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       return;
     }
 
-    if (_selectedFiscalVoucherType == 'B01' &&
-        !isB01FiscalClientValid(
-          _selectedClientTaxId,
-          _selectedClientFiscalName,
-        )) {
-      await _showB01ClientRequiredDialog();
-      return;
+    if (_selectedFiscalVoucherType == 'B01') {
+      if (_selectedClient == null) {
+        await _showB01ClientRequiredDialog(
+          'Para emitir un comprobante B01 debes seleccionar un cliente.',
+        );
+        return;
+      }
+      final hasTaxId = normalizeTaxId(_selectedClientTaxId).length >= 9;
+      final hasName = (_selectedClientFiscalName ?? '').trim().isNotEmpty;
+      if (!hasTaxId) {
+        await _showB01ClientRequiredDialog(
+          'El cliente seleccionado debe tener RNC/Cédula para emitir este comprobante.',
+        );
+        return;
+      }
+      if (!hasName) {
+        await _showB01ClientRequiredDialog(
+          'El cliente debe tener nombre para emitir este comprobante.',
+        );
+        return;
+      }
     }
 
     debugPrint(
@@ -3078,7 +3076,7 @@ class _B01ClientRequirementNotice extends StatelessWidget {
         const SizedBox(width: 5),
         Expanded(
           child: Text(
-            'Requiere un cliente con RNC y razón social.',
+            'Requiere un cliente con RNC/Cédula y nombre.',
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(

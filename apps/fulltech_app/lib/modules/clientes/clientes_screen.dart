@@ -188,9 +188,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
     final totalClients = items.length;
     final activeClients = items.where((c) => !c.isDeleted).length;
     final deletedClients = items.where((c) => c.isDeleted).length;
-    final withEmail = items
-        .where((c) => (c.correo ?? '').trim().isNotEmpty)
-        .length;
     final withPhone = items.where((c) => c.telefono.trim().isNotEmpty).length;
     final withAddress = items
         .where((c) => (c.direccion ?? '').trim().isNotEmpty)
@@ -210,7 +207,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
           totalClients: totalClients,
           activeClients: activeClients,
           deletedClients: deletedClients,
-          withEmail: withEmail,
           withPhone: withPhone,
           withAddress: withAddress,
           totalPurchasedFuture: totalPurchasedFuture,
@@ -1157,11 +1153,11 @@ class _ClienteFixedInfoColumn extends ConsumerWidget {
                               ? 'Sin teléfono'
                               : selected.telefono.trim(),
                         ),
-                        if ((selected.correo ?? '').trim().isNotEmpty)
+                        if ((selected.taxId ?? '').trim().isNotEmpty)
                           _ClientInfoLine(
-                            icon: Icons.email_outlined,
-                            label: 'Correo',
-                            value: selected.correo!.trim(),
+                            icon: Icons.badge_outlined,
+                            label: 'RNC / Cédula',
+                            value: selected.taxId!.trim(),
                           ),
                         if ((selected.direccion ?? '').trim().isNotEmpty)
                           _ClientInfoLine(
@@ -1169,12 +1165,6 @@ class _ClienteFixedInfoColumn extends ConsumerWidget {
                             label: 'Dirección',
                             value: selected.direccion!.trim(),
                             maxLines: 3,
-                          ),
-                        if ((selected.locationUrl ?? '').trim().isNotEmpty)
-                          const _ClientInfoLine(
-                            icon: Icons.map_outlined,
-                            label: 'Ubicación',
-                            value: 'GPS disponible',
                           ),
                         _ClientInfoLine(
                           icon: Icons.calendar_today_outlined,
@@ -1932,7 +1922,7 @@ class _ClientesFiltersSheetState extends State<_ClientesFiltersSheet> {
                             ),
                             SizedBox(height: 2),
                             Text(
-                              'Orden, correo y estado',
+                              'Orden y estado',
                               style: TextStyle(
                                 color: AppColors.textMuted,
                                 fontSize: 12,
@@ -1963,22 +1953,6 @@ class _ClientesFiltersSheetState extends State<_ClientesFiltersSheet> {
                         onSelected: (value) {
                           setState(
                             () => _draft = _draft.copyWith(order: value),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      _FilterSection<CorreoFilter>(
-                        title: 'Correo',
-                        value: _draft.correoFilter,
-                        options: const [
-                          CorreoFilter.todos,
-                          CorreoFilter.conCorreo,
-                          CorreoFilter.sinCorreo,
-                        ],
-                        labelBuilder: _correoFilterLabel,
-                        onSelected: (value) {
-                          setState(
-                            () => _draft = _draft.copyWith(correoFilter: value),
                           );
                         },
                       ),
@@ -2143,17 +2117,6 @@ String _clientesOrderLabel(ClientesOrder order) {
       return 'Nombre A-Z';
     case ClientesOrder.za:
       return 'Nombre Z-A';
-  }
-}
-
-String _correoFilterLabel(CorreoFilter filter) {
-  switch (filter) {
-    case CorreoFilter.todos:
-      return 'Todos';
-    case CorreoFilter.conCorreo:
-      return 'Con correo';
-    case CorreoFilter.sinCorreo:
-      return 'Sin correo';
   }
 }
 
@@ -2352,7 +2315,6 @@ class _ClientesSummaryDialog extends StatelessWidget {
     required this.totalClients,
     required this.activeClients,
     required this.deletedClients,
-    required this.withEmail,
     required this.withPhone,
     required this.withAddress,
     required this.totalPurchasedFuture,
@@ -2361,7 +2323,6 @@ class _ClientesSummaryDialog extends StatelessWidget {
   final int totalClients;
   final int activeClients;
   final int deletedClients;
-  final int withEmail;
   final int withPhone;
   final int withAddress;
   final Future<double> totalPurchasedFuture;
@@ -2475,12 +2436,6 @@ class _ClientesSummaryDialog extends StatelessWidget {
                     label: 'Clientes eliminados',
                     value: '$deletedClients',
                     accent: const Color(0xFFB45309),
-                  ),
-                  _ClientesSummaryMetric(
-                    icon: Icons.email_outlined,
-                    label: 'Con correo',
-                    value: '$withEmail',
-                    accent: const Color(0xFF0E7490),
                   ),
                   _ClientesSummaryMetric(
                     icon: Icons.phone_outlined,

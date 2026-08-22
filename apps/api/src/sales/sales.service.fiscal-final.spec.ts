@@ -238,7 +238,7 @@ describe("SalesService fiscal closure", () => {
           issuerAddressSnapshot: "Higuey",
           issuerPhoneSnapshot: "809-000-0000",
           fiscalCustomerTaxId: "101010101",
-          fiscalCustomerName: "FULLTECH SRL",
+          fiscalCustomerName: "Fulltech",
           items: expect.objectContaining({
             create: [
               expect.objectContaining({

@@ -2085,7 +2085,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
   }
 
-  /// Prellena los datos fiscales del cliente (RNC y razón social) solo si el
+  /// Prellena los datos fiscales del cliente (RNC y nombre) solo si el
   /// usuario aún no escribió nada en el panel fiscal.
   void _applyClientFiscalPrefill(ClienteModel client) {
     final taxId = client.taxId?.trim() ?? '';
@@ -2095,10 +2095,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       _fiscalCustomerTaxId = taxId;
     }
     if (_fiscalCustomerName.trim().isEmpty) {
-      if (businessName.isNotEmpty) {
-        _fiscalCustomerName = businessName;
-      } else if (clientName.isNotEmpty && clientName != 'Sin cliente') {
+      if (clientName.isNotEmpty && clientName != 'Sin cliente') {
         _fiscalCustomerName = clientName;
+      } else if (businessName.isNotEmpty) {
+        _fiscalCustomerName = businessName;
       }
     }
   }
@@ -13070,7 +13070,7 @@ class _DesktopFiscalInvoicePanelState
           await repo.updateClientFiscal(
             id: clientId,
             taxId: digits,
-            businessName: name,
+            nombre: name,
           );
         } else {
           // Sin cliente: buscar por RNC en la empresa activa; reutilizar o crear.
@@ -13082,7 +13082,6 @@ class _DesktopFiscalInvoicePanelState
               nombre: name,
               telefono: '',
               taxId: digits,
-              businessName: name,
             );
             clientId = created.id;
           }
@@ -13311,7 +13310,7 @@ class _DesktopFiscalInvoicePanelState
                       controller: _customerNameCtrl,
                       onChanged: (_) => setState(() {}),
                       decoration: const InputDecoration(
-                        labelText: 'Razón social / cliente fiscal',
+                        labelText: 'Nombre / cliente fiscal',
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
