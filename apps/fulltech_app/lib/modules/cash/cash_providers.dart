@@ -31,6 +31,12 @@ final cashMovementsProvider = FutureProvider<List<CashMovementModel>>((
   return ref.watch(cashRepositoryProvider).movements();
 });
 
+/// `true` cuando el estado actual del turno provino de la caché local (fallo
+/// de red transitorio) o de un error de revalidación: NO está confirmado contra
+/// el backend. La UI debe mostrarlo como "estado no sincronizado", nunca como
+/// un turno abierto/cerrado garantizado.
+final cashStateUnverifiedProvider = StateProvider<bool>((ref) => false);
+
 class ActiveCashSessionController
     extends StateNotifier<AsyncValue<ActiveCashSession?>> {
   ActiveCashSessionController(this.ref) : super(const AsyncLoading()) {
@@ -65,23 +71,48 @@ class ActiveCashSessionController
     state = value;
   }
 
-  Future<void> refresh() async {
+  /// Revalida el turno contra el backend (fuente de verdad).
+  ///
+  /// - `silent: false` (acciones explícitas): muestra loading mientras consulta.
+  /// - `silent: true` (reconciliación de fondo: resume, reconexión realtime,
+  ///   polling, navegación): conserva el snapshot visual actual para no
+  ///   provocar parpadeo; al terminar queda el estado real del backend.
+  ///
+  /// Regla #39: un error de red/API nunca se traduce a "turno cerrado", y un
+  /// snapshot de caché se marca como "no sincronizado" ([cashStateUnverifiedProvider]).
+  Future<void> refresh({bool silent = false}) async {
     debugPrint(
       '[CASH_LIFECYCLE] REFRESH START id=${identityHashCode(this)}',
     );
-    _setState(const AsyncLoading());
-    final nextState = await AsyncValue.guard(() async {
+    if (!silent) _setState(const AsyncLoading());
+
+    AsyncValue<ActiveCashSession?> nextState;
+    try {
       final gate = await ref.read(cashRepositoryProvider).state();
       debugPrint(
         '[CashController] currentShift=${gate.activeSession?.shiftId}',
       );
-      if (!mounted) return gate.activeSession;
+      // Estado verificado contra el backend (o snapshot local marcado como
+      // no verificado si vino de caché por fallo de red).
+      ref.read(cashStateUnverifiedProvider.notifier).state = gate.fromCache;
+      if (!mounted) return;
       ref.invalidate(cashGateStateProvider);
       ref.invalidate(cashSummaryProvider);
       ref.invalidate(cashMovementsProvider);
       debugPrint('[CashController] refresh complete');
-      return gate.activeSession;
-    });
+      nextState = AsyncValue.data(gate.activeSession);
+    } catch (error, stack) {
+      // Un fallo de red/API NO debe convertir un turno abierto conocido en
+      // "cerrado" ni viceversa: se conserva el último snapshot y se marca como
+      // no sincronizado. Solo si nunca hubo dato se expone el error.
+      ref.read(cashStateUnverifiedProvider.notifier).state = true;
+      final previous = state;
+      if (previous.hasValue) {
+        nextState = previous;
+      } else {
+        nextState = AsyncValue.error(error, stack);
+      }
+    }
     _setState(nextState);
     debugPrint(
       '[CASH_LIFECYCLE] REFRESH END id=${identityHashCode(this)}',
@@ -104,6 +135,9 @@ class ActiveCashSessionController
         if (!mounted) return session;
         ref.invalidate(cashGateStateProvider);
         ref.invalidate(cashSummaryProvider);
+        // La apertura se confirmó contra el backend: el estado ya no es un
+        // snapshot no verificado.
+        ref.read(cashStateUnverifiedProvider.notifier).state = false;
         return session;
       });
       _setState(nextState);
@@ -138,11 +172,23 @@ class ActiveCashSessionController
       );
 
       await repo.closeSession(closingAmount: closingAmount, note: note);
+      // El cierre se confirmó contra el backend: estado verificado.
+      ref.read(cashStateUnverifiedProvider.notifier).state = false;
       debugPrint(
         '[CASH_LIFECYCLE] CLOSE API SUCCESS id=${identityHashCode(this)}',
       );
       if (!mounted) return null;
       return printer.printCloseTicket(snapshot);
+    } on CashSessionAlreadyClosedException {
+      // El turno ya estaba cerrado (lo cerró este u otro dispositivo). En vez
+      // de quedarse mostrando el snapshot viejo "abierto", revalidamos contra
+      // el backend para que la UI converja inmediatamente a CERRADO.
+      debugPrint(
+        '[CASH_LIFECYCLE] CLOSE ALREADY CLOSED id=${identityHashCode(this)}',
+      );
+      await refresh(silent: true);
+      if (!mounted) return null;
+      return null;
     } finally {
       _closing = false;
     }

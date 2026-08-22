@@ -1,13 +1,12 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../../core/company/company_settings_model.dart';
+import '../../../core/pdf/pdf_kit.dart';
 import '../../../core/tax/product_tax_preview_calculator.dart';
 import '../../../core/utils/pdf_file_actions.dart';
 import '../cotizacion_models.dart';
@@ -34,7 +33,7 @@ Future<Uint8List> buildCotizacionPdf({
   final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
   final dateFmt = DateFormat('dd/MM/yyyy h:mm a', 'es_DO');
   final qtyFmt = NumberFormat('#,##0.##', 'es_DO');
-  final logoImage = await _resolveCompanyLogo(company);
+  final logoImage = await pdfResolveCompanyLogo(company);
 
   final doc = pw.Document(title: 'Cotización', author: viewData.company.name);
 
@@ -669,22 +668,6 @@ String _fileNameToken(String value) {
       .replaceAll(RegExp(r'\s+'), ' ')
       .replaceAll(RegExp(r'_+'), '_')
       .trim();
-}
-
-Future<pw.MemoryImage?> _resolveCompanyLogo(CompanySettings? company) async {
-  final rawLogo = _clean(company?.logoBase64);
-  if (rawLogo.isNotEmpty) {
-    try {
-      return pw.MemoryImage(base64Decode(rawLogo));
-    } catch (_) {}
-  }
-
-  try {
-    final asset = await rootBundle.load('assets/image/logo.png');
-    return pw.MemoryImage(asset.buffer.asUint8List());
-  } catch (_) {
-    return null;
-  }
 }
 
 String _buildQuoteCode(String id) {

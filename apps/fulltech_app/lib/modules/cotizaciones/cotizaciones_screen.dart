@@ -263,6 +263,13 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   String? _lastSalesNoticeKey;
   int _salesNoticeCount = 0;
   bool _restoringEditorDraft = false;
+  // Caché del valor de productTaxUiConfigProvider para que los getters
+  // fiscales NO lean `ref`. Leer `ref` durante/después del dispose es ilegal
+  // (StateError "Cannot use ref after the widget was disposed"), y dispose()
+  // llama a _writeActiveDesktopDraft → _effectiveFiscalVoucherType →
+  // _currentTaxConfig. El valor se refresca en initState y en cada build
+  // (ref.watch), preservando el comportamiento fiscal exacto.
+  ProductTaxUiConfig? _taxConfigCache;
 
   final TextEditingController _searchCtrl = TextEditingController();
   final FocusNode _mobileSearchFocusNode = FocusNode();
@@ -322,6 +329,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   @override
   void initState() {
     super.initState();
+    _taxConfigCache = ref.read(productTaxUiConfigProvider).valueOrNull;
     _openTicketsRepository = ref.read(openSalesTicketsRepositoryProvider);
     final user = ref.read(authStateProvider).user;
     _sessionCompanyId = (user?.companyId ?? '').trim();
@@ -950,6 +958,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       final rows = await ref
           .read(catalogRepositoryProvider)
           .fetchProducts(forceRefresh: forceRemote, silent: true);
+      // Si el widget se desmontó durante la descarga, ignoramos el resultado:
+      // usar `ref` ahora (con context.mounted=false) lanzaría
+      // StateError "Cannot use ref after the widget was disposed".
+      if (!mounted) return;
       if (ref.read(authStateProvider).user?.companyId?.trim() !=
           requestCompanyId) {
         return;
@@ -1192,8 +1204,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _commitEditorChange(() {});
   }
 
-  ProductTaxUiConfig? get _currentTaxConfig =>
-      ref.read(productTaxUiConfigProvider).valueOrNull;
+  ProductTaxUiConfig? get _currentTaxConfig => _taxConfigCache;
 
   _QuoteTaxSummary get _quoteTaxSummary {
     final config = _currentTaxConfig;
@@ -5490,12 +5501,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         }
       }
 
+      // Tras awaits largos (impresión/consulta de la venta) el widget pudo
+      // desmontarse: usar `ref` aquí lanzaría
+      // "Cannot use ref after the widget was disposed". Si la pantalla ya no
+      // existe, el realtime (salesStream) refresca créditos/ventas.
+      if (!mounted) return;
       if (checkout?.method == _CheckoutPaymentMethod.credit) {
         ref.invalidate(salesCreditsProvider);
       }
       ref.invalidate(ventasControllerProvider);
-
-      if (!mounted) return;
 
       _commitEditorChange(_resetEditorState);
       _schedulePersistEditorDraft(immediate: true);
@@ -6848,6 +6862,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Refresca la caché fiscal en cada build (subscripción a cambios del
+    // provider). Los getters leen el campo, nunca `ref`.
+    _taxConfigCache = ref.watch(productTaxUiConfigProvider).valueOrNull;
     final user = ref.watch(authStateProvider).user;
     final aiState = ref.watch(quotationAiControllerProvider);
     final isDesktop = MediaQuery.sizeOf(context).width >= _desktopBreakpoint;

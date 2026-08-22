@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:permission_handler/permission_handler.dart';
 import 'package:printing/printing.dart';
 
 import '../../../core/api/env.dart';
@@ -23,6 +24,7 @@ import '../../../core/tax/product_tax_options_provider.dart';
 import '../../../core/tax/product_tax_preview_calculator.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/media_file_actions.dart';
+import '../../../core/utils/mobile_product_image_picker.dart';
 import '../../../core/utils/money_formatters.dart';
 import '../../../core/utils/local_file_bytes.dart';
 import '../../../core/utils/product_image_url.dart';
@@ -5319,6 +5321,7 @@ class _CategoryEditorDialogState extends State<_CategoryEditorDialog> {
   Uint8List? _imageBytes;
   String? _imageBase64;
   String? _imageName;
+  String? _pickedImagePath;
   bool _clearImage = false;
   bool _picking = false;
   String? _error;
@@ -5333,6 +5336,12 @@ class _CategoryEditorDialogState extends State<_CategoryEditorDialog> {
   @override
   void dispose() {
     _nameCtrl.dispose();
+    // Limpiar el temporal propio (solo móvil) al cerrar el diálogo. Nunca
+    // borra archivos originales de la galería del usuario.
+    final pending = _pickedImagePath;
+    if (pending != null) {
+      unawaited(deleteMobileProductImageTemp(pending));
+    }
     super.dispose();
   }
 
@@ -5343,6 +5352,11 @@ class _CategoryEditorDialogState extends State<_CategoryEditorDialog> {
       _error = null;
     });
     try {
+      if (isMobileImagePlatform()) {
+        await _pickMobileImage();
+        return;
+      }
+      // Windows / escritorio: comportamiento actual intacto (bytes con data).
       final result = await FilePicker.platform.pickFiles(
         type: FileType.image,
         allowMultiple: false,
@@ -5367,16 +5381,61 @@ class _CategoryEditorDialogState extends State<_CategoryEditorDialog> {
     }
   }
 
-  void _submit() {
+  Future<void> _pickMobileImage() async {
+    try {
+      final source = await showMobileProductImageSourceChooser(context);
+      if (!mounted || source == null) return; // Usuario canceló.
+      final result = await pickMobileProductImage(source: source);
+      if (!mounted || result == null) return; // Usuario canceló.
+      final previous = _pickedImagePath;
+      setState(() {
+        _pickedImagePath = result.filePath;
+        _imageName = result.filename;
+        _imageBytes = null; // Móvil: nunca mantener el original en memoria.
+        _imageBase64 = null;
+        _clearImage = false;
+      });
+      // El archivo anterior ya no se usa: se puede limpiar de forma segura.
+      unawaited(deleteMobileProductImageTemp(previous));
+    } on Exception catch (e) {
+      if (!mounted) return;
+      setState(() => _error = mobileProductImageErrorMessage(e));
+      if (isMobilePermissionError(e)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(mobileProductImageErrorMessage(e)),
+            action: SnackBarAction(
+              label: 'Configuración',
+              onPressed: () => unawaited(openAppSettings()),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _submit() async {
     final name = _normalizeCategoryName(_nameCtrl.text);
     if (name.isEmpty) {
       setState(() => _error = 'Escribe el nombre de la categoría.');
       return;
     }
+    String? base64ToSave = _imageBase64;
+    if (_pickedImagePath != null) {
+      // Móvil: leer los bytes OPTIMIZADOS (pequeños) para conservar el flujo
+      // base64 existente sin cargar el original gigante en memoria.
+      try {
+        final bytes = await readLocalFileBytes(_pickedImagePath!);
+        base64ToSave = bytes.isEmpty ? null : base64Encode(bytes);
+      } catch (_) {
+        base64ToSave = null;
+      }
+    }
+    if (!mounted) return;
     Navigator.of(context).pop(
       _CategoryEditorResult(
         name: name,
-        imageBase64: _imageBase64,
+        imageBase64: base64ToSave,
         clearImage: _clearImage,
       ),
     );
@@ -5418,13 +5477,27 @@ class _CategoryEditorDialogState extends State<_CategoryEditorDialog> {
               border: Border.all(color: _borderSoft),
             ),
             clipBehavior: Clip.antiAlias,
-            child: previewBytes == null
+            child: _pickedImagePath != null
+                ? buildMobileProductImagePreview(
+                    path: _pickedImagePath!,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                    cacheWidth: 512,
+                    cacheHeight: 512,
+                  )
+                : previewBytes == null
                 ? const Icon(
                     Icons.image_outlined,
                     size: 48,
                     color: _textSecondary,
                   )
-                : Image.memory(previewBytes, fit: BoxFit.cover),
+                : Image.memory(
+                    previewBytes,
+                    fit: BoxFit.cover,
+                    cacheWidth: 512,
+                    cacheHeight: 512,
+                  ),
           ),
           const SizedBox(height: 10),
           Row(
@@ -5451,15 +5524,20 @@ class _CategoryEditorDialogState extends State<_CategoryEditorDialog> {
               const SizedBox(width: 8),
               IconButton(
                 tooltip: 'Quitar foto',
-                onPressed: previewBytes == null
+                onPressed: previewBytes == null && _pickedImagePath == null
                     ? null
                     : () {
+                        final pending = _pickedImagePath;
                         setState(() {
                           _imageBytes = null;
                           _imageBase64 = null;
                           _imageName = null;
+                          _pickedImagePath = null;
                           _clearImage = true;
                         });
+                        if (pending != null) {
+                          unawaited(deleteMobileProductImageTemp(pending));
+                        }
                       },
                 icon: const Icon(Icons.delete_outline_rounded),
               ),
@@ -6994,6 +7072,7 @@ class _InventoryProductEditorPageState
 
   Uint8List? _imageBytes;
   String? _imageName;
+  String? _pickedImagePath;
   Future<String?>? _imageUploadFuture;
   String? _uploadedImagePath;
   int _imageUploadToken = 0;
@@ -7048,6 +7127,26 @@ class _InventoryProductEditorPageState
     _taxTreatment = product?.taxTreatment ?? 'INHERIT';
     _taxRate = product?.taxRate;
     _taxPriceMode = product?.taxPriceMode;
+    _maybeRecoverLostImage();
+  }
+
+  /// Recupera (solo Android) una imagen perdida por destrucción de la
+  /// Activity durante la captura. Best-effort; si hay datos, la restaura en el
+  /// formulario e inicia la subida como si se hubiera seleccionado.
+  Future<void> _maybeRecoverLostImage() async {
+    if (!isMobileImagePlatform()) return;
+    final recovered = await recoverLostMobileImage();
+    if (!mounted || recovered == null) return;
+    setState(() {
+      _pickedImagePath = recovered.filePath;
+      _imageName = recovered.filename;
+      _imageBytes = null;
+      _uploadedImagePath = null;
+    });
+    _startSelectedImageUpload(
+      filePath: recovered.filePath,
+      filename: recovered.filename,
+    );
   }
 
   @override
@@ -7065,6 +7164,20 @@ class _InventoryProductEditorPageState
     _costFocus.dispose();
     _stockFocus.dispose();
     _categoryFocus.dispose();
+    // Limpiar el archivo temporal optimizado (solo móvil). Si hay una subida
+    // en curso, se elimina cuando termine para no romper el upload. Nunca borra
+    // archivos originales de la galería del usuario.
+    final pending = _pickedImagePath;
+    if (pending != null) {
+      final upload = _imageUploadFuture;
+      if (upload == null) {
+        unawaited(deleteMobileProductImageTemp(pending));
+      } else {
+        unawaited(
+          upload.whenComplete(() => deleteMobileProductImageTemp(pending)),
+        );
+      }
+    }
     super.dispose();
   }
 
@@ -7079,6 +7192,10 @@ class _InventoryProductEditorPageState
       Navigator.of(context).pop();
       return;
     }
+    // Al cambiar de empresa se descarta la imagen en edición; el temporal
+    // propio (solo móvil) debe limpiarse para no acumularse. Nunca borra la
+    // foto original del usuario.
+    final pending = _pickedImagePath;
     setState(() {
       _nameCtrl.clear();
       _codeCtrl.clear();
@@ -7088,6 +7205,7 @@ class _InventoryProductEditorPageState
       _categoryCtrl.clear();
       _imageBytes = null;
       _imageName = null;
+      _pickedImagePath = null;
       _uploadedImagePath = null;
       _imageUploadFuture = null;
       _taxTreatment = 'INHERIT';
@@ -7095,6 +7213,9 @@ class _InventoryProductEditorPageState
       _taxPriceMode = null;
       _formError = null;
     });
+    if (pending != null) {
+      unawaited(deleteMobileProductImageTemp(pending));
+    }
   }
 
   double? _effectiveTaxRate(ProductTaxUiConfig? taxConfig) {
@@ -7114,6 +7235,11 @@ class _InventoryProductEditorPageState
     });
 
     try {
+      if (isMobileImagePlatform()) {
+        await _pickMobileImage();
+        return;
+      }
+      // Windows / escritorio: comportamiento actual intacto (bytes con data).
       final result = await FilePicker.platform.pickFiles(
         type: FileType.image,
         allowMultiple: false,
@@ -7141,8 +7267,54 @@ class _InventoryProductEditorPageState
     }
   }
 
+  Future<void> _pickMobileImage() async {
+    try {
+      final source = await showMobileProductImageSourceChooser(context);
+      if (!mounted || source == null) return; // Usuario canceló.
+      final result = await pickMobileProductImage(source: source);
+      if (!mounted || result == null) return; // Usuario canceló.
+      final previous = _pickedImagePath;
+      setState(() {
+        _pickedImagePath = result.filePath;
+        _imageName = result.filename;
+        _imageBytes = null; // Móvil: nunca mantener el original en memoria.
+        _uploadedImagePath = null;
+      });
+      // El archivo anterior ya no se usa: se puede limpiar de forma segura.
+      unawaited(deleteMobileProductImageTemp(previous));
+      _startSelectedImageUpload(
+        filePath: result.filePath,
+        filename: result.filename,
+      );
+    } on Exception catch (e) {
+      if (!mounted) return;
+      _showMobileImageError(e);
+    }
+  }
+
+  /// Muestra el error de captura móvil en el banner del formulario y, si es
+  /// un permiso denegado, ofrece la acción “Configuración” sin forzarla.
+  void _showMobileImageError(Object error) {
+    if (!mounted) return;
+    setState(() => _formError = mobileProductImageErrorMessage(error));
+    if (isMobilePermissionError(error)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(mobileProductImageErrorMessage(error)),
+          action: SnackBarAction(
+            label: 'Configuración',
+            onPressed: () {
+              unawaited(openAppSettings());
+            },
+          ),
+        ),
+      );
+    }
+  }
+
   void _startSelectedImageUpload({
-    required Uint8List bytes,
+    Uint8List? bytes,
+    String? filePath,
     required String filename,
   }) {
     final token = ++_imageUploadToken;
@@ -7150,6 +7322,7 @@ class _InventoryProductEditorPageState
     final upload = _uploadSelectedImageWithRetry(
       repo: repo,
       bytes: bytes,
+      filePath: filePath,
       filename: filename,
     );
     _imageUploadFuture = upload;
@@ -7163,20 +7336,28 @@ class _InventoryProductEditorPageState
 
   Future<String?> _uploadSelectedImageWithRetry({
     required CatalogRepository repo,
-    required Uint8List bytes,
+    Uint8List? bytes,
+    String? filePath,
     required String filename,
   }) async {
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
-        final path = await repo.uploadImage(bytes: bytes, filename: filename);
+        final path = await repo.uploadImage(
+          bytes: bytes,
+          filePath: filePath,
+          filename: filename,
+        );
         final cachedUrl = buildProductImageUrl(
           imageUrl: path,
           baseUrl: Env.apiBaseUrl,
         );
+        // Sembrar la caché SIEMPRE con la versión optimizada (nunca el
+        // original gigante). En móvil se lee el archivo optimizado (pequeño).
         unawaited(
-          FulltechImageCacheManager.putImageBytes(
+          _seedOptimizedImageCache(
             url: cachedUrl,
             bytes: bytes,
+            filePath: filePath,
             filename: filename,
           ),
         );
@@ -7190,6 +7371,28 @@ class _InventoryProductEditorPageState
       }
     }
     return null;
+  }
+
+  Future<void> _seedOptimizedImageCache({
+    required String url,
+    List<int>? bytes,
+    String? filePath,
+    String? filename,
+  }) async {
+    List<int>? optimized = bytes;
+    if (optimized == null && (filePath ?? '').trim().isNotEmpty) {
+      try {
+        optimized = await readLocalFileBytes(filePath!);
+      } catch (_) {
+        optimized = null;
+      }
+    }
+    if (optimized == null || optimized.isEmpty) return;
+    await FulltechImageCacheManager.putImageBytes(
+      url: url,
+      bytes: optimized,
+      filename: filename,
+    );
   }
 
   void _attachImageAfterUpload({
@@ -7237,7 +7440,7 @@ class _InventoryProductEditorPageState
     if ((readyPath ?? '').trim().isNotEmpty) {
       return readyPath!.trim();
     }
-    if (_imageBytes == null) return null;
+    if (_imageBytes == null && (_pickedImagePath ?? '').isEmpty) return null;
 
     final upload = _imageUploadFuture;
     if (upload == null) {
@@ -7389,6 +7592,7 @@ class _InventoryProductEditorPageState
       }
 
       if (_imageBytes == null &&
+          (_pickedImagePath ?? '').isEmpty &&
           (normalizedReadyImagePath ?? '').isEmpty &&
           pendingImageUpload != null) {
         _attachImageAfterUpload(
@@ -7636,6 +7840,15 @@ class _InventoryProductEditorPageState
                           fit: BoxFit.cover,
                           width: double.infinity,
                           height: double.infinity,
+                        )
+                      : _pickedImagePath != null
+                      ? buildMobileProductImagePreview(
+                          path: _pickedImagePath!,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          height: double.infinity,
+                          cacheWidth: 720,
+                          cacheHeight: 720,
                         )
                       : (product != null && existingImageUrl.isNotEmpty)
                       ? ProductNetworkImage(

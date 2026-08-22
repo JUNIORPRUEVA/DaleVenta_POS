@@ -171,6 +171,7 @@ class CashTurnMenuButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(activeCashSessionControllerProvider);
     final active = session.valueOrNull;
+    final unverified = ref.watch(cashStateUnverifiedProvider);
 
     return PopupMenuButton<String>(
       tooltip: 'Turno actual',
@@ -184,6 +185,18 @@ class CashTurnMenuButton extends ConsumerWidget {
         side: const BorderSide(color: Color(0xFFDDE7EE)),
       ),
       itemBuilder: (menuContext) => [
+        if (unverified)
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: const _TurnMenuNotice(
+              icon: Icons.cloud_off_rounded,
+              label: 'Estado no sincronizado',
+              helpText:
+                  'Sin conexión: el estado del turno no está confirmado con '
+                  'el servidor y se actualizará al recuperar conexión.',
+            ),
+          ),
         if (active == null)
           PopupMenuItem(
             enabled: false,
@@ -511,6 +524,72 @@ class _TurnInlineMenuHelp extends StatelessWidget {
           height: 1.25,
           fontWeight: FontWeight.w700,
           letterSpacing: 0,
+        ),
+      ),
+    );
+  }
+}
+
+/// Aviso de que el estado del turno NO está confirmado contra el backend
+/// (fallo de red transitorio o error de revalidación). Regla #32/#39: la caché
+/// local nunca es autoridad; se muestra como "estado no sincronizado".
+class _TurnMenuNotice extends StatelessWidget {
+  const _TurnMenuNotice({
+    required this.icon,
+    required this.label,
+    required this.helpText,
+  });
+
+  final IconData icon;
+  final String label;
+  final String helpText;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 258,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF7E6),
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(color: const Color(0xFFF4D9A6)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 16, color: const Color(0xFFB54708)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: Color(0xFF7A4D04),
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    helpText,
+                    style: const TextStyle(
+                      color: Color(0xFF7A4D04),
+                      fontSize: 11.4,
+                      height: 1.25,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

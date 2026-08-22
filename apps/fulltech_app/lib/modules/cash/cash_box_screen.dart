@@ -145,6 +145,7 @@ class CashBoxScreen extends ConsumerWidget {
     final session = ref.watch(activeCashSessionControllerProvider);
     final summary = ref.watch(cashSummaryProvider);
     final movements = ref.watch(cashMovementsProvider);
+    final unverified = ref.watch(cashStateUnverifiedProvider);
     final isMobile = MediaQuery.sizeOf(context).width < 700;
 
     return Scaffold(
@@ -194,61 +195,104 @@ class CashBoxScreen extends ConsumerWidget {
                 const SizedBox(width: 10),
               ],
       ),
-      body: Padding(
-        padding: isMobile
-            ? const EdgeInsets.fromLTRB(0, 6, 0, 8)
-            : const EdgeInsets.all(18),
-        child: session.when(
-          loading: () => const _PanelMessage(
-            icon: Icons.point_of_sale_outlined,
-            title: 'Caja',
-            detail: 'Preparando datos del turno...',
-          ),
-          error: (error, _) => _CashError(error: '$error'),
-          data: (active) {
-            if (active == null) {
-              return _ClosedCashView(onOpen: () => _openCash(context, ref));
-            }
-            return LayoutBuilder(
-              builder: (context, constraints) {
-                final activePanel = _ActiveCashPanel(
-                  active: active,
-                  summary: summary,
-                  onClose: () => _closeCash(context, ref),
-                  onPrint: () => _printCurrentCash(context, ref),
-                  onCashIn: () => _addMovement(context, ref, 'IN'),
-                  onCashOut: () => _addMovement(context, ref, 'OUT'),
-                );
-                final movementsPanel = _MovementsPanel(movements: movements);
-                if (constraints.maxWidth < 980) {
-                  if (isMobile) {
-                    return activePanel;
+      body: Column(
+        children: [
+          if (unverified) const _CashUnverifiedBanner(),
+          Expanded(
+            child: Padding(
+              padding: isMobile
+                  ? const EdgeInsets.fromLTRB(0, 6, 0, 8)
+                  : const EdgeInsets.all(18),
+              child: session.when(
+                loading: () => const _PanelMessage(
+                  icon: Icons.point_of_sale_outlined,
+                  title: 'Caja',
+                  detail: 'Preparando datos del turno...',
+                ),
+                error: (error, _) => _CashError(error: '$error'),
+                data: (active) {
+                  if (active == null) {
+                    return _ClosedCashView(onOpen: () => _openCash(context, ref));
                   }
-                  return ListView(
-                    children: [
-                      SizedBox(
-                        height: isMobile ? 690 : 620,
-                        child: activePanel,
-                      ),
-                      if (!isMobile) ...[
-                        const SizedBox(height: 14),
-                        SizedBox(height: 420, child: movementsPanel),
-                      ],
-                    ],
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                      final activePanel = _ActiveCashPanel(
+                        active: active,
+                        summary: summary,
+                        onClose: () => _closeCash(context, ref),
+                        onPrint: () => _printCurrentCash(context, ref),
+                        onCashIn: () => _addMovement(context, ref, 'IN'),
+                        onCashOut: () => _addMovement(context, ref, 'OUT'),
+                      );
+                      final movementsPanel = _MovementsPanel(
+                        movements: movements,
+                      );
+                      if (constraints.maxWidth < 980) {
+                        if (isMobile) {
+                          return activePanel;
+                        }
+                        return ListView(
+                          children: [
+                            SizedBox(
+                              height: isMobile ? 690 : 620,
+                              child: activePanel,
+                            ),
+                            if (!isMobile) ...[
+                              const SizedBox(height: 14),
+                              SizedBox(height: 420, child: movementsPanel),
+                            ],
+                          ],
+                        );
+                      }
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(flex: 2, child: activePanel),
+                          const SizedBox(width: 16),
+                          Expanded(child: movementsPanel),
+                        ],
+                      );
+                    },
                   );
-                }
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(flex: 2, child: activePanel),
-                    const SizedBox(width: 16),
-                    Expanded(child: movementsPanel),
-                  ],
-                );
-              },
-            );
-          },
-        ),
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Aviso de que el estado del turno NO está confirmado contra el backend
+/// (fallo de red transitorio o error de revalidación). Regla #32/#39: la caché
+/// local nunca es autoridad; se muestra como "estado no sincronizado".
+class _CashUnverifiedBanner extends StatelessWidget {
+  const _CashUnverifiedBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFFFF7E6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.cloud_off_rounded, size: 16, color: Color(0xFFB54708)),
+          SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              'Sin conexión — el estado del turno no está sincronizado. '
+              'Se actualizará automáticamente al recuperar conexión.',
+              style: TextStyle(
+                color: Color(0xFF7A4D04),
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -8,6 +8,17 @@ import '../../core/errors/api_exception.dart';
 import '../../core/offline/sync_queue_service.dart';
 import 'cash_models.dart';
 
+/// El turno ya no está abierto (lo cerró este dispositivo u otro). No es un
+/// error real: el estado correcto es CERRADO y la UI debe converger a él.
+class CashSessionAlreadyClosedException implements Exception {
+  const CashSessionAlreadyClosedException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 final cashRepositoryProvider = Provider<CashRepository>((ref) {
   final repository = CashRepository(
     ref.watch(dioProvider),
@@ -24,6 +35,11 @@ class CashRepository {
   final SyncQueueService _syncQueue;
   final LocalJsonCache _cache = LocalJsonCache();
   bool _handlersRegistered = false;
+
+  /// `true` si la última llamada a [state] cayó a la caché local por un fallo
+  /// de red transitorio. Los consumidores NO deben tratar ese estado como un
+  /// turno confirmado contra el backend.
+  bool lastStateFromCache = false;
 
   static const String _openSyncType = 'cash.open';
   static const String _closeSyncType = 'cash.close';
@@ -82,6 +98,7 @@ class CashRepository {
         ApiRoutes.cashState,
         options: Options(extra: const {'skipLoader': true}),
       );
+      lastStateFromCache = false;
       final state = CashGateState.fromJson(
         (res.data as Map).cast<String, dynamic>(),
       );
@@ -102,7 +119,19 @@ class CashRepository {
     } on DioException catch (e) {
       if (_shouldQueueNetworkFailure(e)) {
         final cached = await _cache.readMap(_activeSessionCacheKey);
-        if (cached != null) return CashGateState.fromJson(cached);
+        if (cached != null) {
+          // Fallo de red transitorio: devolvemos el snapshot local, pero
+          // marcado como NO verificado. La UI debe mostrarlo como
+          // "estado no sincronizado", nunca como un turno confirmado.
+          lastStateFromCache = true;
+          final gate = CashGateState.fromJson(cached);
+          return CashGateState(
+            businessDate: gate.businessDate,
+            canOperate: gate.canOperate,
+            activeSession: gate.activeSession,
+            fromCache: true,
+          );
+        }
       }
       throw ApiException(_message(e.response?.data, 'No se pudo cargar caja'));
     }
@@ -176,9 +205,22 @@ class CashRepository {
   }) async {
     try {
       await _closeSessionRemote(closingAmount: closingAmount, note: note);
+      lastStateFromCache = false;
       await _cache.remove(_activeSessionCacheKey);
       await _cache.remove(_pendingMovementsCacheKey);
     } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      if (status == 404 || status == 409) {
+        // El turno ya fue cerrado (por este dispositivo u otro dispositivo).
+        // No es un fallo: el estado real es CERRADO. La caché queda limpia y
+        // el llamador debe revalidar el estado.
+        lastStateFromCache = false;
+        await _cache.remove(_activeSessionCacheKey);
+        await _cache.remove(_pendingMovementsCacheKey);
+        throw const CashSessionAlreadyClosedException(
+          'El turno ya estaba cerrado.',
+        );
+      }
       if (!_shouldQueueNetworkFailure(e)) {
         throw ApiException(
           _message(e.response?.data, 'No se pudo cerrar turno'),

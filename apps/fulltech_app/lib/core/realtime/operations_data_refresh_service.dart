@@ -29,6 +29,13 @@ class OperationsDataRefreshService {
     });
     _permissionsSubscription = realtime.permissionsStream.listen((message) {
       unawaited(refreshPermissions(message));
+      if (message.type == 'permissions.reconnect') {
+        // El socket se (re)conectó tras estar en background/caída de red: los
+        // eventos realtime de caja (`cash.session.closed/opened`) pudieron
+        // perderse mientras estuvo desconectado. Revalidamos el turno en
+        // silencio para converger al estado real del backend (multi-dispositivo).
+        refreshCash(silent: true);
+      }
     });
     // Reacciona a login/logout para que la caja no arrastre estado de otra
     // sesión/empresa entre inicios de sesión. El subscription se gestiona solo
@@ -54,10 +61,10 @@ class OperationsDataRefreshService {
     _ref.read(salesDataRefreshTickProvider.notifier).state++;
     _ref.invalidate(ventasControllerProvider);
     _ref.invalidate(salesCreditsProvider);
-    refreshCash();
+    refreshCash(silent: true);
   }
 
-  void refreshCash() {
+  void refreshCash({bool silent = false}) {
     _ref.read(cashDataRefreshTickProvider.notifier).state++;
     // IMPORTANTE: NO invalidar activeCashSessionControllerProvider aquí.
     // Invalidarlo destruye (dispose) el notifier mientras una operación
@@ -75,7 +82,10 @@ class OperationsDataRefreshService {
     _ref.invalidate(cashMovementHistoryProvider);
     _ref.invalidate(cashTurnHistoryProvider);
     if (controller.mounted) {
-      unawaited(controller.refresh());
+      // `silent: true` para reconciliaciones de fondo (realtime, reconnect,
+      // resume, polling): no queremos que cada evento provoque un flash de
+      // loading en la UI (ver regla anti-flicker).
+      unawaited(controller.refresh(silent: silent));
     }
   }
 

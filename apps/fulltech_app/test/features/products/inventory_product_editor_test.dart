@@ -123,7 +123,8 @@ class _FakeCatalogRepository extends CatalogRepository {
 
   @override
   Future<String> uploadImage({
-    required List<int> bytes,
+    List<int>? bytes,
+    String? filePath,
     required String filename,
   }) async {
     uploads += 1;

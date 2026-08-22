@@ -149,7 +149,39 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   ProviderSubscription<AuthState>? _authStateSubscription;
   StreamSubscription<LicenseRealtimeMessage>? _licenseRealtimeSubscription;
   Timer? _licensePollTimer;
+  Timer? _cashPollTimer;
   final _lifecycleCoordinator = AppLifecycleCoordinator();
+
+  /// Intervalo del polling ligero de revalidación del turno de caja. Solo
+  /// corre en primer plano con sesión activa y es un GET silencioso de
+  /// `/cash/state` (sin flicker). Justificación: es la red de seguridad para
+  /// que, aunque el socket realtime no esté disponible (firewall, websocket
+  /// caído) o un evento `cash.session.closed/opened` se pierda, el estado del
+  /// turno (usuario+empresa, fuente de verdad = backend) converja entre
+  /// dispositivos en <= 30s. No es agresivo: 1 petición ligera cada 30s.
+  static const _cashPollInterval = Duration(seconds: 30);
+
+  void _startCashRevalidationPolling() {
+    _cashPollTimer?.cancel();
+    _cashPollTimer = Timer.periodic(_cashPollInterval, (_) {
+      if (!mounted) return;
+      final auth = ref.read(authStateProvider);
+      if (!auth.isAuthenticated) return;
+      ref.read(operationsDataRefreshProvider).refreshCash(silent: true);
+    });
+  }
+
+  void _stopCashRevalidationPolling() {
+    _cashPollTimer?.cancel();
+    _cashPollTimer = null;
+  }
+
+  void _refreshCashOnResume() {
+    // Al volver al primer plano (Android/iOS/Windows) otro dispositivo pudo
+    // abrir/cerrar el turno mientras esta app estuvo en background y el evento
+    // realtime pudo perderse. Revalidamos en silencio contra el backend.
+    ref.read(operationsDataRefreshProvider).refreshCash(silent: true);
+  }
 
   @override
   void initState() {
@@ -212,6 +244,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     _stopLicensePolling();
+    _stopCashRevalidationPolling();
     _licenseRealtimeSubscription?.cancel();
     _authStateSubscription?.close();
     WidgetsBinding.instance.removeObserver(this);
@@ -254,10 +287,17 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed || !widget.enableBackgroundStartup) {
+    if (!widget.enableBackgroundStartup) return;
+
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      _stopCashRevalidationPolling();
       return;
     }
+    if (state != AppLifecycleState.resumed) return;
 
+    _startCashRevalidationPolling();
     unawaited(
       _lifecycleCoordinator.runPendingSync(
         () => ref.read(syncQueueServiceProvider.notifier).processPending(),
@@ -271,6 +311,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     final authState = ref.read(authStateProvider);
     if (authState.isAuthenticated) {
       unawaited(ref.read(operationsRealtimeServiceProvider).connect(authState));
+      _refreshCashOnResume();
       unawaited(
         _lifecycleCoordinator.runSessionValidation(
           () async => ref

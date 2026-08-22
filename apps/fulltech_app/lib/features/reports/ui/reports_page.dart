@@ -224,7 +224,9 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     if (!mounted) return;
     _realtimeReloadDebounce?.cancel();
     _realtimeReloadDebounce = Timer(const Duration(milliseconds: 350), () {
-      if (mounted && !_loading) {
+      if (mounted) {
+        // El guard interno de [_loadData] consolida recargas: si hay una carga
+        // en vuelo, este evento se encola como recarga pendiente (no se pierde).
         unawaited(_loadData());
       }
     });

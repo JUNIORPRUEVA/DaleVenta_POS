@@ -309,7 +309,7 @@ class VentasRepository {
           res.statusCode,
         );
       }
-      final data = (raw as Map).cast<String, dynamic>();
+      final data = raw.cast<String, dynamic>();
       await _cache.writeMap(
         _salesSummaryCacheKey(
           from: from,
@@ -426,7 +426,7 @@ class VentasRepository {
           res.statusCode,
         );
       }
-      return (raw as Map).cast<String, dynamic>();
+      return raw.cast<String, dynamic>();
     } on DioException catch (e) {
       throw ApiException(
         _extractMessage(e.response?.data, 'No se pudo cargar el reporte'),

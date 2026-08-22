@@ -47,11 +47,17 @@ class CashGateState {
     required this.businessDate,
     required this.canOperate,
     this.activeSession,
+    this.fromCache = false,
   });
 
   final String businessDate;
   final bool canOperate;
   final ActiveCashSession? activeSession;
+
+  /// `true` cuando este estado provino de la caché local (no verificado contra
+  /// el backend, p. ej. fallo de red transitorio). La UI debe mostrarlo como
+  /// "estado no sincronizado", NUNCA como un turno confirmado.
+  final bool fromCache;
 
   factory CashGateState.fromJson(Map<String, dynamic> json) {
     final active = json['activeSession'];
@@ -61,6 +67,7 @@ class CashGateState {
       activeSession: active is Map
           ? ActiveCashSession.fromJson(active.cast<String, dynamic>())
           : null,
+      fromCache: json['fromCache'] == true,
     );
   }
 }

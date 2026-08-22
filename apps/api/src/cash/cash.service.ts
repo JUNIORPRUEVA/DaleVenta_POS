@@ -74,57 +74,95 @@ export class CashService {
     const businessDate = this.businessDate();
     const openingAmount = new Prisma.Decimal(dto.openingAmount);
 
-    const session = await this.prisma.$transaction(async (tx) => {
-      const existing = await tx.cashSession.findFirst({
-        where: { openedByUserId: user.id, companyId, status: "OPEN", closedAt: null },
-        orderBy: { openedAt: "desc" },
-      });
-      if (existing) return this.mapActiveSession(existing);
+    // Invariante multi-dispositivo: solo puede existir UN turno abierto por
+    // (usuario + empresa). Dos dispositivos pueden pulsar "Abrir caja" casi al
+    // mismo tiempo; con aislamiento por defecto (READ COMMITTED) ambos podrían
+    // ver "no existe turno" y crear dos turnos abiertos. Con SERIALIZABLE el
+    // segundo intento aborta (P2034) y se reintenta: en el reintento ya verá el
+    // turno creado y lo devolverá, en lugar de crear un segundo.
+    const session = await this.retryOnWriteConflict(() =>
+      this.prisma.$transaction(
+        async (tx) => {
+          const existing = await tx.cashSession.findFirst({
+            where: {
+              openedByUserId: user.id,
+              companyId,
+              status: "OPEN",
+              closedAt: null,
+            },
+            orderBy: { openedAt: "desc" },
+          });
+          if (existing) return this.mapActiveSession(existing);
 
-      let cashbox = await tx.cashboxDaily.findFirst({
-        where: { companyId, businessDate },
-      });
-      if (!cashbox) {
-        cashbox = await tx.cashboxDaily.create({
-          data: {
-            companyId,
-            businessDate,
-            openedByUserId: user.id,
-            initialAmount: openingAmount,
-            currentAmount: openingAmount,
-            note: dto.note,
-          },
-        });
-      } else {
-        cashbox = await tx.cashboxDaily.update({
-          where: { id: cashbox.id },
-          data: {
-            status: "OPEN",
-            closedAt: null,
-            closedByUserId: null,
-          },
-        });
-      }
+          let cashbox = await tx.cashboxDaily.findFirst({
+            where: { companyId, businessDate },
+          });
+          if (!cashbox) {
+            cashbox = await tx.cashboxDaily.create({
+              data: {
+                companyId,
+                businessDate,
+                openedByUserId: user.id,
+                initialAmount: openingAmount,
+                currentAmount: openingAmount,
+                note: dto.note,
+              },
+            });
+          } else {
+            cashbox = await tx.cashboxDaily.update({
+              where: { id: cashbox.id },
+              data: {
+                status: "OPEN",
+                closedAt: null,
+                closedByUserId: null,
+              },
+            });
+          }
 
-      const session = await tx.cashSession.create({
-        data: {
-          companyId,
-          openedByUserId: user.id,
-          userName,
-          initialAmount: openingAmount,
-          cashboxDailyId: cashbox.id,
-          businessDate,
-          note: dto.note,
+          const session = await tx.cashSession.create({
+            data: {
+              companyId,
+              openedByUserId: user.id,
+              userName,
+              initialAmount: openingAmount,
+              cashboxDailyId: cashbox.id,
+              businessDate,
+              note: dto.note,
+            },
+          });
+
+          return this.mapActiveSession(session);
         },
-      });
-
-      return this.mapActiveSession(session);
-    });
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      ),
+    );
     this.emitCashEvent(companyId, "cash.session.opened", session.shiftId, {
       userId: user.id,
       businessDate: session.businessDate,
     });
     return session;
+  }
+
+  /**
+   * Reintenta una transacción que falló por conflicto de escritura/deadlock
+   * (P2034, típico de aislamiento SERIALIZABLE bajo concurrencia real). El
+   * reintento es seguro: la transacción es idempotente (si el turno ya existe
+   * se devuelve el existente).
+   */
+  private async retryOnWriteConflict<T>(
+    task: () => Promise<T>,
+    attempts = 3,
+  ): Promise<T> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await task();
+      } catch (error) {
+        const isConflict =
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2034";
+        if (!isConflict || attempt >= attempts) throw error;
+      }
+    }
   }
 
   async addMovement(user: RequestUser, dto: CreateCashMovementDto) {

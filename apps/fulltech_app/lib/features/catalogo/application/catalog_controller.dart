@@ -7,6 +7,7 @@ import '../../../core/auth/auth_provider.dart';
 import '../../../core/cache/fulltech_cache_manager.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/models/product_model.dart';
+import '../../../core/utils/local_file_bytes.dart';
 import '../../../core/utils/product_image_url.dart';
 import '../data/catalog_repository.dart';
 import '../data/catalog_sync_utils.dart';
@@ -251,6 +252,32 @@ class CatalogController extends StateNotifier<CatalogState> {
     return code == null || code >= 500;
   }
 
+  /// Siembra la caché local de la imagen recién subida usando SIEMPRE la
+  /// versión optimizada (nunca el original gigante). En móvil la imagen ya
+  /// está optimizada (≤1600 px, JPEG), por lo que leer sus bytes para la
+  /// caché es seguro y barato.
+  Future<void> _seedImageCache({
+    required String url,
+    List<int>? bytes,
+    String? filePath,
+    String? filename,
+  }) async {
+    List<int>? optimized = bytes;
+    if (optimized == null && (filePath ?? '').trim().isNotEmpty) {
+      try {
+        optimized = await readLocalFileBytes(filePath!);
+      } catch (_) {
+        optimized = null;
+      }
+    }
+    if (optimized == null || optimized.isEmpty) return;
+    await FulltechImageCacheManager.putImageBytes(
+      url: url,
+      bytes: optimized,
+      filename: filename,
+    );
+  }
+
   Future<String?> _resolveImportImageUrl(
     CatalogRepository repo,
     CatalogImportDraft draft,
@@ -392,6 +419,7 @@ class CatalogController extends StateNotifier<CatalogState> {
     required String categoria,
     String? fotoUrl,
     List<int>? imageBytes,
+    String? imageFilePath,
     String? filename,
     String? operationId,
     String? taxTreatment,
@@ -404,17 +432,24 @@ class CatalogController extends StateNotifier<CatalogState> {
     try {
       final repo = ref.read(catalogRepositoryProvider);
       String? path;
-      if (imageBytes != null && filename != null) {
+      if ((imageBytes != null || imageFilePath != null) && filename != null) {
         try {
-          path = await repo.uploadImage(bytes: imageBytes, filename: filename);
+          path = await repo.uploadImage(
+            bytes: imageBytes,
+            filePath: imageFilePath,
+            filename: filename,
+          );
           final cachedUrl = buildProductImageUrl(
             imageUrl: path,
             baseUrl: Env.apiBaseUrl,
           );
+          // Sembrar la caché SIEMPRE con la versión optimizada (nunca el
+          // original gigante). En móvil se lee el archivo optimizado (pequeño).
           unawaited(
-            FulltechImageCacheManager.putImageBytes(
+            _seedImageCache(
               url: cachedUrl,
               bytes: imageBytes,
+              filePath: imageFilePath,
               filename: filename,
             ),
           );
@@ -636,6 +671,7 @@ class CatalogController extends StateNotifier<CatalogState> {
     required String categoria,
     String? fotoUrl,
     List<int>? newImageBytes,
+    String? newImageFilePath,
     String? newFilename,
     String? operationId,
     String? taxTreatment,
@@ -649,20 +685,25 @@ class CatalogController extends StateNotifier<CatalogState> {
     try {
       final repo = ref.read(catalogRepositoryProvider);
       String? uploadedFotoUrl;
-      if (newImageBytes != null && newFilename != null) {
+      if ((newImageBytes != null || newImageFilePath != null) &&
+          newFilename != null) {
         try {
           uploadedFotoUrl = await repo.uploadImage(
             bytes: newImageBytes,
+            filePath: newImageFilePath,
             filename: newFilename,
           );
           final cachedUrl = buildProductImageUrl(
             imageUrl: uploadedFotoUrl,
             baseUrl: Env.apiBaseUrl,
           );
+          // Sembrar la caché SIEMPRE con la versión optimizada (nunca el
+          // original gigante). En móvil se lee el archivo optimizado (pequeño).
           unawaited(
-            FulltechImageCacheManager.putImageBytes(
+            _seedImageCache(
               url: cachedUrl,
               bytes: newImageBytes,
+              filePath: newImageFilePath,
               filename: newFilename,
             ),
           );

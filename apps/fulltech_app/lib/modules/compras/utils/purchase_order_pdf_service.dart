@@ -5,266 +5,480 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../../core/company/company_settings_model.dart';
-import '../../../core/utils/money_formatters.dart';
+import '../../../core/pdf/pdf_kit.dart';
 import '../purchase_models.dart';
 
+/// Builds the Purchase Order PDF using the same visual language as
+/// Cotizaciones (shared `pdf_kit.dart`): same header, logo resolution,
+/// typography, blocks, table and footer.
 Future<Uint8List> buildPurchaseOrderPdf({
   required PurchaseOrderModel order,
   CompanySettings? company,
 }) async {
+  final logoImage = await pdfResolveCompanyLogo(company);
+  final money = PdfKitFormats.money();
+  final qtyFmt = PdfKitFormats.qty();
+  final dateFmt = PdfKitFormats.shortDate();
+  final companyName = pdfFallback(company?.companyName, fallback: 'FULLTECH');
+  final isDraft = order.status == 'DRAFT';
+  final orderCode = isDraft || order.orderNumber.trim().isEmpty
+      ? 'BORRADOR'
+      : order.orderNumber;
+
   final doc = pw.Document(
-    title: 'ORDEN DE COMPRA ${order.orderNumber}',
-    author: 'FullTech',
+    title: 'ORDEN DE COMPRA $orderCode',
+    author: companyName,
   );
-  final dateFmt = DateFormat('dd/MM/yyyy');
-  String money(double value) => formatRdCurrencyAccounting(value);
-  final companyName = company?.companyName.trim().isNotEmpty == true
-      ? company!.companyName
-      : 'FULLTECH SRL';
 
   doc.addPage(
     pw.MultiPage(
-      pageFormat: PdfPageFormat.letter,
-      margin: const pw.EdgeInsets.all(32),
-      header: (context) => pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Container(
-                width: 54,
-                height: 54,
-                alignment: pw.Alignment.center,
-                decoration: pw.BoxDecoration(
-                  color: PdfColor.fromHex('#1A56DB'),
-                  borderRadius: pw.BorderRadius.circular(8),
-                ),
-                child: pw.Text(
-                  'FT',
-                  style: pw.TextStyle(
-                    color: PdfColors.white,
-                    fontWeight: pw.FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-              ),
-              pw.SizedBox(width: 12),
-              pw.Expanded(
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      companyName,
-                      style: pw.TextStyle(
-                        fontWeight: pw.FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    if ((company?.rnc ?? '').trim().isNotEmpty)
-                      pw.Text('RNC: ${company!.rnc}'),
-                    if ((company?.address ?? '').trim().isNotEmpty)
-                      pw.Text(company!.address),
-                    pw.Text(
-                      [
-                        company?.phone,
-                        company?.websiteUrl,
-                      ].where((e) => (e ?? '').trim().isNotEmpty).join(' · '),
-                    ),
-                  ],
-                ),
-              ),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.end,
-                children: [
-                  pw.Text(
-                    'ORDEN DE COMPRA',
-                    style: pw.TextStyle(
-                      fontWeight: pw.FontWeight.bold,
-                      fontSize: 18,
-                      color: PdfColor.fromHex('#1A56DB'),
-                    ),
-                  ),
-                  pw.Text(
-                    order.orderNumber,
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.Text(
-                    'Fecha: ${order.orderDate == null ? '-' : dateFmt.format(order.orderDate!)}',
-                  ),
-                  pw.Text('Estado: ${order.status}'),
-                ],
-              ),
-            ],
-          ),
-          pw.SizedBox(height: 12),
-          pw.Divider(color: PdfColor.fromHex('#CBD5E1')),
-        ],
-      ),
-      footer: (context) => pw.Align(
-        alignment: pw.Alignment.centerRight,
-        child: pw.Text(
-          'Página ${context.pageNumber} de ${context.pagesCount}',
-          style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey),
+      pageTheme: pw.PageTheme(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.fromLTRB(26, 24, 26, 22),
+        buildBackground: (_) => pw.FullPage(
+          ignoreMargins: true,
+          child: pw.Container(color: PdfKitColors.pageBackground),
         ),
       ),
-      build: (context) => [
+      header: (context) => _pageHeader(
+        companyName: companyName,
+        company: company,
+        logoImage: logoImage,
+        order: order,
+        orderCode: orderCode,
+        isDraft: isDraft,
+        dateFmt: dateFmt,
+        pageNumber: context.pageNumber,
+        pagesCount: context.pagesCount,
+      ),
+      footer: (context) => pdfFooter(context.pageNumber, context.pagesCount),
+      build: (_) => [
+        ..._detailSection(order, money, qtyFmt),
+        pw.SizedBox(height: 14),
+        _bottomSection(order, money),
+        pw.SizedBox(height: 16),
+        _signatureRow(order),
+      ],
+    ),
+  );
+
+  return doc.save();
+}
+
+pw.Widget _pageHeader({
+  required String companyName,
+  required CompanySettings? company,
+  required pw.MemoryImage? logoImage,
+  required PurchaseOrderModel order,
+  required String orderCode,
+  required bool isDraft,
+  required DateFormat dateFmt,
+  required int pageNumber,
+  required int pagesCount,
+}) {
+  if (pageNumber > 1) {
+    return pdfContinuationHeader(
+      companyName: companyName,
+      documentKind: 'Orden de compra',
+      code: orderCode,
+      pageNumber: pageNumber,
+      pagesCount: pagesCount,
+    );
+  }
+
+  return pdfPanel(
+    margin: const pw.EdgeInsets.only(bottom: 13),
+    padding: const pw.EdgeInsets.fromLTRB(0, 2, 0, 10),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
         pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
             pw.Expanded(
-              child: _infoBox('Suplidor', [
-                order.supplier?.commercialName ?? 'Sin suplidor',
-                if ((order.supplier?.taxId ?? '').isNotEmpty)
-                  'RNC: ${order.supplier!.taxId}',
-                if ((order.supplier?.contactName ?? '').isNotEmpty)
-                  'Contacto: ${order.supplier!.contactName}',
-                if ((order.supplier?.phone ?? '').isNotEmpty)
-                  'Tel: ${order.supplier!.phone}',
-                if ((order.supplier?.whatsapp ?? '').isNotEmpty)
-                  'WhatsApp: ${order.supplier!.whatsapp}',
-                if ((order.supplier?.address ?? '').isNotEmpty)
-                  order.supplier!.address!,
-              ]),
-            ),
-            pw.SizedBox(width: 12),
-            pw.Expanded(
-              child: _infoBox('Entrega e instrucciones', [
-                'Entrega estimada: ${order.expectedDeliveryDate == null ? '-' : dateFmt.format(order.expectedDeliveryDate!)}',
-                if ((order.supplier?.paymentTerms ?? '').isNotEmpty)
-                  'Condiciones: ${order.supplier!.paymentTerms}',
-                if ((order.supplierInstructions ?? '').isNotEmpty)
-                  order.supplierInstructions!,
-              ]),
-            ),
-          ],
-        ),
-        pw.SizedBox(height: 16),
-        pw.TableHelper.fromTextArray(
-          border: pw.TableBorder.all(
-            color: PdfColor.fromHex('#E2E8F0'),
-            width: .6,
-          ),
-          headerDecoration: pw.BoxDecoration(
-            color: PdfColor.fromHex('#EFF6FF'),
-          ),
-          headerStyle: pw.TextStyle(
-            fontWeight: pw.FontWeight.bold,
-            fontSize: 9,
-          ),
-          cellStyle: const pw.TextStyle(fontSize: 8.5),
-          cellPadding: const pw.EdgeInsets.all(6),
-          columnWidths: {
-            0: const pw.FixedColumnWidth(58),
-            1: const pw.FlexColumnWidth(2.6),
-            2: const pw.FixedColumnWidth(54),
-            3: const pw.FixedColumnWidth(72),
-            4: const pw.FixedColumnWidth(78),
-          },
-          headers: const [
-            'Código',
-            'Descripción',
-            'Cant.',
-            'Costo',
-            'Subtotal',
-          ],
-          data: [
-            for (final item in order.items)
-              [
-                item.productCode ?? '',
-                item.productName,
-                item.quantity.toStringAsFixed(item.quantity % 1 == 0 ? 0 : 2),
-                money(item.unitCost),
-                money(item.subtotal),
-              ],
-          ],
-        ),
-        pw.SizedBox(height: 14),
-        pw.Align(
-          alignment: pw.Alignment.centerRight,
-          child: pw.Container(
-            width: 230,
-            child: pw.Column(
-              children: [
-                _totalLine('Subtotal', money(order.subtotal)),
-                _totalLine('Descuento', money(order.discount)),
-                _totalLine('Transporte', money(order.shippingCost)),
-                _totalLine('Costos adicionales', money(order.additionalCost)),
-                _totalLine('Impuestos', money(order.tax)),
-                pw.Divider(),
-                _totalLine(
-                  'Total de inversión',
-                  money(order.total),
-                  strong: true,
-                ),
-              ],
-            ),
-          ),
-        ),
-        if ((order.notes ?? '').isNotEmpty) ...[
-          pw.SizedBox(height: 16),
-          _infoBox('Observaciones', [order.notes!]),
-        ],
-        pw.SizedBox(height: 28),
-        pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          children: [
-            pw.Text('Responsable: ${order.createdByName ?? ''}'),
-            pw.Container(
-              width: 180,
-              decoration: const pw.BoxDecoration(
-                border: pw.Border(top: pw.BorderSide(color: PdfColors.grey)),
+              child: pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pdfLogoBox(companyName: companyName, logoImage: logoImage),
+                  pw.SizedBox(width: 12),
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          companyName,
+                          style: pw.TextStyle(
+                            fontSize: 17,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfKitColors.textPrimary,
+                          ),
+                        ),
+                        pw.SizedBox(height: 4),
+                        if (pdfClean(company?.rnc).isNotEmpty)
+                          pdfCompanyLine('RNC: ${company!.rnc}'),
+                        if (pdfClean(company?.phone).isNotEmpty)
+                          pdfCompanyLine('Tel: ${company!.phone}'),
+                        if (pdfClean(company?.address).isNotEmpty)
+                          pdfCompanyLine(company!.address),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              child: pw.Center(child: pw.Text('Firma')),
             ),
+            pw.SizedBox(width: 16),
+            pw.SizedBox(
+              width: 222,
+              child: pdfFactsPanel(
+                title: 'ORDEN DE COMPRA',
+                code: orderCode,
+                facts: [
+                  (
+                    'Fecha',
+                    order.orderDate == null
+                        ? '-'
+                        : dateFmt.format(order.orderDate!),
+                  ),
+                  if (!isDraft)
+                    ('Estado', purchaseOrderStatusLabel(order.status)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 12),
+        pw.Container(height: 1.1, color: PdfKitColors.softLine),
+        pw.SizedBox(height: 9),
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Expanded(child: _supplierPanel(order)),
+            pw.SizedBox(width: 12),
+            pw.Expanded(child: _deliveryPanel(order, dateFmt)),
           ],
         ),
       ],
     ),
   );
-  return doc.save();
 }
 
-pw.Widget _infoBox(String title, List<String> lines) => pw.Container(
-  padding: const pw.EdgeInsets.all(10),
-  decoration: pw.BoxDecoration(
-    border: pw.Border.all(color: PdfColor.fromHex('#CBD5E1')),
-    borderRadius: pw.BorderRadius.circular(6),
-  ),
-  child: pw.Column(
-    crossAxisAlignment: pw.CrossAxisAlignment.start,
-    children: [
+pw.Widget _supplierPanel(PurchaseOrderModel order) {
+  final supplier = order.supplier;
+  final name = pdfClean(supplier?.commercialName);
+  final rows = <pw.Widget>[
+    if (name.isEmpty)
       pw.Text(
-        title,
+        'Sin suplidor',
         style: pw.TextStyle(
+          fontSize: 9,
+          color: PdfKitColors.textPrimary,
           fontWeight: pw.FontWeight.bold,
-          color: PdfColor.fromHex('#1A56DB'),
         ),
-      ),
-      pw.SizedBox(height: 5),
-      for (final line in lines.where((line) => line.trim().isNotEmpty))
-        pw.Padding(
-          padding: const pw.EdgeInsets.only(bottom: 2),
-          child: pw.Text(line),
-        ),
+      )
+    else ...[
+      pdfPersonLine('Nombre', name, strong: true),
+      if (pdfClean(supplier?.taxId).isNotEmpty)
+        pdfPersonLine('RNC/Cédula', supplier!.taxId!),
+      if (pdfClean(supplier?.contactName).isNotEmpty)
+        pdfPersonLine('Contacto', supplier!.contactName!),
+      if (pdfClean(supplier?.phone).isNotEmpty)
+        pdfPersonLine('Teléfono', supplier!.phone!),
+      if (pdfClean(supplier?.whatsapp).isNotEmpty)
+        pdfPersonLine('WhatsApp', supplier!.whatsapp!),
+      if (pdfClean(supplier?.email).isNotEmpty)
+        pdfPersonLine('Correo', supplier!.email!),
+      if (pdfClean(supplier?.address).isNotEmpty)
+        pdfPersonLine('Dirección', supplier!.address!),
     ],
-  ),
-);
+  ];
+  return pdfInfoPanel(title: 'DATOS DEL SUPLIDOR', children: rows);
+}
 
-pw.Widget _totalLine(String label, String value, {bool strong = false}) =>
-    pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 2),
-      child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+pw.Widget _deliveryPanel(PurchaseOrderModel order, DateFormat dateFmt) {
+  final rows = <pw.Widget>[
+    pdfPersonLine(
+      'Entrega estimada',
+      order.expectedDeliveryDate == null
+          ? '-'
+          : dateFmt.format(order.expectedDeliveryDate!),
+    ),
+    if (pdfClean(order.supplier?.paymentTerms).isNotEmpty)
+      pdfPersonLine('Condiciones', order.supplier!.paymentTerms!),
+    if (pdfClean(order.supplierInstructions).isNotEmpty)
+      pdfPersonLine('Instrucciones', order.supplierInstructions!),
+  ];
+  return pdfInfoPanel(title: 'ENTREGA E INSTRUCCIONES', children: rows);
+}
+
+List<pw.Widget> _detailSection(
+  PurchaseOrderModel order,
+  NumberFormat money,
+  NumberFormat qtyFmt,
+) {
+  final rows = <pw.TableRow>[
+    pw.TableRow(
+      repeat: true,
+      decoration: pw.BoxDecoration(color: PdfKitColors.headingBlack),
+      children: [
+        pdfHeaderCell('Código', align: pw.TextAlign.left),
+        pdfHeaderCell('Descripción', align: pw.TextAlign.left),
+        pdfHeaderCell('Cant.'),
+        pdfHeaderCell('Costo', align: pw.TextAlign.right),
+        pdfHeaderCell('Subtotal', align: pw.TextAlign.right),
+      ],
+    ),
+  ];
+
+  if (order.items.isEmpty) {
+    rows.add(
+      pw.TableRow(
         children: [
-          pw.Text(
-            label,
-            style: strong ? pw.TextStyle(fontWeight: pw.FontWeight.bold) : null,
-          ),
-          pw.Text(
-            value,
-            style: strong ? pw.TextStyle(fontWeight: pw.FontWeight.bold) : null,
-          ),
+          pdfBodyCell('-'),
+          pdfBodyCell('No hay productos en esta orden de compra.'),
+          pdfBodyCell(''),
+          pdfBodyCell(''),
+          pdfBodyCell(''),
         ],
       ),
     );
+  } else {
+    for (var index = 0; index < order.items.length; index++) {
+      final item = order.items[index];
+      rows.add(
+        pw.TableRow(
+          decoration: pw.BoxDecoration(
+            color: index.isOdd ? PdfKitColors.zebraFill : PdfColors.white,
+          ),
+          children: [
+            pdfBodyCell(
+              purchaseOrderDisplayProductCode(item.productCode),
+              align: pw.TextAlign.left,
+              textColor: PdfKitColors.textMuted,
+            ),
+            pdfDescriptionCell(item.productName),
+            pdfBodyCell(
+              qtyFmt.format(item.quantity),
+              align: pw.TextAlign.center,
+            ),
+            pdfBodyCell(money.format(item.unitCost), align: pw.TextAlign.right),
+            pdfBodyCell(
+              money.format(item.subtotal),
+              align: pw.TextAlign.right,
+              bold: true,
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  return [
+    pw.Text(
+      'Detalle de productos',
+      style: pw.TextStyle(
+        fontSize: 10.8,
+        fontWeight: pw.FontWeight.bold,
+        color: PdfKitColors.textPrimary,
+      ),
+    ),
+    pw.SizedBox(height: 8),
+    pw.Table(
+      border: pw.TableBorder(
+        top: pw.BorderSide(color: PdfKitColors.panelBorder, width: 0.45),
+        bottom: pw.BorderSide(color: PdfKitColors.panelBorder, width: 0.45),
+        left: pw.BorderSide(color: PdfKitColors.panelBorder, width: 0.45),
+        right: pw.BorderSide(color: PdfKitColors.panelBorder, width: 0.45),
+        horizontalInside: pw.BorderSide(
+          color: PdfKitColors.borderColor,
+          width: 0.45,
+        ),
+      ),
+      columnWidths: {
+        0: pw.FlexColumnWidth(0.95), // Código (compact)
+        1: pw.FlexColumnWidth(3.4), // Descripción (primary)
+        2: pw.FlexColumnWidth(0.55), // Cant.
+        3: pw.FlexColumnWidth(1.0), // Costo
+        4: pw.FlexColumnWidth(1.05), // Subtotal
+      },
+      children: rows,
+    ),
+  ];
+}
+
+pw.Widget _bottomSection(PurchaseOrderModel order, NumberFormat money) {
+  return pw.Row(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: [
+      pw.Expanded(
+        child: pdfPanel(
+          padding: const pw.EdgeInsets.fromLTRB(14, 13, 14, 13),
+          fillColor: PdfKitColors.softFill,
+          showBorder: true,
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                'Observaciones',
+                style: pw.TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfKitColors.textPrimary,
+                ),
+              ),
+              pw.SizedBox(height: 7),
+              pw.Text(
+                pdfClean(order.notes).isEmpty
+                    ? 'Sin observaciones.'
+                    : order.notes!,
+                style: pw.TextStyle(
+                  fontSize: 9,
+                  color: pdfClean(order.notes).isEmpty
+                      ? PdfKitColors.textMuted
+                      : PdfKitColors.textPrimary,
+                  fontStyle: pdfClean(order.notes).isEmpty
+                      ? pw.FontStyle.italic
+                      : pw.FontStyle.normal,
+                  lineSpacing: 2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      pw.SizedBox(width: 14),
+      pw.SizedBox(width: 238, child: _totalsPanel(order, money)),
+    ],
+  );
+}
+
+pw.Widget _totalsPanel(PurchaseOrderModel order, NumberFormat money) {
+  return pdfPanel(
+    padding: const pw.EdgeInsets.fromLTRB(14, 13, 14, 13),
+    fillColor: PdfKitColors.softFill,
+    showBorder: true,
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          'Resumen',
+          style: pw.TextStyle(
+            fontSize: 10.8,
+            fontWeight: pw.FontWeight.bold,
+            color: PdfKitColors.textPrimary,
+          ),
+        ),
+        pw.SizedBox(height: 9),
+        pdfTotalLine('Subtotal', money.format(order.subtotal)),
+        if (order.discount != 0)
+          pdfTotalLine(
+            'Descuento',
+            '-${money.format(order.discount.abs())}',
+            valueColor: PdfKitColors.danger,
+          ),
+        if (order.shippingCost != 0)
+          pdfTotalLine('Transporte', money.format(order.shippingCost)),
+        if (order.additionalCost != 0)
+          pdfTotalLine('Costos adicionales', money.format(order.additionalCost)),
+        if (order.tax != 0)
+          pdfTotalLine('Impuestos', money.format(order.tax)),
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(vertical: 8),
+          child: pw.Container(height: 1, color: PdfKitColors.softLine),
+        ),
+        pw.Container(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: pw.BoxDecoration(
+            color: PdfColors.white,
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+          ),
+          child: pw.Row(
+            children: [
+              pw.Expanded(
+                child: pw.Text(
+                  'TOTAL DE INVERSIÓN',
+                  style: pw.TextStyle(
+                    fontSize: 10.4,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfKitColors.textPrimary,
+                  ),
+                ),
+              ),
+              pw.Text(
+                money.format(order.total),
+                style: pw.TextStyle(
+                  fontSize: 12,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfKitColors.accentBlue,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+pw.Widget _signatureRow(PurchaseOrderModel order) {
+  return pw.Row(
+    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+    children: [
+      pw.Text(
+        'Responsable: ${pdfClean(order.createdByName)}',
+        style: pw.TextStyle(fontSize: 8.4, color: PdfKitColors.textMuted),
+      ),
+      pw.Container(
+        width: 180,
+        decoration: const pw.BoxDecoration(
+          border: pw.Border(top: pw.BorderSide(color: PdfColors.grey)),
+        ),
+        child: pw.Center(
+          child: pw.Text(
+            'Firma',
+            style: pw.TextStyle(fontSize: 8.4, color: PdfKitColors.textMuted),
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+/// Maps a real purchase order status to its professional Spanish label.
+/// Never exposes technical statuses (DRAFT, PENDING_APPROVAL, ...).
+String purchaseOrderStatusLabel(String status) {
+  switch (status) {
+    case 'DRAFT':
+      return 'Borrador';
+    case 'PENDING_APPROVAL':
+      return 'Pendiente de aprobación';
+    case 'APPROVED':
+      return 'Aprobada';
+    case 'SENT':
+      return 'Enviada';
+    case 'PARTIALLY_RECEIVED':
+      return 'Recibida parcial';
+    case 'RECEIVED':
+      return 'Recibida';
+    case 'CANCELLED':
+      return 'Cancelada';
+    default:
+      return status;
+  }
+}
+
+/// Displays a compact, professional product code in the PDF table.
+///
+/// Internal UUIDs are truncated to 8 chars (`b3e5350c`) so they never break
+/// the table layout. Real SKUs/codes are shown as configured.
+String purchaseOrderDisplayProductCode(String? code) {
+  final value = pdfClean(code);
+  if (value.isEmpty) return '-';
+  final isUuid = RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+  ).hasMatch(value);
+  if (!isUuid) return value;
+  final token = value.replaceAll('-', '');
+  return token.length > 8
+      ? token.substring(0, 8).toUpperCase()
+      : token.toUpperCase();
+}

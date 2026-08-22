@@ -34,6 +34,9 @@ class _FakeCashRepository implements CashRepository {
   int addMovementCalls = 0;
 
   @override
+  bool lastStateFromCache = false;
+
+  @override
   void registerSyncHandlers() {}
 
   @override

@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/auth/auth_provider.dart';
 import '../../core/debug/debug_admin_action.dart';
@@ -15,6 +16,7 @@ import '../../core/routing/app_route_observer.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/media_file_actions.dart';
+import '../../core/utils/mobile_product_image_picker.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/string_utils.dart';
 import '../../core/widgets/user_avatar.dart';
@@ -291,9 +293,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
   void _scheduleCatalogSync() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref
-          .read(catalogControllerProvider.notifier)
-          .load(silent: true);
+      ref.read(catalogControllerProvider.notifier).load(silent: true);
     });
   }
 
@@ -1127,10 +1127,12 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
         ? indexOf(['tasa itbis', 'tasa', 'tax rate', 'taxRate'], -1)
         : -1;
     final taxPriceModeIndex = hasHeader
-        ? indexOf(
-            ['modo precio fiscal', 'modo precio', 'tax price mode', 'taxPriceMode'],
-            -1,
-          )
+        ? indexOf([
+            'modo precio fiscal',
+            'modo precio',
+            'tax price mode',
+            'taxPriceMode',
+          ], -1)
         : -1;
 
     final dataLines = hasHeader ? lines.skip(1) : lines;
@@ -3045,7 +3047,9 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   late final TextEditingController _categoryCtrl;
   Uint8List? _imageBytes;
   String? _imageName;
+  String? _pickedImagePath;
   bool _saving = false;
+  bool _isPickingImage = false;
 
   @override
   void initState() {
@@ -3065,6 +3069,21 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     _categoryCtrl = TextEditingController(
       text: initialCategory == 'Sin categoría' ? '' : (initialCategory ?? ''),
     );
+    _maybeRecoverLostImage();
+  }
+
+  /// Recupera (solo Android) una imagen que se perdió porque el sistema
+  /// destruyó la Activity durante la captura. Best-effort: si no hay datos o
+  /// el formulario ya no existe, no hace nada.
+  Future<void> _maybeRecoverLostImage() async {
+    if (!isMobileImagePlatform()) return;
+    final recovered = await recoverLostMobileImage();
+    if (!mounted || recovered == null) return;
+    setState(() {
+      _pickedImagePath = recovered.filePath;
+      _imageName = recovered.filename;
+      _imageBytes = null;
+    });
   }
 
   @override
@@ -3075,21 +3094,76 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     _costCtrl.dispose();
     _stockCtrl.dispose();
     _categoryCtrl.dispose();
+    // Limpiar el archivo temporal optimizado (solo móvil) al cerrar el
+    // formulario. Nunca borra archivos originales de la galería del usuario.
+    final pending = _pickedImagePath;
+    if (pending != null) {
+      unawaited(deleteMobileProductImageTemp(pending));
+    }
     super.dispose();
   }
 
   Future<void> _pickImage() async {
+    if (_isPickingImage || _saving) return;
+    if (isMobileImagePlatform()) {
+      await _pickMobileImage();
+      return;
+    }
+    // Windows / escritorio: comportamiento actual intacto (bytes con data).
     final result = await FilePicker.platform.pickFiles(
       type: FileType.image,
       allowMultiple: false,
       withData: true,
     );
+    if (!mounted) return;
     if (result != null && result.files.single.bytes != null) {
       setState(() {
         _imageBytes = result.files.single.bytes;
         _imageName = result.files.single.name;
       });
     }
+  }
+
+  Future<void> _pickMobileImage() async {
+    setState(() => _isPickingImage = true);
+    try {
+      final source = await showMobileProductImageSourceChooser(context);
+      if (!mounted || source == null) return; // Usuario canceló.
+      final result = await pickMobileProductImage(source: source);
+      if (!mounted || result == null) return; // Usuario canceló.
+      final previous = _pickedImagePath;
+      setState(() {
+        _pickedImagePath = result.filePath;
+        _imageName = result.filename;
+        _imageBytes = null; // Móvil: nunca mantener el original en memoria.
+      });
+      // El archivo anterior ya no se usa: se puede limpiar de forma segura.
+      unawaited(deleteMobileProductImageTemp(previous));
+    } on Exception catch (e) {
+      if (!mounted) return;
+      _showMobileImageError(e);
+    } finally {
+      if (mounted) setState(() => _isPickingImage = false);
+    }
+  }
+
+  /// Muestra el error de la captura móvil con mensaje claro y, si es un
+  /// permiso denegado, ofrece la acción “Configuración” sin forzarla.
+  void _showMobileImageError(Object error) {
+    final action = isMobilePermissionError(error)
+        ? SnackBarAction(
+            label: 'Configuración',
+            onPressed: () {
+              unawaited(openAppSettings());
+            },
+          )
+        : null;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(mobileProductImageErrorMessage(error)),
+        action: action,
+      ),
+    );
   }
 
   Future<void> _submit() async {
@@ -3118,7 +3192,9 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
       return;
     }
 
-    if (widget.product == null && _imageBytes == null) {
+    if (widget.product == null &&
+        _imageBytes == null &&
+        (_pickedImagePath ?? '').isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Selecciona una imagen para el producto')),
       );
@@ -3136,8 +3212,9 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
           precio: price,
           costo: cost,
           stock: stock,
-          imageBytes: _imageBytes!,
-          filename: _imageName ?? 'producto.png',
+          imageBytes: _imageBytes,
+          imageFilePath: _pickedImagePath,
+          filename: _imageName ?? 'producto.jpg',
           categoria: category,
         );
         if (!mounted) return;
@@ -3153,6 +3230,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
           costo: cost,
           stock: stock,
           newImageBytes: _imageBytes,
+          newImageFilePath: _pickedImagePath,
           newFilename: _imageName,
           categoria: category,
         );
@@ -3258,7 +3336,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: _saving ? null : _pickImage,
+                  onPressed: _saving || _isPickingImage ? null : _pickImage,
                   icon: const Icon(Icons.file_upload),
                   label: Text(
                     _imageName ?? 'Seleccionar archivo',
@@ -3276,6 +3354,18 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                     height: 64,
                     width: 64,
                     fit: BoxFit.cover,
+                  ),
+                )
+              else if (_pickedImagePath != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: buildMobileProductImagePreview(
+                    path: _pickedImagePath!,
+                    height: 64,
+                    width: 64,
+                    fit: BoxFit.cover,
+                    cacheWidth: 128,
+                    cacheHeight: 128,
                   ),
                 )
               else if (isEdit && widget.product?.displayFotoUrl != null)

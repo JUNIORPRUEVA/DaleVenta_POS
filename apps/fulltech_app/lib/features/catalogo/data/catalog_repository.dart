@@ -5,6 +5,7 @@ import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/token_storage.dart';
 import '../../../core/cache/local_json_cache.dart';
+import '../../../core/debug/trace_log.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/models/product_model.dart';
 import '../../../core/offline/sync_queue_service.dart';
@@ -305,17 +306,35 @@ class CatalogRepository {
   }
 
   Future<String> uploadImage({
-    required List<int> bytes,
+    List<int>? bytes,
+    String? filePath,
     required String filename,
   }) async {
+    final uploadStartedAt = DateTime.now();
+    TraceLog.log(
+      'MobileImage',
+      'mobile_image.upload.start filename=$filename '
+          'fromFile=${(filePath ?? '').trim().isNotEmpty}',
+    );
     try {
-      final formData = FormData.fromMap({
-        'file': MultipartFile.fromBytes(
-          bytes,
+      // En móvil se prefiere subir desde la ruta del archivo optimizado
+      // (`MultipartFile.fromFile`) para evitar una copia completa en memoria.
+      // En escritorio/web se mantiene el flujo por bytes.
+      final MultipartFile filePart;
+      if ((filePath ?? '').trim().isNotEmpty) {
+        filePart = await MultipartFile.fromFile(
+          filePath!,
           filename: filename,
           contentType: detectImageMime(filename),
-        ),
-      });
+        );
+      } else {
+        filePart = MultipartFile.fromBytes(
+          bytes ?? const <int>[],
+          filename: filename,
+          contentType: detectImageMime(filename),
+        );
+      }
+      final formData = FormData.fromMap({'file': filePart});
       final res = await _dio.post(
         ApiRoutes.productsUpload,
         data: formData,
@@ -334,8 +353,24 @@ class CatalogRepository {
       if (data is Map && data['objectKey'] is String) {
         return data['objectKey'] as String;
       }
+      final durationMs = DateTime.now()
+          .difference(uploadStartedAt)
+          .inMilliseconds;
+      TraceLog.log(
+        'MobileImage',
+        'mobile_image.upload.done filename=$filename durationMs=$durationMs',
+      );
       throw ApiException('No se recibió la ruta de la imagen');
     } on DioException catch (e) {
+      final durationMs = DateTime.now()
+          .difference(uploadStartedAt)
+          .inMilliseconds;
+      TraceLog.log(
+        'MobileImage',
+        'mobile_image.upload.error filename=$filename '
+            'status=${e.response?.statusCode ?? 'n/a'} durationMs=$durationMs',
+        error: e,
+      );
       throw ApiException(
         _extractMessage(e.response?.data, 'No se pudo subir la imagen'),
         e.response?.statusCode,
