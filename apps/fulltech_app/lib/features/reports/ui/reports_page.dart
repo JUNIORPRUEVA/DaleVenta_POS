@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/auth/auth_provider.dart';
+import '../../../core/debug/trace_log.dart';
 import '../../../core/realtime/operations_refresh_signals.dart';
 import '../../../core/utils/app_feedback.dart';
 import '../../../core/utils/money_formatters.dart';
@@ -175,6 +176,14 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   ProviderSubscription<int>? _salesRefreshSubscription;
   ProviderSubscription<int>? _cashRefreshSubscription;
   Timer? _realtimeReloadDebounce;
+  // Protección contra races y tormentas de recarga:
+  // - [_loadGeneration]: descarta respuestas obsoletas (filtro antiguo) al
+  //   cambiar rápidamente de filtro.
+  // - [_loadInFlight]/[_pendingReload]: solo una carga en vuelo; los eventos
+  //   de realtime se consolidan en una única recarga pendiente.
+  int _loadGeneration = 0;
+  bool _loadInFlight = false;
+  bool _pendingReload = false;
 
   KpisData _kpis = KpisData.fromSummary(SalesSummaryModel.empty());
   List<SaleModel> _sales = const [];
@@ -228,6 +237,14 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   );
 
   Future<void> _loadData() async {
+    // Incrementa la generación SIEMPRE (incluso si hay una carga en vuelo)
+    // para que la carga antigua descarte su resultado al finalizar.
+    final generation = ++_loadGeneration;
+    if (_loadInFlight) {
+      _pendingReload = true;
+      return;
+    }
+    _loadInFlight = true;
     setState(() {
       _loading = true;
       _error = null;
@@ -246,7 +263,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       );
       final comparisons = await _loadComparisonsSafely(repo);
 
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _kpis = KpisData.fromReport(report);
         _sales = sales;
@@ -261,11 +278,22 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
+      TraceLog.log(
+        'REPORTS',
+        'Error cargando reportes (${e.runtimeType}): $e',
+        error: e,
+      );
       setState(() {
         _loading = false;
         _error = 'No se pudieron cargar los reportes';
       });
+    } finally {
+      _loadInFlight = false;
+      if (_pendingReload) {
+        _pendingReload = false;
+        unawaited(_loadData());
+      }
     }
   }
 
@@ -274,11 +302,20 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     DateTimeRange range,
   ) async {
     try {
-      return await repo.listInvoices(
+      final rows = await repo.listInvoices(
         from: range.start,
         to: range.end,
         includeDeleted: false,
+        // Límite acotado: solo se muestran ~12 en pantalla y 30 en el PDF.
+        // Evita descargar y parsear en el hilo principal miles de ventas
+        // completas (causa principal del bloqueo "No responde").
+        limit: 150,
       );
+      // Excluye documentos de devolución (kind=refund): no son ventas y no
+      // deben aparecer en "Ventas recientes" ni en el PDF.
+      return rows
+          .where((sale) => sale.kind != 'refund')
+          .toList(growable: false);
     } catch (_) {
       return const [];
     }

@@ -46,6 +46,12 @@ export class ReportsService {
       kind: "invoice",
       isDeleted: true,
       deletedAt: range,
+      // Reversión contable segura: solo restamos ventas anuladas que se
+      // contabilizaron en un período ANTERIOR (saleDate < inicio del rango).
+      // Una venta creada y anulada dentro del mismo período nunca entró al
+      // "gross" (filtro isDeleted:false) y restarla aquí la descontaría dos
+      // veces, produciendo un neto negativo incorrecto.
+      saleDate: { lt: range.gte },
     };
     const refundWhere: Prisma.SaleWhereInput = {
       companyId,
@@ -406,7 +412,7 @@ export class ReportsService {
     return {
       range: {
         from: range.gte,
-        to: range.lte,
+        to: range.lt,
         timezone: "America/Santo_Domingo",
       },
       filters: {
@@ -437,7 +443,12 @@ export class ReportsService {
         taxAmount: totals.taxAmount,
         exemptAmount: totals.exemptAmount,
         discountAmount: totals.discountAmount,
-        avgTicket: sales.length === 0 ? 0 : totals.totalSold / sales.length,
+        // Ticket promedio sobre el conteo de órdenes realmente visibles (respeta
+        // el filtro de categoría); evita dividir por todas las ventas del rango.
+        avgTicket:
+          visibleSales.length === 0
+            ? 0
+            : totals.totalSold / visibleSales.length,
         totalReturns: returns.count,
         totalExpenses: profitExpenses,
         cashIncome,
@@ -519,12 +530,15 @@ export class ReportsService {
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
       throw new BadRequestException("Rango de fechas invalido");
     }
-    if (start.getTime() > end.getTime()) {
+    if (start.getTime() >= end.getTime()) {
       throw new BadRequestException(
         "La fecha inicial no puede ser mayor que la final",
       );
     }
-    return { gte: start, lte: end };
+    // Semántica de rango exclusivo: fecha >= inicio AND fecha < fin.
+    // Evita la ventana de precisión de 23:59:59.999 que podría dejar fuera o
+    // contar mal ventas cercanas a la medianoche (mismo criterio que /sales).
+    return { gte: start, lt: end };
   }
 
   private parseDominicanDate(value: string | undefined, startOfDay: boolean) {
@@ -536,8 +550,10 @@ export class ReportsService {
     const year = Number(match[1]);
     const month = Number(match[2]) - 1;
     const day = Number(match[3]);
+    // América/Santo_Domingo es UTC-4 (sin horario de verano):
+    // inicio de día = 04:00 UTC; fin = 04:00 UTC del día siguiente (exclusivo).
     if (startOfDay) return new Date(Date.UTC(year, month, day, 4, 0, 0, 0));
-    return new Date(Date.UTC(year, month, day + 1, 3, 59, 59, 999));
+    return new Date(Date.UTC(year, month, day + 1, 4, 0, 0, 0));
   }
 
   private formatDominicanDay(date: Date) {

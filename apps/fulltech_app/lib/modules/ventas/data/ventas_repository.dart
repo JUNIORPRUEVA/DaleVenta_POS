@@ -302,7 +302,14 @@ class VentasRepository {
         },
         options: Options(extra: const {'skipLoader': true}),
       );
-      final data = (res.data as Map).cast<String, dynamic>();
+      final raw = res.data;
+      if (raw is! Map) {
+        throw ApiException(
+          'El servidor devolvió una respuesta vacía o inválida al cargar el resumen',
+          res.statusCode,
+        );
+      }
+      final data = (raw as Map).cast<String, dynamic>();
       await _cache.writeMap(
         _salesSummaryCacheKey(
           from: from,
@@ -412,8 +419,14 @@ class VentasRepository {
         },
         options: Options(extra: const {'skipLoader': true}),
       );
-      return ((res.data as Map?) ?? const <String, dynamic>{})
-          .cast<String, dynamic>();
+      final raw = res.data;
+      if (raw is! Map) {
+        throw ApiException(
+          'El servidor devolvió una respuesta vacía o inválida al cargar el reporte',
+          res.statusCode,
+        );
+      }
+      return (raw as Map).cast<String, dynamic>();
     } on DioException catch (e) {
       throw ApiException(
         _extractMessage(e.response?.data, 'No se pudo cargar el reporte'),

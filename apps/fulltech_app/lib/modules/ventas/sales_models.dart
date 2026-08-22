@@ -212,6 +212,7 @@ class SaleModel {
   final double creditPaidAmount;
   final double creditBalance;
   final String creditStatus;
+  final String kind;
   final bool isDeleted;
   final DateTime? deletedAt;
   final bool fiscalTaxEnabled;
@@ -256,6 +257,7 @@ class SaleModel {
     required this.creditStatus,
     required this.isDeleted,
     required this.deletedAt,
+    this.kind = 'invoice',
     this.fiscalTaxEnabled = false,
     this.fiscalPriceMode = 'NO_TAX',
     this.taxableBase = 0,
@@ -334,6 +336,7 @@ class SaleModel {
       creditPaidAmount: _toDouble(json['creditPaidAmount']),
       creditBalance: _toDouble(json['creditBalance']),
       creditStatus: (json['creditStatus'] ?? '').toString(),
+      kind: (json['kind'] ?? 'invoice').toString(),
       isDeleted: json['isDeleted'] == true,
       deletedAt: json['deletedAt'] != null
           ? DateTime.tryParse(json['deletedAt'].toString())
