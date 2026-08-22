@@ -1,0 +1,11 @@
+-- DRIFT FIX (no destructivo, aditivo) — 2026-08-22
+-- La BD de producción carece de la columna `admin_authorization_pin_hash`
+-- aunque `_prisma_migrations` la registra como aplicada
+-- (`20260730130000_add_admin_authorization_pin`, finishedAt 2026-08-07).
+-- El historial real de migraciones quedó desincronizado con el repo
+-- (baseline consolidado `phase6_baseline` nunca aplicado a esta BD), por lo
+-- que NO se debe usar `prisma migrate deploy` aquí hasta reconciliar historial.
+-- Esta migración registra la corrección aditiva equivalente al schema
+-- (`AppConfig.adminAuthorizationPinHash String? @map("admin_authorization_pin_hash")`).
+-- IF NOT EXISTS: idempotente / seguro de re-ejecutar.
+ALTER TABLE "app_config" ADD COLUMN IF NOT EXISTS "admin_authorization_pin_hash" TEXT;

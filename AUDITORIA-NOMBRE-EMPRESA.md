@@ -305,3 +305,44 @@ La tabla `app_config` de esta BD usa nombres de columna en camelCase y **carece 
 - Flutter `flutter analyze` (full): **No issues found**.
 - Flutter `company_settings_repository_test.dart`: **12/12 passed**.
 - Flutter `company_account_menu_navigation_test.dart` + `sales_company_topbar_bootstrap_test.dart`: **4/4 passed**.
+
+---
+
+# 🚦 ESTADO POST-DEPLOY (2026-08-22) — validación de cierre
+
+## Verificación de deploy (evidencia real, read-only)
+- `GET /` → 200 (backend responde)
+- `GET /health` → 200
+- `GET /settings` (unauth) → 401 (ruta existe)
+- `PATCH /settings/company-name` (unauth) → **404** → **el backend nuevo AÚN NO está desplegado** (la ruta dedicada solo existe en la versión blindada).
+
+➡️ **DEPLOY PENDIENTE.** Todas las validaciones que requieren producción/API real/dispositivos quedan **PENDIENTE DE VALIDACIÓN**.
+
+## Fix en código (vigente, verificado)
+- Backend: `settings.service.ts` `withoutCompanyName` + `updateCompanyName` (PATCH `/settings/company-name`); controller con ruta dedicada. ✅
+- Flutter: `company_settings_repository.dart` generic save sin `companyName`, handler `settings.save` sanea `remove('companyName')`, `settings.save_name` dedicada, `saveCompanyNameOrQueue` → `/settings/company-name`. Editor solo reenvía nombre si `nameChanged`. ✅
+
+## Drift de BD (auditoría read-only → ver `DB-DRIFT-REPORT.md`)
+- `app_config` falta **solo** `admin_authorization_pin_hash` (historial `_prisma_migrations` desincronizado; `migrate deploy` NO seguro por baseline consolidado no aplicado).
+- Corrección aditiva preparada: `ALTER TABLE "app_config" ADD COLUMN IF NOT EXISTS "admin_authorization_pin_hash" TEXT;` (archivo `20260822000000_add_admin_authorization_pin_drift_fix/migration.sql`).
+- ⚠️ **Sin aplicar todavía**: requiere backup previo (pg_dump disponible en `C:\Program Files\PostgreSQL\17\bin\pg_dump.exe`) y confirmación de deploy.
+
+## Estado de la empresa (verificado en BD)
+- `Company.name` = `FULLTECH, SRL` · `AppConfig.companyName` = `FULLTECH, SRL` · `updatedAt` = 2026-08-22T21:34:12Z.
+
+## Tests automatizados (Step 35) — ✅
+- Backend `npm test`: **99/99** (20 suites) · `npm run build` (tsc): ✅
+- Flutter `flutter analyze` (full): **No issues found**
+- Flutter `company_settings_repository_test.dart` + account/topbar: **16/16 passed**
+
+## Pendientes para declarar CERRADO (bloqueados por deploy no confirmado)
+1. Confirmar deploy del backend (ruta `/settings/company-name` → debe responder 401, no 404).
+2. Backup BD + aplicar ALTER aditivo + validar `information_schema` + test PIN administrativo.
+3. PATCH genérico real (telefono/dirección) → `Company.name` intacto.
+4. Payload legacy real (`companyName: "DaleVenta POS"` + phone) → name intacto.
+5. Endpoint dedicado real (`FULLTECH, SRL` → `FULLTECH, SRL TEST` → restaurar) + audit log.
+6. Build Windows actualizado + prueba Windows.
+7. Build Android actualizado + prueba online + offline/reconnect + cola legacy + caché vieja.
+8. Cross-device (2 ciclos), logout/login, multiempresa, realtime.
+9. PDFs/tickets muestran `FULLTECH, SRL`.
+10. Reinicios backend/Windows/Android + verificación DB final.
