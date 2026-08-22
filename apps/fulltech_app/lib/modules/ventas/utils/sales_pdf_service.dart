@@ -491,6 +491,12 @@ pw.Widget _invoiceDetailSection(
       final description = item.productNameSnapshot.trim().isEmpty
           ? 'Producto sin descripción'
           : item.productNameSnapshot.trim();
+      // Precio unitario ORIGINAL (bruto/qty) para que la columna "Precio
+      // unidad" + "Descuento" reconcilié con el total de la línea, igual que
+      // la cotización. grossAmount = original × qty en documentos nuevos.
+      final originalUnitPrice = item.grossAmount > 0
+          ? item.grossAmount / item.qty
+          : item.priceSoldUnit;
       tableRows.add(
         pw.TableRow(
           decoration: pw.BoxDecoration(
@@ -502,7 +508,7 @@ pw.Widget _invoiceDetailSection(
             ),
             _bodyCell(qtyFmt.format(item.qty), align: pw.TextAlign.center),
             _bodyCell(
-              money.format(item.priceSoldUnit),
+              money.format(_roundMoney(originalUnitPrice)),
               align: pw.TextAlign.right,
             ),
             if (hasProductDiscount)

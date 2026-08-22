@@ -379,6 +379,7 @@ class SaleDraftItem {
   final bool isExternal;
   final double qty;
   final double priceSoldUnit;
+  final double? originalUnitPrice;
   final double costUnitSnapshot;
   final String? taxTreatment;
   final double? taxRate;
@@ -392,6 +393,7 @@ class SaleDraftItem {
     required this.isExternal,
     required this.qty,
     required this.priceSoldUnit,
+    this.originalUnitPrice,
     required this.costUnitSnapshot,
     this.taxTreatment,
     this.taxRate,
@@ -414,6 +416,7 @@ class SaleDraftItem {
     bool? isExternal,
     double? qty,
     double? priceSoldUnit,
+    double? originalUnitPrice,
     double? costUnitSnapshot,
     String? taxTreatment,
     double? taxRate,
@@ -427,6 +430,7 @@ class SaleDraftItem {
       isExternal: isExternal ?? this.isExternal,
       qty: qty ?? this.qty,
       priceSoldUnit: priceSoldUnit ?? this.priceSoldUnit,
+      originalUnitPrice: originalUnitPrice ?? this.originalUnitPrice,
       costUnitSnapshot: costUnitSnapshot ?? this.costUnitSnapshot,
       taxTreatment: taxTreatment ?? this.taxTreatment,
       taxRate: taxRate ?? this.taxRate,
@@ -440,6 +444,8 @@ class SaleDraftItem {
       if (productId == null) 'productName': name,
       'qty': qty,
       'priceSoldUnit': priceSoldUnit,
+      if (originalUnitPrice != null && originalUnitPrice != priceSoldUnit)
+        'originalUnitPriceSnapshot': originalUnitPrice,
       if (productId == null) 'costUnitSnapshot': costUnitSnapshot,
     };
   }
@@ -454,6 +460,9 @@ class SaleDraftItem {
       isExternal: productId == null || productId.trim().isEmpty,
       qty: _toDouble(json['qty']),
       priceSoldUnit: _toDouble(json['priceSoldUnit']),
+      originalUnitPrice: _nullableDouble(
+        json['originalUnitPriceSnapshot'] ?? json['originalUnitPrice'],
+      ),
       costUnitSnapshot: _toDouble(json['costUnitSnapshot']),
       taxTreatment: json['taxTreatment']?.toString(),
       taxRate: _nullableDouble(json['taxRate']),

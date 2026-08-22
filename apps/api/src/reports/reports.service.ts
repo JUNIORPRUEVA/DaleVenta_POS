@@ -163,6 +163,17 @@ export class ReportsService {
           (sum, item) => sum + this.toNumber((item as any).lineDiscountAmount),
           0,
         );
+        // Descuento general REAL del documento (comercial). lineDiscountAmount
+        // ahora es solo el descuento comercial de línea; el general se asigna
+        // proporcionalmente por categoría para no perderlo en el reporte.
+        const saleLineDiscountTotal = sale.items.reduce(
+          (sum, item) => sum + this.toNumber(item.lineDiscountAmount),
+          0,
+        );
+        const generalDiscount = Math.max(
+          0,
+          this.toNumber(sale.discountAmount) - saleLineDiscountTotal,
+        );
         const saleSold = this.toNumber(sale.totalSold);
         const allocation = saleSold > 0 ? itemSold / saleSold : 0;
         acc.totalSold += itemSold;
@@ -171,7 +182,8 @@ export class ReportsService {
         acc.taxableBase += itemTaxableBase;
         acc.taxAmount += itemTaxAmount;
         acc.exemptAmount += itemExemptAmount;
-        acc.discountAmount += itemDiscountAmount;
+        acc.discountAmount +=
+          itemDiscountAmount + generalDiscount * allocation;
         acc.totalCommission +=
           this.toNumber(sale.commissionAmount) * allocation;
         acc.cash += this.toNumber(sale.paymentCashAmount) * allocation;

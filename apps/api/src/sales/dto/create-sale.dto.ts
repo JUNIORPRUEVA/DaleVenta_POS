@@ -35,6 +35,18 @@ export class CreateSaleItemDto {
   @IsNumber()
   @Min(0)
   costUnitSnapshot?: number;
+
+  /**
+   * Precio unitario ORIGINAL antes de un descuento comercial de línea
+   * (solo para ventas directas). Permite al backend persistir el descuento
+   * comercial real por línea, separado del prorrateo fiscal del descuento
+   * general. Ausente ⇒ no hubo descuento de línea en ese producto.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  originalUnitPriceSnapshot?: number;
 }
 
 export class CreateSaleDto {

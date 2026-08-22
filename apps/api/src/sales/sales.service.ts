@@ -32,6 +32,7 @@ type NormalizedSaleItem = {
   productImageSnapshot: string | null;
   qty: Prisma.Decimal;
   priceSoldUnit: Prisma.Decimal;
+  originalUnitPriceSnapshot?: Prisma.Decimal;
   costUnitSnapshot: Prisma.Decimal;
   subtotalSold: Prisma.Decimal;
   subtotalCost: Prisma.Decimal;
@@ -693,11 +694,31 @@ export class SalesService {
           })),
         });
 
+    // Descuento COMERCIAL real por línea (ventas directas). Se separa del
+    // prorrateo fiscal del descuento general (que calculate() guardaba en
+    // lineDiscountAmount): el PDF solo muestra el descuento comercial.
+    const directCommercialLineValues = sourceQuotation
+      ? []
+      : normalizedItems.map((item) => {
+          const originalPrice =
+            item.originalUnitPriceSnapshot ?? item.priceSoldUnit;
+          const realGross = item.qty.mul(originalPrice);
+          const realLineDiscount = Prisma.Decimal.max(
+            new Prisma.Decimal(0),
+            realGross.minus(item.qty.mul(item.priceSoldUnit)),
+          );
+          return { realGross, realLineDiscount };
+        });
+    const totalDirectCommercialLineDiscount = directCommercialLineValues.reduce(
+      (sum, value) => sum.plus(value.realLineDiscount),
+      new Prisma.Decimal(0),
+    );
+
     let totalSold = sourceQuotation
       ? new Prisma.Decimal(sourceQuotation.total)
       : fiscalSettings.taxEnabled
       ? taxCalculation.total
-      : new Prisma.Decimal(0);
+      : new Prisma.Decimal(taxCalculation.discountAmount);
     let totalCost = new Prisma.Decimal(0);
     let totalProfit = new Prisma.Decimal(0);
 
@@ -928,7 +949,11 @@ export class SalesService {
             taxableBase: taxCalculation.taxableBase,
             taxAmount: taxCalculation.taxAmount,
             exemptAmount: taxCalculation.exemptAmount,
-            discountAmount: taxCalculation.discountAmount,
+            discountAmount: sourceQuotation
+              ? taxCalculation.discountAmount
+              : totalDirectCommercialLineDiscount.plus(
+                  new Prisma.Decimal(taxCalculation.discountAmount),
+                ),
             fiscalVoucherType: requestedVoucherType,
             ncf: reservedNcf?.ncf ?? null,
             ncfExpirationDate: reservedNcf?.validUntil ?? null,
@@ -965,9 +990,12 @@ export class SalesService {
                   ).minus(item.subtotalCost);
                   const itemCommercialProfit = itemNetTaxProfit;
                   return {
-                    grossAmount: taxLine?.grossAmount ?? item.subtotalSold,
-                    lineDiscountAmount:
-                      taxLine?.discountAmount ?? new Prisma.Decimal(0),
+                    grossAmount: sourceQuotation
+                      ? (taxLine?.grossAmount ?? item.subtotalSold)
+                      : directCommercialLineValues[index].realGross,
+                    lineDiscountAmount: sourceQuotation
+                      ? (taxLine?.discountAmount ?? new Prisma.Decimal(0))
+                      : directCommercialLineValues[index].realLineDiscount,
                     taxableBase: taxLine?.taxableBase ?? new Prisma.Decimal(0),
                     taxRate: taxLine?.taxRate ?? new Prisma.Decimal(0),
                     taxAmount: taxLine?.taxAmount ?? new Prisma.Decimal(0),
@@ -1644,6 +1672,10 @@ export class SalesService {
         productImageSnapshot: product.imagen,
         qty,
         priceSoldUnit,
+        originalUnitPriceSnapshot:
+          item.originalUnitPriceSnapshot === undefined
+            ? undefined
+            : new Prisma.Decimal(item.originalUnitPriceSnapshot),
         costUnitSnapshot,
         subtotalSold,
         subtotalCost,
@@ -1682,6 +1714,10 @@ export class SalesService {
       productImageSnapshot: null,
       qty,
       priceSoldUnit,
+      originalUnitPriceSnapshot:
+        item.originalUnitPriceSnapshot === undefined
+          ? undefined
+          : new Prisma.Decimal(item.originalUnitPriceSnapshot),
       costUnitSnapshot,
       subtotalSold,
       subtotalCost,

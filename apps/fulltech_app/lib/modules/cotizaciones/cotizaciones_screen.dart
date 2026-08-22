@@ -1320,6 +1320,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           isExternal: item.isExternal,
           qty: item.qty,
           priceSoldUnit: _roundUnitPrice(item.unitPrice),
+          originalUnitPrice: item.originalUnitPrice,
           costUnitSnapshot: item.tracedCostUnit ?? 0,
           taxTreatment: item.taxTreatment,
           taxRate: item.taxRate > 0 ? item.taxRate : null,
