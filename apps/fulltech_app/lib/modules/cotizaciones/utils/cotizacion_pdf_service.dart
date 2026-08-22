@@ -53,6 +53,7 @@ Future<Uint8List> buildCotizacionPdf({
         customer: viewData.customer,
         logoImage: logoImage,
         dateFmt: dateFmt,
+        showFiscalCondition: viewData.totals.fiscalEnabled,
         pageNumber: context.pageNumber,
         pagesCount: context.pagesCount,
       ),
@@ -239,6 +240,7 @@ pw.Widget _pageHeader({
   required CotizacionPdfCustomerData customer,
   required pw.MemoryImage? logoImage,
   required DateFormat dateFmt,
+  required bool showFiscalCondition,
   required int pageNumber,
   required int pagesCount,
 }) {
@@ -299,6 +301,7 @@ pw.Widget _pageHeader({
                 issuedText: dateFmt.format(quote.issuedAt),
                 expiresText: dateFmt.format(quote.expiresAt),
                 taxText: quote.fiscalCondition,
+                showFiscalCondition: showFiscalCondition,
               ),
             ),
           ],
@@ -400,6 +403,7 @@ List<pw.Widget> _detailSection(
   final hasProductDiscount = data.lines.any(
     (item) => item.productDiscountAmount > 0,
   );
+  final showTaxColumn = data.totals.fiscalEnabled;
   final rows = <pw.TableRow>[
     pw.TableRow(
       repeat: true,
@@ -410,7 +414,7 @@ List<pw.Widget> _detailSection(
         _headerCell('Precio unidad', align: pw.TextAlign.right),
         if (hasProductDiscount)
           _headerCell('Descuento', align: pw.TextAlign.right),
-        _headerCell('ITBIS', align: pw.TextAlign.right),
+        if (showTaxColumn) _headerCell('ITBIS', align: pw.TextAlign.right),
         _headerCell('Total', align: pw.TextAlign.right),
       ],
     ),
@@ -424,7 +428,7 @@ List<pw.Widget> _detailSection(
           _bodyCell(''),
           _bodyCell(''),
           if (hasProductDiscount) _bodyCell(''),
-          _bodyCell(''),
+          if (showTaxColumn) _bodyCell(''),
           _bodyCell(''),
         ],
       ),
@@ -451,7 +455,11 @@ List<pw.Widget> _detailSection(
                     ? _danger
                     : _textMuted,
               ),
-            _bodyCell(money.format(item.taxAmount), align: pw.TextAlign.right),
+            if (showTaxColumn)
+              _bodyCell(
+                money.format(item.taxAmount),
+                align: pw.TextAlign.right,
+              ),
             _bodyCell(
               money.format(item.total),
               align: pw.TextAlign.right,
@@ -481,14 +489,17 @@ List<pw.Widget> _detailSection(
         right: pw.BorderSide(color: _panelBorder, width: 0.45),
         horizontalInside: pw.BorderSide(color: _borderColor, width: 0.45),
       ),
-      columnWidths: _detailColumnWidths(hasProductDiscount),
+      columnWidths: _detailColumnWidths(hasProductDiscount, showTaxColumn),
       children: rows,
     ),
   ];
 }
 
-Map<int, pw.TableColumnWidth> _detailColumnWidths(bool hasProductDiscount) {
-  if (hasProductDiscount) {
+Map<int, pw.TableColumnWidth> _detailColumnWidths(
+  bool hasProductDiscount,
+  bool showTaxColumn,
+) {
+  if (hasProductDiscount && showTaxColumn) {
     return const {
       0: pw.FlexColumnWidth(3.45),
       1: pw.FlexColumnWidth(0.62),
@@ -498,12 +509,29 @@ Map<int, pw.TableColumnWidth> _detailColumnWidths(bool hasProductDiscount) {
       5: pw.FlexColumnWidth(1.12),
     };
   }
+  if (hasProductDiscount) {
+    return const {
+      0: pw.FlexColumnWidth(3.45),
+      1: pw.FlexColumnWidth(0.62),
+      2: pw.FlexColumnWidth(1.1),
+      3: pw.FlexColumnWidth(1.02),
+      4: pw.FlexColumnWidth(1.12),
+    };
+  }
+  if (showTaxColumn) {
+    return const {
+      0: pw.FlexColumnWidth(4.0),
+      1: pw.FlexColumnWidth(0.68),
+      2: pw.FlexColumnWidth(1.18),
+      3: pw.FlexColumnWidth(0.92),
+      4: pw.FlexColumnWidth(1.2),
+    };
+  }
   return const {
     0: pw.FlexColumnWidth(4.1),
     1: pw.FlexColumnWidth(0.7),
     2: pw.FlexColumnWidth(1.2),
-    3: pw.FlexColumnWidth(1.0),
-    4: pw.FlexColumnWidth(1.2),
+    3: pw.FlexColumnWidth(1.2),
   };
 }
 
@@ -786,6 +814,7 @@ pw.Widget _quoteFactsPanel({
   required String issuedText,
   required String expiresText,
   required String taxText,
+  required bool showFiscalCondition,
 }) {
   return pw.Container(
     padding: const pw.EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -817,7 +846,7 @@ pw.Widget _quoteFactsPanel({
         pw.SizedBox(height: 6),
         _factLine('Expedición', issuedText),
         _factLine('Vencimiento', expiresText),
-        _factLine('Condición', taxText),
+        if (showFiscalCondition) _factLine('Condición', taxText),
       ],
     ),
   );

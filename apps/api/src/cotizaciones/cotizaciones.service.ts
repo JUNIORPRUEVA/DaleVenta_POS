@@ -630,6 +630,24 @@ export class CotizacionesService {
     const customerPhoneNormalized = normalizePhone(customerPhone);
 
     const normalized = await this.normalizeItems(companyId, dto.items);
+    // Descuento REAL por línea y bruto original desde la cotización.
+    // El cálculo fiscal prorratea el descuento general en `discountAmount`
+    // para las bases imponibles, pero el PDF debe mostrar el descuento
+    // realmente aplicado a cada línea: ((originalUnitPrice − unitPrice) × qty)
+    // y el bruto original (originalUnitPrice × qty).
+    const realLineValues = normalized.map((item) => {
+      const originalPrice = item.originalUnitPriceSnapshot ?? item.unitPrice;
+      const realGross = item.qty.mul(originalPrice);
+      const realLineDiscount = Prisma.Decimal.max(
+        new Prisma.Decimal(0),
+        realGross.minus(item.qty.mul(item.unitPrice)),
+      );
+      return { realGross, realLineDiscount };
+    });
+    const totalRealLineDiscount = realLineValues.reduce(
+      (sum, value) => sum.plus(value.realLineDiscount),
+      new Prisma.Decimal(0),
+    );
     const fiscalSettings = await this.taxes.getCompanyFiscalSettings(companyId);
     const defaultPriceMode = this.taxes.resolvePriceMode(fiscalSettings);
     const taxCalculation = this.taxes.calculatorService.calculate({
@@ -697,7 +715,7 @@ export class CotizacionesService {
             taxableBase: taxCalculation.taxableBase,
             taxAmount: taxCalculation.taxAmount,
             exemptAmount: taxCalculation.exemptAmount,
-            discountAmount: taxCalculation.discountAmount,
+            discountAmount: totalRealLineDiscount.plus(generalDiscountAmount),
             globalDiscountAmount: generalDiscountAmount,
             subtotal,
             subtotalCost: totalCost,
@@ -717,8 +735,8 @@ export class CotizacionesService {
                 subtotalCost: item.subtotalCost,
                 taxTreatment: item.taxTreatment,
                 taxPriceMode: item.taxPriceMode ?? defaultPriceMode,
-                grossAmount: taxCalculation.lines[index]?.grossAmount ?? item.lineTotal,
-                lineDiscountAmount: taxCalculation.lines[index]?.discountAmount ?? new Prisma.Decimal(0),
+                grossAmount: realLineValues[index].realGross,
+                lineDiscountAmount: realLineValues[index].realLineDiscount,
                 taxableBase: taxCalculation.lines[index]?.taxableBase ?? new Prisma.Decimal(0),
                 taxRate: taxCalculation.lines[index]?.taxRate ?? new Prisma.Decimal(0),
                 taxAmount: taxCalculation.lines[index]?.taxAmount ?? new Prisma.Decimal(0),
@@ -814,6 +832,13 @@ export class CotizacionesService {
     let generalDiscountAmount = new Prisma.Decimal(
       Math.max(0, dto.globalDiscountAmount ?? currentGeneralDiscountAmount),
     );
+    let documentDiscountAmount = new Prisma.Decimal(
+      current.discountAmount ?? 0,
+    );
+    let realLineValues: Array<{
+      realGross: Prisma.Decimal;
+      realLineDiscount: Prisma.Decimal;
+    }> = [];
 
     if (nextItems) {
       subtotalCost = new Prisma.Decimal(0);
@@ -834,6 +859,21 @@ export class CotizacionesService {
         : rawSubtotal;
       itbisAmount = taxCalculation?.taxAmount ?? new Prisma.Decimal(0);
       generalDiscountAmount = taxCalculation?.discountAmount ?? new Prisma.Decimal(0);
+      // Descuento REAL por línea y bruto original (mismo criterio que create).
+      realLineValues = nextItems.map((item) => {
+        const originalPrice = item.originalUnitPriceSnapshot ?? item.unitPrice;
+        const realGross = item.qty.mul(originalPrice);
+        const realLineDiscount = Prisma.Decimal.max(
+          new Prisma.Decimal(0),
+          realGross.minus(item.qty.mul(item.unitPrice)),
+        );
+        return { realGross, realLineDiscount };
+      });
+      const totalRealLineDiscount = realLineValues.reduce(
+        (sum, value) => sum.plus(value.realLineDiscount),
+        new Prisma.Decimal(0),
+      );
+      documentDiscountAmount = totalRealLineDiscount.plus(generalDiscountAmount);
       total = taxCalculation?.total ?? new Prisma.Decimal(0);
       totalCost = hasUnknownCost ? null : subtotalCost;
       totalProfit = hasUnknownCost ? null : total.minus(subtotalCost);
@@ -857,6 +897,12 @@ export class CotizacionesService {
         : current.items.reduce((sum, item) => sum.plus(item.lineTotal), new Prisma.Decimal(0));
       itbisAmount = taxCalculation.taxAmount;
       generalDiscountAmount = taxCalculation.discountAmount;
+      documentDiscountAmount = current.items
+        .reduce(
+          (sum, item) => sum.plus(item.lineDiscountAmount ?? 0),
+          new Prisma.Decimal(0),
+        )
+        .plus(generalDiscountAmount);
       total = taxCalculation.total;
       totalProfit = totalCost == null ? null : total.minus(totalCost);
     }
@@ -908,7 +954,7 @@ export class CotizacionesService {
             taxableBase: taxCalculation?.taxableBase ?? current.taxableBase,
             taxAmount: taxCalculation?.taxAmount ?? current.taxAmount,
             exemptAmount: taxCalculation?.exemptAmount ?? current.exemptAmount,
-            discountAmount: taxCalculation?.discountAmount ?? current.discountAmount,
+            discountAmount: documentDiscountAmount,
             globalDiscountAmount: generalDiscountAmount,
             subtotal,
             subtotalCost,
@@ -929,8 +975,8 @@ export class CotizacionesService {
                     subtotalCost: item.subtotalCost,
                     taxTreatment: item.taxTreatment,
                     taxPriceMode: item.taxPriceMode ?? defaultPriceMode,
-                    grossAmount: taxCalculation?.lines[index]?.grossAmount ?? item.lineTotal,
-                    lineDiscountAmount: taxCalculation?.lines[index]?.discountAmount ?? new Prisma.Decimal(0),
+                    grossAmount: realLineValues[index].realGross,
+                    lineDiscountAmount: realLineValues[index].realLineDiscount,
                     taxableBase: taxCalculation?.lines[index]?.taxableBase ?? new Prisma.Decimal(0),
                     taxRate: taxCalculation?.lines[index]?.taxRate ?? new Prisma.Decimal(0),
                     taxAmount: taxCalculation?.lines[index]?.taxAmount ?? new Prisma.Decimal(0),

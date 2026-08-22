@@ -346,3 +346,35 @@ La tabla `app_config` de esta BD usa nombres de columna en camelCase y **carece 
 8. Cross-device (2 ciclos), logout/login, multiempresa, realtime.
 9. PDFs/tickets muestran `FULLTECH, SRL`.
 10. Reinicios backend/Windows/Android + verificación DB final.
+
+## ⛔ DETENCIÓN POR DRIFT ADICIONAL CRÍTICO (2026-08-22)
+- Antes de aplicar el ALTER de `app_config` se detectó drift adicional: la tabla `companies` de producción carece de `tax_enabled`, `default_tax_id`, `default_tax_rate`, `prices_include_tax`, `ncf_enabled` (schema `Company`).
+- `prisma migrate status` → exit 1 (historial desincronizado). Impacto probable: `GET/PATCH /settings` e impuestos devuelven 500 en producción hasta añadir las columnas.
+- **NO se aplicó ninguna modificación de BD** (backup listo: `%TEMP%\daleventa_backup_20260822_180416.dump`). Corrección aditiva preparada en `DB-DRIFT-REPORT.md`. Pendiente de autorización.
+
+---
+
+# 🔧 DECISIÓN PRISMA_SYNC_MODE (2026-08-22)
+
+## Qué hace REALMENTE (código verificado)
+- Único consumidor: `apps/api/scripts/start-prod.sh` (entrypoint del contenedor: `CMD ["sh", "scripts/start-prod.sh"]`).
+- Default del script: `PRISMA_SYNC_MODE="${PRISMA_SYNC_MODE:-migrate}"` → **si la variable se QUITA, el comportamiento sigue siendo `migrate`** (quitar la variable no desactiva nada).
+- Con `RUN_MIGRATIONS=true` (default del Dockerfile: `ENV RUN_MIGRATIONS=true`):
+  - `migrate` (o ausente) → `npx prisma migrate deploy` con reintentos (10×, 5 s) y resolver P3009 solo para `20260502043000_add_status_history_user_name_and_created_at`.
+  - `push` → `npx prisma db push --accept-data-loss` (**DESTRUCTIVO**); bloqueado en producción salvo `ALLOW_PRODUCTION_DB_PUSH=true`.
+- Si `migrate deploy` falla y `MIGRATION_STRICT != true` (default) → el arranque continúa igual.
+- El contenedor inicia con `exec node dist/main.js` (NO `npm start`), así que el `prestart: prisma migrate deploy` de `package.json` NO se ejecuta en el contenedor.
+
+## Riesgo con el historial actual
+- El repo tiene baseline consolidado (`phase6_baseline`, 100% CREATE sin `IF NOT EXISTS` ni `DROP`); no está en `_prisma_migrations` (139 antiguas).
+- `migrate deploy` intentaría `phase6_baseline` primero → `CREATE TYPE`/`CREATE TABLE` fallan ("already exists") → P3009 → reintentos → **no destructivo, pero inútil y ruidoso** (retraso de arranque, migración marcada failed).
+- `db push --accept-data-loss` es destructivo y está bloqueado en producción por diseño.
+
+## Decisión final
+- `PRISMA_SYNC_MODE` NO es el interruptor de migraciones: con o sin la variable, el default es `migrate`. El switch real es **`RUN_MIGRATIONS`**.
+- **OPCIÓN D — NO usar sincronización automática en producción**:
+  1. Mantener `PRISMA_SYNC_MODE` eliminada.
+  2. Configurar **`RUN_MIGRATIONS=false`** en el entorno de producción (detiene el `migrate deploy` automático al arrancar).
+  3. Gestionar cambios de esquema manualmente: backup (pg_dump) + ALTER aditivo controlado + validación + documentación.
+  4. Reconciliar el historial (`prisma migrate resolve --applied phase6_baseline ...`) solo en un paso futuro planificado, nunca a ciegas.
+- NO restaurar `PRISMA_SYNC_MODE=migrate` (no aporta nada: es el default y generaría fallos de migración cada boot).

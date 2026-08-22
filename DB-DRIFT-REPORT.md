@@ -97,3 +97,62 @@ Luego: probar Prisma contra `app_config` (sin `column does not exist`) y el fluj
 - `Company.name` = `FULLTECH, SRL`
 - `AppConfig.companyName` = `FULLTECH, SRL`
 - `updatedAt` = 2026-08-22T21:34:12Z
+
+---
+
+# DECISIÓN PRISMA_SYNC_MODE (2026-08-22)
+
+## Dónde se usa (código verificado)
+- `apps/api/scripts/start-prod.sh` (entrypoint del contenedor, `CMD ["sh", "scripts/start-prod.sh"]`).
+- `package.json` `prestart: prisma migrate deploy` — **NO se ejecuta en el contenedor** (arranca con `exec node dist/main.js`).
+- `.env.docker.example` / `.env.example` línea 43: `PRISMA_SYNC_MODE=push` (solo ejemplo; `push` está bloqueado en producción por el script salvo `ALLOW_PRODUCTION_DB_PUSH=true`).
+
+## Comando real que ejecuta
+- Default: `${PRISMA_SYNC_MODE:-migrate}` → **quitar la variable NO cambia el comportamiento** (sigue `migrate`).
+- `migrate` → `npx prisma migrate deploy` (reintentos 10×5 s + resolver P3009 para una migración antigua específica; si falla y `MIGRATION_STRICT!=true`, el arranque continúa).
+- `push` → `npx prisma db push --accept-data-loss` (DESTRUCTIVO, bloqueado en prod).
+
+## Riesgo
+- `migrate deploy` contra esta BD intentaría aplicar `phase6_baseline` (100% CREATE, sin `IF NOT EXISTS` ni `DROP`) → falla por tipos/tablas ya existentes → P3009/noise; **no destructivo, pero inútil**. `push` es destructivo y está bloqueado.
+
+## Decisión
+- **OPCIÓN D — NO sincronización automática en producción.** Mantener `PRISMA_SYNC_MODE` eliminada + **`RUN_MIGRATIONS=false`**. Cambios de esquema: manuales (backup + ALTER aditivo + validación). NO restaurar `migrate` ni usar `db push` hasta reconciliar el historial de migraciones.
+
+---
+
+# ⛔ DRIFT ADICIONAL CRÍTICO — tabla `companies` (2026-08-22)
+
+Durante la validación read-only previa al ALTER se detectó drift adicional **crítico**:
+
+- `prisma.company.findUnique` con campos fiscales falla: `The column companies.tax_enabled does not exist`.
+- `information_schema` confirma que `companies` carece de **5 columnas** del schema actual:
+
+| Campo (schema `Company`) | Columna esperada | Estado |
+|---|---|---|
+| `taxEnabled Boolean @default(false)` | `tax_enabled BOOLEAN NOT NULL DEFAULT false` | ❌ FALTA |
+| `defaultTaxId String? @db.Uuid` | `default_tax_id UUID` | ❌ FALTA |
+| `defaultTaxRate Decimal @default(0) @db.Decimal(5,4)` | `default_tax_rate DECIMAL(5,4) NOT NULL DEFAULT 0` | ❌ FALTA |
+| `pricesIncludeTax Boolean @default(false)` | `prices_include_tax BOOLEAN NOT NULL DEFAULT false` | ❌ FALTA |
+| `ncfEnabled Boolean @default(false)` | `ncf_enabled BOOLEAN NOT NULL DEFAULT false` | ❌ FALTA |
+
+**Impacto en producción (backend nuevo ya desplegado):**
+- `tax.service.getCompanyFiscalSettings` y `settings.service` (get/update settings y updateCompanyName) seleccionan esas columnas → **`GET/PATCH /settings` y endpoints de impuestos devolverían 500** ("column does not exist") hasta añadirlas.
+- `prisma migrate status` → **exit 1** (migraciones del repo sin aplicar; historial desincronizado).
+
+**Corrección recomendada (ADITIVA, NO aplicada — requiere autorización):**
+```sql
+ALTER TABLE "companies" ADD COLUMN IF NOT EXISTS "tax_enabled" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "companies" ADD COLUMN IF NOT EXISTS "default_tax_id" UUID;
+ALTER TABLE "companies" ADD COLUMN IF NOT EXISTS "default_tax_rate" DECIMAL(5,4) NOT NULL DEFAULT 0;
+ALTER TABLE "companies" ADD COLUMN IF NOT EXISTS "prices_include_tax" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "companies" ADD COLUMN IF NOT EXISTS "ncf_enabled" BOOLEAN NOT NULL DEFAULT false;
+```
+Junto con el ALTER de `app_config` (ya preparado):
+```sql
+ALTER TABLE "app_config" ADD COLUMN IF NOT EXISTS "admin_authorization_pin_hash" TEXT;
+```
+> ⛔ **SIN APLICAR** — el usuario ordenó DETENERSE ante drift crítico adicional y reportarlo antes de modificar la BD. Backup listo: `%TEMP%\daleventa_backup_20260822_180416.dump` (exit 0, 445947 bytes).
+
+**Estado de la configuración de producción (verificado en código):**
+- `RUN_MIGRATIONS=false` → `start-prod.sh` salta el bloque de sync de Prisma (no ejecuta `migrate deploy` ni `db push`).
+- `PRISMA_SYNC_MODE` sin definir → default `migrate`, irrelevante con `RUN_MIGRATIONS=false`.

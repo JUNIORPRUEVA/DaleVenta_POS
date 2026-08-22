@@ -649,25 +649,35 @@ export class SalesService {
     const fiscalSettings = await this.taxes.getCompanyFiscalSettings(companyId);
     const defaultPriceMode = this.taxes.resolvePriceMode(fiscalSettings);
     const taxCalculation = sourceQuotation
-      ? {
-          total: new Prisma.Decimal(sourceQuotation.total),
-          taxableBase: new Prisma.Decimal(sourceQuotation.taxableBase),
-          taxAmount: new Prisma.Decimal(sourceQuotation.taxAmount),
-          exemptAmount: new Prisma.Decimal(sourceQuotation.exemptAmount),
-          discountAmount: new Prisma.Decimal(sourceQuotation.discountAmount),
-          lines: normalizedItems.map((item, index) => ({
-            index,
-            grossAmount: new Prisma.Decimal(item.grossAmount ?? 0),
-            discountAmount: new Prisma.Decimal(item.lineDiscountAmount ?? 0),
-            taxableBase: new Prisma.Decimal(item.taxableBase ?? 0),
-            taxRate: new Prisma.Decimal(item.taxRate ?? 0),
-            taxAmount: new Prisma.Decimal(item.taxAmount ?? 0),
-            exemptAmount: new Prisma.Decimal(item.exemptAmount ?? 0),
-            taxIncluded: item.taxIncluded ?? false,
-            taxExempt: item.taxExempt ?? false,
-            lineTotal: new Prisma.Decimal(item.lineTotal ?? item.subtotalSold),
-          })),
-        }
+      ? (() => {
+          const totalRealLineDiscount = normalizedItems.reduce(
+            (sum, item) =>
+              sum.plus(new Prisma.Decimal(item.lineDiscountAmount ?? 0)),
+            new Prisma.Decimal(0),
+          );
+          const generalDiscount = new Prisma.Decimal(
+            sourceQuotation.globalDiscountAmount ?? 0,
+          );
+          return {
+            total: new Prisma.Decimal(sourceQuotation.total),
+            taxableBase: new Prisma.Decimal(sourceQuotation.taxableBase),
+            taxAmount: new Prisma.Decimal(sourceQuotation.taxAmount),
+            exemptAmount: new Prisma.Decimal(sourceQuotation.exemptAmount),
+            discountAmount: totalRealLineDiscount.plus(generalDiscount),
+            lines: normalizedItems.map((item, index) => ({
+              index,
+              grossAmount: new Prisma.Decimal(item.grossAmount ?? 0),
+              discountAmount: new Prisma.Decimal(item.lineDiscountAmount ?? 0),
+              taxableBase: new Prisma.Decimal(item.taxableBase ?? 0),
+              taxRate: new Prisma.Decimal(item.taxRate ?? 0),
+              taxAmount: new Prisma.Decimal(item.taxAmount ?? 0),
+              exemptAmount: new Prisma.Decimal(item.exemptAmount ?? 0),
+              taxIncluded: item.taxIncluded ?? false,
+              taxExempt: item.taxExempt ?? false,
+              lineTotal: new Prisma.Decimal(item.lineTotal ?? item.subtotalSold),
+            })),
+          };
+        })()
       : this.taxes.calculatorService.calculate({
           taxEnabled: fiscalSettings.taxEnabled,
           defaultTaxRate: fiscalSettings.defaultTaxRate,
