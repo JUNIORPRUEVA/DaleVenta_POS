@@ -1943,8 +1943,15 @@ class _CompanySettingsEditorState
     );
     if (!authorized || !mounted) return;
 
+    final nameValue = _name.text.trim();
+    if (nameValue.isEmpty) {
+      _showMessage('El nombre de la empresa es obligatorio.');
+      return;
+    }
+    final nameChanged = nameValue != widget.settings.companyName.trim();
+
     final settingsDraft = widget.settings.copyWith(
-      companyName: _name.text.trim(),
+      companyName: nameValue,
       rnc: _rnc.text.trim(),
       phone: _phone.text.trim(),
       phonePreferential: _phonePreferential.text.trim(),
@@ -1989,6 +1996,15 @@ class _CompanySettingsEditorState
       final queued = await settingsRepository.saveSettingsOrQueue(
         settingsDraft,
       );
+      var queuedName = false;
+      // El nombre es dato maestro: solo se envía por la vía explícita cuando el
+      // usuario realmente lo editó, nunca como efecto secundario de otros
+      // campos (teléfono, dirección, logo, etc.).
+      if (nameChanged) {
+        queuedName = await settingsRepository.saveCompanyNameOrQueue(
+          nameValue,
+        );
+      }
       if (!mounted) return;
       ref.invalidate(companySettingsProvider);
       ref.invalidate(productTaxUiConfigProvider);
@@ -1996,7 +2012,7 @@ class _CompanySettingsEditorState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            queued
+            queued || queuedName
                 ? 'Empresa guardada localmente y pendiente de sincronizar.'
                 : 'Datos de empresa guardados.',
           ),

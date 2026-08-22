@@ -53,6 +53,7 @@ class CompanySettingsRepository {
   static const Duration _settingsTimeout = Duration(seconds: 20);
   static const String _cacheKey = 'company_settings_cache_v1';
   static const String _saveSyncType = 'settings.save';
+  static const String _saveNameSyncType = 'settings.save_name';
 
   final LocalJsonCache _cache = LocalJsonCache();
   final SyncQueueService _syncQueue;
@@ -89,11 +90,26 @@ class CompanySettingsRepository {
         );
         return;
       }
-      final settings = CompanySettings.fromMap(
-        ((payload['settings'] as Map?) ?? const <String, dynamic>{})
-            .cast<String, dynamic>(),
-      );
+      // Sanitización de operaciones LEGACY: `companyName` es dato maestro y
+      // jamás debe llegar por la vía genérica de settings, aunque payloads
+      // viejos (creados por versiones anteriores, p. ej. Android) lo incluyan.
+      final map = Map<String, dynamic>.from(
+        (payload['settings'] as Map?) ?? const <String, dynamic>{},
+      )..remove('companyName');
+      final settings = CompanySettings.fromMap(map);
       await _saveSettingsRemote(settings);
+    });
+    _syncQueue.registerHandler(_saveNameSyncType, (payload) async {
+      if (!_canWriteSettings) {
+        TraceLog.log(
+          'company_settings',
+          'discarded stale settings.save_name for non-admin session',
+        );
+        return;
+      }
+      final companyName = (payload['companyName'] ?? '').toString().trim();
+      if (companyName.isEmpty) return;
+      await _saveCompanyNameRemote(companyName);
     });
   }
 
@@ -221,8 +237,9 @@ class CompanySettingsRepository {
 
   Future<void> _saveSettingsRemote(CompanySettings settings) async {
     try {
+      // NOTA: `companyName` es dato maestro. No se envía por esta vía genérica;
+      // solo el endpoint dedicado /settings/company-name lo actualiza.
       final payload = <String, dynamic>{
-        'companyName': settings.companyName,
         'rnc': settings.rnc,
         'phone': settings.phone,
         'phonePreferential': settings.phonePreferential,
@@ -285,6 +302,33 @@ class CompanySettingsRepository {
     }
   }
 
+  /// Actualiza `Company.name` por la vía EXPLÍCITA (/settings/company-name).
+  /// Nunca se invoca con un nombre de fallback/display: solo con la intención
+  /// explícita del usuario (edición del campo nombre en el editor).
+  Future<void> _saveCompanyNameRemote(String companyName) async {
+    try {
+      await _dio
+          .patch(
+            ApiRoutes.settingsCompanyName,
+            options: Options(extra: const {'skipLoader': true}),
+            data: {'companyName': companyName.trim()},
+          )
+          .timeout(_settingsTimeout);
+    } on TimeoutException {
+      throw ApiException(
+        'Actualizar el nombre de la empresa tardó demasiado. Inténtalo de nuevo.',
+      );
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(
+          e.response?.data,
+          'No se pudo actualizar el nombre de la empresa',
+        ),
+        e.response?.statusCode,
+      );
+    }
+  }
+
   Future<bool> saveSettingsOrQueue(CompanySettings settings) async {
     if (!_canWriteSettings) {
       throw ApiException(
@@ -303,6 +347,43 @@ class CompanySettingsRepository {
         type: _saveSyncType,
         scope: _scopedCacheKey,
         payload: {'settings': settings.toMap()},
+      );
+      return true;
+    }
+  }
+
+  /// Guarda el nombre de empresa por la vía explícita, con reintento offline.
+  /// Solo debe llamarse cuando el usuario EDITÓ el nombre (intención explícita),
+  /// nunca con fallbacks de display.
+  Future<bool> saveCompanyNameOrQueue(String companyName) async {
+    final name = companyName.trim();
+    if (name.isEmpty) {
+      throw ApiException('El nombre de la empresa no puede estar vacío.');
+    }
+    if (!_canWriteSettings) {
+      throw ApiException(
+        'Solo un administrador puede cambiar el nombre de la empresa.',
+        403,
+      );
+    }
+    // Actualiza la copia local (display) para que la UI refleje el nuevo nombre.
+    final cached = await getCachedSettings();
+    if (cached != null) {
+      await _cache.writeMap(
+        _scopedCacheKey,
+        cached.copyWith(companyName: name).toMap(),
+      );
+    }
+    try {
+      await _saveCompanyNameRemote(name);
+      return false;
+    } on ApiException catch (e) {
+      if (!_shouldQueueSync(e)) rethrow;
+      await _syncQueue.enqueue(
+        id: '$_saveNameSyncType:$_scopedCacheKey',
+        type: _saveNameSyncType,
+        scope: _scopedCacheKey,
+        payload: {'companyName': name},
       );
       return true;
     }

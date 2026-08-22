@@ -8,6 +8,7 @@ class ApiRoutes {
   static const accountDeletionPreview = '/auth/account/deletion-preview';
   static const accountDelete = '/auth/account';
   static const settings = '/settings';
+  static const settingsCompanyName = '/settings/company-name';
   static const fiscalSettings = '/company/fiscal-settings';
   static const taxes = '/taxes';
   static const ncfSequences = '/ncf/sequences';

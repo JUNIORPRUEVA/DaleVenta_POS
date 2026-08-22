@@ -94,14 +94,14 @@ describe('SettingsService company master data protection', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('rejects empty company names instead of creating an appConfig/company mismatch', async () => {
+  it('rejects empty company names on the dedicated rename endpoint', async () => {
     const prisma = {
       $transaction: jest.fn(),
     };
     const service = buildService(prisma);
 
     await expect(
-      service.updateSettings(
+      service.updateCompanyName(
         { id: 'admin-a', role: Role.ADMIN, companyId: 'company-a' },
         { companyName: '   ' },
       ),
@@ -109,11 +109,26 @@ describe('SettingsService company master data protection', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('updates only the authenticated tenant company and writes an audit record', async () => {
+  it('rejects renames from non-admin users before touching prisma', async () => {
+    const prisma = {
+      $transaction: jest.fn(),
+    };
+    const service = buildService(prisma);
+
+    await expect(
+      service.updateCompanyName(
+        { id: 'cashier-a', role: Role.CAJERO, companyId: 'company-a' },
+        { companyName: 'Nombre Nuevo' },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('renames only through the explicit endpoint, tenant-scoped and audited', async () => {
     const tx = {
       company: {
         findUnique: jest.fn().mockResolvedValue({ name: 'Nombre Viejo' }),
-        update: jest.fn().mockResolvedValue({}),
+        update: jest.fn().mockResolvedValue({ id: 'company-a' }),
       },
       appConfig: {
         upsert: jest.fn().mockResolvedValue({
@@ -153,7 +168,7 @@ describe('SettingsService company master data protection', () => {
     };
     const service = buildService(prisma);
 
-    await service.updateSettings(
+    await service.updateCompanyName(
       { id: 'admin-a', role: Role.ADMIN, companyId: 'company-a' },
       { companyName: 'Nombre Nuevo' },
     );
@@ -161,9 +176,13 @@ describe('SettingsService company master data protection', () => {
     expect(tx.company.update).toHaveBeenCalledWith({
       where: { id: 'company-a' },
       data: { name: 'Nombre Nuevo' },
+      select: { id: true },
     });
     expect(tx.company.update).not.toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'company-b' } }),
+    );
+    expect(tx.appConfig.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ update: { companyName: 'Nombre Nuevo' } }),
     );
     expect(tx.companyLicenseAuditLog.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -178,7 +197,7 @@ describe('SettingsService company master data protection', () => {
     );
   });
 
-  it('persists fiscal false values through the fiscal settings service', async () => {
+  it('persists fiscal false values without touching Company.name', async () => {
     let fiscalState = {
       taxEnabled: true,
       defaultTaxId: 'tax-18',
@@ -244,7 +263,9 @@ describe('SettingsService company master data protection', () => {
     const response = await service.updateSettings(
       { id: 'admin-a', role: Role.ADMIN, companyId: 'company-a' },
       {
-        companyName: 'FullPOS Cloud',
+        // Payload legado: contiene companyName, pero el PATCH genérico NO debe
+        // modificar Company.name (ni propagarlo a AppConfig).
+        companyName: 'DaleVenta POS',
         taxEnabled: false,
         pricesIncludeTax: false,
         ncfEnabled: false,
@@ -252,6 +273,9 @@ describe('SettingsService company master data protection', () => {
       },
     );
 
+    expect(tx.company.update).not.toHaveBeenCalled();
+    const upsertCall = tx.appConfig.upsert.mock.calls[0][0];
+    expect(upsertCall.update).not.toHaveProperty('companyName');
     expect(taxes.updateFiscalSettings).toHaveBeenCalledWith(
       expect.objectContaining({ companyId: 'company-a' }),
       {
@@ -261,16 +285,6 @@ describe('SettingsService company master data protection', () => {
         ncfEnabled: false,
       },
     );
-    expect(tx.company.update).toHaveBeenCalledWith({
-      where: { id: 'company-a' },
-      data: {
-        name: 'FullPOS Cloud',
-        taxEnabled: false,
-        defaultTaxRate: expect.anything(),
-        pricesIncludeTax: false,
-        ncfEnabled: false,
-      },
-    });
     expect(response.taxEnabled).toBe(false);
     expect(response.pricesIncludeTax).toBe(false);
     expect(response.ncfEnabled).toBe(false);

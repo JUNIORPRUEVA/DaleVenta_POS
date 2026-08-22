@@ -20,6 +20,18 @@ export class SettingsController {
     return this.settings.updateSettings(req.user as TenantUser, dto);
   }
 
+  /**
+   * Única vía para cambiar `Company.name`. Requiere admin y una intención
+   * EXPLÍCITA: el PATCH genérico de settings ya no puede modificar el nombre.
+   */
+  @Patch('company-name')
+  updateCompanyName(
+    @Req() req: Request,
+    @Body() dto: { companyName?: unknown },
+  ) {
+    return this.settings.updateCompanyName(req.user as TenantUser, dto);
+  }
+
   @Post('admin-pin')
   setAdminPin(@Req() req: Request, @Body() dto: { pin?: unknown }) {
     return this.settings.setAdminPin(req.user as TenantUser, dto.pin);

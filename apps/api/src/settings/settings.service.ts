@@ -38,58 +38,27 @@ export class SettingsService {
   async updateSettings(user: TenantUser, dto: SettingsPayload) {
     this.requireAdmin(user);
     const companyId = requireTenant(user);
-    const data = this.settingsData(dto);
-    if (
-      Object.prototype.hasOwnProperty.call(dto, 'companyName') &&
-      (data.companyName ?? '').trim().length === 0
-    ) {
-      throw new BadRequestException('El nombre de la empresa es obligatorio');
-    }
-    let changedCompanyName: string | null = null;
-    let previousCompanyName: string | null = null;
+    // `Company.name` es dato MAESTRO. El PATCH genérico de settings NUNCA lo
+    // modifica: un payload legacy (p. ej. de una build Android antigua) que
+    // incluya `companyName` se ignora deliberadamente aquí. El nombre solo
+    // cambia por la acción EXPLÍCITA y autorizada `updateCompanyName`.
+    const data = this.withoutCompanyName(this.settingsData(dto));
     const config = await this.prisma.$transaction(async (tx) => {
-      const currentCompany = await tx.company.findUnique({
+      const company = await tx.company.findUnique({
         where: { id: companyId },
         select: { name: true },
       });
-      previousCompanyName = currentCompany?.name?.trim() ?? null;
-      const updated = await tx.appConfig.upsert({
+      const companyName = company?.name?.trim() ?? '';
+      return tx.appConfig.upsert({
         where: { companyId },
         create: {
           id: `company_${companyId}`,
           companyId,
+          companyName,
           ...data,
         },
         update: data,
       });
-      const companyName = data.companyName?.trim();
-      if (companyName) {
-        await tx.company.update({
-          where: { id: companyId },
-          data: {
-            name: companyName,
-            ...this.companyFiscalData(dto),
-          },
-        });
-        changedCompanyName = companyName;
-        if (previousCompanyName !== companyName) {
-          await this.writeCompanySettingsAuditLog(tx, {
-            companyId,
-            user,
-            previousCompanyName,
-            nextCompanyName: companyName,
-          });
-        }
-      } else {
-        const fiscalData = this.companyFiscalData(dto);
-        if (Object.keys(fiscalData).length) {
-          await tx.company.update({
-            where: { id: companyId },
-            data: fiscalData,
-          });
-        }
-      }
-      return updated;
     });
     if (this.hasFiscalSettingsData(dto)) {
       await this.taxes.updateFiscalSettings(user, {
@@ -99,11 +68,63 @@ export class SettingsService {
         ncfEnabled: this.boolValue(dto, 'ncfEnabled') ?? undefined,
       });
     }
-    if (changedCompanyName) {
-      this.emitCompanyNameUpdated(companyId, changedCompanyName);
-    }
     const fiscal = await this.taxes.getCompanyFiscalSettings(companyId);
     return this.toPublicSettings(config, fiscal);
+  }
+
+  async updateCompanyName(user: TenantUser, dto: { companyName?: unknown }) {
+    this.requireAdmin(user);
+    const companyId = requireTenant(user);
+    const companyName =
+      typeof dto.companyName === 'string' ? dto.companyName.trim() : '';
+    if (!companyName) {
+      throw new BadRequestException('El nombre de la empresa es obligatorio');
+    }
+    let previousCompanyName: string | null = null;
+    const config = await this.prisma.$transaction(async (tx) => {
+      const currentCompany = await tx.company.findUnique({
+        where: { id: companyId },
+        select: { name: true },
+      });
+      previousCompanyName = currentCompany?.name?.trim() ?? null;
+      await tx.company.update({
+        where: { id: companyId },
+        data: { name: companyName },
+        select: { id: true },
+      });
+      const updated = await tx.appConfig.upsert({
+        where: { companyId },
+        create: {
+          id: `company_${companyId}`,
+          companyId,
+          companyName,
+        },
+        update: { companyName },
+      });
+      if (previousCompanyName !== companyName) {
+        await this.writeCompanySettingsAuditLog(tx, {
+          companyId,
+          user,
+          previousCompanyName,
+          nextCompanyName: companyName,
+        });
+      }
+      return updated;
+    });
+    this.emitCompanyNameUpdated(companyId, companyName);
+    const fiscal = await this.taxes.getCompanyFiscalSettings(companyId);
+    return this.toPublicSettings(config, fiscal);
+  }
+
+  private withoutCompanyName(
+    data: Prisma.AppConfigUncheckedCreateInput &
+      Prisma.AppConfigUncheckedUpdateInput,
+  ): Prisma.AppConfigUncheckedCreateInput &
+    Prisma.AppConfigUncheckedUpdateInput {
+    const clone = { ...data } as Record<string, unknown>;
+    delete clone.companyName;
+    return clone as Prisma.AppConfigUncheckedCreateInput &
+      Prisma.AppConfigUncheckedUpdateInput;
   }
 
   async setAdminPin(user: TenantUser, pin: unknown) {
