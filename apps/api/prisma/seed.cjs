@@ -15,12 +15,14 @@ function isMissingUserTable(error) {
 async function upsertDefaultCompany() {
   return prisma.company.upsert({
     where: { slug: 'daleventa-pos' },
-    update: {
-      name: 'FullPOS Cloud',
-      status: 'ACTIVE',
-      plan: 'ENTERPRISE',
-      maxUsers: 1000,
-    },
+    // SAFETY (2026-08-22, forensic CASO B): the `update` branch must NEVER
+    // overwrite tenant-owned fields on an EXISTING company. Doing so silently
+    // reverted the real company name to the product default ("FullPOS Cloud")
+    // with NO audit event on every seed run, and would also clobber
+    // Appyra-managed license data (status/plan/maxUsers). Only `create` seeds
+    // initial/default values for a brand-new company; `update` is a no-op so
+    // production tenants (name, status, plan, maxUsers, limits) are preserved.
+    update: {},
     create: {
       name: 'FullPOS Cloud',
       slug: 'daleventa-pos',
@@ -34,10 +36,10 @@ async function upsertDefaultCompany() {
 async function upsertAppConfig(company) {
   return prisma.appConfig.upsert({
     where: { id: 'global' },
-    update: {
-      companyId: company.id,
-      companyName: company.name,
-    },
+    // SAFETY: never overwrite an EXISTING tenant AppConfig (companyName, rnc,
+    // phone, address, logo, businessHours, description, ...). Only `create`
+    // seeds the initial config for a brand-new setup.
+    update: {},
     create: {
       id: 'global',
       companyId: company.id,
@@ -51,7 +53,11 @@ async function upsertUser({ companyId, email, password, nombreCompleto, telefono
   try {
     const user = await prisma.user.upsert({
       where: { email },
-      update: { companyId, nombreCompleto, telefono, role, passwordHash, blocked: false },
+      // SAFETY: never overwrite an EXISTING user's credentials or data. The
+      // `update` branch must NOT reset passwordHash (would change the admin
+      // password on every seed run), nor role/companyId/nombreCompleto/
+      // telefono/blocked. Only `create` bootstraps a new admin.
+      update: {},
       create: {
         companyId,
         email,
@@ -78,7 +84,9 @@ async function upsertUser({ companyId, email, password, nombreCompleto, telefono
         INSERT INTO users (email, "passwordHash", role)
         VALUES (${email}, ${passwordHash}, CAST(${role} AS "Role"))
         ON CONFLICT (email)
-        DO UPDATE SET "passwordHash" = EXCLUDED."passwordHash", role = EXCLUDED.role
+        -- SAFETY: only enforce the ADMIN role on an existing legacy user;
+        -- never reset their passwordHash on every seed run.
+        DO UPDATE SET role = EXCLUDED.role
         RETURNING id, email
       `);
     } catch {
@@ -86,7 +94,9 @@ async function upsertUser({ companyId, email, password, nombreCompleto, telefono
         INSERT INTO users (email, "passwordHash", role)
         VALUES (${email}, ${passwordHash}, ${role})
         ON CONFLICT (email)
-        DO UPDATE SET "passwordHash" = EXCLUDED."passwordHash", role = EXCLUDED.role
+        -- SAFETY: only enforce the ADMIN role on an existing legacy user;
+        -- never reset their passwordHash on every seed run.
+        DO UPDATE SET role = EXCLUDED.role
         RETURNING id, email
       `);
     }
@@ -109,11 +119,9 @@ async function upsertCompanyMember({ userId, companyId, role }) {
   if (!prisma.companyMember?.upsert) return { skipped: true };
   return prisma.companyMember.upsert({
     where: { userId_companyId: { userId, companyId } },
-    update: {
-      role: companyMemberRoleFromLegacyRole(role),
-      status: CompanyMemberStatus?.ACTIVE ?? 'ACTIVE',
-      joinedAt: new Date(),
-    },
+    // SAFETY: never overwrite an EXISTING membership (role, status, joinedAt).
+    // Only `create` sets the initial membership for a new admin.
+    update: {},
     create: {
       userId,
       companyId,
@@ -190,9 +198,13 @@ async function main() {
   const adminPassword = process.env.ADMIN_PASSWORD;
   if (!adminPassword) throw new Error('ADMIN_PASSWORD is required to run seed');
 
+  const existingCompany = await prisma.company.findUnique({ where: { slug: 'daleventa-pos' } });
   const company = await upsertDefaultCompany();
   await upsertAppConfig(company);
-  const backfill = await backfillDefaultCompany(company.id);
+  // SAFETY: only backfill orphaned rows (companyId = null) when bootstrapping a
+  // brand-NEW company. On an existing production company this would otherwise
+  // reassign ambiguous rows (possibly belonging to other tenants) to this one.
+  const backfill = existingCompany ? [] : await backfillDefaultCompany(company.id);
 
   const admin = await upsertUser({
     companyId: company.id,
@@ -219,12 +231,24 @@ async function main() {
   });
 }
 
-main()
-  .then(async () => {
-    await prisma.$disconnect();
-  })
-  .catch(async (e) => {
-    console.error(e);
-    await prisma.$disconnect();
-    process.exit(1);
-  });
+if (require.main === module) {
+  main()
+    .then(async () => {
+      await prisma.$disconnect();
+    })
+    .catch(async (e) => {
+      console.error(e);
+      await prisma.$disconnect();
+      process.exit(1);
+    });
+}
+
+module.exports = {
+  upsertDefaultCompany,
+  upsertAppConfig,
+  upsertUser,
+  upsertCompanyMember,
+  backfillDefaultCompany,
+  main,
+  prisma,
+};
