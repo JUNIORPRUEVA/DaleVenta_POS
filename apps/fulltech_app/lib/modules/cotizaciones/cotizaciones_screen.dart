@@ -250,6 +250,33 @@ bool shouldShowBillingItbis({
   return taxEnabled && taxAmount > 0;
 }
 
+/// Devuelve el id del ticket que debe quedar ACTIVO después de retirar el
+/// ticket completado [removedId] de la lista de tickets abiertos
+/// ([orderedTicketIds], en el orden visual actual de la barra inferior).
+///
+/// Reutiliza la convención existente de `_deleteDesktopTicket`: tras retirar,
+/// se activa el ticket vecino en la misma posición (clamp). Los tickets
+/// hermanos conservan exactamente su orden y contenido (nunca se mutan).
+///
+/// Devuelve `null` cuando no queda ningún ticket después de la remoción;
+/// en ese caso el llamador debe crear un ticket vacío nuevo.
+/// Si [removedId] no existe en la lista (nada que retirar), la lista se
+/// conserva intacta y se devuelve el primer ticket como activo.
+String? nextActiveTicketIdAfterRemoval(
+  List<String> orderedTicketIds,
+  String removedId,
+) {
+  final remaining = orderedTicketIds
+      .where((id) => id != removedId)
+      .toList(growable: false);
+  if (remaining.isEmpty) return null;
+  final originalIndex = orderedTicketIds.indexOf(removedId);
+  final nextIndex = originalIndex < 0
+      ? 0
+      : originalIndex.clamp(0, remaining.length - 1);
+  return remaining[nextIndex];
+}
+
 class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     with WidgetsBindingObserver
     implements RouteAware {
@@ -1764,6 +1791,54 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     });
     _schedulePersistEditorDraft();
     unawaited(_syncQuotationAi());
+  }
+
+  /// Elimina el ticket COBRADO de la lista de tickets abiertos y deja activo
+  /// el ticket vecino (misma lógica que `_deleteDesktopTicket`).
+  ///
+  /// Se invoca EXCLUSIVAMENTE después de confirmar que la venta quedó
+  /// persistida (cobro exitoso); nunca ante fallos del backend/validación.
+  /// La venta finalizada permanece intacta en Ventas/historial/NCF; solo se
+  /// descarta el DRAFT abierto de Facturación.
+  ///
+  /// Si era el último ticket abierto, se crea un ticket nuevo vacío funcional
+  /// (nuevo id, sin cliente/fiscal del ticket cobrado). Los tickets hermanos
+  /// conservan exactamente sus productos/clientes/estado fiscal.
+  void _removeCompletedDesktopTicket() {
+    final activeId = _activeDesktopTicketId;
+    if (activeId == null || _desktopTickets.isEmpty) return;
+
+    final orderedIds = _desktopTickets
+        .map((ticket) => ticket.id)
+        .toList(growable: false);
+    final nextActiveId = nextActiveTicketIdAfterRemoval(orderedIds, activeId);
+    final remainingTickets = _desktopTickets
+        .where((ticket) => ticket.id != activeId)
+        .toList(growable: false);
+
+    _DesktopTicketDraft next;
+    if (nextActiveId == null) {
+      // Era el único ticket abierto: la venta ya quedó persistida, así que el
+      // draft completado se descarta y se abre un ticket vacío nuevo.
+      final user = ref.read(authStateProvider).user;
+      next = _DesktopTicketDraft.empty(
+        id: _newId(),
+        title: 'Ticket 1',
+        companyId: user?.companyId,
+        createdByUserId: user?.id,
+        createdByUserName: user?.nombreCompleto,
+      );
+      _desktopTickets = [next];
+    } else {
+      _desktopTickets = remainingTickets;
+      next = _findDesktopTicket(nextActiveId)!;
+    }
+
+    _activeDesktopTicketId = next.id;
+    _replaceEditorStateFromDraft(next);
+    _syncEditorItemsFiscalWithLoadedProducts();
+    _writeActiveDesktopDraft();
+    _showMobileTicketDropdown = false;
   }
 
   String get _activeTicketLabel {
@@ -5512,7 +5587,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       }
       ref.invalidate(ventasControllerProvider);
 
-      _commitEditorChange(_resetEditorState);
+      // Cobro confirmado y venta persistida: se elimina el DRAFT completado
+      // de la lista de tickets abiertos (la venta finalizada permanece en
+      // Ventas/historial/NCF). Ante cualquier fallo previo se retornó sin
+      // tocar el ticket, para que el usuario pueda corregir/reintentar.
+      _commitEditorChange(_removeCompletedDesktopTicket);
       _schedulePersistEditorDraft(immediate: true);
       unawaited(_loadProducts(forceRemote: true, silent: true));
 
