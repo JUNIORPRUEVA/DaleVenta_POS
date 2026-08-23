@@ -16,6 +16,7 @@ class AppNavigationItem {
     required this.route,
     this.appIcon,
     this.showIndicator = false,
+    this.enabled = true,
   });
 
   final IconData icon;
@@ -23,6 +24,10 @@ class AppNavigationItem {
   final String title;
   final String route;
   final bool showIndicator;
+
+  /// `false` para ítems meramente informativos/deshabilitados (p. ej. estado
+  /// de turno no sincronizado): se renderizan atenuados y no ejecutan acción.
+  final bool enabled;
 }
 
 class AppNavigationSection {

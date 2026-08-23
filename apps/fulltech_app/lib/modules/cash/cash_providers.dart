@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/debug/trace_log.dart';
 import '../../core/printing/unified_ticket_printer.dart';
 import 'cash_close_ticket_printer.dart';
 import 'cash_models.dart';
@@ -84,6 +85,7 @@ class ActiveCashSessionController
     debugPrint(
       '[CASH_LIFECYCLE] REFRESH START id=${identityHashCode(this)}',
     );
+    TraceLog.log('cash', 'cash.refresh silent=$silent');
     if (!silent) _setState(const AsyncLoading());
 
     AsyncValue<ActiveCashSession?> nextState;
@@ -127,6 +129,7 @@ class ActiveCashSessionController
       debugPrint(
         '[CASH_LIFECYCLE] OPEN START id=${identityHashCode(this)}',
       );
+      TraceLog.log('cash', 'cash.open.start');
       _setState(const AsyncLoading());
       final nextState = await AsyncValue.guard(() async {
         final session = await ref
@@ -138,6 +141,7 @@ class ActiveCashSessionController
         // La apertura se confirmó contra el backend: el estado ya no es un
         // snapshot no verificado.
         ref.read(cashStateUnverifiedProvider.notifier).state = false;
+        TraceLog.log('cash', 'cash.open.done shiftId=${session.shiftId}');
         return session;
       });
       _setState(nextState);
@@ -157,6 +161,7 @@ class ActiveCashSessionController
       debugPrint(
         '[CASH_LIFECYCLE] CLOSE START id=${identityHashCode(this)}',
       );
+      TraceLog.log('cash', 'cash.close.start');
       final repo = ref.read(cashRepositoryProvider);
       final printer = ref.read(cashCloseTicketPrinterProvider);
       final stateBeforeClose = await repo.state();
@@ -177,6 +182,7 @@ class ActiveCashSessionController
       debugPrint(
         '[CASH_LIFECYCLE] CLOSE API SUCCESS id=${identityHashCode(this)}',
       );
+      TraceLog.log('cash', 'cash.close.done');
       if (!mounted) return null;
       return printer.printCloseTicket(snapshot);
     } on CashSessionAlreadyClosedException {
@@ -186,6 +192,7 @@ class ActiveCashSessionController
       debugPrint(
         '[CASH_LIFECYCLE] CLOSE ALREADY CLOSED id=${identityHashCode(this)}',
       );
+      TraceLog.log('cash', 'cash.conflict already_closed');
       await refresh(silent: true);
       if (!mounted) return null;
       return null;

@@ -106,10 +106,21 @@ export class CatalogRealtimeRelayService implements OnModuleDestroy {
       if (role) {
         socket.join(`ops:role:${role}`);
       }
+
+      // Diagnóstico multi-dispositivo: permite confirmar que Windows y Android
+      // están conectados simultáneamente y en el room de la empresa.
+      this.logger.log(
+        `[realtime] socket.join socketId=${socket.id} userId=${userId || "-"} ` +
+          `companyId=${companyId || "-"} room=${companyId ? `company:${companyId}` : "(ninguno)"}`,
+      );
     });
   }
 
   emitTo(room: string, event: string, payload: unknown) {
+    const recipients = this.io?.sockets.adapter.rooms.get(room)?.size ?? 0;
+    this.logger.log(
+      `[realtime] emit room=${room} event=${event} recipients=${recipients}`,
+    );
     this.io?.to(room).emit(event, payload);
   }
 

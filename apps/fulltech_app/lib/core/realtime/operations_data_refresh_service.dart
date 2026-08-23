@@ -7,6 +7,7 @@ import '../../modules/cash/cash_providers.dart';
 import '../../modules/ventas/application/ventas_controller.dart';
 import '../../modules/ventas/sales_credit_screen.dart';
 import '../auth/auth_provider.dart';
+import '../debug/trace_log.dart';
 import 'operations_refresh_signals.dart';
 import 'operations_realtime_service.dart';
 
@@ -25,7 +26,10 @@ class OperationsDataRefreshService {
       refreshSalesAndCash();
     });
     _cashSubscription = realtime.cashStream.listen((_) {
-      refreshCash();
+      // Evento realtime de caja (otro dispositivo abrió/cerró): revalidación
+      // de fondo, silenciosa para no provocar parpadeo en la UI.
+      TraceLog.log('cash', 'cash.realtime.refresh.start');
+      refreshCash(silent: true);
     });
     _permissionsSubscription = realtime.permissionsStream.listen((message) {
       unawaited(refreshPermissions(message));
@@ -34,16 +38,14 @@ class OperationsDataRefreshService {
         // eventos realtime de caja (`cash.session.closed/opened`) pudieron
         // perderse mientras estuvo desconectado. Revalidamos el turno en
         // silencio para converger al estado real del backend (multi-dispositivo).
+        TraceLog.log('cash', 'cash.reconnect_refresh');
         refreshCash(silent: true);
       }
     });
     // Reacciona a login/logout para que la caja no arrastre estado de otra
     // sesión/empresa entre inicios de sesión. El subscription se gestiona solo
     // mientras viva este provider (ref.listen se limpia automáticamente).
-    _ref.listen<AuthState>(authStateProvider, (
-      previous,
-      next,
-    ) {
+    _ref.listen<AuthState>(authStateProvider, (previous, next) {
       if (previous?.isAuthenticated == true && !next.isAuthenticated) {
         _resetCashState();
       } else if (previous?.isAuthenticated == false && next.isAuthenticated) {
@@ -66,14 +68,14 @@ class OperationsDataRefreshService {
 
   void refreshCash({bool silent = false}) {
     _ref.read(cashDataRefreshTickProvider.notifier).state++;
+    TraceLog.log('cash', 'cash.refresh silent=$silent');
     // IMPORTANTE: NO invalidar activeCashSessionControllerProvider aquí.
     // Invalidarlo destruye (dispose) el notifier mientras una operación
     // async (abrir/cerrar turno) puede estar en vuelo o mientras un diálogo
     // conserva una referencia, provocando:
     //   Bad state: Tried to use ActiveCashSessionController after 'dispose'.
     // En su lugar se refresca el MISMO controller en sitio (sin recrearlo).
-    final controller = _ref
-        .read(activeCashSessionControllerProvider.notifier);
+    final controller = _ref.read(activeCashSessionControllerProvider.notifier);
     _ref.invalidate(cashGateStateProvider);
     _ref.invalidate(activeCashSessionProvider);
     _ref.invalidate(cashSummaryProvider);

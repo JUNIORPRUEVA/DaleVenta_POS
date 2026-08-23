@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_routes.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/cache/local_json_cache.dart';
+import '../../core/debug/trace_log.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/offline/sync_queue_service.dart';
 import 'cash_models.dart';
@@ -93,6 +94,7 @@ class CashRepository {
   }
 
   Future<CashGateState> state() async {
+    TraceLog.log('cash', 'cash.fetch.start');
     try {
       final res = await _dio.get(
         ApiRoutes.cashState,
@@ -101,6 +103,10 @@ class CashRepository {
       lastStateFromCache = false;
       final state = CashGateState.fromJson(
         (res.data as Map).cast<String, dynamic>(),
+      );
+      TraceLog.log(
+        'cash',
+        'cash.fetch.done active=${state.activeSession?.shiftId ?? 'null'}',
       );
       if (state.activeSession != null) {
         await _cache.writeMap(_activeSessionCacheKey, {
@@ -124,6 +130,7 @@ class CashRepository {
           // marcado como NO verificado. La UI debe mostrarlo como
           // "estado no sincronizado", nunca como un turno confirmado.
           lastStateFromCache = true;
+          TraceLog.log('cash', 'cash.cache_fallback');
           final gate = CashGateState.fromJson(cached);
           return CashGateState(
             businessDate: gate.businessDate,
@@ -215,6 +222,7 @@ class CashRepository {
         // No es un fallo: el estado real es CERRADO. La caché queda limpia y
         // el llamador debe revalidar el estado.
         lastStateFromCache = false;
+        TraceLog.log('cash', 'cash.conflict already_closed status=$status');
         await _cache.remove(_activeSessionCacheKey);
         await _cache.remove(_pendingMovementsCacheKey);
         throw const CashSessionAlreadyClosedException(

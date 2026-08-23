@@ -25,6 +25,7 @@ import '../utils/money_formatters.dart';
 import 'app_navigation.dart';
 
 const String _drawerCloseTurnAction = '__drawer_close_turn__';
+const String _drawerOpenTurnAction = '__drawer_open_turn__';
 
 class AppDrawer extends ConsumerStatefulWidget {
   final UserModel? currentUser;
@@ -367,8 +368,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
     // `Navigator.pop(context)` el drawer se destruye, y usar `ref` (WidgetRef
     // del drawer) después lanzaría:
     //   Bad state: Cannot use "ref" after the widget was disposed.
-    final controller =
-        ref.read(activeCashSessionControllerProvider.notifier);
+    final controller = ref.read(activeCashSessionControllerProvider.notifier);
     Navigator.pop(context);
     await Future<void>.delayed(Duration.zero);
     if (!rootContext.mounted) return;
@@ -393,8 +393,12 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
       );
     } catch (error) {
       if (!rootContext.mounted) return;
-      showCashToast(rootContext, resolveCashError(error),
-          isError: true, overlay: overlay);
+      showCashToast(
+        rootContext,
+        resolveCashError(error),
+        isError: true,
+        overlay: overlay,
+      );
     }
   }
 
@@ -406,8 +410,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     // Capturar el controller ANTES de cerrar el drawer: el ref del drawer
     // queda invalidado al destruirse el drawer tras el pop.
-    final controller =
-        ref.read(activeCashSessionControllerProvider.notifier);
+    final controller = ref.read(activeCashSessionControllerProvider.notifier);
     Navigator.pop(context);
     await Future<void>.delayed(Duration.zero);
     if (!rootContext.mounted) return;
@@ -432,8 +435,44 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
       showCashToast(rootContext, message, overlay: overlay);
     } catch (error) {
       if (!rootContext.mounted) return;
-      showCashToast(rootContext, resolveCashError(error),
-          isError: true, overlay: overlay);
+      showCashToast(
+        rootContext,
+        resolveCashError(error),
+        isError: true,
+        overlay: overlay,
+      );
+    }
+  }
+
+  Future<void> _openTurnFromDrawer(BuildContext context) async {
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
+    // Capturar el overlay ANTES de cerrar el drawer (el overlay raíz sigue
+    // montado aunque el drawer se destruya tras el pop).
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    // Capturar el controller ANTES de cerrar el drawer: el ref del drawer
+    // queda invalidado al destruirse el drawer tras el pop.
+    final controller = ref.read(activeCashSessionControllerProvider.notifier);
+    Navigator.pop(context);
+    await Future<void>.delayed(Duration.zero);
+    if (!rootContext.mounted) return;
+
+    try {
+      final opened = await showOpenCashDialog(
+        rootContext,
+        onOpenShift: (amount) => controller.open(amount),
+      );
+      if (!rootContext.mounted || opened != true) return;
+      await controller.refresh();
+      if (!rootContext.mounted) return;
+      showCashToast(rootContext, 'Caja abierta', overlay: overlay);
+    } catch (error) {
+      if (!rootContext.mounted) return;
+      showCashToast(
+        rootContext,
+        resolveCashError(error),
+        isError: true,
+        overlay: overlay,
+      );
     }
   }
 
@@ -441,8 +480,13 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
     BuildContext context,
     AppNavigationItem item,
   ) async {
+    if (!item.enabled) return;
     if (item.route == _drawerCloseTurnAction) {
       await _closeTurnFromDrawer(context);
+      return;
+    }
+    if (item.route == _drawerOpenTurnAction) {
+      await _openTurnFromDrawer(context);
       return;
     }
     final permission = RouteAccess.permissionForLocation(item.route);
@@ -486,10 +530,22 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
         ref.watch(authStateProvider).user?.appRole ??
         AppRole.unknown;
     final sections = buildAppNavigationSections(ref, currentUser);
+    // Estado autoritativo del turno (fuente de verdad = backend). El drawer
+    // móvil observa el MISMO provider que el resto de la app: si el turno
+    // cambia (realtime/poll/resumed/reconexión), el grupo "Turno" se
+    // reconstruye sin necesidad de cerrar/reabrir el drawer.
+    final cashSession = ref.watch(activeCashSessionControllerProvider);
+    final cashUnverified = ref.watch(cashStateUnverifiedProvider);
+    final hasOpenShift = cashSession.valueOrNull?.isOpen == true;
+    // Estado confirmado contra el backend (no loading, no error, no caché
+    // no sincronizada). Regla #28: un error de red NO es "turno cerrado".
+    final cashConfirmed = cashSession.hasValue && !cashUnverified;
     final groups = _buildDrawerGroups(
       sections,
       mobileLayout: !isDesktop,
       role: role,
+      hasOpenShift: hasOpenShift,
+      cashConfirmed: cashConfirmed,
     );
     final location = safeCurrentLocation(context);
     final expandedGroupIndex = isDesktop
@@ -653,10 +709,10 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                               title: item.title,
                               compact: isCompactMobile,
                               desktop: isDesktop,
-                              selected: isNavigationRouteActive(
-                                location,
-                                item.route,
-                              ),
+                              enabled: item.enabled,
+                              selected:
+                                  item.enabled &&
+                                  isNavigationRouteActive(location, item.route),
                               showIndicator: item.showIndicator,
                               onTap: () => _handleItemTap(context, item),
                             ),
@@ -731,6 +787,8 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
   List<AppNavigationSection> sections, {
   required bool mobileLayout,
   required AppRole role,
+  required bool hasOpenShift,
+  required bool cashConfirmed,
 }) {
   final itemsByRoute = <String, AppNavigationItem>{};
   for (final section in sections) {
@@ -888,19 +946,40 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
   }
 
   if (mobileLayout) {
+    // Grupo "Turno" reactivo al estado autoritativo del backend:
+    //  - ABIERTO confirmado  → Turno actual + Cerrar turno + Historial.
+    //  - CERRADO confirmado  → Abrir turno + Historial.
+    //  - LOADING/ERROR/NO SINCRONIZADO → ítem neutro DESHABILITADO + Historial
+    //    (no se presenta ninguna acción crítica como confirmada).
     final turnosItems = <AppNavigationItem>[
-      if (hasPermission(role, AppPermission.viewSales))
+      if (!cashConfirmed)
         const AppNavigationItem(
-          icon: Icons.point_of_sale_outlined,
-          title: 'Turno actual',
+          icon: Icons.cloud_off_outlined,
+          title: 'Estado del turno no disponible',
           route: Routes.caja,
+          enabled: false,
         ),
-      if (hasPermission(role, AppPermission.viewSales))
-        const AppNavigationItem(
-          icon: Icons.lock_clock_outlined,
-          title: 'Cerrar turno',
-          route: _drawerCloseTurnAction,
-        ),
+      if (hasOpenShift && cashConfirmed)
+        if (hasPermission(role, AppPermission.viewSales))
+          const AppNavigationItem(
+            icon: Icons.point_of_sale_outlined,
+            title: 'Turno actual',
+            route: Routes.caja,
+          ),
+      if (hasOpenShift && cashConfirmed)
+        if (hasPermission(role, AppPermission.viewSales))
+          const AppNavigationItem(
+            icon: Icons.lock_clock_outlined,
+            title: 'Cerrar turno',
+            route: _drawerCloseTurnAction,
+          ),
+      if (!hasOpenShift && cashConfirmed)
+        if (hasPermission(role, AppPermission.viewSales))
+          const AppNavigationItem(
+            icon: Icons.lock_open_outlined,
+            title: 'Abrir turno',
+            route: _drawerOpenTurnAction,
+          ),
       pick(Routes.cajaTurnosHistorial) ??
           const AppNavigationItem(
             icon: Icons.history_rounded,
@@ -1099,6 +1178,7 @@ class _DrawerMenuGroup {
 
   bool containsActiveRoute(String location) {
     bool active(AppNavigationItem item) {
+      if (!item.enabled) return false;
       return isNavigationRouteActive(location, item.route);
     }
 
@@ -1436,6 +1516,7 @@ class _DrawerMenuItem extends StatefulWidget {
   final bool desktop;
   final bool selected;
   final bool showIndicator;
+  final bool enabled;
   final VoidCallback onTap;
 
   const _DrawerMenuItem({
@@ -1446,6 +1527,7 @@ class _DrawerMenuItem extends StatefulWidget {
     required this.desktop,
     required this.selected,
     this.showIndicator = false,
+    this.enabled = true,
     required this.onTap,
   });
 
@@ -1478,10 +1560,12 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
   }
 
   void _handlePointerDown() {
+    if (!widget.enabled) return;
     _pressController.forward();
   }
 
   void _handlePointerUp() {
+    if (!widget.enabled) return;
     _pressController.reverse();
   }
 
@@ -1489,18 +1573,23 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final selected = widget.selected;
-    final tileBg = widget.desktop
-        ? (selected
-              ? AppColors.primary.withValues(alpha: 0.09)
-              : (_hovered
-                    ? AppColors.surfaceMuted.withValues(alpha: 0.72)
-                    : Colors.transparent))
-        : (selected
-              ? const Color(0xFFE8F1FF)
-              : (_hovered
-                    ? Colors.white.withValues(alpha: 0.72)
-                    : Colors.transparent));
-    final foreground = selected
+    final enabled = widget.enabled;
+    final tileBg = enabled
+        ? (widget.desktop
+              ? (selected
+                    ? AppColors.primary.withValues(alpha: 0.09)
+                    : (_hovered
+                          ? AppColors.surfaceMuted.withValues(alpha: 0.72)
+                          : Colors.transparent))
+              : (selected
+                    ? const Color(0xFFE8F1FF)
+                    : (_hovered
+                          ? Colors.white.withValues(alpha: 0.72)
+                          : Colors.transparent)))
+        : Colors.transparent;
+    final foreground = !enabled
+        ? const Color(0xFFA7B4C4)
+        : selected
         ? const Color(0xFF2563EB)
         : widget.desktop
         ? AppColors.textSecondary
@@ -1509,9 +1598,11 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
     return Padding(
       padding: EdgeInsets.symmetric(vertical: widget.desktop ? 2 : 1.5),
       child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
+        cursor: widget.enabled
+            ? SystemMouseCursors.click
+            : SystemMouseCursors.basic,
+        onEnter: widget.enabled ? (_) => setState(() => _hovered = true) : null,
+        onExit: widget.enabled ? (_) => setState(() => _hovered = false) : null,
         child: Listener(
           onPointerDown: (_) => _handlePointerDown(),
           onPointerUp: (_) => _handlePointerUp(),
@@ -1522,10 +1613,12 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
               color: Colors.transparent,
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
-                onTap: () {
-                  _handlePointerUp();
-                  widget.onTap();
-                },
+                onTap: widget.enabled
+                    ? () {
+                        _handlePointerUp();
+                        widget.onTap();
+                      }
+                    : null,
                 splashColor: AppColors.primary.withValues(alpha: 0.15),
                 highlightColor: AppColors.primary.withValues(alpha: 0.08),
                 child: AnimatedContainer(

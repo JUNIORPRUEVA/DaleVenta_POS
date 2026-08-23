@@ -7,6 +7,7 @@ import '../api/env.dart';
 import '../auth/auth_provider.dart';
 import '../auth/auth_repository.dart';
 import '../auth/token_storage.dart';
+import '../debug/trace_log.dart';
 
 class OperationsRealtimeMessage {
   const OperationsRealtimeMessage({
@@ -332,11 +333,18 @@ class OperationsRealtimeService {
         _seenEventIds.remove(_seenEventIds.first);
       }
 
+      final type = payload['type']?.toString() ?? 'cash.updated';
+      final sessionId = _trimmedOrNull(payload['sessionId']);
+      TraceLog.log(
+        'cash',
+        'cash.realtime.received eventId=$eventId type=$type '
+            'sessionId=${sessionId ?? '-'}',
+      );
       _cashController.add(
         CashRealtimeMessage(
           eventId: eventId,
-          type: payload['type']?.toString() ?? 'cash.updated',
-          sessionId: _trimmedOrNull(payload['sessionId']),
+          type: type,
+          sessionId: sessionId,
           businessDate: _trimmedOrNull(payload['businessDate']),
         ),
       );

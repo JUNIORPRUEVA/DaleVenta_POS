@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma, Role } from "@prisma/client";
@@ -20,6 +21,8 @@ type RequestUser = TenantUser;
 
 @Injectable()
 export class CashService {
+  private readonly logger = new Logger(CashService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: CatalogRealtimeRelayService,
@@ -633,13 +636,25 @@ export class CashService {
     sessionId?: string | null,
     extra: Record<string, unknown> = {},
   ) {
-    this.realtime.emitCompany(companyId, "cash.event", {
+    const payload = {
       eventId: crypto.randomUUID(),
       type,
       sessionId,
       companyId,
       emittedAt: new Date().toISOString(),
       ...extra,
-    });
+    };
+    this.logger.log(
+      `cash.realtime.emit room=company:${companyId} event=cash.event type=${type} ` +
+        `sessionId=${sessionId ?? ""} userId=${(extra.userId as string) ?? ""}`,
+    );
+    try {
+      this.realtime.emitCompany(companyId, "cash.event", payload);
+    } catch (error) {
+      this.logger.error(
+        `cash.realtime.emit.failed type=${type} room=company:${companyId}`,
+        error instanceof Error ? (error.stack ?? error.message) : String(error),
+      );
+    }
   }
 }
