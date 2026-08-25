@@ -13,6 +13,7 @@ import 'package:daleventa_pos/features/account/account_menu_screens.dart';
 import 'package:daleventa_pos/features/settings/data/mobile_printer_settings_model.dart';
 import 'package:daleventa_pos/features/settings/data/mobile_printer_settings_repository.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -178,70 +179,87 @@ Future<GoRouter> _pumpSettingsRouter(
 
 String _readProjectFile(String path) => File(path).readAsStringSync();
 
+void _testAndroidWidgets(
+  String description,
+  Future<void> Function(WidgetTester tester) callback,
+) {
+  testWidgets(description, (tester) async {
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await callback(tester);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+    }
+  });
+}
+
 void main() {
-  testWidgets('dispose during fiscal company save does not use WidgetRef', (
-    tester,
-  ) async {
-    final saveCompleter = Completer<bool>();
-    await _pumpSettingsRouter(
-      tester,
-      initialLocation: Routes.configuracionEmpresa,
-      viewport: const Size(1366, 1200),
-      companyRepository: _FakeCompanySettingsRepository(
-        saveCompleter: saveCompleter,
-      ),
-    );
+  _testAndroidWidgets(
+    'dispose during fiscal company save does not use WidgetRef',
+    (tester) async {
+      final saveCompleter = Completer<bool>();
+      await _pumpSettingsRouter(
+        tester,
+        initialLocation: Routes.configuracionEmpresa,
+        viewport: const Size(1366, 1200),
+        companyRepository: _FakeCompanySettingsRepository(
+          saveCompleter: saveCompleter,
+        ),
+      );
 
-    final saveButton = find.text('Guardar empresa');
-    await tester.ensureVisible(saveButton);
-    await tester.tap(saveButton);
-    await tester.pump();
+      final saveButton = find.text('Guardar empresa');
+      await tester.ensureVisible(saveButton);
+      await tester.tap(saveButton);
+      await tester.pump();
 
-    expect(saveCompleter.isCompleted, isFalse);
+      expect(saveCompleter.isCompleted, isFalse);
 
-    await tester.pumpWidget(const SizedBox.shrink());
-    saveCompleter.complete(false);
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      saveCompleter.complete(false);
+      await tester.pumpAndSettle();
 
-    expect(tester.takeException(), isNull);
-  });
+      expect(tester.takeException(), isNull);
+    },
+  );
 
-  testWidgets('dispose during admin PIN validation does not use WidgetRef', (
-    tester,
-  ) async {
-    final pinCompleter = Completer<AdminAuthorizationVerification>();
-    await _pumpSettingsRouter(
-      tester,
-      initialLocation: Routes.configuracionEmpresa,
-      viewport: const Size(1366, 1200),
-      userRole: 'CAJERO',
-      companyRepository: _FakeCompanySettingsRepository(
-        pinCompleter: pinCompleter,
-      ),
-    );
+  _testAndroidWidgets(
+    'dispose during admin PIN validation does not use WidgetRef',
+    (tester) async {
+      final pinCompleter = Completer<AdminAuthorizationVerification>();
+      await _pumpSettingsRouter(
+        tester,
+        initialLocation: Routes.configuracionEmpresa,
+        viewport: const Size(1366, 1200),
+        userRole: 'CAJERO',
+        companyRepository: _FakeCompanySettingsRepository(
+          pinCompleter: pinCompleter,
+        ),
+      );
 
-    final saveButton = find.text('Guardar empresa');
-    await tester.ensureVisible(saveButton);
-    await tester.tap(saveButton);
-    await tester.pumpAndSettle();
+      final saveButton = find.text('Guardar empresa');
+      await tester.ensureVisible(saveButton);
+      await tester.tap(saveButton);
+      await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField).last, '1234');
-    await tester.tap(find.text('Autorizar'));
-    await tester.pump();
+      await tester.enterText(find.byType(TextField).last, '1234');
+      await tester.tap(find.text('Autorizar'));
+      await tester.pump();
 
-    expect(pinCompleter.isCompleted, isFalse);
+      expect(pinCompleter.isCompleted, isFalse);
 
-    await tester.pumpWidget(const SizedBox.shrink());
-    pinCompleter.complete(
-      const AdminAuthorizationVerification(
-        duration: Duration(minutes: 5),
-        token: 'pin-token',
-      ),
-    );
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      pinCompleter.complete(
+        const AdminAuthorizationVerification(
+          duration: Duration(minutes: 5),
+          token: 'pin-token',
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(tester.takeException(), isNull);
-  });
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   test('company tax settings async save is guarded after dispose', () {
     final source = _readProjectFile(
@@ -295,7 +313,9 @@ void main() {
   };
 
   for (final entry in targets.entries) {
-    testWidgets('mobile settings card opens ${entry.key}', (tester) async {
+    _testAndroidWidgets('mobile settings card opens ${entry.key}', (
+      tester,
+    ) async {
       await _pumpSettingsRouter(tester);
 
       await tester.tap(find.text(entry.key).first);
@@ -313,33 +333,35 @@ void main() {
     });
   }
 
-  testWidgets('mobile settings hub uses drawer leading instead of back', (
-    tester,
-  ) async {
-    await _pumpSettingsRouter(tester);
+  _testAndroidWidgets(
+    'mobile settings hub uses drawer leading instead of back',
+    (tester) async {
+      await _pumpSettingsRouter(tester);
 
-    expect(find.byTooltip('Abrir menú'), findsOneWidget);
-    expect(find.byTooltip('Volver'), findsNothing);
-  });
+      expect(find.byTooltip('Abrir menú'), findsOneWidget);
+      expect(find.byTooltip('Volver'), findsNothing);
+    },
+  );
 
-  testWidgets('mobile settings back button responds across its tap target', (
-    tester,
-  ) async {
-    await _pumpSettingsRouter(tester);
+  _testAndroidWidgets(
+    'mobile settings back button responds across its tap target',
+    (tester) async {
+      await _pumpSettingsRouter(tester);
 
-    await tester.tap(find.text('Empresa').first);
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Empresa').first);
+      await tester.pumpAndSettle();
 
-    final backButton = find.byTooltip('Volver').first;
-    final rect = tester.getRect(backButton);
-    await tester.tapAt(rect.topCenter + const Offset(0, 8));
-    await tester.pumpAndSettle();
+      final backButton = find.byTooltip('Volver').first;
+      final rect = tester.getRect(backButton);
+      await tester.tapAt(rect.topCenter + const Offset(0, 8));
+      await tester.pumpAndSettle();
 
-    expect(tester.takeException(), isNull);
-    expect(find.text('Empresa'), findsOneWidget);
-    expect(find.text('Impresora'), findsOneWidget);
-    expect(find.text('Backup'), findsOneWidget);
-  });
+      expect(tester.takeException(), isNull);
+      expect(find.text('Empresa'), findsOneWidget);
+      expect(find.text('Impresora'), findsOneWidget);
+      expect(find.text('Backup'), findsOneWidget);
+    },
+  );
 
   const desktopTargets = <String, String>{
     Routes.configuracionEmpresa: 'Datos de empresa',
@@ -351,7 +373,7 @@ void main() {
 
   for (final size in [Size(1024, 768), Size(1366, 768), Size(1920, 1080)]) {
     for (final entry in desktopTargets.entries) {
-      testWidgets(
+      _testAndroidWidgets(
         'settings page ${entry.key} has no overflow at ${size.width.toInt()}x${size.height.toInt()}',
         (tester) async {
           await _pumpSettingsRouter(
