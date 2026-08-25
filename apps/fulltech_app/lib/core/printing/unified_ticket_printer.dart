@@ -149,7 +149,7 @@ class UnifiedTicketPrinter {
       final htmlEligible = _supportsHtmlReceipt(data);
       debugPrint('[PRINT] HTML receipt eligible = $htmlEligible');
       if (platform.platform == PrintingPlatform.windows && htmlEligible) {
-        return _printWindowsHtmlReceipt(
+        return await _printWindowsHtmlReceipt(
           data: data,
           company: company,
           settings: settings,
@@ -167,7 +167,7 @@ class UnifiedTicketPrinter {
           warrantyPolicy: settings.warrantyPolicy,
         );
         final bytes = await renderer.render(receipt);
-        return _printWindowsRawEscPos(
+        return await _printWindowsRawEscPos(
           bytes: bytes,
           printerName: settings.selectedPrinterName,
           documentName: 'Ticket ${data.ticketNumber}',
@@ -593,7 +593,7 @@ class UnifiedTicketPrinter {
           .getOrCreate();
       final renderer = FullPosEscPosReceiptRenderer(cutPaper: settings.autoCut);
       final bytes = await renderer.renderWindowsRawDiagnostic();
-      return _printWindowsRawEscPos(
+      return await _printWindowsRawEscPos(
         bytes: bytes,
         printerName: settings.selectedPrinterName,
         documentName: 'FULLPOS RAW TEST',

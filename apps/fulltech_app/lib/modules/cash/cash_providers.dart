@@ -184,7 +184,7 @@ class ActiveCashSessionController
       );
       TraceLog.log('cash', 'cash.close.done');
       if (!mounted) return null;
-      return printer.printCloseTicket(snapshot);
+      return await printer.printCloseTicket(snapshot);
     } on CashSessionAlreadyClosedException {
       // El turno ya estaba cerrado (lo cerró este u otro dispositivo). En vez
       // de quedarse mostrando el snapshot viejo "abierto", revalidamos contra
