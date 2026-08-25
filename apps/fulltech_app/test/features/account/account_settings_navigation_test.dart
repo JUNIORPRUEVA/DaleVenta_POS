@@ -166,7 +166,10 @@ Future<GoRouter> _pumpSettingsRouter(
           _FakeMobilePrinterSettingsRepository(),
         ),
       ],
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(
+        theme: ThemeData(platform: TargetPlatform.android),
+        routerConfig: router,
+      ),
     ),
   );
   await tester.pumpAndSettle();
