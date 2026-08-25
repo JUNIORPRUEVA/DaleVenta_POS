@@ -483,3 +483,85 @@ reciben, 30ms). El único punto a validar en hardware es la conexión del socket
 el dispositivo móvil; los logs añadidos
 (`socket.join`/`cash.realtime.emit`/`cash.realtime.received`/`cash.realtime.refresh.start`)
 permiten ubicar el eslabón exacto si se pierde en producción.
+
+---
+
+# ADENDA 3 — Fix "Failed to load dynamic library" en Android al cerrar turno (2026-08-22)
+
+## A. Causa raíz exacta
+
+Al confirmar el cierre en móvil, `CashCloseTicketPrinter.printCloseTicket` (camino
+PDF) hace `_ref.read(unifiedTicketPrinterProvider)` → `UnifiedTicketPrinter(...)`
+→ `_windowsRaw = WindowsRawPrinterTransport()` → `FfiWindowsRawSpooler()` →
+`DynamicLibrary.open('winspool.drv')` **en TODAS las plataformas**. En Android/iOS
+esa DLL no existe → `ArgumentError: Invalid argument(s): Failed to load dynamic
+library 'winspool.drv'` → el diálogo lo mostraba en rojo (vía `_inlineError`).
+
+## B. Librería/plugin que fallaba
+
+`winspool.drv` (y `kernel32.dll`), abiertas por `FfiWindowsRawSpooler` en
+`lib/core/printing/windows_raw_printer_transport.dart`.
+
+## C. Por qué solo móvil
+
+Windows tiene `winspool.drv` → la apertura FFI funciona. Android/iOS no → la mera
+**construcción** (no el uso) del transporte lanzaba el error. El transporte RAW se
+construía eager aunque el móvil usa `mobilePrintService`/PDF.
+
+## D. Cambio aplicado
+
+- `unified_ticket_printer.dart`: `_defaultWindowsRawTransport()` solo crea
+  `WindowsRawPrinterTransport()` en Windows; en el resto usa `_UnavailableWindowsRawTransport`
+  (stub que NUNCA abre FFI y lanza mensaje amigable si se usara).
+- `windows_raw_printer_transport.dart`: `WindowsRawPrinterTransport` solo instancia
+  `FfiWindowsRawSpooler()` cuando `Platform.isWindows`; fuera usa `_UnavailableWindowsSpooler`
+  (defensa en profundidad). No se toca `FfiWindowsRawSpooler` (sigue intacto para Windows).
+
+## E. Manejo de error visual
+
+El camino RAW en móvil ahora devuelve `RAW ERROR: La impresión RAW de Windows solo
+está disponible en Windows.` (nunca `Invalid argument`/`DynamicLibrary`/`Failed to
+load`). El cierre móvil ni siquiera toca ese transporte (usa PDF/mobilePrint).
+
+## F. Validación del campo
+
+`parseDominicanAmount` es puro Dart y ya está testeado (0/1200/1,200.00/1200,50;
+rechaza negativos/NaN/Infinity). No dependía de ninguna librería nativa.
+
+## G. Flujo de cierre
+
+Monto válido → `controller.close` → backend cierra → `printCloseTicket` (PDF en
+móvil, sin FFI) → provider → drawer cambia a "Abrir turno". Sin error técnico.
+
+## H. Tests
+
+- `test/core/printing/unified_ticket_printer_platform_test.dart` (**nuevo, 3/3**):
+  construir `UnifiedTicketPrinter` en Android no lanza; RAW en Android devuelve
+  mensaje amigable sin texto técnico; transporte RAW no es FFI en Android.
+- Tests de impresión existentes: 75/75 (Windows RAW intacto).
+- Suite cash: 50/50.
+
+## I. Android build
+
+`flutter build apk --debug` → **OK**.
+
+## J. Windows build
+
+`flutter build windows --debug` → **OK**. `flutter analyze` limpio.
+
+## K. Archivos modificados (esta adenda)
+
+- `apps/fulltech_app/lib/core/printing/unified_ticket_printer.dart`
+- `apps/fulltech_app/lib/core/printing/windows_raw_printer_transport.dart`
+- `apps/fulltech_app/test/core/printing/unified_ticket_printer_platform_test.dart` (**nuevo**)
+
+## L. Estado Git
+
+HEAD `23ec06b8`; cambios sin commit. `git diff --check` sin errores.
+NO commit/push/deploy.
+
+## M. Veredicto
+
+**CIERRE DE TURNO MÓVIL CORREGIDO Y BLINDADO** — se eliminó la carga eager de DLLs
+de Windows fuera de Windows en la raíz (sin ocultar el error, sin `catch(_)`,
+sin romper Windows). Pendiente solo la prueba física Android (escenario FASE 8).

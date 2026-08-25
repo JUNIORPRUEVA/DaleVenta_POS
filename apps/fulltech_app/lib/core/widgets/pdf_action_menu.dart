@@ -8,6 +8,7 @@ import '../utils/pdf_file_actions.dart';
 enum PdfDocumentAction {
   print('Imprimir', Icons.print_rounded),
   share('Compartir PDF', Icons.ios_share_rounded),
+  shareClient('Compartir con cliente', Icons.person_outline_rounded),
   save('Guardar en descargas', Icons.download_rounded);
 
   const PdfDocumentAction(this.label, this.icon);
@@ -44,22 +45,24 @@ class PdfActionMenu extends StatelessWidget {
       onSelected: (action) => _runAction(context, action),
       itemBuilder: (context) => [
         for (final action in PdfDocumentAction.values)
-          PopupMenuItem<PdfDocumentAction>(
-            value: action,
-            child: Row(
-              children: [
-                Icon(action.icon, size: 18, color: const Color(0xFF1957E6)),
-                const SizedBox(width: 10),
-                Text(
-                  action.label,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF1D2430),
+          if (action != PdfDocumentAction.shareClient ||
+              onShareWithClient != null)
+            PopupMenuItem<PdfDocumentAction>(
+              value: action,
+              child: Row(
+                children: [
+                  Icon(action.icon, size: 18, color: const Color(0xFF1957E6)),
+                  const SizedBox(width: 10),
+                  Text(
+                    action.label,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1D2430),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
       ],
       child: Container(
         padding: EdgeInsets.symmetric(
@@ -100,6 +103,9 @@ class PdfActionMenu extends StatelessWidget {
         return;
       case PdfDocumentAction.share:
         await Printing.sharePdf(bytes: bytes, filename: fileName);
+        return;
+      case PdfDocumentAction.shareClient:
+        await onShareWithClient?.call(context);
         return;
       case PdfDocumentAction.save:
         final saved = await savePdfBytes(bytes: bytes, fileName: fileName);

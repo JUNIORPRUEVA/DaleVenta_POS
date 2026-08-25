@@ -200,7 +200,7 @@ class CatalogRepository {
     }
 
     final existing = _remoteFetches[companyId];
-    if (existing != null && !forceRefresh) return existing;
+    if (existing != null) return existing;
 
     final requestSeq = (_remoteFetchSeqByCompany[companyId] ?? 0) + 1;
     _remoteFetchSeqByCompany[companyId] = requestSeq;

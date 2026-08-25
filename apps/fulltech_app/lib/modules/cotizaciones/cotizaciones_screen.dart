@@ -6176,30 +6176,22 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       setState(() => _mobileCartExtent = nextExtent);
     }
 
-    Widget cartDragHandle(double nextExtent) {
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onVerticalDragUpdate: hasItems
-            ? (details) => dragCartBy(details.primaryDelta ?? 0)
-            : null,
-        onVerticalDragEnd: hasItems
-            ? (_) {
-                setState(() {
-                  _mobileCartExtent = _mobileCartExtent
-                      .clamp(collapsedSize, expandedSize)
-                      .toDouble();
-                });
-              }
-            : null,
-        onTap: hasItems
-            ? () => unawaited(_animateMobileCartTo(nextExtent))
-            : null,
+    void settleCartDrag() {
+      setState(() {
+        _mobileCartExtent = _mobileCartExtent
+            .clamp(collapsedSize, expandedSize)
+            .toDouble();
+      });
+    }
+
+    Widget cartDragHandle() {
+      return SizedBox(
+        width: 132,
+        height: compactForKeyboard ? 24 : 28,
         child: SizedBox(
-          width: 96,
-          height: compactForKeyboard ? 18 : 20,
           child: Center(
             child: Container(
-              width: compactForKeyboard ? 38 : 48,
+              width: compactForKeyboard ? 42 : 52,
               height: 4,
               decoration: BoxDecoration(
                 color: hasItems
@@ -6222,67 +6214,80 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           ? mediumSize
           : expandedSize;
 
-      return Padding(
-        padding: EdgeInsets.fromLTRB(14, compactForKeyboard ? 2 : 3, 12, 4),
-        child: Column(
-          children: [
-            Center(child: cartDragHandle(nextExtent)),
-            Row(
-              children: [
-                Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.shopping_cart_outlined,
-                    size: 18,
-                    color: Color(0xFF2563EB),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    itemCountLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF0F172A),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onVerticalDragStart: hasItems
+            ? (_) => HapticFeedback.selectionClick()
+            : null,
+        onVerticalDragUpdate: hasItems
+            ? (details) => dragCartBy(details.primaryDelta ?? 0)
+            : null,
+        onVerticalDragEnd: hasItems ? (_) => settleCartDrag() : null,
+        onTap: hasItems
+            ? () => unawaited(_animateMobileCartTo(nextExtent))
+            : null,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(14, compactForKeyboard ? 0 : 2, 12, 5),
+          child: Column(
+            children: [
+              Center(child: cartDragHandle()),
+              Row(
+                children: [
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.shopping_cart_outlined,
+                      size: 18,
+                      color: Color(0xFF2563EB),
                     ),
                   ),
-                ),
-                if (isCollapsed || compactForKeyboard)
-                  Flexible(
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: Text(
-                        _money(_total),
-                        textAlign: TextAlign.right,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF0F172A),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      itemCountLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF0F172A),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
-                Icon(
-                  isExpanded
-                      ? Icons.keyboard_arrow_down_rounded
-                      : Icons.keyboard_arrow_up_rounded,
-                  color: hasItems
-                      ? const Color(0xFF0F172A)
-                      : const Color(0xFF94A3B8),
-                ),
-              ],
-            ),
-          ],
+                  if (isCollapsed || compactForKeyboard)
+                    Flexible(
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Text(
+                          _money(_total),
+                          textAlign: TextAlign.right,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF0F172A),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  Icon(
+                    isExpanded
+                        ? Icons.keyboard_arrow_down_rounded
+                        : Icons.keyboard_arrow_up_rounded,
+                    color: hasItems
+                        ? const Color(0xFF0F172A)
+                        : const Color(0xFF94A3B8),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -6435,61 +6440,70 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     ),
                   ),
                 ),
-                if (_shouldShowItbis)
-                  GestureDetector(
-                    onTap: () => unawaited(
-                      _openMobileFiscalInvoicePanel(authorized: true),
-                    ),
-                    child: Text(
-                      '$_fiscalInvoiceLabel · ITBIS ${_money(_taxAmount)}',
-                      style: const TextStyle(
-                        color: Color(0xFF2563EB),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
                 const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: _applyGeneralDiscount,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      const Text(
-                        'Total',
-                        style: TextStyle(
-                          color: Color(0xFF334155),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 180),
-                        child: Text(
-                          _money(_total),
-                          key: ValueKey(_money(_total)),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xFF0F172A),
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            height: 1,
+                Flexible(
+                  child: GestureDetector(
+                    onTap: _applyGeneralDiscount,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        if (_shouldShowItbis)
+                          GestureDetector(
+                            onTap: () => unawaited(
+                              _openMobileFiscalInvoicePanel(authorized: true),
+                            ),
+                            child: Text(
+                              '$_fiscalInvoiceLabel · ITBIS ${_money(_taxAmount)}',
+                              textAlign: TextAlign.right,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xFF2563EB),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                height: 1.05,
+                              ),
+                            ),
+                          ),
+                        const Text(
+                          'Total',
+                          style: TextStyle(
+                            color: Color(0xFF334155),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                      ),
-                    ],
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 180),
+                          child: FittedBox(
+                            key: ValueKey(_money(_total)),
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              _money(_total),
+                              maxLines: 1,
+                              style: const TextStyle(
+                                color: Color(0xFF0F172A),
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700,
+                                height: 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 5),
+            const SizedBox(height: 3),
             Row(
               children: [
                 Expanded(
                   flex: 3,
                   child: SizedBox(
-                    height: 44,
+                    height: 42,
                     child: OutlinedButton(
                       onPressed: hasItems ? _saveCurrentAsQuotation : null,
                       style: OutlinedButton.styleFrom(
@@ -6516,7 +6530,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     icon: const Icon(Icons.check_rounded, size: 20),
                     label: const Text('Cobrar'),
                     style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(44),
+                      minimumSize: const Size.fromHeight(42),
                       backgroundColor: const Color(0xFF2563EB),
                       foregroundColor: Colors.white,
                       disabledBackgroundColor: const Color(0xFF93C5FD),
@@ -6575,7 +6589,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         final lineCount = _items.length;
         final defaultVisibleRows = lineCount <= 2 ? lineCount : 2;
         const cartLineHeight = 58.0;
-        final collapsedBaseHeight = keyboardVisible ? 112.0 : 168.0;
+        final fiscalTotalsExtraHeight = !keyboardVisible && _shouldShowItbis
+            ? 8.0
+            : 0.0;
+        final collapsedBaseHeight =
+            (keyboardVisible ? 112.0 : 168.0) + fiscalTotalsExtraHeight;
         final collapsedMaxRatio = keyboardVisible ? 0.24 : 0.28;
         final maxCollapsedCartHeight =
             constraints.maxHeight * collapsedMaxRatio;

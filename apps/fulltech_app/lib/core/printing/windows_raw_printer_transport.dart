@@ -40,9 +40,17 @@ class RawPrinterException implements Exception {
 
 class WindowsRawPrinterTransport implements RawPrinterTransport {
   WindowsRawPrinterTransport({WindowsRawSpooler? spooler})
-    : _spooler = spooler ?? FfiWindowsRawSpooler();
+    : _spooler = spooler ?? _defaultSpooler();
 
   static const String datatype = 'RAW';
+
+  /// Solo se crea el spooler FFI en Windows. Fuera de Windows se usa un stub
+  /// que NUNCA abre `winspool.drv`/`kernel32.dll`: construir el transporte en
+  /// Android/iOS no debe lanzar "Failed to load dynamic library".
+  static WindowsRawSpooler _defaultSpooler() {
+    if (Platform.isWindows) return FfiWindowsRawSpooler();
+    return const _UnavailableWindowsSpooler();
+  }
 
   final WindowsRawSpooler _spooler;
 
@@ -247,3 +255,23 @@ typedef _WritePrinterDart =
 
 typedef _GetLastErrorNative = Uint32 Function();
 typedef _GetLastErrorDart = int Function();
+
+/// Spooler NO disponible fuera de Windows: NUNCA abre `winspool.drv`/
+/// `kernel32.dll`. Permite construir `WindowsRawPrinterTransport` en
+/// Android/iOS sin lanzar \"Failed to load dynamic library\" (la impresión
+/// RAW solo existe en Windows; `printRaw` ya lo valida antes de usarlo).
+class _UnavailableWindowsSpooler implements WindowsRawSpooler {
+  const _UnavailableWindowsSpooler();
+
+  @override
+  int writeRaw({
+    required String printerName,
+    required String documentName,
+    required String datatype,
+    required Uint8List bytes,
+  }) {
+    throw const RawPrinterException(
+      'La impresión RAW de Windows solo está disponible en Windows.',
+    );
+  }
+}

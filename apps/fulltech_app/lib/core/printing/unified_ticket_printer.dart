@@ -43,6 +43,26 @@ class PrintTicketResult {
   final bool skipped;
 }
 
+/// Transporte RAW de Windows NO disponible fuera de Windows (Android/iOS/web).
+/// Evita abrir `winspool.drv`/`kernel32.dll` por FFI en plataformas donde no
+/// existen — causa raíz de "Invalid argument(s): Failed to load dynamic
+/// library" en móvil.
+class _UnavailableWindowsRawTransport implements RawPrinterTransport {
+  const _UnavailableWindowsRawTransport();
+
+  @override
+  Future<RawPrintResult> printRaw({
+    required String printerName,
+    required Uint8List bytes,
+    String documentName = 'FullPOS ESC/POS Ticket',
+    int copies = 1,
+  }) {
+    throw const RawPrinterException(
+      'La impresión RAW de Windows solo está disponible en Windows.',
+    );
+  }
+}
+
 class TicketPreviewConfig {
   const TicketPreviewConfig({
     required this.text,
@@ -63,7 +83,8 @@ class UnifiedTicketPrinter {
     bool? useEscPosReceiptRenderer,
     HtmlToPdfConverter? htmlToPdfConverter,
   }) : _thermal = thermalPrinterService ?? ThermalPrinterService(),
-       _windowsRaw = windowsRawPrinterTransport ?? WindowsRawPrinterTransport(),
+       _windowsRaw =
+           windowsRawPrinterTransport ?? _defaultWindowsRawTransport(),
        _htmlToPdfConverter =
            htmlToPdfConverter ?? UnifiedTicketPrinter._convertHtmlToPdf,
        _useEscPosReceiptRenderer =
@@ -72,6 +93,18 @@ class UnifiedTicketPrinter {
   static const bool _defaultUseEscPosReceiptRenderer = bool.fromEnvironment(
     'FULLPOS_ESC_POS_RECEIPT',
   );
+
+  /// El transporte RAW usa FFI de Windows (`winspool.drv`/`kernel32.dll`).
+  /// Construirlo en Android/iOS abría esas DLLs y lanzaba
+  /// "Invalid argument(s): Failed to load dynamic library 'winspool.drv'"
+  /// al imprimir el cierre de turno. Solo se crea en Windows; en el resto de
+  /// plataformas se usa un stub que NUNCA toca FFI.
+  static RawPrinterTransport _defaultWindowsRawTransport() {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      return WindowsRawPrinterTransport();
+    }
+    return const _UnavailableWindowsRawTransport();
+  }
 
   final Ref _ref;
   final ThermalPrinterService _thermal;

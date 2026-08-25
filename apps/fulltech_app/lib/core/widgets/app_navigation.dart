@@ -269,6 +269,7 @@ bool desktopShellShouldShowOwnAppBar(String location) {
     Routes.clientes,
     Routes.ventas,
     Routes.ventasLista,
+    Routes.ventasCreditos,
     Routes.compras,
     Routes.caja,
     Routes.cotizaciones,
