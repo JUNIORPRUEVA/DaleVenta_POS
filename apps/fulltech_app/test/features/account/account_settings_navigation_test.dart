@@ -55,23 +55,36 @@ class _FakeMobilePrinterSettingsRepository
 
 class _FakeCompanySettingsRepository extends CompanySettingsRepository {
   _FakeCompanySettingsRepository({
+    Completer<bool>? saveCompleter,
+    Completer<AdminAuthorizationVerification>? pinCompleter,
+    Completer<void>? saveCalled,
+    Completer<void>? pinCalled,
+  }) : this._(
+         OfflineStore.forTesting(
+           'account_settings_navigation_${_nextStoreId()}.db',
+         ),
+         saveCompleter: saveCompleter,
+         pinCompleter: pinCompleter,
+         saveCalled: saveCalled,
+         pinCalled: pinCalled,
+       );
+
+  _FakeCompanySettingsRepository._(
+    OfflineStore store, {
     this.saveCompleter,
     this.pinCompleter,
     this.saveCalled,
     this.pinCalled,
-  }) : super(
-         Dio(),
-         SyncQueueService(
-           OfflineStore.forTesting(
-             'account_settings_navigation_${_nextStoreId()}.db',
-           ),
-         ),
-       );
+  }) : _store = store,
+       super(Dio(), SyncQueueService(store));
 
+  final OfflineStore _store;
   final Completer<bool>? saveCompleter;
   final Completer<AdminAuthorizationVerification>? pinCompleter;
   final Completer<void>? saveCalled;
   final Completer<void>? pinCalled;
+
+  Future<void> close() => _store.closeForTesting();
 
   @override
   Future<CompanySettings> getSettings() async => CompanySettings.empty();
@@ -135,6 +148,13 @@ Future<GoRouter> _pumpSettingsRouter(
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
+  final fakeCompanyRepository =
+      companyRepository is _FakeCompanySettingsRepository
+      ? companyRepository
+      : null;
+  if (fakeCompanyRepository != null) {
+    addTearDown(fakeCompanyRepository.close);
+  }
 
   final router = GoRouter(
     initialLocation: initialLocation,
