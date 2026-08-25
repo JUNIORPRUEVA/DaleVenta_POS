@@ -10,14 +10,21 @@ import '../storage/resilient_local_database.dart';
 import 'pending_sync_action.dart';
 
 class OfflineStore {
-  OfflineStore._();
+  OfflineStore._({String databaseFileName = 'fulltech_offline.db'})
+    : _databaseFileName = databaseFileName;
 
   static final OfflineStore instance = OfflineStore._();
+
+  @visibleForTesting
+  factory OfflineStore.forTesting(String databaseFileName) {
+    return OfflineStore._(databaseFileName: databaseFileName);
+  }
 
   static const String _webCachePrefix = 'ft_db_cache:';
   static const String _webPendingKey = 'ft_db_pending_actions';
   static const String _webOfflineSalesKey = 'ft_db_offline_sales';
 
+  final String _databaseFileName;
   Database? _database;
   Future<Database>? _opening;
   bool _preferencesFallbackEnabled = false;
@@ -47,9 +54,9 @@ class OfflineStore {
   }
 
   Future<Database> _openDatabase() async {
-    TraceLog.log('offline_store', 'opening sqlite db path=fulltech_offline.db');
+    TraceLog.log('offline_store', 'opening sqlite db path=$_databaseFileName');
     return openResilientLocalDatabase(
-      fileName: 'fulltech_offline.db',
+      fileName: _databaseFileName,
       version: 3,
       allowInMemoryFallback: false,
       onCreate: (db, version) async {

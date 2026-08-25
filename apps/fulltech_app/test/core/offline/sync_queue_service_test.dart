@@ -8,6 +8,9 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  late OfflineStore store;
+  var databaseCounter = 0;
+
   setUpAll(() {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
@@ -15,7 +18,15 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    await OfflineStore.instance.clearAll();
+    databaseCounter += 1;
+    store = OfflineStore.forTesting(
+      'sync_queue_service_test_$databaseCounter.db',
+    );
+    await store.clearAll();
+  });
+
+  tearDown(() async {
+    await store.closeForTesting();
   });
 
   test('does not process Company A queue while scoped as Company B', () async {
@@ -24,7 +35,7 @@ void main() {
       userId: 'user-sync-a',
     );
     final service = SyncQueueService(
-      OfflineStore.instance,
+      store,
       scopeResolver: () async => currentScope,
     );
     var processed = 0;
@@ -36,7 +47,7 @@ void main() {
       companyId: 'company-sync-b',
       userId: 'user-sync-b',
     );
-    await OfflineStore.instance.putPendingAction(
+    await store.putPendingAction(
       _action(
         id: 'sales.create:company-a-sale',
         companyId: 'company-sync-a',
@@ -46,7 +57,7 @@ void main() {
     );
     await service.processPending();
 
-    final remainingAfterB = await OfflineStore.instance.listPendingActions(
+    final remainingAfterB = await store.listPendingActions(
       companyId: 'company-sync-a',
       userId: 'user-sync-a',
     );
@@ -65,7 +76,7 @@ void main() {
     );
     await service.processPending();
 
-    final remainingAfterA = await OfflineStore.instance.listPendingActions(
+    final remainingAfterA = await store.listPendingActions(
       companyId: 'company-sync-a',
       userId: 'user-sync-a',
     );
@@ -86,7 +97,7 @@ void main() {
       companyId: 'company-stale-worker',
       userId: 'user-stale-worker',
     );
-    await OfflineStore.instance.putPendingAction(
+    await store.putPendingAction(
       _action(
         id: 'sales.create:stale-worker',
         companyId: 'company-stale-worker',
@@ -101,10 +112,7 @@ void main() {
       ),
     );
 
-    final service = SyncQueueService(
-      OfflineStore.instance,
-      scopeResolver: () async => scope,
-    );
+    final service = SyncQueueService(store, scopeResolver: () async => scope);
     var processed = 0;
     service.registerHandler('sales.create', (_) async {
       processed += 1;
@@ -112,7 +120,7 @@ void main() {
 
     await service.processPending();
 
-    final remaining = await OfflineStore.instance.listPendingActions(
+    final remaining = await store.listPendingActions(
       companyId: 'company-stale-worker',
       userId: 'user-stale-worker',
     );

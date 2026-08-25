@@ -142,6 +142,21 @@ Future<void> pumpRealIo(WidgetTester tester, {int rounds = 15}) async {
   }
 }
 
+Future<Finder> _pumpUntilHitTestable(
+  WidgetTester tester,
+  Finder finder, {
+  int rounds = 10,
+}) async {
+  for (var i = 0; i < rounds; i++) {
+    final hitTestableFinder = finder.hitTestable();
+    if (hitTestableFinder.evaluate().isNotEmpty) {
+      return hitTestableFinder;
+    }
+    await tester.pump(const Duration(milliseconds: 120));
+  }
+  fail('No hit-testable widget found for $finder');
+}
+
 void main() {
   late Directory sourceDir;
   late Directory appTempDir;
@@ -195,15 +210,20 @@ void main() {
         await tester.ensureVisible(
           find.text('Subir imagen desde el ordenador'),
         );
+        final uploadButton = await _pumpUntilHitTestable(
+          tester,
+          find.text('Subir imagen desde el ordenador'),
+        );
+        await tester.tap(uploadButton);
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 200));
-        await tester.tap(find.text('Subir imagen desde el ordenador'));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300)); // animación sheet
+        final galleryOption = await _pumpUntilHitTestable(
+          tester,
+          find.text('Elegir de galería'),
+        );
 
         // Elige galería (tap fuera de runAsync) y deja que el pipeline (IO
         // real) complete su trabajo con ciclos runAsync + pump.
-        await tester.tap(find.text('Elegir de galería'));
+        await tester.tap(galleryOption);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
         await pumpRealIo(tester);
@@ -243,14 +263,19 @@ void main() {
         await tester.ensureVisible(
           find.text('Subir imagen desde el ordenador'),
         );
+        final uploadButton = await _pumpUntilHitTestable(
+          tester,
+          find.text('Subir imagen desde el ordenador'),
+        );
+        await tester.tap(uploadButton);
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 200));
-        await tester.tap(find.text('Subir imagen desde el ordenador'));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300));
+        final galleryOption = await _pumpUntilHitTestable(
+          tester,
+          find.text('Elegir de galería'),
+        );
 
         // El picker queda pendiente (sin IO): se elige galería y se espera.
-        await tester.tap(find.text('Elegir de galería'));
+        await tester.tap(galleryOption);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
 

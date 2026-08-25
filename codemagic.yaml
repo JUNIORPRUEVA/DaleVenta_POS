@@ -110,7 +110,7 @@ workflows:
       - name: Unit and widget tests
         script: |
           cd "$APP_DIR"
-          flutter test
+          flutter test -r expanded
       - name: Apply Xcode signing settings
         script: |
           cd "$APP_DIR"

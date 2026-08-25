@@ -538,6 +538,10 @@ class _SettingsDetailScaffold extends ConsumerWidget {
       onPressed: () => context.go(
         isDesktopLayout ? Routes.cotizaciones : Routes.configuracion,
       ),
+      style: IconButton.styleFrom(
+        minimumSize: const Size.square(48),
+        tapTargetSize: MaterialTapTargetSize.padded,
+      ),
       icon: const Icon(Icons.arrow_back_rounded),
     );
     final content = Center(
@@ -2001,9 +2005,7 @@ class _CompanySettingsEditorState
       // usuario realmente lo editó, nunca como efecto secundario de otros
       // campos (teléfono, dirección, logo, etc.).
       if (nameChanged) {
-        queuedName = await settingsRepository.saveCompanyNameOrQueue(
-          nameValue,
-        );
+        queuedName = await settingsRepository.saveCompanyNameOrQueue(nameValue);
       }
       if (!mounted) return;
       ref.invalidate(companySettingsProvider);
