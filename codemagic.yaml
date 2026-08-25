@@ -110,8 +110,9 @@ workflows:
       - name: Unit and widget tests
         script: |
           cd "$APP_DIR"
-          flutter test test/features/account/account_settings_navigation_test.dart -r expanded --concurrency=1
-          flutter test -r expanded
+          flutter test test/features/account/account_settings_navigation_test.dart \
+            -r expanded \
+            --concurrency=1
       - name: Apply Xcode signing settings
         script: |
           cd "$APP_DIR"
