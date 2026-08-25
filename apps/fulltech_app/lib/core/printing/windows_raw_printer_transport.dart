@@ -40,7 +40,8 @@ class RawPrinterException implements Exception {
 
 class WindowsRawPrinterTransport implements RawPrinterTransport {
   WindowsRawPrinterTransport({WindowsRawSpooler? spooler})
-    : _spooler = spooler ?? _defaultSpooler();
+    : _spooler = spooler ?? _defaultSpooler(),
+      _requiresWindowsPlatform = spooler == null;
 
   static const String datatype = 'RAW';
 
@@ -53,6 +54,7 @@ class WindowsRawPrinterTransport implements RawPrinterTransport {
   }
 
   final WindowsRawSpooler _spooler;
+  final bool _requiresWindowsPlatform;
 
   @override
   Future<RawPrintResult> printRaw({
@@ -68,7 +70,7 @@ class WindowsRawPrinterTransport implements RawPrinterTransport {
     if (bytes.isEmpty) {
       throw const RawPrinterException('No hay bytes ESC/POS para imprimir.');
     }
-    if (!Platform.isWindows) {
+    if (_requiresWindowsPlatform && !Platform.isWindows) {
       throw const RawPrinterException(
         'Windows RAW solo esta disponible en Windows.',
       );
