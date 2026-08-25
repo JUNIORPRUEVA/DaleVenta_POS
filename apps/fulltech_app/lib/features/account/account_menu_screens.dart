@@ -2250,11 +2250,11 @@ class _FiscalSettingsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final rateLabel = '${(defaultTaxRate * 100).toStringAsFixed(0)}%';
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
+    return Material(
+      color: theme.colorScheme.surface,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFDDE7EE)),
+        side: const BorderSide(color: Color(0xFFDDE7EE)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
