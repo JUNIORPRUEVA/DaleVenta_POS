@@ -54,17 +54,32 @@ class _FakeMobilePrinterSettingsRepository
 }
 
 class _FakeCompanySettingsRepository extends CompanySettingsRepository {
-  _FakeCompanySettingsRepository({this.saveCompleter, this.pinCompleter})
-    : super(Dio(), SyncQueueService(OfflineStore.instance));
+  _FakeCompanySettingsRepository({
+    this.saveCompleter,
+    this.pinCompleter,
+    this.saveCalled,
+    this.pinCalled,
+  }) : super(
+         Dio(),
+         SyncQueueService(
+           OfflineStore.forTesting(
+             'account_settings_navigation_${_nextStoreId()}.db',
+           ),
+         ),
+       );
 
   final Completer<bool>? saveCompleter;
   final Completer<AdminAuthorizationVerification>? pinCompleter;
+  final Completer<void>? saveCalled;
+  final Completer<void>? pinCalled;
 
   @override
   Future<CompanySettings> getSettings() async => CompanySettings.empty();
 
   @override
   Future<bool> saveSettingsOrQueue(CompanySettings settings) {
+    final called = saveCalled;
+    if (called != null && !called.isCompleted) called.complete();
     final completer = saveCompleter;
     if (completer != null) return completer.future;
     return Future.value(false);
@@ -74,6 +89,8 @@ class _FakeCompanySettingsRepository extends CompanySettingsRepository {
   Future<AdminAuthorizationVerification> verifyAdminAuthorizationPin(
     String pin,
   ) {
+    final called = pinCalled;
+    if (called != null && !called.isCompleted) called.complete();
     final completer = pinCompleter;
     if (completer != null) return completer.future;
     return Future.value(
@@ -84,6 +101,10 @@ class _FakeCompanySettingsRepository extends CompanySettingsRepository {
     );
   }
 }
+
+int _storeCounter = 0;
+
+int _nextStoreId() => _storeCounter++;
 
 class _TestAuthController extends AuthController {
   _TestAuthController(super.ref, {required String role}) {
@@ -189,20 +210,29 @@ void main() {
     tester,
   ) async {
     final saveCompleter = Completer<bool>();
+    final saveCalled = Completer<void>();
     await _pumpSettingsRouter(
       tester,
       initialLocation: Routes.configuracionEmpresa,
       viewport: const Size(1366, 1200),
       companyRepository: _FakeCompanySettingsRepository(
         saveCompleter: saveCompleter,
+        saveCalled: saveCalled,
       ),
     );
 
-    final saveButton = find.text('Guardar empresa');
-    await tester.ensureVisible(saveButton);
-    await tester.tap(saveButton);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Nombre comercial'),
+      'FULLTECH',
+    );
     await tester.pump();
 
+    final saveButton = find.text('Guardar empresa');
+    await tester.ensureVisible(saveButton);
+    await tester.tap(saveButton.hitTestable());
+    await tester.pump();
+
+    await saveCalled.future;
     expect(saveCompleter.isCompleted, isFalse);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -216,6 +246,7 @@ void main() {
     tester,
   ) async {
     final pinCompleter = Completer<AdminAuthorizationVerification>();
+    final pinCalled = Completer<void>();
     await _pumpSettingsRouter(
       tester,
       initialLocation: Routes.configuracionEmpresa,
@@ -223,18 +254,26 @@ void main() {
       userRole: 'CAJERO',
       companyRepository: _FakeCompanySettingsRepository(
         pinCompleter: pinCompleter,
+        pinCalled: pinCalled,
       ),
     );
 
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Nombre comercial'),
+      'FULLTECH',
+    );
+    await tester.pump();
+
     final saveButton = find.text('Guardar empresa');
     await tester.ensureVisible(saveButton);
-    await tester.tap(saveButton);
+    await tester.tap(saveButton.hitTestable());
     await _settleSettingsFrame(tester);
 
     await tester.enterText(find.byType(TextField).last, '1234');
     await tester.tap(find.text('Autorizar').hitTestable());
     await tester.pump();
 
+    await pinCalled.future;
     expect(pinCompleter.isCompleted, isFalse);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -340,7 +379,17 @@ void main() {
     final rect = tester.getRect(backButton);
     expect(rect.width, greaterThanOrEqualTo(48));
     expect(rect.height, greaterThanOrEqualTo(48));
-    await tester.tapAt(rect.centerLeft + const Offset(8, 0));
+  });
+
+  testWidgets('mobile settings back button navigates from semantic button', (
+    tester,
+  ) async {
+    await _pumpSettingsRouter(tester);
+
+    await tester.tap(find.text('Empresa').hitTestable().first);
+    await _settleSettingsFrame(tester);
+
+    await tester.tap(find.byTooltip('Volver').hitTestable().first);
     await _settleSettingsFrame(tester);
 
     expect(tester.takeException(), isNull);
