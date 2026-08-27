@@ -342,6 +342,8 @@ class AppNavigator {
     if (path.isEmpty) return false;
     if (path == Routes.splash ||
         path == Routes.login ||
+        path == Routes.forgotPassword ||
+        path == Routes.resetPassword ||
         path == Routes.register ||
         path == Routes.registrarVenta) {
       return false;

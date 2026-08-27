@@ -10,6 +10,8 @@ describe("AuthService tenant role hydration", () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
+      {} as any,
     ) as any;
   }
 
@@ -109,6 +111,8 @@ describe("AuthService login errors", () => {
       {} as any,
       {} as any,
       { assertCompanyCanUseApp: jest.fn() } as any,
+      {} as any,
+      {} as any,
     );
 
     await expect(

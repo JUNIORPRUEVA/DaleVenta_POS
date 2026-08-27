@@ -13,6 +13,8 @@ import { LoginDto } from "./dto/login.dto";
 import { AuthGuard } from "@nestjs/passport";
 import { Request } from "express";
 import { RefreshDto } from "./dto/refresh.dto";
+import { ForgotPasswordDto } from "./dto/forgot-password.dto";
+import { ResetPasswordDto } from "./dto/reset-password.dto";
 
 @Controller("auth")
 export class AuthController {
@@ -30,6 +32,22 @@ export class AuthController {
   @Post("register-business")
   async registerBusiness(@Body() dto: Record<string, unknown>) {
     return this.auth.registerBusiness(dto as any);
+  }
+
+  @Post("forgot-password")
+  async forgotPassword(@Body() dto: ForgotPasswordDto, @Req() req: Request) {
+    return this.auth.forgotPassword(dto.email, {
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent") ?? null,
+    });
+  }
+
+  @Post("reset-password")
+  async resetPassword(@Body() dto: ResetPasswordDto, @Req() req: Request) {
+    return this.auth.resetPassword(dto.token, dto.password, {
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent") ?? null,
+    });
   }
 
   @Post("refresh")
@@ -53,7 +71,10 @@ export class AuthController {
 
   @UseGuards(AuthGuard("jwt"))
   @Delete("account")
-  async deleteAccount(@Req() req: Request, @Body() dto: Record<string, unknown>) {
+  async deleteAccount(
+    @Req() req: Request,
+    @Body() dto: Record<string, unknown>,
+  ) {
     const user = req.user as any;
     return this.auth.deleteAccount(user.id, user.companyId, dto);
   }

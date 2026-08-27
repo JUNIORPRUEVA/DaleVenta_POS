@@ -86,6 +86,10 @@ class AuthInterceptor extends Interceptor {
         path.endsWith(ApiRoutes.login) ||
         path == ApiRoutes.registerBusiness ||
         path.endsWith(ApiRoutes.registerBusiness) ||
+        path == ApiRoutes.forgotPassword ||
+        path.endsWith(ApiRoutes.forgotPassword) ||
+        path == ApiRoutes.resetPassword ||
+        path.endsWith(ApiRoutes.resetPassword) ||
         _isAuthRefreshPath(path);
   }
 

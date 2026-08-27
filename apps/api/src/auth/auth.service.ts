@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { randomUUID, createHash } from "node:crypto";
+import { randomUUID, createHash, randomBytes } from "node:crypto";
 import * as fs from "node:fs/promises";
 import { resolve, join, relative, isAbsolute } from "node:path";
 import { PrismaService } from "../prisma/prisma.service";
@@ -21,15 +21,25 @@ import * as bcrypt from "bcryptjs";
 import { ConfigService } from "@nestjs/config";
 import { JwtUser } from "./jwt-user.type";
 import { LicenseService } from "../license/license.service";
+import { RedisService } from "../common/redis/redis.service";
+import { PasswordResetEmailService } from "./password-reset-email.service";
+
+const PASSWORD_RESET_GENERIC_MESSAGE =
+  "Si tu cuenta permite recuperación por correo, recibirás las instrucciones correspondientes. De lo contrario, contacta al administrador de tu empresa.";
+const PASSWORD_RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
 
 @Injectable()
 export class AuthService {
+  private readonly passwordResetMemoryRateLimit = new Map<string, number>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly r2: R2Service,
     private readonly licenses: LicenseService,
+    private readonly redis: RedisService,
+    private readonly passwordResetEmail: PasswordResetEmailService,
   ) {}
 
   async login(identifier: string, password: string) {
@@ -168,6 +178,203 @@ export class AuthService {
     const user = await this.findUserForMe(userId);
     if (!user) throw new UnauthorizedException("No autorizado");
     return user;
+  }
+
+  async forgotPassword(
+    rawEmail: string,
+    request: { ipAddress?: string | null; userAgent?: string | null } = {},
+  ) {
+    const email = (rawEmail ?? "").trim().toLowerCase();
+    if (!email || !email.includes("@")) {
+      return { ok: true, message: PASSWORD_RESET_GENERIC_MESSAGE };
+    }
+
+    const rateAllowed = await this.consumePasswordResetRateLimit(
+      `forgot:${this.hashResetToken(email)}:${request.ipAddress ?? "unknown"}`,
+      60,
+    );
+    const ipRateAllowed = await this.consumePasswordResetRateLimit(
+      `forgot-ip:${request.ipAddress ?? "unknown"}`,
+      10,
+    );
+    if (!rateAllowed || !ipRateAllowed) {
+      return { ok: true, message: PASSWORD_RESET_GENERIC_MESSAGE };
+    }
+
+    const owner = await this.findPasswordResetOwner(email);
+    if (!owner) {
+      await this.auditPasswordReset({
+        action: "PASSWORD_RESET_REQUEST_IGNORED",
+        email,
+        reason: "not_owner_or_not_found",
+        ipAddress: request.ipAddress,
+        userAgent: request.userAgent,
+      });
+      return { ok: true, message: PASSWORD_RESET_GENERIC_MESSAGE };
+    }
+
+    const token = this.generateResetToken();
+    const tokenHash = this.hashResetToken(token);
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + PASSWORD_RESET_TOKEN_TTL_MS);
+
+    await this.prisma.$transaction(async (tx) => {
+      await (tx as any).passwordResetToken.updateMany({
+        where: {
+          userId: owner.id,
+          usedAt: null,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: now,
+          revocationReason: "superseded",
+        },
+      });
+
+      await (tx as any).passwordResetToken.create({
+        data: {
+          userId: owner.id,
+          companyId: owner.companyId,
+          tokenHash,
+          expiresAt,
+          requestedIp: request.ipAddress ?? null,
+          requestedUserAgent: request.userAgent ?? null,
+        },
+      });
+    });
+
+    const resetUrl = this.buildPasswordResetUrl(token);
+    const emailResult = await this.passwordResetEmail.sendPasswordResetEmail({
+      to: owner.email,
+      resetUrl,
+    });
+
+    await this.auditPasswordReset({
+      action: "PASSWORD_RESET_REQUESTED",
+      userId: owner.id,
+      companyId: owner.companyId,
+      email,
+      reason: emailResult.sent ? "email_sent" : "email_not_configured",
+      ipAddress: request.ipAddress,
+      userAgent: request.userAgent,
+    });
+
+    return { ok: true, message: PASSWORD_RESET_GENERIC_MESSAGE };
+  }
+
+  async resetPassword(
+    rawToken: string,
+    rawPassword: string,
+    request: { ipAddress?: string | null; userAgent?: string | null } = {},
+  ) {
+    const token = (rawToken ?? "").trim();
+    const password = rawPassword ?? "";
+    if (!token) throw new BadRequestException("Token inválido o expirado");
+    if (password.length < 8) {
+      throw new BadRequestException(
+        "La contrasena debe tener al menos 8 caracteres",
+      );
+    }
+
+    const rateAllowed = await this.consumePasswordResetRateLimit(
+      `reset:${this.hashResetToken(token)}:${request.ipAddress ?? "unknown"}`,
+      30,
+    );
+    if (!rateAllowed)
+      throw new BadRequestException("Token inválido o expirado");
+
+    const now = new Date();
+    const tokenHash = this.hashResetToken(token);
+    const resetToken = await (this.prisma as any).passwordResetToken.findUnique(
+      {
+        where: { tokenHash },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              blocked: true,
+              companyMemberships: {
+                where: {
+                  status: CompanyMemberStatus.ACTIVE,
+                  role: CompanyMemberRole.OWNER,
+                },
+                select: { companyId: true },
+              },
+            },
+          },
+        },
+      },
+    );
+
+    if (
+      !resetToken ||
+      resetToken.usedAt != null ||
+      resetToken.revokedAt != null ||
+      resetToken.expiresAt <= now ||
+      resetToken.user?.blocked === true ||
+      !resetToken.user?.companyMemberships?.some(
+        (membership: { companyId: string }) =>
+          membership.companyId === resetToken.companyId,
+      )
+    ) {
+      await this.auditPasswordReset({
+        action: "PASSWORD_RESET_FAILED",
+        companyId: resetToken?.companyId ?? null,
+        userId: resetToken?.userId ?? null,
+        reason: "invalid_expired_used_or_not_owner",
+        ipAddress: request.ipAddress,
+        userAgent: request.userAgent,
+      });
+      throw new BadRequestException("Token inválido o expirado");
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await this.prisma.$transaction(async (tx) => {
+      const updated = await (tx as any).passwordResetToken.updateMany({
+        where: {
+          id: resetToken.id,
+          usedAt: null,
+          revokedAt: null,
+          expiresAt: { gt: now },
+        },
+        data: {
+          usedAt: now,
+          usedIp: request.ipAddress ?? null,
+          usedUserAgent: request.userAgent ?? null,
+        },
+      });
+
+      if (updated.count !== 1) {
+        throw new BadRequestException("Token inválido o expirado");
+      }
+
+      await tx.user.update({
+        where: { id: resetToken.userId },
+        data: { passwordHash },
+        select: { id: true },
+      });
+
+      await tx.authSession.updateMany({
+        where: { userId: resetToken.userId, revokedAt: null },
+        data: {
+          revokedAt: now,
+          revocationReason: "password_reset",
+        },
+      });
+    });
+
+    await this.auditPasswordReset({
+      action: "PASSWORD_RESET_COMPLETED",
+      userId: resetToken.userId,
+      companyId: resetToken.companyId,
+      reason: "password_updated",
+      ipAddress: request.ipAddress,
+      userAgent: request.userAgent,
+    });
+
+    return { ok: true };
   }
 
   async deletionPreview(userId: string, activeCompanyId?: string | null) {
@@ -508,6 +715,114 @@ export class AuthService {
 
   private hashRefreshToken(token: string) {
     return createHash("sha256").update(token).digest("hex");
+  }
+
+  private generateResetToken() {
+    return randomBytes(32).toString("base64url");
+  }
+
+  private hashResetToken(token: string) {
+    return createHash("sha256").update(token).digest("hex");
+  }
+
+  private async consumePasswordResetRateLimit(key: string, ttlSeconds: number) {
+    if (this.redis?.isEnabled()) {
+      return this.redis.tryLock(`password-reset:${key}`, ttlSeconds);
+    }
+
+    const now = Date.now();
+    const until = this.passwordResetMemoryRateLimit.get(key) ?? 0;
+    if (until > now) return false;
+    this.passwordResetMemoryRateLimit.set(key, now + ttlSeconds * 1000);
+    return true;
+  }
+
+  private buildPasswordResetUrl(token: string) {
+    const configuredBase = (
+      this.config.get<string>("PASSWORD_RESET_URL_BASE") ??
+      this.config.get<string>("APP_PUBLIC_URL") ??
+      this.config.get<string>("FRONTEND_URL") ??
+      ""
+    ).trim();
+    const base = configuredBase || "https://fullposcloud.fulltechrd.com";
+    const url = new URL("/reset-password", base);
+    url.searchParams.set("token", token);
+    return url.toString();
+  }
+
+  private async findPasswordResetOwner(email: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        email: true,
+        blocked: true,
+        companyId: true,
+        companyMemberships: {
+          where: {
+            role: CompanyMemberRole.OWNER,
+            status: CompanyMemberStatus.ACTIVE,
+          },
+          select: { companyId: true },
+          orderBy: { joinedAt: "asc" },
+        },
+      },
+    });
+
+    if (
+      !user ||
+      user.blocked === true ||
+      user.companyMemberships.length === 0
+    ) {
+      return null;
+    }
+
+    const preferred =
+      user.companyMemberships.find(
+        (membership) => membership.companyId === user.companyId,
+      ) ?? user.companyMemberships[0];
+
+    return {
+      id: user.id,
+      email: user.email,
+      companyId: preferred.companyId,
+    };
+  }
+
+  private async auditPasswordReset(event: {
+    action: string;
+    userId?: string | null;
+    companyId?: string | null;
+    email?: string | null;
+    reason?: string | null;
+    ipAddress?: string | null;
+    userAgent?: string | null;
+  }) {
+    const emailHash = event.email
+      ? this.hashResetToken(event.email.trim().toLowerCase())
+      : null;
+    try {
+      await (this.prisma as any).passwordResetAuditLog.create({
+        data: {
+          action: event.action,
+          userId: event.userId ?? null,
+          companyId: event.companyId ?? null,
+          emailHash,
+          reason: event.reason ?? null,
+          ipAddress: event.ipAddress ?? null,
+          userAgent: event.userAgent ?? null,
+        },
+      });
+    } catch {
+      console.info("[password-reset-audit]", {
+        timestamp: new Date().toISOString(),
+        action: event.action,
+        userId: event.userId ?? null,
+        companyId: event.companyId ?? null,
+        emailHash,
+        reason: event.reason ?? null,
+      });
+    }
   }
 
   private async createAuthSession(userId: string, companyId: string | null) {

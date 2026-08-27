@@ -513,6 +513,53 @@ class AuthRepository {
     }
   }
 
+  Future<String> requestPasswordReset(String email) async {
+    try {
+      final res = await _dio
+          .post(ApiRoutes.forgotPassword, data: {'email': email.trim()})
+          .timeout(_loginTimeout);
+      final data = res.data;
+      if (data is Map && data['message'] is String) {
+        return data['message'] as String;
+      }
+      return 'Si tu cuenta permite recuperación por correo, recibirás las instrucciones correspondientes. De lo contrario, contacta al administrador de tu empresa.';
+    } on TimeoutException {
+      throw const ApiException.detailed(
+        message:
+            'El servidor tardó demasiado procesando la solicitud. Inténtalo de nuevo.',
+        type: ApiErrorType.timeout,
+        displayCode: 'NETWORK_TIMEOUT',
+        retryable: true,
+      );
+    } on DioException catch (e) {
+      throw _mapDioError(e, 'No se pudo solicitar la recuperación');
+    }
+  }
+
+  Future<void> resetPassword({
+    required String token,
+    required String password,
+  }) async {
+    try {
+      await _dio
+          .post(
+            ApiRoutes.resetPassword,
+            data: {'token': token.trim(), 'password': password},
+          )
+          .timeout(_loginTimeout);
+    } on TimeoutException {
+      throw const ApiException.detailed(
+        message:
+            'El servidor tardó demasiado restableciendo la contraseña. Inténtalo de nuevo.',
+        type: ApiErrorType.timeout,
+        displayCode: 'NETWORK_TIMEOUT',
+        retryable: true,
+      );
+    } on DioException catch (e) {
+      throw _mapDioError(e, 'No se pudo restablecer la contraseña');
+    }
+  }
+
   Future<AccountDeletionPreview> getAccountDeletionPreview() async {
     try {
       final res = await _dio

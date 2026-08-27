@@ -7,6 +7,7 @@ import '../../features/account/account_menu_screens.dart';
 import '../../features/auth/presentation/landing_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
+import '../../features/auth/presentation/forgot_password_screen.dart';
 import '../../features/home/home_shell.dart';
 import '../../features/user/profile_screen.dart';
 import '../../features/user/users_screen.dart';
@@ -84,6 +85,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: Routes.login,
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: Routes.forgotPassword,
+        builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: Routes.resetPassword,
+        builder: (context, state) {
+          final token = (state.uri.queryParameters['token'] ?? '').trim();
+          return ResetPasswordScreen(token: token);
+        },
       ),
       GoRoute(
         path: Routes.register,
@@ -343,6 +355,8 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       final isAuthRoute =
           path == Routes.login ||
+          path == Routes.forgotPassword ||
+          path == Routes.resetPassword ||
           (!registrationDisabled && path == Routes.register) ||
           path == Routes.landing;
       final isSplashRoute = path == Routes.splash;

@@ -413,7 +413,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ],
                               const SizedBox(height: 8),
                               TextButton(
-                                onPressed: loading ? null : () {},
+                                onPressed: loading
+                                    ? null
+                                    : () => context.go(Routes.forgotPassword),
                                 child: const Text('¿Olvidaste tu contraseña?'),
                               ),
                             ],

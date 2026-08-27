@@ -3,6 +3,8 @@ class ApiRoutes {
   static const releaseCheckUpdate = '/api/v1/check-update';
   static const login = '/auth/login';
   static const registerBusiness = '/auth/register-business';
+  static const forgotPassword = '/auth/forgot-password';
+  static const resetPassword = '/auth/reset-password';
   static const refresh = '/auth/refresh';
   static const me = '/auth/me';
   static const accountDeletionPreview = '/auth/account/deletion-preview';
