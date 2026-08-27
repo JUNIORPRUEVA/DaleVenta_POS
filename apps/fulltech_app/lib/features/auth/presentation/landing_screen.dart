@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/app_access/app_access_links.dart';
+import '../../../core/auth/business_registration_policy.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/utils/safe_url_launcher.dart';
 import 'pwa_install_prompt.dart';
@@ -15,6 +16,8 @@ class LandingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.sizeOf(context).width < 760;
+    final businessRegistrationDisabled =
+        isBusinessRegistrationDisabledOnCurrentPlatform;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F8FB),
@@ -36,9 +39,17 @@ class LandingScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _TopBar(isMobile: isMobile),
+                        _TopBar(
+                          isMobile: isMobile,
+                          businessRegistrationDisabled:
+                              businessRegistrationDisabled,
+                        ),
                         SizedBox(height: isMobile ? 24 : 44),
-                        _Hero(isMobile: isMobile),
+                        _Hero(
+                          isMobile: isMobile,
+                          businessRegistrationDisabled:
+                              businessRegistrationDisabled,
+                        ),
                         const SizedBox(height: 18),
                         const _InstallPanel(),
                         if (isMobile) ...[
@@ -85,9 +96,13 @@ class LandingScreen extends StatelessWidget {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.isMobile});
+  const _TopBar({
+    required this.isMobile,
+    required this.businessRegistrationDisabled,
+  });
 
   final bool isMobile;
+  final bool businessRegistrationDisabled;
 
   @override
   Widget build(BuildContext context) {
@@ -156,11 +171,12 @@ class _TopBar extends StatelessWidget {
             child: const Text('Iniciar sesion'),
           ),
           const SizedBox(width: 8),
-          FilledButton.icon(
-            onPressed: () => context.go(Routes.register),
-            icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
-            label: const Text('Crear mi cuenta'),
-          ),
+          if (!businessRegistrationDisabled)
+            FilledButton.icon(
+              onPressed: () => context.go(Routes.register),
+              icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+              label: const Text('Crear mi cuenta'),
+            ),
         ],
       ],
     );
@@ -168,9 +184,13 @@ class _TopBar extends StatelessWidget {
 }
 
 class _Hero extends StatelessWidget {
-  const _Hero({required this.isMobile});
+  const _Hero({
+    required this.isMobile,
+    required this.businessRegistrationDisabled,
+  });
 
   final bool isMobile;
+  final bool businessRegistrationDisabled;
 
   @override
   Widget build(BuildContext context) {
@@ -214,17 +234,18 @@ class _Hero extends StatelessWidget {
           spacing: 12,
           runSpacing: 12,
           children: [
-            FilledButton.icon(
-              onPressed: () => context.go(Routes.register),
-              icon: const Icon(Icons.rocket_launch_rounded, size: 19),
-              label: const Text('Crear mi cuenta'),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 22,
-                  vertical: 17,
+            if (!businessRegistrationDisabled)
+              FilledButton.icon(
+                onPressed: () => context.go(Routes.register),
+                icon: const Icon(Icons.rocket_launch_rounded, size: 19),
+                label: const Text('Crear mi cuenta'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 17,
+                  ),
                 ),
               ),
-            ),
             OutlinedButton.icon(
               onPressed: () => _requestInstall(context),
               icon: const Icon(Icons.add_to_home_screen_rounded, size: 19),
@@ -1082,11 +1103,12 @@ class _LandingDrawer extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 18),
-            _DrawerAction(
-              icon: Icons.person_add_alt_1_rounded,
-              label: 'Crear mi cuenta',
-              onTap: () => context.go(Routes.register),
-            ),
+            if (!isBusinessRegistrationDisabledOnCurrentPlatform)
+              _DrawerAction(
+                icon: Icons.person_add_alt_1_rounded,
+                label: 'Crear mi cuenta',
+                onTap: () => context.go(Routes.register),
+              ),
             _DrawerAction(
               icon: Icons.login_rounded,
               label: 'Iniciar sesion',

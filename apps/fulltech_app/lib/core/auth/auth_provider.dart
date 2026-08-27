@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'auth_repository.dart';
 import 'auth_session_events.dart';
+import 'business_registration_policy.dart';
 import 'token_storage.dart';
 import '../cache/fulltech_cache_manager.dart';
 import '../debug/trace_log.dart';
+import '../errors/api_exception.dart';
 import '../models/user_model.dart';
 import '../offline/sync_queue_service.dart';
 import '../utils/is_flutter_test.dart';
@@ -223,7 +225,9 @@ class AuthController extends StateNotifier<AuthState> {
           break;
         case SessionVerificationStatus.deferred:
           _markSessionHealthy();
-          if (state.restoringSession || state.loading || !state.hasSessionHint) {
+          if (state.restoringSession ||
+              state.loading ||
+              !state.hasSessionHint) {
             state = state.copyWith(
               initialized: true,
               isAuthenticated: true,
@@ -290,6 +294,15 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<bool> registerBusiness(Map<String, dynamic> payload) async {
     if (state.loading) return false;
+    if (ref.read(businessRegistrationDisabledProvider)) {
+      throw const ApiException.detailed(
+        message:
+            'FullPOS Cloud requiere una cuenta empresarial existente en esta plataforma.',
+        type: ApiErrorType.forbidden,
+        displayCode: 'BUSINESS_REGISTRATION_DISABLED',
+        retryable: false,
+      );
+    }
     state = state.copyWith(loading: true);
     final repo = ref.read(authRepositoryProvider);
     try {

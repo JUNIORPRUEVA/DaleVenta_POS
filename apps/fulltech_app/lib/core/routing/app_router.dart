@@ -37,6 +37,7 @@ import '../auth/admin_authorization_session.dart';
 import '../auth/app_bootstrap_status.dart';
 import '../auth/auth_provider.dart';
 import '../auth/app_permissions.dart';
+import '../auth/business_registration_policy.dart';
 import 'app_route_observer.dart';
 import 'route_access.dart';
 import 'routes.dart';
@@ -328,9 +329,21 @@ final routerProvider = Provider<GoRouter>((ref) {
       final loc = state.uri.toString();
       final path = state.uri.path;
       ref.read(adminAuthorizationProvider.notifier).clearIfExpired();
+      final registrationDisabled = ref.read(
+        businessRegistrationDisabledProvider,
+      );
+
+      if (registrationDisabled && path == Routes.register) {
+        return Routes.login;
+      }
+
+      if (registrationDisabled && path == Routes.landing) {
+        return Routes.login;
+      }
+
       final isAuthRoute =
           path == Routes.login ||
-          path == Routes.register ||
+          (!registrationDisabled && path == Routes.register) ||
           path == Routes.landing;
       final isSplashRoute = path == Routes.splash;
 
@@ -348,13 +361,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       if (isSplashRoute) {
-        return bootstrap == AppBootstrapStatus.ready
-            ? defaultAuthedRoute()
-            : Routes.landing;
+        if (bootstrap == AppBootstrapStatus.ready) {
+          return defaultAuthedRoute();
+        }
+        return registrationDisabled ? Routes.login : Routes.landing;
       }
 
       if (!isAuth) {
-        return isAuthRoute ? null : Routes.landing;
+        if (isAuthRoute) return null;
+        return registrationDisabled ? Routes.login : Routes.landing;
       }
 
       if (isAuth && isAuthRoute) {
