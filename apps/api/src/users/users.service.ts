@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -20,6 +21,14 @@ import { ConfigService } from "@nestjs/config";
 import { requireTenant, type TenantUser } from "../auth/tenant-context";
 import { LicenseService } from "../license/license.service";
 import { CatalogRealtimeRelayService } from "../products/catalog-realtime-relay.service";
+
+const ADMIN_MEMBER_ROLES = new Set<CompanyMemberRole>([
+  CompanyMemberRole.OWNER,
+  CompanyMemberRole.ADMIN,
+  CompanyMemberRole.MANAGER,
+]);
+
+const ADMIN_LEGACY_ROLES = new Set<Role>([Role.ADMIN]);
 
 @Injectable()
 export class UsersService {
@@ -208,6 +217,120 @@ export class UsersService {
     });
     if (!target) throw new NotFoundException("User not found");
     return target;
+  }
+
+  private domainBadRequest(code: string, message: string) {
+    return new BadRequestException({ code, message });
+  }
+
+  private domainConflict(code: string, message: string) {
+    return new ConflictException({ code, message });
+  }
+
+  private isAdminLegacyRole(role?: Role | string | null) {
+    return ADMIN_LEGACY_ROLES.has(role as Role);
+  }
+
+  private isAdminMemberRole(role?: CompanyMemberRole | string | null) {
+    return ADMIN_MEMBER_ROLES.has(role as CompanyMemberRole);
+  }
+
+  private nextMemberRoleFromDto(role?: Role) {
+    return role ? this.memberRoleFromLegacyRole(role) : undefined;
+  }
+
+  private async countOperationalAdmins(
+    companyId: string,
+    excludeUserId?: string,
+  ) {
+    const where: Prisma.UserWhereInput = {
+      blocked: false,
+      ...(excludeUserId ? { id: { not: excludeUserId } } : {}),
+      OR: [
+        { companyId, role: { in: [...ADMIN_LEGACY_ROLES] } },
+        {
+          companyMemberships: {
+            some: {
+              companyId,
+              status: CompanyMemberStatus.ACTIVE,
+              role: { in: [...ADMIN_MEMBER_ROLES] },
+            },
+          },
+        },
+      ],
+    };
+    return this.prisma.user.count({ where });
+  }
+
+  private async assertCanDisableOperationalAdmin(options: {
+    requestUser: TenantUser;
+    targetUserId: string;
+    currentBlocked?: boolean;
+    currentRole?: Role | string | null;
+    nextBlocked?: boolean;
+    nextRole?: Role;
+    action: string;
+  }) {
+    const companyId = requireTenant(options.requestUser);
+    if (
+      options.nextBlocked === true &&
+      options.targetUserId === options.requestUser.id
+    ) {
+      throw this.domainBadRequest(
+        "SELF_BLOCK_NOT_ALLOWED",
+        "No puedes bloquear tu propia cuenta.",
+      );
+    }
+
+    const membership = await this.prisma.companyMember.findFirst({
+      where: {
+        userId: options.targetUserId,
+        companyId,
+        status: CompanyMemberStatus.ACTIVE,
+      },
+      select: { role: true },
+    });
+    const currentAdmin =
+      this.isAdminLegacyRole(options.currentRole) ||
+      this.isAdminMemberRole(membership?.role);
+    if (!currentAdmin || options.currentBlocked === true) return;
+
+    const nextMemberRole = this.nextMemberRoleFromDto(options.nextRole);
+    const targetRemainsAdmin =
+      options.nextBlocked !== true &&
+      (options.nextRole === undefined
+        ? currentAdmin
+        : this.isAdminLegacyRole(options.nextRole) ||
+          this.isAdminMemberRole(nextMemberRole));
+    if (targetRemainsAdmin) return;
+
+    const remainingAdmins = await this.countOperationalAdmins(
+      companyId,
+      options.targetUserId,
+    );
+    if (remainingAdmins > 0) return;
+
+    throw this.domainConflict(
+      "LAST_ACTIVE_OWNER_CANNOT_BE_DISABLED",
+      "No puedes dejar la empresa sin un OWNER/ADMIN operativo.",
+    );
+  }
+
+  private auditUserSecurityEvent(event: {
+    action: string;
+    actorUserId?: string | null;
+    targetUserId: string;
+    companyId: string;
+    before: Record<string, unknown>;
+    after: Record<string, unknown>;
+    source?: string;
+  }) {
+    // Structured log until a durable audit table migration is scheduled.
+    console.info("[user-security-audit]", {
+      timestamp: new Date().toISOString(),
+      source: event.source ?? "users.service",
+      ...event,
+    });
   }
 
   private targetUserTenantWhere(
@@ -1139,6 +1262,16 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
       return this.findById(id);
     }
 
+    await this.assertCanDisableOperationalAdmin({
+      requestUser,
+      targetUserId: id,
+      currentBlocked: existing.blocked,
+      currentRole: existing.role,
+      nextBlocked: this.hasValue(dto.blocked) ? dto.blocked : undefined,
+      nextRole: this.hasValue(dto.role) ? dto.role : undefined,
+      action: "USER_UPDATED",
+    });
+
     // Enforce numeroFlota when editing users that don't have it yet.
     if (
       existingNumeroFlota.length === 0 &&
@@ -1165,6 +1298,31 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
         });
       }
     });
+
+    const companyId = requireTenant(requestUser);
+    if (this.hasValue(dto.blocked)) {
+      this.auditUserSecurityEvent({
+        action: dto.blocked ? "USER_BLOCKED" : "USER_UNBLOCKED",
+        actorUserId: requestUser.id,
+        targetUserId: id,
+        companyId,
+        before: { blocked: existing.blocked },
+        after: { blocked: dto.blocked },
+      });
+    }
+    if (this.hasValue(dto.role) && dto.role !== existing.role) {
+      this.auditUserSecurityEvent({
+        action: "USER_ROLE_CHANGED",
+        actorUserId: requestUser.id,
+        targetUserId: id,
+        companyId,
+        before: { role: existing.role },
+        after: {
+          role: dto.role,
+          memberRole: this.memberRoleFromLegacyRole(dto.role),
+        },
+      });
+    }
 
     return this.findById(id);
   }
@@ -1364,7 +1522,16 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     if (!existing) throw new NotFoundException("User not found");
     const next = blocked ?? !existing.blocked;
 
-    return this.prisma.user.update({
+    await this.assertCanDisableOperationalAdmin({
+      requestUser,
+      targetUserId: id,
+      currentBlocked: existing.blocked,
+      currentRole: existing.role,
+      nextBlocked: next,
+      action: next ? "USER_BLOCKED" : "USER_UNBLOCKED",
+    });
+
+    const updated = await this.prisma.user.update({
       where: { id },
       data: { blocked: next },
       select: {
@@ -1375,6 +1542,18 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
         updatedAt: true,
       },
     });
+
+    if (existing.blocked !== next) {
+      this.auditUserSecurityEvent({
+        action: next ? "USER_BLOCKED" : "USER_UNBLOCKED",
+        actorUserId: requestUser.id,
+        targetUserId: id,
+        companyId: requireTenant(requestUser),
+        before: { blocked: existing.blocked },
+        after: { blocked: next },
+      });
+    }
+    return updated;
   }
 
   async remove(requestUser: TenantUser, id: string) {
@@ -1384,6 +1563,14 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     });
     if (!existing) throw new NotFoundException("User not found");
     const companyId = requireTenant(requestUser);
+    await this.assertCanDisableOperationalAdmin({
+      requestUser,
+      targetUserId: id,
+      currentBlocked: existing.blocked,
+      currentRole: existing.role,
+      nextBlocked: true,
+      action: "USER_DELETED",
+    });
     await this.prisma.$transaction(async (tx) => {
       await tx.companyMember.deleteMany({ where: { userId: id, companyId } });
 
@@ -1408,6 +1595,18 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
           : { blocked: true, companyId: null },
         select: { id: true },
       });
+    });
+    this.auditUserSecurityEvent({
+      action: "USER_DELETED",
+      actorUserId: requestUser.id,
+      targetUserId: id,
+      companyId,
+      before: {
+        blocked: existing.blocked,
+        companyId: existing.companyId,
+        role: existing.role,
+      },
+      after: { removedFromCompanyId: companyId },
     });
     return { ok: true };
   }

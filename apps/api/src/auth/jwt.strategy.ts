@@ -1,12 +1,17 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { PassportStrategy } from '@nestjs/passport';
-import { ConfigService } from '@nestjs/config';
-import { ExtractJwt, Strategy } from 'passport-jwt';
-import { PrismaService } from '../prisma/prisma.service';
-import { JwtUser } from './jwt-user.type';
-import { CompanyMemberRole, CompanyMemberStatus, Prisma, Role } from '@prisma/client';
-import { normalizeJwtSecret } from './jwt.util';
-import { LicenseService } from '../license/license.service';
+import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { PassportStrategy } from "@nestjs/passport";
+import { ConfigService } from "@nestjs/config";
+import { ExtractJwt, Strategy } from "passport-jwt";
+import { PrismaService } from "../prisma/prisma.service";
+import { JwtUser } from "./jwt-user.type";
+import {
+  CompanyMemberRole,
+  CompanyMemberStatus,
+  Prisma,
+  Role,
+} from "@prisma/client";
+import { normalizeJwtSecret } from "./jwt.util";
+import { LicenseService } from "../license/license.service";
 
 type JwtLookupUser = {
   id: string;
@@ -32,31 +37,48 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: normalizeJwtSecret(config.get<string>('JWT_SECRET')) ?? 'change-me'
+      secretOrKey:
+        normalizeJwtSecret(config.get<string>("JWT_SECRET")) ?? "change-me",
     });
   }
 
   async validate(payload: JwtUser) {
     // Bloquea tokens de refresh usados como Bearer token
-    if (payload.tokenType === 'refresh') {
-      throw new UnauthorizedException('Invalid token');
+    if (payload.tokenType === "refresh") {
+      throw new UnauthorizedException("Invalid token");
     }
     const user = await this.findUserForJwt(payload.sub);
-    if (!user || user.blocked === true) throw new UnauthorizedException('User blocked');
+    if (!user || user.blocked === true) {
+      throw new UnauthorizedException({
+        code: "USER_BLOCKED",
+        message: "User blocked",
+      });
+    }
     const sessionCompanyId = await this.assertActiveSession(payload);
     const membership = this.resolveActiveMembership(user, payload.companyId);
-    const companyId = membership?.companyId ?? payload.companyId ?? sessionCompanyId ?? user.companyId ?? null;
+    const companyId =
+      membership?.companyId ??
+      payload.companyId ??
+      sessionCompanyId ??
+      user.companyId ??
+      null;
     await this.licenses.assertCompanyCanUseApp(companyId);
     const role = membership
       ? this.mapMemberRoleToLegacyRole(membership.role)
       : this.normalizeLegacyRole(user.role);
-    return { id: user.id, email: user.email, role, memberRole: membership?.role ?? null, companyId };
+    return {
+      id: user.id,
+      email: user.email,
+      role,
+      memberRole: membership?.role ?? null,
+      companyId,
+    };
   }
 
   private async assertActiveSession(payload: JwtUser) {
-    const sessionId = (payload.sessionId ?? '').trim();
+    const sessionId = (payload.sessionId ?? "").trim();
     if (!sessionId) {
-      throw new UnauthorizedException('Invalid session');
+      throw new UnauthorizedException("Invalid session");
     }
 
     const session = await this.prisma.authSession.findFirst({
@@ -68,37 +90,47 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       },
       select: {
         id: true,
-        company: { select: { id: true, status: true, licenseStatus: true, trialEndsAt: true, licenseExpiresAt: true } },
+        company: {
+          select: {
+            id: true,
+            status: true,
+            licenseStatus: true,
+            trialEndsAt: true,
+            licenseExpiresAt: true,
+          },
+        },
       },
     });
-    if (!session) throw new UnauthorizedException('Invalid session');
-    if (session.company && session.company.status !== 'ACTIVE') {
-      throw new UnauthorizedException('Company inactive');
+    if (!session) throw new UnauthorizedException("Invalid session");
+    if (session.company && session.company.status !== "ACTIVE") {
+      throw new UnauthorizedException("Company inactive");
     }
     if (session.company) {
       const now = Date.now();
       const trialExpired =
-        session.company.licenseStatus === 'TRIAL' &&
+        session.company.licenseStatus === "TRIAL" &&
         !!session.company.trialEndsAt &&
         session.company.trialEndsAt.getTime() < now;
       const paidExpired =
-        session.company.licenseStatus === 'ACTIVE' &&
+        session.company.licenseStatus === "ACTIVE" &&
         !!session.company.licenseExpiresAt &&
         session.company.licenseExpiresAt.getTime() < now;
       if (
-        session.company.licenseStatus === 'BLOCKED' ||
-        session.company.licenseStatus === 'EXPIRED' ||
+        session.company.licenseStatus === "BLOCKED" ||
+        session.company.licenseStatus === "EXPIRED" ||
         trialExpired ||
         paidExpired
       ) {
-        throw new UnauthorizedException('Licencia no activa');
+        throw new UnauthorizedException("Licencia no activa");
       }
     }
     return session.company?.id ?? null;
   }
 
-  private mapMemberRoleToLegacyRole(role?: CompanyMemberRole | string | null): Role {
-    switch (`${role ?? ''}`.toUpperCase()) {
+  private mapMemberRoleToLegacyRole(
+    role?: CompanyMemberRole | string | null,
+  ): Role {
+    switch (`${role ?? ""}`.toUpperCase()) {
       case CompanyMemberRole.OWNER:
       case CompanyMemberRole.ADMIN:
       case CompanyMemberRole.MANAGER:
@@ -115,7 +147,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   private normalizeLegacyRole(role: Role | string): Role {
-    return Object.values(Role).includes(role as Role) ? (role as Role) : Role.CAJERO;
+    return Object.values(Role).includes(role as Role)
+      ? (role as Role)
+      : Role.CAJERO;
   }
 
   private resolveActiveMembership(
@@ -125,22 +159,29 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const memberships = user?.companyMemberships ?? [];
     if (!memberships.length) return null;
     return (
-      memberships.find((membership) => membership.companyId === requestedCompanyId) ??
-      memberships.find((membership) => membership.companyId === user?.companyId) ??
+      memberships.find(
+        (membership) => membership.companyId === requestedCompanyId,
+      ) ??
+      memberships.find(
+        (membership) => membership.companyId === user?.companyId,
+      ) ??
       memberships[0]
     );
   }
 
   private isMissingUserTable(error: unknown) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      return error.code === 'P2021';
+      return error.code === "P2021";
     }
 
-    if (typeof error === 'object' && error !== null) {
+    if (typeof error === "object" && error !== null) {
       const value = error as { code?: unknown; message?: unknown };
-      const code = typeof value.code === 'string' ? value.code : '';
-      const message = typeof value.message === 'string' ? value.message : '';
-      return code === 'P2021' || message.includes('does not exist in the current database');
+      const code = typeof value.code === "string" ? value.code : "";
+      const message = typeof value.message === "string" ? value.message : "";
+      return (
+        code === "P2021" ||
+        message.includes("does not exist in the current database")
+      );
     }
 
     return false;
@@ -148,17 +189,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   private isMissingBlockedColumn(error: unknown) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      return error.code === 'P2022' && error.meta?.column_name === 'blocked';
+      return error.code === "P2022" && error.meta?.column_name === "blocked";
     }
 
-    if (typeof error === 'object' && error !== null) {
+    if (typeof error === "object" && error !== null) {
       const value = error as { code?: unknown; message?: unknown };
-      const code = typeof value.code === 'string' ? value.code : '';
-      const message = typeof value.message === 'string' ? value.message : '';
+      const code = typeof value.code === "string" ? value.code : "";
+      const message = typeof value.message === "string" ? value.message : "";
       return (
-        code === 'P2022' &&
-        (message.includes('blocked') ||
-          message.toLowerCase().includes('column') && message.toLowerCase().includes('blocked'))
+        code === "P2022" &&
+        (message.includes("blocked") ||
+          (message.toLowerCase().includes("column") &&
+            message.toLowerCase().includes("blocked")))
       );
     }
 
@@ -203,7 +245,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       if (!this.isMissingUserTable(error)) throw error;
 
       const rows = await this.prisma.$queryRaw<
-        Array<{ id: string; email: string; role: string; companyId: string | null }>
+        Array<{
+          id: string;
+          email: string;
+          role: string;
+          companyId: string | null;
+        }>
       >(Prisma.sql`
         SELECT id, email, role, NULL AS "companyId"
         FROM users

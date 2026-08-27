@@ -1,7 +1,8 @@
-import { CompanyMemberRole, CompanyMemberStatus, Role } from '@prisma/client';
-import { AuthService } from './auth.service';
+import { UnauthorizedException } from "@nestjs/common";
+import { CompanyMemberRole, CompanyMemberStatus, Role } from "@prisma/client";
+import { AuthService } from "./auth.service";
 
-describe('AuthService tenant role hydration', () => {
+describe("AuthService tenant role hydration", () => {
   function buildService() {
     return new AuthService(
       {} as any,
@@ -12,24 +13,24 @@ describe('AuthService tenant role hydration', () => {
     ) as any;
   }
 
-  it('uses the active company membership role instead of stale users.role', () => {
+  it("uses the active company membership role instead of stale users.role", () => {
     const service = buildService();
 
     const session = service.resolveCompanySession({
-      id: 'employee-a',
+      id: "employee-a",
       role: Role.ADMIN,
-      companyId: 'company-a',
+      companyId: "company-a",
       companyMemberships: [
         {
-          id: 'membership-a',
+          id: "membership-a",
           role: CompanyMemberRole.CASHIER,
           status: CompanyMemberStatus.ACTIVE,
           company: {
-            id: 'company-a',
-            name: 'Nombre Nuevo',
-            slug: 'company-a',
-            status: 'ACTIVE',
-            plan: 'STANDARD',
+            id: "company-a",
+            name: "Nombre Nuevo",
+            slug: "company-a",
+            status: "ACTIVE",
+            plan: "STANDARD",
             maxUsers: 10,
           },
         },
@@ -37,27 +38,27 @@ describe('AuthService tenant role hydration', () => {
     });
 
     expect(session.effectiveRole).toBe(Role.CAJERO);
-    expect(session.activeCompany.name).toBe('Nombre Nuevo');
+    expect(session.activeCompany.name).toBe("Nombre Nuevo");
   });
 
-  it('hydrates all users in the same company from the same company row', () => {
+  it("hydrates all users in the same company from the same company row", () => {
     const service = buildService();
     const sharedCompany = {
-      id: 'company-a',
-      name: 'Nombre Nuevo',
-      slug: 'company-a',
-      status: 'ACTIVE',
-      plan: 'STANDARD',
+      id: "company-a",
+      name: "Nombre Nuevo",
+      slug: "company-a",
+      status: "ACTIVE",
+      plan: "STANDARD",
       maxUsers: 10,
     };
 
     const adminSession = service.resolveCompanySession({
-      id: 'admin-a',
+      id: "admin-a",
       role: Role.ADMIN,
-      companyId: 'company-a',
+      companyId: "company-a",
       companyMemberships: [
         {
-          id: 'membership-admin',
+          id: "membership-admin",
           role: CompanyMemberRole.ADMIN,
           status: CompanyMemberStatus.ACTIVE,
           company: sharedCompany,
@@ -65,12 +66,12 @@ describe('AuthService tenant role hydration', () => {
       ],
     });
     const employeeSession = service.resolveCompanySession({
-      id: 'employee-a',
+      id: "employee-a",
       role: Role.ADMIN,
-      companyId: 'company-a',
+      companyId: "company-a",
       companyMemberships: [
         {
-          id: 'membership-employee',
+          id: "membership-employee",
           role: CompanyMemberRole.SELLER,
           status: CompanyMemberStatus.ACTIVE,
           company: sharedCompany,
@@ -78,10 +79,48 @@ describe('AuthService tenant role hydration', () => {
       ],
     });
 
-    expect(adminSession.activeCompany.id).toBe('company-a');
-    expect(employeeSession.activeCompany.id).toBe('company-a');
-    expect(adminSession.activeCompany.name).toBe('Nombre Nuevo');
-    expect(employeeSession.activeCompany.name).toBe('Nombre Nuevo');
+    expect(adminSession.activeCompany.id).toBe("company-a");
+    expect(employeeSession.activeCompany.id).toBe("company-a");
+    expect(adminSession.activeCompany.name).toBe("Nombre Nuevo");
+    expect(employeeSession.activeCompany.name).toBe("Nombre Nuevo");
     expect(employeeSession.effectiveRole).toBe(Role.VENDEDOR);
+  });
+});
+
+describe("AuthService login errors", () => {
+  it("returns USER_BLOCKED for an active-license blocked user", async () => {
+    const prisma = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: "blocked-user",
+          email: "blocked@test.local",
+          passwordHash: "hash",
+          role: Role.ADMIN,
+          blocked: true,
+          companyId: "company-a",
+          company: { id: "company-a", name: "Company A", slug: "company-a" },
+          companyMemberships: [],
+        }),
+      },
+    };
+    const service = new AuthService(
+      prisma as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      { assertCompanyCanUseApp: jest.fn() } as any,
+    );
+
+    await expect(
+      service.login("blocked@test.local", "whatever"),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "USER_BLOCKED",
+        message: "User blocked",
+      }),
+    });
+    await expect(
+      service.login("blocked@test.local", "whatever"),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

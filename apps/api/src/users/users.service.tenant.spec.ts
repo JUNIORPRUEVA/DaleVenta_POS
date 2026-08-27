@@ -1,5 +1,5 @@
-import { NotFoundException } from "@nestjs/common";
-import { Role } from "@prisma/client";
+import { ConflictException, NotFoundException } from "@nestjs/common";
+import { CompanyMemberRole, Role } from "@prisma/client";
 import { UsersService } from "./users.service";
 
 function buildService(prisma: any) {
@@ -68,7 +68,18 @@ describe("UsersService tenant isolation", () => {
         findFirst: jest
           .fn()
           .mockResolvedValueOnce({ id: "user-a" })
-          .mockResolvedValueOnce({ id: "user-a", companyId: "company-a" }),
+          .mockResolvedValueOnce({
+            id: "user-a",
+            companyId: "company-a",
+            role: Role.CAJERO,
+            blocked: false,
+          }),
+        count: jest.fn(),
+      },
+      companyMember: {
+        findFirst: jest.fn().mockResolvedValue({
+          role: CompanyMemberRole.CASHIER,
+        }),
       },
       $transaction: jest.fn(async (callback: any) => callback(tx)),
     };
@@ -91,7 +102,7 @@ describe("UsersService tenant isolation", () => {
     });
   });
 
-  it("blocks and detaches the user when removing the last active company membership", async () => {
+  it("blocks and detaches a non-admin user when removing the last active company membership", async () => {
     const tx = {
       companyMember: {
         deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -106,7 +117,18 @@ describe("UsersService tenant isolation", () => {
         findFirst: jest
           .fn()
           .mockResolvedValueOnce({ id: "user-a" })
-          .mockResolvedValueOnce({ id: "user-a", companyId: "company-a" }),
+          .mockResolvedValueOnce({
+            id: "user-a",
+            companyId: "company-a",
+            role: Role.CAJERO,
+            blocked: false,
+          }),
+        count: jest.fn(),
+      },
+      companyMember: {
+        findFirst: jest.fn().mockResolvedValue({
+          role: CompanyMemberRole.CASHIER,
+        }),
       },
       $transaction: jest.fn(async (callback: any) => callback(tx)),
     };
@@ -124,6 +146,165 @@ describe("UsersService tenant isolation", () => {
       data: { blocked: true, companyId: null },
       select: { id: true },
     });
+  });
+
+  it("rejects self-blocking the authenticated user", async () => {
+    const prisma = {
+      user: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValueOnce({ id: "admin-a" })
+          .mockResolvedValueOnce({
+            id: "admin-a",
+            companyId: "company-a",
+            role: Role.ADMIN,
+            blocked: false,
+          }),
+      },
+    };
+    const { service } = buildService(prisma);
+
+    await expect(
+      service.setBlocked(
+        { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+        "admin-a",
+        true,
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "SELF_BLOCK_NOT_ALLOWED" }),
+    });
+  });
+
+  it("rejects blocking the last operational admin in a company", async () => {
+    const prisma = {
+      user: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValueOnce({ id: "admin-b" })
+          .mockResolvedValueOnce({
+            id: "admin-b",
+            companyId: "company-a",
+            role: Role.ADMIN,
+            blocked: false,
+          }),
+        count: jest.fn().mockResolvedValue(0),
+      },
+      companyMember: {
+        findFirst: jest.fn().mockResolvedValue({
+          role: CompanyMemberRole.ADMIN,
+        }),
+      },
+    };
+    const { service } = buildService(prisma);
+
+    await expect(
+      service.setBlocked(
+        { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+        "admin-b",
+        true,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("allows blocking one admin when another operational admin remains", async () => {
+    const updatedAt = new Date("2026-08-27T13:00:00.000Z");
+    const prisma = {
+      user: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValueOnce({ id: "admin-b" })
+          .mockResolvedValueOnce({
+            id: "admin-b",
+            companyId: "company-a",
+            role: Role.ADMIN,
+            blocked: false,
+          }),
+        count: jest.fn().mockResolvedValue(1),
+        update: jest.fn().mockResolvedValue({
+          id: "admin-b",
+          email: "admin-b@test.local",
+          role: Role.ADMIN,
+          blocked: true,
+          updatedAt,
+        }),
+      },
+      companyMember: {
+        findFirst: jest.fn().mockResolvedValue({
+          role: CompanyMemberRole.ADMIN,
+        }),
+      },
+    };
+    const { service } = buildService(prisma);
+
+    await expect(
+      service.setBlocked(
+        { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+        "admin-b",
+        true,
+      ),
+    ).resolves.toMatchObject({ id: "admin-b", blocked: true });
+  });
+
+  it("rejects removing the last operational admin in a company", async () => {
+    const prisma = {
+      user: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValueOnce({ id: "admin-b" })
+          .mockResolvedValueOnce({
+            id: "admin-b",
+            companyId: "company-a",
+            role: Role.ADMIN,
+            blocked: false,
+          }),
+        count: jest.fn().mockResolvedValue(0),
+      },
+      companyMember: {
+        findFirst: jest.fn().mockResolvedValue({
+          role: CompanyMemberRole.OWNER,
+        }),
+      },
+    };
+    const { service } = buildService(prisma);
+
+    await expect(
+      service.remove(
+        { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+        "admin-b",
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("rejects removing the last operational admin role", async () => {
+    const prisma = {
+      user: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValueOnce({ id: "admin-b" })
+          .mockResolvedValueOnce({
+            id: "admin-b",
+            companyId: "company-a",
+            role: Role.ADMIN,
+            blocked: false,
+            numeroFlota: "1",
+          }),
+        count: jest.fn().mockResolvedValue(0),
+      },
+      companyMember: {
+        findFirst: jest.fn().mockResolvedValue({
+          role: CompanyMemberRole.OWNER,
+        }),
+      },
+    };
+    const { service } = buildService(prisma);
+
+    await expect(
+      service.update(
+        { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+        "admin-b",
+        { role: Role.CAJERO } as any,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 
   it("emits a scoped permissions.updated event after updating permissions", async () => {

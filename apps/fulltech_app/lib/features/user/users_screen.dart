@@ -362,7 +362,17 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                   onView: () => context.go(Routes.userPermissionsById(user.id)),
                   onEdit: () => _showUserDialog(context, ref, user),
                   onDelete: () => _showDeleteDialog(context, ref, user),
-                  onToggleBlock: () => _toggleBlock(context, ref, user),
+                  onToggleBlock:
+                      _blockDisabledReason(user, filteredUsers, currentUser) ==
+                          null
+                      ? () => _toggleBlock(
+                          context,
+                          ref,
+                          user,
+                          filteredUsers,
+                          currentUser,
+                        )
+                      : null,
                 );
               },
             );
@@ -501,8 +511,18 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                               _showUserDialog(context, ref, user),
                           onDeleteUser: (user) =>
                               _showDeleteDialog(context, ref, user),
-                          onToggleBlock: (user) =>
-                              _toggleBlock(context, ref, user),
+                          onToggleBlock: (user) => _toggleBlock(
+                            context,
+                            ref,
+                            user,
+                            desktopUsers,
+                            currentUser,
+                          ),
+                          blockDisabledReason: (user) => _blockDisabledReason(
+                            user,
+                            desktopUsers,
+                            currentUser,
+                          ),
                           onOpenContract: (user) =>
                               _openWorkContractPreview(context, user),
                         ),
@@ -521,10 +541,29 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                                     ref,
                                     selectedUser,
                                   ),
-                            onToggleBlock: selectedUser == null
+                            onToggleBlock:
+                                selectedUser == null ||
+                                    _blockDisabledReason(
+                                          selectedUser,
+                                          desktopUsers,
+                                          currentUser,
+                                        ) !=
+                                        null
                                 ? null
-                                : () =>
-                                      _toggleBlock(context, ref, selectedUser),
+                                : () => _toggleBlock(
+                                    context,
+                                    ref,
+                                    selectedUser,
+                                    desktopUsers,
+                                    currentUser,
+                                  ),
+                            blockDisabledReason: selectedUser == null
+                                ? null
+                                : _blockDisabledReason(
+                                    selectedUser,
+                                    desktopUsers,
+                                    currentUser,
+                                  ),
                             onOpenContract: selectedUser == null
                                 ? null
                                 : () => _openWorkContractPreview(
@@ -683,7 +722,16 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
     BuildContext context,
     WidgetRef ref,
     UserModel user,
+    List<UserModel> users,
+    UserModel? currentUser,
   ) async {
+    final disabledReason = _blockDisabledReason(user, users, currentUser);
+    if (disabledReason != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(disabledReason)));
+      return;
+    }
     final allowed = await ensureAdminAuthorization(
       context,
       ref,
@@ -711,6 +759,31 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
         ).showSnackBar(SnackBar(content: Text('No se pudo actualizar: $e')));
       }
     }
+  }
+
+  bool _isOperationalAdmin(UserModel user) {
+    return !user.blocked && _managementRole(user) == AppRole.admin;
+  }
+
+  String? _blockDisabledReason(
+    UserModel user,
+    List<UserModel> users,
+    UserModel? currentUser,
+  ) {
+    if (user.blocked) return null;
+    if (currentUser != null && user.id == currentUser.id) {
+      return 'No puedes bloquear tu propia cuenta.';
+    }
+    if (_isOperationalAdmin(user)) {
+      final remainingAdmins = users
+          .where((candidate) => candidate.id != user.id)
+          .where(_isOperationalAdmin)
+          .length;
+      if (remainingAdmins == 0) {
+        return 'No puedes dejar la empresa sin un administrador operativo.';
+      }
+    }
+    return null;
   }
 
   Future<void> _showUserDialog(
@@ -1321,6 +1394,7 @@ class _UserPermissionDetailsPanel extends StatelessWidget {
     required this.user,
     required this.onEdit,
     required this.onToggleBlock,
+    required this.blockDisabledReason,
     required this.onOpenContract,
     required this.onEditPermissions,
   });
@@ -1328,6 +1402,7 @@ class _UserPermissionDetailsPanel extends StatelessWidget {
   final UserModel? user;
   final VoidCallback? onEdit;
   final VoidCallback? onToggleBlock;
+  final String? blockDisabledReason;
   final VoidCallback? onOpenContract;
   final VoidCallback? onEditPermissions;
 
@@ -1463,9 +1538,9 @@ class _UserPermissionDetailsPanel extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     IconButton.filledTonal(
-                      tooltip: selectedUser.blocked
-                          ? 'Desbloquear'
-                          : 'Bloquear',
+                      tooltip:
+                          blockDisabledReason ??
+                          (selectedUser.blocked ? 'Desbloquear' : 'Bloquear'),
                       onPressed: onToggleBlock,
                       icon: Icon(
                         selectedUser.blocked
@@ -2300,6 +2375,7 @@ class _UsersTable extends StatelessWidget {
     required this.onEditUser,
     required this.onDeleteUser,
     required this.onToggleBlock,
+    required this.blockDisabledReason,
     required this.onOpenContract,
   });
 
@@ -2310,6 +2386,7 @@ class _UsersTable extends StatelessWidget {
   final ValueChanged<UserModel> onEditUser;
   final ValueChanged<UserModel> onDeleteUser;
   final ValueChanged<UserModel> onToggleBlock;
+  final String? Function(UserModel user) blockDisabledReason;
   final ValueChanged<UserModel> onOpenContract;
 
   @override
@@ -2366,7 +2443,9 @@ class _UsersTable extends StatelessWidget {
                               onView: () => onViewUser(user),
                               onEdit: () => onEditUser(user),
                               onDelete: () => onDeleteUser(user),
-                              onToggleBlock: () => onToggleBlock(user),
+                              onToggleBlock: blockDisabledReason(user) == null
+                                  ? () => onToggleBlock(user)
+                                  : null,
                               onOpenContract: () => onOpenContract(user),
                             );
                           },
@@ -2454,7 +2533,7 @@ class _UserRowCard extends StatefulWidget {
   final VoidCallback onView;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
-  final VoidCallback onToggleBlock;
+  final VoidCallback? onToggleBlock;
   final VoidCallback onOpenContract;
 
   @override
@@ -2571,7 +2650,7 @@ class _UserRowCardState extends State<_UserRowCard> {
                             widget.onOpenContract();
                             break;
                           case _UserMenuAction.bloquear:
-                            widget.onToggleBlock();
+                            widget.onToggleBlock?.call();
                             break;
                           case _UserMenuAction.eliminar:
                             widget.onDelete();
@@ -2591,12 +2670,13 @@ class _UserRowCardState extends State<_UserRowCard> {
                           value: _UserMenuAction.contrato,
                           child: Text('Contrato'),
                         ),
-                        PopupMenuItem(
-                          value: _UserMenuAction.bloquear,
-                          child: Text(
-                            widget.user.blocked ? 'Desbloquear' : 'Bloquear',
+                        if (widget.onToggleBlock != null)
+                          PopupMenuItem(
+                            value: _UserMenuAction.bloquear,
+                            child: Text(
+                              widget.user.blocked ? 'Desbloquear' : 'Bloquear',
+                            ),
                           ),
-                        ),
                         const PopupMenuItem(
                           value: _UserMenuAction.eliminar,
                           child: Text('Eliminar'),
@@ -2810,7 +2890,7 @@ class _UserCard extends StatelessWidget {
   final VoidCallback onView;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
-  final VoidCallback onToggleBlock;
+  final VoidCallback? onToggleBlock;
 
   @override
   Widget build(BuildContext context) {
@@ -2857,7 +2937,7 @@ class _UserCard extends StatelessWidget {
                 onView();
                 break;
               case _UserMenuAction.bloquear:
-                onToggleBlock();
+                onToggleBlock?.call();
                 break;
               case _UserMenuAction.eliminar:
                 onDelete();
@@ -2873,10 +2953,11 @@ class _UserCard extends StatelessWidget {
               value: _UserMenuAction.editar,
               child: Text('Editar'),
             ),
-            PopupMenuItem(
-              value: _UserMenuAction.bloquear,
-              child: Text(user.blocked ? 'Desbloquear' : 'Bloquear'),
-            ),
+            if (onToggleBlock != null)
+              PopupMenuItem(
+                value: _UserMenuAction.bloquear,
+                child: Text(user.blocked ? 'Desbloquear' : 'Bloquear'),
+              ),
             const PopupMenuItem(
               value: _UserMenuAction.eliminar,
               child: Text('Eliminar'),

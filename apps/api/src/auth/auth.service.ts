@@ -36,14 +36,24 @@ export class AuthService {
     const normalizedIdentifier = identifier.trim().toLowerCase();
     const user = await this.findUserForLogin(normalizedIdentifier);
     if (!user) throw new UnauthorizedException("Invalid credentials");
-    if (user.blocked === true) throw new UnauthorizedException("User blocked");
+    if (user.blocked === true) {
+      throw new UnauthorizedException({
+        code: "USER_BLOCKED",
+        message: "User blocked",
+      });
+    }
 
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) throw new UnauthorizedException("Invalid credentials");
 
     const session = this.resolveCompanySession(user);
-    await this.licenses.assertCompanyCanUseApp(session.activeCompany?.id ?? user.companyId);
-    const sessionRecord = await this.createAuthSession(user.id, session.activeCompany?.id ?? user.companyId ?? null);
+    await this.licenses.assertCompanyCanUseApp(
+      session.activeCompany?.id ?? user.companyId,
+    );
+    const sessionRecord = await this.createAuthSession(
+      user.id,
+      session.activeCompany?.id ?? user.companyId ?? null,
+    );
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
       companyId: session.activeCompany?.id ?? user.companyId,
@@ -54,7 +64,10 @@ export class AuthService {
       tokenType: "access",
     });
 
-    const refreshToken = await this.signRefreshToken(user.id, sessionRecord.sessionId);
+    const refreshToken = await this.signRefreshToken(
+      user.id,
+      sessionRecord.sessionId,
+    );
     await this.storeRefreshHash(sessionRecord.sessionId, refreshToken);
 
     return {
@@ -86,7 +99,10 @@ export class AuthService {
 
     const user = await this.findUserForRefresh(payload.sub);
     if (!user || user.blocked === true)
-      throw new UnauthorizedException("User blocked");
+      throw new UnauthorizedException({
+        code: "USER_BLOCKED",
+        message: "User blocked",
+      });
     const sessionId = (payload.sessionId ?? "").trim();
     if (!sessionId) throw new UnauthorizedException("Invalid refresh token");
     const existingSession = await this.prisma.authSession.findFirst({
@@ -98,17 +114,25 @@ export class AuthService {
       },
       select: { id: true, refreshTokenHash: true, tokenFamily: true },
     });
-    if (!existingSession) throw new UnauthorizedException("Invalid refresh token");
-    if (existingSession.refreshTokenHash !== this.hashRefreshToken(refreshToken)) {
+    if (!existingSession)
+      throw new UnauthorizedException("Invalid refresh token");
+    if (
+      existingSession.refreshTokenHash !== this.hashRefreshToken(refreshToken)
+    ) {
       await this.prisma.authSession.updateMany({
         where: { tokenFamily: existingSession.tokenFamily, revokedAt: null },
-        data: { revokedAt: new Date(), revocationReason: "refresh_replay_detected" },
+        data: {
+          revokedAt: new Date(),
+          revocationReason: "refresh_replay_detected",
+        },
       });
       throw new UnauthorizedException("Invalid refresh token");
     }
 
     const session = this.resolveCompanySession(user);
-    await this.licenses.assertCompanyCanUseApp(session.activeCompany?.id ?? user.companyId);
+    await this.licenses.assertCompanyCanUseApp(
+      session.activeCompany?.id ?? user.companyId,
+    );
     const nextSessionRecord = await this.rotateAuthSession(existingSession.id);
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
@@ -120,7 +144,10 @@ export class AuthService {
       tokenType: "access",
     });
 
-    const newRefreshToken = await this.signRefreshToken(user.id, nextSessionRecord.sessionId);
+    const newRefreshToken = await this.signRefreshToken(
+      user.id,
+      nextSessionRecord.sessionId,
+    );
     await this.storeRefreshHash(nextSessionRecord.sessionId, newRefreshToken);
 
     return {
@@ -151,8 +178,12 @@ export class AuthService {
       (membership) => membership.status === CompanyMemberStatus.ACTIVE,
     );
     const activeMembership =
-      memberships.find((membership) => membership.companyId === activeCompanyId) ??
-      memberships.find((membership) => membership.companyId === user.companyId) ??
+      memberships.find(
+        (membership) => membership.companyId === activeCompanyId,
+      ) ??
+      memberships.find(
+        (membership) => membership.companyId === user.companyId,
+      ) ??
       memberships[0] ??
       null;
 
@@ -217,7 +248,8 @@ export class AuthService {
     },
   ) {
     const password = typeof dto.password === "string" ? dto.password : "";
-    if (!password) throw new BadRequestException("La contrasena es obligatoria");
+    if (!password)
+      throw new BadRequestException("La contrasena es obligatoria");
 
     const user = await this.findAccountDeletionUser(userId);
     if (!user) throw new UnauthorizedException("No autorizado");
@@ -229,12 +261,19 @@ export class AuthService {
       (membership) => membership.status === CompanyMemberStatus.ACTIVE,
     );
     const activeMembership =
-      memberships.find((membership) => membership.companyId === activeCompanyId) ??
-      memberships.find((membership) => membership.companyId === user.companyId) ??
+      memberships.find(
+        (membership) => membership.companyId === activeCompanyId,
+      ) ??
+      memberships.find(
+        (membership) => membership.companyId === user.companyId,
+      ) ??
       memberships[0] ??
       null;
 
-    if (!activeMembership || activeMembership.role !== CompanyMemberRole.OWNER) {
+    if (
+      !activeMembership ||
+      activeMembership.role !== CompanyMemberRole.OWNER
+    ) {
       throw new ForbiddenException(
         "Solo el responsable de la empresa puede eliminar esta cuenta",
       );
@@ -348,7 +387,9 @@ export class AuthService {
     const commercialName = (dto.commercialName ?? "").trim();
 
     if (!firstName)
-      throw new BadRequestException("El nombre de la persona responsable es obligatorio");
+      throw new BadRequestException(
+        "El nombre de la persona responsable es obligatorio",
+      );
     if (!email || !email.includes("@"))
       throw new BadRequestException("Correo invalido");
     if (!phone) throw new BadRequestException("El WhatsApp es obligatorio");
@@ -455,10 +496,13 @@ export class AuthService {
     const amount = Number(match[1]);
     const unit = match[2].toLowerCase();
     const multiplier =
-      unit === "s" ? 1000 :
-      unit === "m" ? 60 * 1000 :
-      unit === "h" ? 60 * 60 * 1000 :
-      24 * 60 * 60 * 1000;
+      unit === "s"
+        ? 1000
+        : unit === "m"
+          ? 60 * 1000
+          : unit === "h"
+            ? 60 * 60 * 1000
+            : 24 * 60 * 60 * 1000;
     return new Date(Date.now() + amount * multiplier);
   }
 
@@ -496,7 +540,11 @@ export class AuthService {
     if (!current) throw new UnauthorizedException("Invalid refresh token");
     await this.prisma.authSession.update({
       where: { id: sessionId },
-      data: { revokedAt: new Date(), revocationReason: "refresh_rotated", lastUsedAt: new Date() },
+      data: {
+        revokedAt: new Date(),
+        revocationReason: "refresh_rotated",
+        lastUsedAt: new Date(),
+      },
       select: { id: true },
     });
     const next = await this.prisma.authSession.create({
@@ -575,19 +623,28 @@ export class AuthService {
     const companiesRoot = resolve(uploadRoot, "companies");
     const companyRoot = resolve(companiesRoot, companyId);
     const pathFromCompaniesRoot = relative(companiesRoot, companyRoot);
-    if (pathFromCompaniesRoot.startsWith("..") || isAbsolute(pathFromCompaniesRoot)) {
+    if (
+      pathFromCompaniesRoot.startsWith("..") ||
+      isAbsolute(pathFromCompaniesRoot)
+    ) {
       throw new Error("Unsafe company upload path");
     }
 
     try {
       await fs.rm(companyRoot, { recursive: true, force: true });
     } catch (error) {
-      throw new Error(`No se pudo eliminar storage local de empresa: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `No se pudo eliminar storage local de empresa: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
   private resolveUploadDir(): string {
-    const fromEnv = (this.config.get<string>("UPLOAD_DIR") ?? process.env.UPLOAD_DIR ?? "").trim();
+    const fromEnv = (
+      this.config.get<string>("UPLOAD_DIR") ??
+      process.env.UPLOAD_DIR ??
+      ""
+    ).trim();
     const volumeDir = "/uploads";
     return fromEnv || volumeDir || join(process.cwd(), "uploads");
   }
@@ -659,7 +716,9 @@ export class AuthService {
   }
 
   private normalizeLegacyRole(role: Role | string): Role {
-    return Object.values(Role).includes(role as Role) ? (role as Role) : Role.CAJERO;
+    return Object.values(Role).includes(role as Role)
+      ? (role as Role)
+      : Role.CAJERO;
   }
 
   private resolveCompanySession(user: {
