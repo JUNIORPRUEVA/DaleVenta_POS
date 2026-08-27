@@ -4,9 +4,9 @@ import 'package:daleventa_pos/core/printing/esc_pos/thermal_receipt_view_model.d
 import 'package:daleventa_pos/core/printing/models/company_info.dart';
 import 'package:daleventa_pos/core/printing/models/ticket_data.dart';
 import 'package:daleventa_pos/core/printing/printing_platform_resolver.dart';
+import 'package:daleventa_pos/core/printing/raw_printer_transport.dart';
 import 'package:daleventa_pos/core/printing/thermal_printer_service.dart';
 import 'package:daleventa_pos/core/printing/unified_ticket_printer.dart';
-import 'package:daleventa_pos/core/printing/windows_raw_printer_transport.dart';
 import 'package:daleventa_pos/features/settings/data/printer_settings_model.dart';
 import 'package:daleventa_pos/features/settings/data/printer_settings_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

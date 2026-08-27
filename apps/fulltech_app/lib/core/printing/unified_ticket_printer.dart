@@ -15,8 +15,10 @@ import 'html/html_thermal_receipt_pdf_renderer.dart';
 import 'mobile_print_service.dart';
 import 'models/models.dart';
 import 'printing_platform_resolver.dart';
+import 'raw_printer_transport.dart';
 import 'thermal_printer_service.dart';
-import 'windows_raw_printer_transport.dart';
+import 'windows_raw_printer_transport_stub.dart'
+    if (dart.library.io) 'windows_raw_printer_transport.dart';
 
 typedef HtmlToPdfConverter =
     Future<Uint8List> Function(

@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:daleventa_pos/core/printing/raw_printer_transport.dart';
 import 'package:daleventa_pos/core/printing/windows_raw_printer_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
 
