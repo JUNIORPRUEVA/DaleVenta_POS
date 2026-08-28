@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:validators/validators.dart' as validators;
 
+import '../../../core/auth/auth_provider.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/routing/routes.dart';
@@ -21,7 +22,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
   bool _loading = false;
-  String? _confirmation;
+  bool _confirmationVisible = false;
 
   @override
   void dispose() {
@@ -34,14 +35,14 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     FocusScope.of(context).unfocus();
     setState(() {
       _loading = true;
-      _confirmation = null;
+      _confirmationVisible = false;
     });
     try {
-      final message = await ref
+      await ref
           .read(authRepositoryProvider)
           .requestPasswordReset(_emailCtrl.text);
       if (!mounted) return;
-      setState(() => _confirmation = message);
+      setState(() => _confirmationVisible = true);
     } on ApiException catch (error) {
       if (!mounted) return;
       await AppFeedback.showError(
@@ -86,9 +87,13 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                 return null;
               },
             ),
-            if (_confirmation != null) ...[
+            if (_confirmationVisible) ...[
               const SizedBox(height: 14),
-              _ConfirmationBox(message: _confirmation!),
+              const _ConfirmationBox(
+                title: 'Revisa tu correo',
+                message:
+                    'Si tu cuenta permite recuperación, te enviamos un enlace para crear una nueva contraseña.',
+              ),
             ],
             const SizedBox(height: 18),
             PrimaryButton(
@@ -142,6 +147,10 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
       await ref
           .read(authRepositoryProvider)
           .resetPassword(token: widget.token, password: _passwordCtrl.text);
+      final auth = ref.read(authStateProvider);
+      if (auth.isAuthenticated || auth.hasSessionHint) {
+        await ref.read(authStateProvider.notifier).logout();
+      }
       if (!mounted) return;
       setState(() => _completed = true);
     } on ApiException catch (error) {
@@ -168,11 +177,11 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
               children: [
                 const _RecoveryHeader(
                   title: 'Contraseña actualizada',
-                  subtitle: 'Ya puedes iniciar sesión con tu nueva contraseña.',
+                  subtitle: 'Contraseña actualizada correctamente',
                 ),
                 const SizedBox(height: 18),
                 PrimaryButton(
-                  label: 'Iniciar sesión',
+                  label: 'Volver a iniciar sesión',
                   onPressed: () => context.go(Routes.login),
                 ),
               ],
@@ -185,11 +194,12 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                 children: [
                   const _RecoveryHeader(
                     title: 'Nueva contraseña',
-                    subtitle: 'Crea una contraseña nueva para tu cuenta.',
+                    subtitle: 'Confirma los datos antes de guardar.',
                   ),
                   if (missingToken) ...[
                     const SizedBox(height: 14),
                     const _ConfirmationBox(
+                      title: 'Enlace inválido',
                       message:
                           'El enlace no contiene un token válido. Solicita un nuevo enlace de recuperación.',
                     ),
@@ -257,7 +267,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                   ),
                   const SizedBox(height: 18),
                   PrimaryButton(
-                    label: 'Actualizar contraseña',
+                    label: 'Guardar nueva contraseña',
                     loading: _loading,
                     onPressed: missingToken ? null : _submit,
                   ),
@@ -354,8 +364,9 @@ class _RecoveryHeader extends StatelessWidget {
 }
 
 class _ConfirmationBox extends StatelessWidget {
-  const _ConfirmationBox({required this.message});
+  const _ConfirmationBox({this.title, required this.message});
 
+  final String? title;
   final String message;
 
   @override
@@ -368,13 +379,28 @@ class _ConfirmationBox extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFE1E8F2)),
       ),
-      child: Text(
-        message,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: const Color(0xFF52667C),
-          fontWeight: FontWeight.w600,
-          height: 1.3,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if ((title ?? '').trim().isNotEmpty) ...[
+            Text(
+              title!,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: const Color(0xFF172033),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 4),
+          ],
+          Text(
+            message,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: const Color(0xFF52667C),
+              fontWeight: FontWeight.w600,
+              height: 1.3,
+            ),
+          ),
+        ],
       ),
     );
   }

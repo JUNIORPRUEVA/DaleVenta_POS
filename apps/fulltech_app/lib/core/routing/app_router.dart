@@ -336,7 +336,6 @@ final routerProvider = Provider<GoRouter>((ref) {
     ],
     redirect: (context, state) {
       final auth = ref.read(authStateProvider);
-      final bootstrap = ref.read(appBootstrapStatusProvider);
       final isAuth = auth.isAuthenticated;
       final loc = state.uri.toString();
       final path = state.uri.path;
@@ -344,6 +343,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       final registrationDisabled = ref.read(
         businessRegistrationDisabledProvider,
       );
+      final isPasswordRecoveryRoute =
+          path == Routes.forgotPassword || path == Routes.resetPassword;
 
       if (registrationDisabled && path == Routes.register) {
         return Routes.login;
@@ -353,10 +354,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         return Routes.login;
       }
 
+      if (isPasswordRecoveryRoute) {
+        return null;
+      }
+
+      final bootstrap = ref.read(appBootstrapStatusProvider);
+
       final isAuthRoute =
           path == Routes.login ||
-          path == Routes.forgotPassword ||
-          path == Routes.resetPassword ||
           (!registrationDisabled && path == Routes.register) ||
           path == Routes.landing;
       final isSplashRoute = path == Routes.splash;

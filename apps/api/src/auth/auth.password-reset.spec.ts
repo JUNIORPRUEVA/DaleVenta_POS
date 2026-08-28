@@ -199,6 +199,9 @@ describe("AuthService password reset", () => {
     expect(await bcrypt.compare("new-password-123", prisma.passwordHash)).toBe(
       true,
     );
+    expect(await bcrypt.compare("old-password-123", prisma.passwordHash)).toBe(
+      false,
+    );
     expect(prisma.tx.authSession.updateMany).toHaveBeenCalledWith({
       where: { userId, revokedAt: null },
       data: {
