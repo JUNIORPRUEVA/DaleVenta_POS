@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -63,6 +64,7 @@ Future<void> main() async {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+      usePathUrlStrategy();
       GoogleFonts.config.allowRuntimeFetching = false;
       if (!kIsWeb) {
         MediaKit.ensureInitialized();
@@ -319,9 +321,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
               .refreshCurrentUser(silent: true),
         ),
       );
-      unawaited(
-        _lifecycleCoordinator.runLicenseValidation(_checkLicenseNow),
-      );
+      unawaited(_lifecycleCoordinator.runLicenseValidation(_checkLicenseNow));
     }
   }
 

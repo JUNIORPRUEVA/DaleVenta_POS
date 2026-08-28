@@ -304,6 +304,29 @@
   <link rel="manifest" href="manifest.json">
   <link rel="preload" href="main.dart.js" as="script">
   <link rel="preload" href="assets/assets/image/logo.png" as="image">
+  <script>
+    (function () {
+      var path = window.location.pathname || '/';
+      var search = window.location.search || '';
+      var hash = window.location.hash || '';
+
+      if ((path === '/' || path === '') && search.indexOf('token=') !== -1) {
+        window.history.replaceState(null, '', '/reset-password' + search);
+        return;
+      }
+
+      if (hash.indexOf('#/') !== 0) {
+        return;
+      }
+
+      var target = hash.substring(1);
+      if (!target || target === '/') {
+        return;
+      }
+
+      window.history.replaceState(null, '', target);
+    })();
+  </script>
 </head>
 <body>
   <div id="app-loader" aria-live="polite">

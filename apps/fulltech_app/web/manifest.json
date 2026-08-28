@@ -42,7 +42,7 @@
         {
             "name": "Iniciar sesion",
             "short_name": "Login",
-            "url": "./#/login",
+            "url": "./login",
             "icons": [
                 {
                     "src": "icons/Icon-192.png?v=20260816",
@@ -54,7 +54,7 @@
         {
             "name": "Ordenes de servicio",
             "short_name": "Ordenes",
-            "url": "./#/service-orders",
+            "url": "./service-orders",
             "icons": [
                 {
                     "src": "icons/Icon-maskable-192.png?v=20260816",
