@@ -70,7 +70,6 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     navigatorKey: appRootNavigatorKey,
-    initialLocation: Routes.splash,
     refreshListenable: refresh,
     observers: [routeObserver],
     routes: [
@@ -343,6 +342,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       final registrationDisabled = ref.read(
         businessRegistrationDisabledProvider,
       );
+      final recoveryLocation = _passwordRecoveryLocationFrom(state.uri);
+      if (recoveryLocation != null && recoveryLocation != loc) {
+        return recoveryLocation;
+      }
       final isPasswordRecoveryRoute =
           path == Routes.forgotPassword || path == Routes.resetPassword;
 
@@ -418,6 +421,48 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
   );
 });
+
+String? _passwordRecoveryLocationFrom(Uri uri) {
+  final path = uri.path.isEmpty ? Routes.landing : uri.path;
+  final directToken = (uri.queryParameters['token'] ?? '').trim();
+  if (path == Routes.resetPassword && directToken.isNotEmpty) {
+    return '${Routes.resetPassword}?token=${Uri.encodeQueryComponent(directToken)}';
+  }
+
+  if ((path == Routes.landing || path == Routes.splash) &&
+      directToken.isNotEmpty) {
+    return '${Routes.resetPassword}?token=${Uri.encodeQueryComponent(directToken)}';
+  }
+
+  final fragmentLocation = _passwordRecoveryLocationFromFragment(uri.fragment);
+  if (fragmentLocation != null) return fragmentLocation;
+
+  return null;
+}
+
+String? _passwordRecoveryLocationFromFragment(String fragment) {
+  final text = fragment.trim();
+  if (text.isEmpty) return null;
+
+  final normalized = text.startsWith('/') ? text : '/$text';
+  Uri? parsed;
+  try {
+    parsed = Uri.parse(normalized);
+  } catch (_) {
+    return null;
+  }
+
+  final path = parsed.path.isEmpty ? Routes.landing : parsed.path;
+  final token = (parsed.queryParameters['token'] ?? '').trim();
+  if (path == Routes.resetPassword && token.isNotEmpty) {
+    return '${Routes.resetPassword}?token=${Uri.encodeQueryComponent(token)}';
+  }
+  if ((path == Routes.landing || path == Routes.splash) && token.isNotEmpty) {
+    return '${Routes.resetPassword}?token=${Uri.encodeQueryComponent(token)}';
+  }
+
+  return null;
+}
 
 class _RouterRefreshNotifier extends ChangeNotifier {
   void refresh() => notifyListeners();

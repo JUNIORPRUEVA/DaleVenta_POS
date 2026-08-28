@@ -241,6 +241,137 @@ void main() {
     },
   );
 
+  testWidgets('arranque externo en reset link NO entra a la app', (
+    tester,
+  ) async {
+    final repository = _FakeAuthRepository();
+    late GoRouter router;
+    tester.binding.platformDispatcher.defaultRouteNameTestValue =
+        '${Routes.resetPassword}?token=reset-token';
+    addTearDown(() {
+      tester.binding.platformDispatcher.defaultRouteNameTestValue = '/';
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(repository),
+          authStateProvider.overrideWith(_AuthenticatedAuthController.new),
+          appBootstrapStatusProvider.overrideWith(
+            (_) => AppBootstrapStatus.authenticatedLoadingCompany,
+          ),
+        ],
+        child: Consumer(
+          builder: (context, ref, _) {
+            router = ref.watch(routerProvider);
+            return MaterialApp.router(routerConfig: router);
+          },
+        ),
+      ),
+    );
+    addTearDown(router.dispose);
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      router.routeInformationProvider.value.uri.path,
+      Routes.resetPassword,
+    );
+    expect(
+      router.routeInformationProvider.value.uri.queryParameters['token'],
+      'reset-token',
+    );
+    expect(find.text('Nueva contraseña'), findsWidgets);
+    expect(find.text('Guardar nueva contraseña'), findsOneWidget);
+    expect(repository.resetToken, isNull);
+  });
+
+  testWidgets('token en raiz se normaliza a reset-password', (tester) async {
+    final repository = _FakeAuthRepository();
+    late GoRouter router;
+    tester.binding.platformDispatcher.defaultRouteNameTestValue =
+        '/?token=reset-token';
+    addTearDown(() {
+      tester.binding.platformDispatcher.defaultRouteNameTestValue = '/';
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(repository),
+          authStateProvider.overrideWith(_AuthenticatedAuthController.new),
+          appBootstrapStatusProvider.overrideWith(
+            (_) => AppBootstrapStatus.authenticatedLoadingCompany,
+          ),
+        ],
+        child: Consumer(
+          builder: (context, ref, _) {
+            router = ref.watch(routerProvider);
+            return MaterialApp.router(routerConfig: router);
+          },
+        ),
+      ),
+    );
+    addTearDown(router.dispose);
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      router.routeInformationProvider.value.uri.path,
+      Routes.resetPassword,
+    );
+    expect(
+      router.routeInformationProvider.value.uri.queryParameters['token'],
+      'reset-token',
+    );
+    expect(find.text('Nueva contraseña'), findsWidgets);
+    expect(repository.resetToken, isNull);
+  });
+
+  testWidgets('hash PWA reset-password se normaliza al formulario', (
+    tester,
+  ) async {
+    final repository = _FakeAuthRepository();
+    late GoRouter router;
+    tester.binding.platformDispatcher.defaultRouteNameTestValue =
+        '/#/reset-password?token=reset-token';
+    addTearDown(() {
+      tester.binding.platformDispatcher.defaultRouteNameTestValue = '/';
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(repository),
+          authStateProvider.overrideWith(_AuthenticatedAuthController.new),
+          appBootstrapStatusProvider.overrideWith(
+            (_) => AppBootstrapStatus.authenticatedLoadingCompany,
+          ),
+        ],
+        child: Consumer(
+          builder: (context, ref, _) {
+            router = ref.watch(routerProvider);
+            return MaterialApp.router(routerConfig: router);
+          },
+        ),
+      ),
+    );
+    addTearDown(router.dispose);
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      router.routeInformationProvider.value.uri.path,
+      Routes.resetPassword,
+    );
+    expect(
+      router.routeInformationProvider.value.uri.queryParameters['token'],
+      'reset-token',
+    );
+    expect(find.text('Nueva contraseña'), findsWidgets);
+    expect(repository.resetToken, isNull);
+  });
+
   testWidgets('volver al login funciona tras actualizar contraseña', (
     tester,
   ) async {

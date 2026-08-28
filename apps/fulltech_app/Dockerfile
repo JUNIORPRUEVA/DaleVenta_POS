@@ -22,6 +22,11 @@ RUN flutter --version \
   && flutter pub get \
   && flutter build web --release --no-wasm-dry-run --no-source-maps --optimization-level=4
 
+RUN BUILD_ID="$(date -u +%Y%m%d%H%M%S)" \
+  && sed -i "s@main.dart.js@main.dart.js?v=${BUILD_ID}@g" build/web/flutter_bootstrap.js \
+  && sed -i "s@href=\"main.dart.js\"@href=\"main.dart.js?v=${BUILD_ID}\"@g" build/web/index.html \
+  && sed -i "s@src=\"flutter_bootstrap.js\"@src=\"flutter_bootstrap.js?v=${BUILD_ID}\"@g" build/web/index.html
+
 FROM nginx:alpine
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
