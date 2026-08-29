@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 
 import '../debug/trace_log.dart';
 import '../api/api_routes.dart';
+import '../usage/client_telemetry_headers.dart';
 import 'auth_session_events.dart';
 import 'token_storage.dart';
 
@@ -49,6 +50,7 @@ class AuthInterceptor extends Interceptor {
       final token = await tokenStorage.getAccessToken();
       if (token != null && token.isNotEmpty) {
         options.headers['Authorization'] = 'Bearer $token';
+        options.headers.addAll(await ClientTelemetryHeaders.instance.headers());
       }
       TraceLog.log(
         'AuthInterceptor',

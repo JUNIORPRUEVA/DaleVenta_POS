@@ -1,7 +1,8 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CompanyStatus, Prisma } from '@prisma/client';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 
 type CompanySeed = {
@@ -28,6 +29,7 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(UsageTelemetryService.name);
   private timer?: NodeJS.Timeout;
   private running = false;
+  private readonly requestTelemetrySeen = new Map<string, number>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -98,6 +100,30 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
     } finally {
       this.running = false;
     }
+  }
+
+  recordRequestUsage(req: Request & { user?: { companyId?: string | null } }) {
+    if (!this.enabled || !this.appyraBaseUrl) return;
+    const companyId = req.user?.companyId?.trim();
+    if (!companyId) return;
+
+    const headers = req.headers;
+    const client = this.requestClientContext(req);
+    const featureCode = this.featureCodeFromPath(req.path || req.url || '');
+    const throttleKey = `${companyId}:${client.deviceId}:${client.platform}:${featureCode}`;
+    if (this.isRequestTelemetryThrottled(throttleKey)) return;
+
+    void this.sendRequestUsage(companyId, {
+      platform: client.platform,
+      deviceFamily: client.deviceFamily,
+      deviceId: client.deviceId,
+      appVersion: this.headerValue(headers['x-client-app-version']) || this.appVersion,
+      osVersion: this.headerValue(headers['x-client-os-version']),
+      deviceModel: this.headerValue(headers['x-client-device-model']),
+      featureCode,
+      method: req.method,
+      route: this.routeForMetrics(req.path || req.url || ''),
+    });
   }
 
   private async buildCompanyUsagePayload(company: CompanySeed) {
@@ -270,6 +296,62 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  private async sendRequestUsage(
+    companyId: string,
+    client: {
+      platform: string;
+      deviceFamily: string;
+      deviceId: string;
+      appVersion: string;
+      osVersion: string;
+      deviceModel: string;
+      featureCode: string;
+      method: string;
+      route: string;
+    },
+  ) {
+    try {
+      const company = await this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: { id: true, name: true, slug: true, licenseKey: true },
+      });
+      if (!company) return;
+
+      const now = new Date();
+      await this.sendToAppyra({
+        app_code: 'DALEVENTAS_POS',
+        project_code: 'DALEVENTAS_POS',
+        business_id: company.id,
+        license_key: company.licenseKey,
+        device_id: client.deviceId,
+        session_id: `${client.deviceId}-${this.isoDate(now)}`,
+        app_version: client.appVersion,
+        event_type: 'client_request_heartbeat',
+        occurred_at: now.toISOString(),
+        active_seconds: this.requestHeartbeatSeconds,
+        metrics: {
+          business_name: company.name,
+          business_slug: company.slug,
+          platform: client.platform,
+          device_family: client.deviceFamily,
+          os_version: client.osVersion,
+          device_model: client.deviceModel,
+          feature_code: client.featureCode,
+          request_method: client.method,
+          route: client.route,
+          telemetry_reason: 'client_platform_usage',
+        },
+        metadata: {
+          generated_by: 'daleventas-api',
+          generated_at: now.toISOString(),
+          privacy: 'technical_usage_only',
+        },
+      });
+    } catch (error) {
+      this.logger.debug(`Client usage telemetry skipped: ${this.errorMessage(error)}`);
+    }
+  }
+
   private async sendToAppyra(payload: Record<string, unknown>) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -309,6 +391,94 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
   private estimateActiveSeconds(salesToday: number, cashSessionsToday: number, modulesUsedToday: number) {
     const seconds = salesToday * 90 + cashSessionsToday * 600 + modulesUsedToday * 180;
     return Math.min(86400, Math.max(0, seconds));
+  }
+
+  private requestClientContext(req: Request) {
+    const headers = req.headers;
+    const explicitPlatform = this.normalizePlatform(this.headerValue(headers['x-client-platform']));
+    const userAgent = this.headerValue(headers['user-agent']);
+    const platform = explicitPlatform || this.platformFromUserAgent(userAgent);
+    const deviceFamily =
+      this.normalizeDeviceFamily(this.headerValue(headers['x-client-device-family'])) ||
+      this.deviceFamilyForPlatform(platform);
+    const rawDeviceId = this.headerValue(headers['x-client-device-id']);
+    const deviceId = rawDeviceId
+      ? `client-${this.sanitizeToken(rawDeviceId, 96)}`
+      : `ua-${this.shortHash(`${platform}:${userAgent || 'unknown'}`)}`;
+    return { platform, deviceFamily, deviceId };
+  }
+
+  private isRequestTelemetryThrottled(key: string) {
+    const now = Date.now();
+    const previous = this.requestTelemetrySeen.get(key) ?? 0;
+    if (now - previous < this.requestTelemetryThrottleMs) return true;
+    this.requestTelemetrySeen.set(key, now);
+    if (this.requestTelemetrySeen.size > 5000) {
+      const cutoff = now - this.requestTelemetryThrottleMs * 3;
+      for (const [entryKey, value] of this.requestTelemetrySeen) {
+        if (value < cutoff) this.requestTelemetrySeen.delete(entryKey);
+      }
+    }
+    return false;
+  }
+
+  private platformFromUserAgent(userAgent: string) {
+    const ua = userAgent.toLowerCase();
+    if (ua.includes('android')) return 'android';
+    if (ua.includes('iphone') || ua.includes('ipad') || ua.includes('ios')) return 'ios';
+    if (ua.includes('windows')) return 'windows';
+    if (ua.includes('mac os') || ua.includes('macintosh')) return 'macos';
+    if (ua.includes('linux')) return 'linux';
+    if (ua.includes('mozilla') || ua.includes('chrome') || ua.includes('safari')) return 'web';
+    if (ua.includes('dart')) return 'unknown_native';
+    return 'unknown';
+  }
+
+  private deviceFamilyForPlatform(platform: string) {
+    if (platform === 'android' || platform === 'ios') return 'mobile';
+    if (platform === 'windows' || platform === 'macos' || platform === 'linux') return 'desktop';
+    if (platform === 'web') return 'web';
+    return 'unknown';
+  }
+
+  private normalizePlatform(value: string) {
+    const platform = this.sanitizeToken(value.toLowerCase(), 40);
+    const allowed = new Set(['windows', 'android', 'ios', 'web', 'macos', 'linux']);
+    return allowed.has(platform) ? platform : '';
+  }
+
+  private normalizeDeviceFamily(value: string) {
+    const family = this.sanitizeToken(value.toLowerCase(), 40);
+    const allowed = new Set(['desktop', 'mobile', 'tablet', 'web', 'unknown']);
+    return allowed.has(family) ? family : '';
+  }
+
+  private featureCodeFromPath(path: string) {
+    const clean = path.split('?')[0].split('/').filter(Boolean);
+    const first = clean[0] || 'api';
+    return this.sanitizeToken(first.toLowerCase().replace(/-/g, '_'), 60) || 'api';
+  }
+
+  private routeForMetrics(path: string) {
+    const clean = path.split('?')[0].split('/').filter(Boolean).slice(0, 2).join('/');
+    return clean ? `/${this.sanitizeRoute(clean)}` : '/';
+  }
+
+  private sanitizeRoute(value: string) {
+    return value.replace(/[^a-zA-Z0-9/_-]/g, '').slice(0, 120);
+  }
+
+  private sanitizeToken(value: string, maxLength: number) {
+    return value.replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, maxLength);
+  }
+
+  private shortHash(value: string) {
+    return createHash('sha256').update(value).digest('hex').slice(0, 24);
+  }
+
+  private headerValue(value: string | string[] | undefined) {
+    const text = Array.isArray(value) ? value[0] : value;
+    return (text ?? '').toString().trim().slice(0, 160);
   }
 
   private startOfDay(date: Date) {
@@ -368,6 +538,17 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
   private get timeoutMs() {
     const raw = Number(this.config.get<string>('APPYRA_USAGE_TELEMETRY_TIMEOUT_MS') ?? '12000');
     return Number.isFinite(raw) ? Math.max(1000, raw) : 12000;
+  }
+
+  private get requestTelemetryThrottleMs() {
+    const raw = Number(this.config.get<string>('APPYRA_USAGE_CLIENT_THROTTLE_SECONDS') ?? '300');
+    const seconds = Number.isFinite(raw) ? Math.max(60, raw) : 300;
+    return seconds * 1000;
+  }
+
+  private get requestHeartbeatSeconds() {
+    const raw = Number(this.config.get<string>('APPYRA_USAGE_CLIENT_ACTIVE_SECONDS') ?? '60');
+    return Number.isFinite(raw) ? Math.min(600, Math.max(0, raw)) : 60;
   }
 
   private get appVersion() {
