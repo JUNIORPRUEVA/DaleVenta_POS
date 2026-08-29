@@ -24,6 +24,7 @@ import { ReportsModule } from './reports/reports.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { SettingsModule } from './settings/settings.module';
 import { LicenseModule } from './license/license.module';
+import { UsageTelemetryModule } from './usage-telemetry/usage-telemetry.module';
 import { TaxModule } from './tax/tax.module';
 
 @Module({
@@ -44,6 +45,7 @@ import { TaxModule } from './tax/tax.module';
     UsersModule,
     ProductsModule,
     LicenseModule,
+    UsageTelemetryModule,
     ClientsModule,
     ContabilidadModule,
     SalesModule,
