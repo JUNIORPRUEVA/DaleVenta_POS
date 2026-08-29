@@ -104,7 +104,7 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
     const now = new Date();
     const todayStart = this.startOfDay(now);
     const sevenDaysAgo = this.daysAgo(7);
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthStart = this.startOfMonth(now);
 
     const [
       usersTotal,
@@ -312,7 +312,13 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
   }
 
   private startOfDay(date: Date) {
-    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const { year, month, day } = this.timeZoneParts(date);
+    return this.zonedDateToUtc(year, month, day);
+  }
+
+  private startOfMonth(date: Date) {
+    const { year, month } = this.timeZoneParts(date);
+    return this.zonedDateToUtc(year, month, 1);
   }
 
   private daysAgo(days: number) {
@@ -320,7 +326,8 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
   }
 
   private isoDate(date: Date) {
-    return date.toISOString().slice(0, 10);
+    const { year, month, day } = this.timeZoneParts(date);
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   }
 
   private decimalToNumber(value: Prisma.Decimal | null | undefined) {
@@ -365,5 +372,48 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
 
   private get appVersion() {
     return (this.config.get<string>('APP_VERSION') ?? process.env.npm_package_version ?? 'api').trim();
+  }
+
+  private get timeZone() {
+    return (this.config.get<string>('APPYRA_USAGE_TELEMETRY_TIME_ZONE') ?? 'America/Santo_Domingo').trim();
+  }
+
+  private timeZoneParts(date: Date) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: this.timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(date);
+    const value = (type: string) => Number(parts.find((part) => part.type === type)?.value);
+    return { year: value('year'), month: value('month'), day: value('day') };
+  }
+
+  private zonedDateToUtc(year: number, month: number, day: number) {
+    const utcGuess = new Date(Date.UTC(year, month - 1, day));
+    return new Date(utcGuess.getTime() - this.timeZoneOffsetMs(utcGuess));
+  }
+
+  private timeZoneOffsetMs(date: Date) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: this.timeZone,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }).formatToParts(date);
+    const value = (type: string) => Number(parts.find((part) => part.type === type)?.value);
+    const asUtc = Date.UTC(
+      value('year'),
+      value('month') - 1,
+      value('day'),
+      value('hour'),
+      value('minute'),
+      value('second'),
+    );
+    return asUtc - date.getTime();
   }
 }
