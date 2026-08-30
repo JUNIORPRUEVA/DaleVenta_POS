@@ -191,6 +191,8 @@ class CotizacionesScreen extends ConsumerStatefulWidget {
 CotizacionItem buildBillingItemFromProduct(ProductModel product) {
   return CotizacionItem(
     productId: product.id,
+    productSource: product.productSource,
+    sourceProductId: product.sourceProductId,
     nombre: product.nombre,
     imageUrl: product.displayFotoUrl,
     originalUnitPrice: product.precio,

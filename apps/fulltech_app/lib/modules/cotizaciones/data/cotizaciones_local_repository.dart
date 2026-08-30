@@ -12,7 +12,7 @@ final cotizacionesLocalRepositoryProvider =
 
 class CotizacionesLocalRepository {
   static const _dbName = 'cotizaciones_local.db';
-  static const _dbVersion = 5;
+  static const _dbVersion = 6;
   static const _tableCotizaciones = 'cotizaciones';
   static const _tableItems = 'cotizacion_items';
 
@@ -56,6 +56,8 @@ class CotizacionesLocalRepository {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             cotizacion_id TEXT NOT NULL,
             product_id TEXT NOT NULL,
+            product_source TEXT,
+            source_product_id TEXT,
             nombre TEXT NOT NULL,
             image_url TEXT,
             original_unit_price REAL,
@@ -175,6 +177,27 @@ class CotizacionesLocalRepository {
               definition: column.$2,
             );
           }
+        }
+        if (oldVersion < 6) {
+          for (final column in const [
+            ('product_source', 'TEXT'),
+            ('source_product_id', 'TEXT'),
+          ]) {
+            await _addColumnIfMissing(
+              db,
+              tableName: _tableItems,
+              columnName: column.$1,
+              definition: column.$2,
+            );
+          }
+          await db.execute(
+            'UPDATE $_tableItems SET product_source = ? WHERE product_id IS NOT NULL AND product_id != ? AND product_source IS NULL',
+            ['LOCAL', ''],
+          );
+          await db.execute(
+            'UPDATE $_tableItems SET source_product_id = product_id WHERE product_id IS NOT NULL AND product_id != ? AND source_product_id IS NULL',
+            [''],
+          );
         }
       },
     );
@@ -389,6 +412,8 @@ class CotizacionesLocalRepository {
         await txn.insert(_tableItems, {
           'cotizacion_id': cotizacion.id,
           'product_id': item.productId,
+          'product_source': item.productSource,
+          'source_product_id': item.sourceProductId,
           'nombre': item.nombre,
           'image_url': item.imageUrl,
           'original_unit_price': item.originalUnitPrice,
@@ -464,6 +489,8 @@ class CotizacionesLocalRepository {
           .map(
             (itemRow) => CotizacionItem(
               productId: (itemRow['product_id'] ?? '').toString(),
+              productSource: itemRow['product_source']?.toString(),
+              sourceProductId: itemRow['source_product_id']?.toString(),
               nombre: (itemRow['nombre'] ?? '').toString(),
               imageUrl: itemRow['image_url']?.toString(),
               originalUnitPrice: (itemRow['original_unit_price'] as num?)

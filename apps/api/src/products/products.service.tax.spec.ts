@@ -13,6 +13,20 @@ describe("ProductsService fiscal validation", () => {
     const service = new ProductsService(
       prisma as never,
       {} as never,
+      {
+        resolveForCompany: jest.fn(async (companyId: string) => ({
+          companyId,
+          source: "LOCAL",
+          readOnly: false,
+          fullposCompanyId: null,
+          supportsDecimalStock: true,
+          supportsNativeUom: true,
+          supportsProductCreate: true,
+          supportsProductEdit: true,
+          supportsStockAdjustment: true,
+          resolution: "safe-default",
+        })),
+      } as never,
       { get: jest.fn().mockReturnValue("") } as unknown as ConfigService,
       {
         assertCanCreateProduct: jest.fn().mockResolvedValue(undefined),

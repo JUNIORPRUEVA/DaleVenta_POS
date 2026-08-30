@@ -31,6 +31,14 @@ enum CompanyPlan {
   @@map("company_plan")
 }
 
+enum ProductSource {
+  LOCAL
+  FULLPOS
+  FULLPOS_DIRECT
+
+  @@map("product_source")
+}
+
 enum LicenseStatus {
   TRIAL
   ACTIVE
@@ -643,6 +651,8 @@ model Company {
   pricesIncludeTax Boolean       @default(false) @map("prices_include_tax")
   ncfEnabled       Boolean       @default(false) @map("ncf_enabled")
   measurementUnitsEnabled Boolean @default(false) @map("measurement_units_enabled")
+  productSource    ProductSource? @map("product_source")
+  fullposCompanyId String?       @map("fullpos_company_id")
   createdAt        DateTime      @default(now()) @map("created_at")
   updatedAt        DateTime      @updatedAt @map("updated_at")
 
@@ -694,6 +704,7 @@ model Company {
   @@index([status])
   @@index([licenseStatus])
   @@index([licenseExpiresAt])
+  @@index([productSource])
   @@map("companies")
 }
 
@@ -2011,6 +2022,8 @@ model PurchaseOrderItem {
   purchaseOrderId                 String   @map("purchase_order_id") @db.Uuid
   productId                       String?  @map("product_id") @db.Uuid
   externalProductId               String?  @map("external_product_id") @db.Uuid
+  productSource                   ProductSource? @map("product_source")
+  sourceProductId                 String?  @map("source_product_id")
   productNameSnapshot             String   @map("product_name_snapshot")
   productCodeSnapshot             String?  @map("product_code_snapshot")
   descriptionSnapshot             String?  @map("description_snapshot") @db.Text
@@ -2038,6 +2051,7 @@ model PurchaseOrderItem {
 
   @@index([purchaseOrderId])
   @@index([productId])
+  @@index([productSource, sourceProductId])
   @@index([supplierId])
   @@map("purchase_order_items")
 }
@@ -2067,6 +2081,8 @@ model PurchaseReceiptItem {
   id                  String   @id @default(uuid()) @db.Uuid
   purchaseReceiptId   String   @map("purchase_receipt_id") @db.Uuid
   purchaseOrderItemId String   @map("purchase_order_item_id") @db.Uuid
+  productSource       ProductSource? @map("product_source")
+  sourceProductId     String?  @map("source_product_id")
   quantityReceived    Decimal  @map("quantity_received") @db.Decimal(18, 6)
   unitCodeSnapshot    String   @default("UNIT") @map("unit_code_snapshot") @db.VarChar(32)
   unitNameSnapshot    String   @default("Unidad") @map("unit_name_snapshot")
@@ -2083,6 +2099,7 @@ model PurchaseReceiptItem {
 
   @@unique([purchaseReceiptId, purchaseOrderItemId])
   @@index([purchaseOrderItemId])
+  @@index([productSource, sourceProductId])
   @@map("purchase_receipt_items")
 }
 
@@ -2502,6 +2519,8 @@ model SaleItem {
   saleId               String   @db.Uuid
   refundedSaleItemId   String?  @map("refunded_sale_item_id") @db.Uuid
   productId            String?  @db.Uuid
+  productSource        ProductSource? @map("product_source")
+  sourceProductId      String?  @map("source_product_id")
   productNameSnapshot  String
   productImageSnapshot String?
   qty                  Decimal  @db.Decimal(18, 6)
@@ -2534,6 +2553,7 @@ model SaleItem {
   @@index([saleId])
   @@index([refundedSaleItemId])
   @@index([productId])
+  @@index([productSource, sourceProductId])
 }
 
 model NcfSequence {
@@ -3566,6 +3586,8 @@ model CotizacionItem {
   id                        String   @id @default(uuid()) @db.Uuid
   cotizacionId              String   @db.Uuid
   productId                 String?  @db.Uuid
+  productSource             ProductSource? @map("product_source")
+  sourceProductId           String?  @map("source_product_id")
   productNameSnapshot       String
   productImageSnapshot      String?
   qty                       Decimal  @db.Decimal(18, 6)
@@ -3596,6 +3618,7 @@ model CotizacionItem {
 
   @@index([cotizacionId])
   @@index([productId])
+  @@index([productSource, sourceProductId])
 }
 
 model WorkScheduleProfile {

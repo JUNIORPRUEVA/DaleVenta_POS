@@ -13,6 +13,10 @@ import { requireTenant, type TenantUser } from "../auth/tenant-context";
 import { LicenseService } from "../license/license.service";
 import { CatalogProductsService } from "./catalog-products.service";
 import { CreateProductDto } from "./dto/create-product.dto";
+import {
+  ProductSourceResolver,
+  type ProductSource,
+} from "./product-source.resolver";
 import { UpdateProductDto } from "./dto/update-product.dto";
 import {
   DEFAULT_UNIT_OF_MEASURE,
@@ -21,18 +25,16 @@ import {
   type UnitOfMeasureSnapshot,
 } from "./unit-of-measure.util";
 
-type ProductsSource = "FULLPOS" | "FULLPOS_DIRECT" | "LOCAL";
-
 @Injectable()
 export class ProductsService {
   private readonly logger = new Logger(ProductsService.name);
   private readonly publicBaseUrl: string;
-  private readonly productsSource: ProductsSource;
   private readonly allowLocalFallback: boolean;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly catalogProducts: CatalogProductsService,
+    private readonly productSourceResolver: ProductSourceResolver,
     private readonly config: ConfigService,
     private readonly licenses: LicenseService,
   ) {
@@ -50,39 +52,45 @@ export class ProductsService {
     this.allowLocalFallback =
       rawFallback === "1" || rawFallback === "true" || rawFallback === "yes";
 
-    const rawSource = (this.config.get<string>("PRODUCTS_SOURCE") ?? "")
-      .trim()
-      .toUpperCase();
-    let computed: ProductsSource = "LOCAL";
-    if (rawSource === "FULLPOS" || rawSource === "FULLPOS_DIRECT") {
-      computed = rawSource;
-    } else if (rawSource && rawSource !== "LOCAL") {
-      this.logger.warn(`PRODUCTS_SOURCE=${rawSource} inválido; usando LOCAL.`);
-    }
-
-    this.productsSource = computed;
   }
 
-  isReadOnly() {
-    return (
-      this.productsSource === "FULLPOS" ||
-      this.productsSource === "FULLPOS_DIRECT"
-    );
+  async isReadOnly(user: TenantUser) {
+    const companyId = requireTenant(user);
+    return (await this.productSourceResolver.resolveForCompany(companyId))
+      .readOnly;
   }
 
-  getSource(): ProductsSource {
-    return this.productsSource;
+  async getSource(user: TenantUser): Promise<ProductSource> {
+    const companyId = requireTenant(user);
+    return (await this.productSourceResolver.resolveForCompany(companyId))
+      .source;
   }
 
-  private assertWritable() {
-    if (
-      this.productsSource === "FULLPOS" ||
-      this.productsSource === "FULLPOS_DIRECT"
-    ) {
+  async sourceInfo(user: TenantUser) {
+    const companyId = requireTenant(user);
+    const context = await this.productSourceResolver.resolveForCompany(companyId);
+    return {
+      source: context.source,
+      readOnly: context.readOnly,
+      capabilities: {
+        supportsDecimalStock: context.supportsDecimalStock,
+        supportsNativeUom: context.supportsNativeUom,
+        supportsProductCreate: context.supportsProductCreate,
+        supportsProductEdit: context.supportsProductEdit,
+        supportsStockAdjustment: context.supportsStockAdjustment,
+      },
+      resolution: context.resolution,
+    };
+  }
+
+  private async assertWritable(companyId: string) {
+    const context = await this.productSourceResolver.resolveForCompany(companyId);
+    if (context.readOnly) {
       throw new ConflictException(
-        "Productos en modo solo-lectura: fuente FULLPOS (cloud). Administra productos en FULLPOS.",
+        "Productos en modo solo-lectura: fuente FULLPOS. Las escrituras, stock decimal y UoM de FULLPOS quedan bloqueadas hasta validar soporte writable en staging.",
       );
     }
+    return context;
   }
 
   private async normalizeProductFiscalInput(
@@ -463,10 +471,19 @@ export class ProductsService {
     companyId: string,
     productId: string,
   ) {
-    const product = await tx.product.findFirst({
-      where: { id: productId, companyId },
-      select: this.catalogProductSelect(),
-    });
+    let product: any = null;
+    try {
+      product = await tx.product.findFirst({
+        where: { id: productId, companyId },
+        select: this.catalogProductSelect(),
+      });
+    } catch (error) {
+      if (!this.isSchemaMismatch(error)) throw error;
+      product = await tx.product.findFirst({
+        where: { id: productId, companyId },
+        select: this.legacyCatalogProductSelect(),
+      });
+    }
     if (!product) {
       throw new NotFoundException("Producto no encontrado");
     }
@@ -474,8 +491,8 @@ export class ProductsService {
   }
 
   async create(user: TenantUser, dto: CreateProductDto): Promise<any> {
-    this.assertWritable();
     const companyId = requireTenant(user);
+    await this.assertWritable(companyId);
     await this.licenses.assertCanCreateProduct(companyId);
     const operationProductIdForRecovery = this.operationProductId(
       companyId,
@@ -682,12 +699,16 @@ export class ProductsService {
 
   async findAll(user: TenantUser): Promise<any[]> {
     const companyId = requireTenant(user);
-    if (
-      this.productsSource === "FULLPOS" ||
-      this.productsSource === "FULLPOS_DIRECT"
-    ) {
+    const sourceContext = await this.productSourceResolver.resolveForCompany(
+      companyId,
+    );
+    if (sourceContext.source === "FULLPOS" || sourceContext.source === "FULLPOS_DIRECT") {
       try {
-        const response = await this.catalogProducts.findAll();
+        const response = await this.catalogProducts.findAll({
+          companyId,
+          source: sourceContext.source,
+          fullposCompanyId: sourceContext.fullposCompanyId,
+        });
         return response.items;
       } catch (error) {
         if (!this.allowLocalFallback) {
@@ -714,7 +735,7 @@ export class ProductsService {
       const products = await this.prisma.product.findMany({
         where: { companyId },
         orderBy: { nombre: "asc" },
-        select: this.catalogProductSelect(),
+        select: this.legacyCatalogProductSelect(),
       });
       return products.map((p) => this.mapProduct(p));
     }
@@ -722,9 +743,16 @@ export class ProductsService {
 
   async findOne(user: TenantUser, id: string): Promise<any> {
     const companyId = requireTenant(user);
-    if (this.productsSource === "FULLPOS") {
+    const sourceContext = await this.productSourceResolver.resolveForCompany(
+      companyId,
+    );
+    if (sourceContext.source === "FULLPOS" || sourceContext.source === "FULLPOS_DIRECT") {
       try {
-        return await this.catalogProducts.findOne(id);
+        return await this.catalogProducts.findOne(id, {
+          companyId,
+          source: sourceContext.source,
+          fullposCompanyId: sourceContext.fullposCompanyId,
+        });
       } catch (error) {
         if (!this.allowLocalFallback) {
           throw error;
@@ -758,8 +786,8 @@ export class ProductsService {
     id: string,
     dto: UpdateProductDto,
   ): Promise<any> {
-    this.assertWritable();
     const companyId = requireTenant(user);
+    await this.assertWritable(companyId);
     await this.findOne(user, id);
     return this.prisma.$transaction(async (tx) => {
       const normalizedCodeForLookup = this.hasProductCodeInput(dto)
@@ -940,16 +968,16 @@ export class ProductsService {
   }
 
   async remove(user: TenantUser, id: string) {
-    this.assertWritable();
     const companyId = requireTenant(user);
+    await this.assertWritable(companyId);
     await this.findOne(user, id);
     await this.prisma.product.deleteMany({ where: { id, companyId } });
     return { ok: true };
   }
 
   async purgeAllForDebug(user: TenantUser) {
-    this.assertWritable();
     const companyId = requireTenant(user);
+    await this.assertWritable(companyId);
     const deleted = await this.prisma.product.deleteMany({
       where: { companyId },
     });
@@ -997,6 +1025,25 @@ export class ProductsService {
           active: true,
         },
       },
+    };
+  }
+
+  private legacyCatalogProductSelect(): Prisma.ProductSelect {
+    return {
+      id: true,
+      companyId: true,
+      nombre: true,
+      codigo: true,
+      categoria: true,
+      costo: true,
+      precio: true,
+      stock: true,
+      taxTreatment: true,
+      taxRate: true,
+      taxPriceMode: true,
+      imagen: true,
+      imageKey: true,
+      imageUpdatedAt: true,
     };
   }
 

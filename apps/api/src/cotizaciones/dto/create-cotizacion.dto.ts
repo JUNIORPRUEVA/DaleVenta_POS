@@ -7,6 +7,14 @@ export class CreateCotizacionItemDto {
   productId?: string;
 
   @IsOptional()
+  @IsIn(['LOCAL', 'FULLPOS', 'FULLPOS_DIRECT'])
+  productSource?: 'LOCAL' | 'FULLPOS' | 'FULLPOS_DIRECT';
+
+  @IsOptional()
+  @IsString()
+  sourceProductId?: string;
+
+  @IsOptional()
   @IsString()
   productName?: string;
 

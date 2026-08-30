@@ -112,6 +112,8 @@ class PurchaseDraftItem {
   const PurchaseDraftItem({
     this.product,
     this.productId,
+    this.productSource,
+    this.sourceProductId,
     required this.productName,
     this.productCode,
     this.description,
@@ -125,6 +127,8 @@ class PurchaseDraftItem {
 
   final ProductModel? product;
   final String? productId;
+  final String? productSource;
+  final String? sourceProductId;
   final String productName;
   final String? productCode;
   final String? description;
@@ -146,6 +150,8 @@ class PurchaseDraftItem {
   }) => PurchaseDraftItem(
     product: product,
     productId: productId,
+    productSource: productSource,
+    sourceProductId: sourceProductId,
     productName: productName,
     productCode: productCode,
     description: description,
@@ -160,6 +166,8 @@ class PurchaseDraftItem {
 
   Map<String, dynamic> toPayload() => {
     'productId': productId,
+    'productSource': productSource,
+    'sourceProductId': sourceProductId,
     'productName': productName,
     'productCode': productCode,
     'description': description,
@@ -174,6 +182,8 @@ class PurchaseDraftItem {
   factory PurchaseDraftItem.fromDraftJson(Map<String, dynamic> json) =>
       PurchaseDraftItem(
         productId: _str(json['productId']),
+        productSource: _str(json['productSource']),
+        sourceProductId: _str(json['sourceProductId']),
         productName: _str(json['productName']) ?? '',
         productCode: _str(json['productCode']),
         description: _str(json['description']),
@@ -190,6 +200,8 @@ class PurchaseDraftItem {
 
   Map<String, dynamic> toDraftJson() => {
     'productId': productId,
+    'productSource': productSource,
+    'sourceProductId': sourceProductId,
     'productName': productName,
     'productCode': productCode,
     'description': description,

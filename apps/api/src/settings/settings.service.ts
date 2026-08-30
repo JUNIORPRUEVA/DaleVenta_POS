@@ -15,6 +15,11 @@ import {
 } from "../auth/tenant-context";
 import { PrismaService } from "../prisma/prisma.service";
 import { CatalogRealtimeRelayService } from "../products/catalog-realtime-relay.service";
+import {
+  ProductSourceResolver,
+  type ProductSource,
+  type ProductSourceContext,
+} from "../products/product-source.resolver";
 import { TaxService } from "../tax/tax.service";
 
 type SettingsPayload = Record<string, unknown>;
@@ -25,6 +30,7 @@ export class SettingsService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly realtime: CatalogRealtimeRelayService,
+    private readonly productSourceResolver: ProductSourceResolver,
     private readonly taxes: TaxService,
   ) {}
 
@@ -32,7 +38,8 @@ export class SettingsService {
     const companyId = requireTenant(user);
     const config = await this.ensureConfig(companyId);
     const fiscal = await this.taxes.getCompanyFiscalSettings(companyId);
-    return this.toPublicSettings(config, fiscal);
+    const productSource = await this.productSourceResolver.resolveForCompany(companyId);
+    return this.toPublicSettings(config, fiscal, productSource);
   }
 
   async updateSettings(user: TenantUser, dto: SettingsPayload) {
@@ -46,16 +53,26 @@ export class SettingsService {
     const config = await this.prisma.$transaction(async (tx) => {
       const company = await tx.company.findUnique({
         where: { id: companyId },
-        select: { name: true, measurementUnitsEnabled: true },
+        select: {
+          name: true,
+          measurementUnitsEnabled: true,
+        },
       });
       const measurementUnitsEnabled =
         this.boolValue(dto, "measurementUnitsEnabled") ??
         company?.measurementUnitsEnabled ??
         false;
-      if (this.boolValue(dto, "measurementUnitsEnabled") !== undefined) {
+      const companyData = this.companyProductSourceData(dto);
+      if (
+        this.boolValue(dto, "measurementUnitsEnabled") !== undefined ||
+        Object.keys(companyData).length > 0
+      ) {
         await tx.company.update({
           where: { id: companyId },
-          data: { measurementUnitsEnabled },
+          data: {
+            measurementUnitsEnabled,
+            ...companyData,
+          } as any,
           select: { id: true },
         });
       }
@@ -70,7 +87,10 @@ export class SettingsService {
         },
         update: data,
       });
-      return { ...updated, measurementUnitsEnabled };
+      return {
+        ...updated,
+        measurementUnitsEnabled,
+      };
     });
     if (this.hasFiscalSettingsData(dto)) {
       await this.taxes.updateFiscalSettings(user, {
@@ -81,7 +101,8 @@ export class SettingsService {
       });
     }
     const fiscal = await this.taxes.getCompanyFiscalSettings(companyId);
-    return this.toPublicSettings(config, fiscal);
+    const productSource = await this.productSourceResolver.resolveForCompany(companyId);
+    return this.toPublicSettings(config, fiscal, productSource);
   }
 
   async updateCompanyName(user: TenantUser, dto: { companyName?: unknown }) {
@@ -125,7 +146,8 @@ export class SettingsService {
     });
     this.emitCompanyNameUpdated(companyId, companyName);
     const fiscal = await this.taxes.getCompanyFiscalSettings(companyId);
-    return this.toPublicSettings(config, fiscal);
+    const productSource = await this.productSourceResolver.resolveForCompany(companyId);
+    return this.toPublicSettings(config, fiscal, productSource);
   }
 
   private withoutCompanyName(
@@ -226,7 +248,10 @@ export class SettingsService {
   private async ensureConfig(companyId: string) {
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
-      select: { name: true, measurementUnitsEnabled: true },
+      select: {
+        name: true,
+        measurementUnitsEnabled: true,
+      },
     });
     const companyName = company?.name?.trim() ?? "";
     const config = await this.prisma.appConfig.upsert({
@@ -282,6 +307,31 @@ export class SettingsService {
   private boolValue(dto: SettingsPayload, key: string) {
     const value = dto[key];
     return typeof value === "boolean" ? value : undefined;
+  }
+
+  private productSourceValue(dto: SettingsPayload): ProductSource | undefined {
+    const raw = this.stringValue(dto, "productsSource");
+    const source = raw?.toUpperCase();
+    if (!source) return undefined;
+    if (source === "LOCAL" || source === "FULLPOS" || source === "FULLPOS_DIRECT") {
+      return source;
+    }
+    throw new BadRequestException("Fuente de productos inválida");
+  }
+
+  private companyProductSourceData(
+    dto: SettingsPayload,
+  ): Prisma.CompanyUncheckedUpdateInput {
+    const data: Prisma.CompanyUncheckedUpdateInput = {};
+    const productSource = this.productSourceValue(dto);
+    const fullposCompanyId = this.stringValue(dto, "fullposCompanyId");
+    if (productSource !== undefined) {
+      (data as any).productSource = productSource;
+    }
+    if (fullposCompanyId !== undefined) {
+      (data as any).fullposCompanyId = fullposCompanyId || null;
+    }
+    return data;
   }
 
   private numberValue(dto: SettingsPayload, key: string) {
@@ -399,6 +449,7 @@ export class SettingsService {
       pricesIncludeTax: boolean;
       ncfEnabled: boolean;
     },
+    productSource: ProductSourceContext,
   ) {
     return {
       companyName: config.companyName,
@@ -431,8 +482,16 @@ export class SettingsService {
       whatsappWebhookEnabled: config.whatsappWebhookEnabled,
       measurementUnitsEnabled: config.measurementUnitsEnabled === true,
       hasAdminAuthorizationPin: Boolean(config.adminAuthorizationPinHash),
-      productsSource: "LOCAL",
-      productsReadOnly: false,
+      productsSource: productSource.source,
+      productsReadOnly: productSource.readOnly,
+      productSourceResolution: productSource.resolution,
+      productProviderCapabilities: {
+        supportsDecimalStock: productSource.supportsDecimalStock,
+        supportsNativeUom: productSource.supportsNativeUom,
+        supportsProductCreate: productSource.supportsProductCreate,
+        supportsProductEdit: productSource.supportsProductEdit,
+        supportsStockAdjustment: productSource.supportsStockAdjustment,
+      },
       taxEnabled: fiscal.taxEnabled,
       defaultTaxId: fiscal.defaultTaxId,
       defaultTaxRate: this.toNumber(fiscal.defaultTaxRate),

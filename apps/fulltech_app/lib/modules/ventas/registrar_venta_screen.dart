@@ -2380,6 +2380,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
     ).hasMatch(product.id);
     final productId = isUuid ? product.id : null;
+    final productSource = isUuid ? 'LOCAL' : product.productSource;
+    final sourceProductId = isUuid ? product.id : product.sourceProductId;
 
     setState(() {
       _cart = [
@@ -2387,6 +2389,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
         SaleDraftItem(
           product: product,
           productId: productId,
+          productSource: productSource,
+          sourceProductId: sourceProductId,
           name: product.nombre,
           imageUrl: product.displayFotoUrl,
           isExternal: productId == null,

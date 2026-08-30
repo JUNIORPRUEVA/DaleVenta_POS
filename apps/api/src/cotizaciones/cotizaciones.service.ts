@@ -17,6 +17,7 @@ import {
   CompanyManualEntryKind,
   CompanyMemberRole,
   CompanyMemberStatus,
+  ProductSource,
   ProductTaxTreatment,
   Prisma,
   Role,
@@ -732,6 +733,8 @@ export class CotizacionesService {
             items: {
               create: normalized.map((item, index) => ({
                 productId: item.productId,
+                productSource: item.productSource,
+                sourceProductId: item.sourceProductId,
                 productNameSnapshot: item.productNameSnapshot,
                 productImageSnapshot: item.productImageSnapshot,
                 originalUnitPriceSnapshot: item.originalUnitPriceSnapshot,
@@ -1484,6 +1487,12 @@ export class CotizacionesService {
 
       return {
         productId: product?.id ?? productId,
+        productSource: product
+          ? ProductSource.LOCAL
+          : this.normalizeProductSource(item.productSource),
+        sourceProductId: product
+          ? product.id
+          : this.cleanSourceProductId(item.sourceProductId),
         productNameSnapshot,
         productImageSnapshot,
         originalUnitPriceSnapshot,
@@ -1507,6 +1516,23 @@ export class CotizacionesService {
           null,
       };
     });
+  }
+
+  private normalizeProductSource(value: unknown): ProductSource | null {
+    const source = String(value ?? "").trim().toUpperCase();
+    if (
+      source === "LOCAL" ||
+      source === "FULLPOS" ||
+      source === "FULLPOS_DIRECT"
+    ) {
+      return source as ProductSource;
+    }
+    return null;
+  }
+
+  private cleanSourceProductId(value: unknown) {
+    const text = String(value ?? "").trim();
+    return text.length > 0 ? text : null;
   }
 
   private toNumber(

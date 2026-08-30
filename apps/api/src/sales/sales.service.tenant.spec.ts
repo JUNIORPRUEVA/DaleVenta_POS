@@ -118,6 +118,69 @@ describe("SalesService tenant isolation", () => {
     });
   });
 
+  it("stores LOCAL product identity for local sale lines", () => {
+    const service = serviceWith({} as any);
+    const product = {
+      id: "11111111-1111-4111-8111-111111111111",
+      nombre: "Tela local",
+      imagen: null,
+      costo: 10,
+      stock: 20,
+      taxTreatment: "INHERIT",
+      taxRate: null,
+      taxPriceMode: null,
+      unitOfMeasure: {
+        code: "YARD",
+        name: "Yarda",
+        symbol: "yd",
+        allowDecimals: true,
+        precision: 3,
+      },
+    };
+
+    const normalized = (service as any).normalizeItem(
+      {
+        productId: product.id,
+        qty: 5.5,
+        priceSoldUnit: 20,
+      },
+      0,
+      new Map([[product.id, product]]),
+    );
+
+    expect(normalized).toMatchObject({
+      productId: product.id,
+      productSource: "LOCAL",
+      sourceProductId: product.id,
+      productNameSnapshot: "Tela local",
+      unitCodeSnapshot: "YARD",
+    });
+  });
+
+  it("rejects FULLPOS sale lines until writable stock is proven", async () => {
+    const prisma = {
+      sale: { findFirst: jest.fn().mockResolvedValue(null) },
+      company: { findFirst: jest.fn().mockResolvedValue({ name: "Empresa A" }) },
+      appConfig: { findFirst: jest.fn().mockResolvedValue(null) },
+    };
+    const service = serviceWith(prisma);
+
+    await expect(
+      service.create(user as never, {
+        items: [
+          {
+            productName: "Tela FULLPOS",
+            productSource: "FULLPOS",
+            sourceProductId: "same-remote-id",
+            qty: 5.5,
+            priceSoldUnit: 20,
+            costUnitSnapshot: 10,
+          },
+        ],
+      } as never),
+    ).rejects.toThrow("FULLPOS");
+  });
+
   it("returns the existing sale for the same company and clientRequestId", async () => {
     const existingSale = {
       id: "33333333-3333-4333-8333-333333333333",

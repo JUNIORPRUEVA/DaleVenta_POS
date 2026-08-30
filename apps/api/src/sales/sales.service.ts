@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Prisma, Role } from "@prisma/client";
+import { Prisma, ProductSource, Role } from "@prisma/client";
 import crypto from "node:crypto";
 import * as fs from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -34,6 +34,8 @@ import { CreateSalePdfShareLinkDto } from "./dto/create-sale-pdf-share-link.dto"
 
 type NormalizedSaleItem = {
   productId: string | null;
+  productSource: ProductSource | null;
+  sourceProductId: string | null;
   productNameSnapshot: string;
   productImageSnapshot: string | null;
   qty: Prisma.Decimal;
@@ -653,6 +655,8 @@ export class SalesService {
           const lineTotal = new Prisma.Decimal(item.lineTotal);
           return {
             productId: item.productId,
+            productSource: item.productSource,
+            sourceProductId: item.sourceProductId,
             productNameSnapshot: item.productNameSnapshot,
             productImageSnapshot: item.productImageSnapshot,
             qty,
@@ -681,6 +685,8 @@ export class SalesService {
       : dto.items.map((item, index) =>
           this.normalizeItem(item, index, productMap),
         );
+
+    this.assertNoUnsupportedExternalStockMutation(normalizedItems);
 
     const fiscalSettings = await this.taxes.getCompanyFiscalSettings(companyId);
     const defaultPriceMode = this.taxes.resolvePriceMode(fiscalSettings);
@@ -1048,6 +1054,8 @@ export class SalesService {
                   };
                 })(),
                 productId: item.productId,
+                productSource: item.productSource,
+                sourceProductId: item.sourceProductId,
                 productNameSnapshot: item.productNameSnapshot,
                 productImageSnapshot: item.productImageSnapshot,
                 qty: item.qty,
@@ -1450,6 +1458,8 @@ export class SalesService {
             data: {
               refundedSaleItemId: original.id,
               productId: original.productId,
+              productSource: original.productSource,
+              sourceProductId: original.sourceProductId,
               productNameSnapshot: original.productNameSnapshot,
               productImageSnapshot: original.productImageSnapshot,
               qty: request.qty,
@@ -1477,6 +1487,11 @@ export class SalesService {
         });
 
         for (const item of refundItems) {
+          if (item.original.productSource && item.original.productSource !== "LOCAL") {
+            throw new BadRequestException(
+              "Las devoluciones de productos FULLPOS requieren integración writable validada.",
+            );
+          }
           if (!item.original.productId) continue;
           await tx.product.updateMany({
             where: { id: item.original.productId, companyId },
@@ -1749,6 +1764,8 @@ export class SalesService {
 
       return {
         productId: product.id,
+        productSource: ProductSource.LOCAL,
+        sourceProductId: product.id,
         productNameSnapshot: product.nombre,
         productImageSnapshot: product.imagen,
         qty,
@@ -1792,6 +1809,8 @@ export class SalesService {
 
     return {
       productId: null,
+      productSource: this.externalProductSource(item),
+      sourceProductId: this.cleanSourceProductId(item.sourceProductId),
       productNameSnapshot: productName,
       productImageSnapshot: null,
       qty,
@@ -1809,6 +1828,27 @@ export class SalesService {
       taxRate: null,
       taxPriceMode: null,
     };
+  }
+
+  private assertNoUnsupportedExternalStockMutation(items: NormalizedSaleItem[]) {
+    const external = items.find(
+      (item) => item.productSource && item.productSource !== ProductSource.LOCAL,
+    );
+    if (!external) return;
+    throw new BadRequestException(
+      "Ventas de productos FULLPOS requieren stock writable validado e idempotente antes de registrarse.",
+    );
+  }
+
+  private externalProductSource(item: CreateSaleItemDto): ProductSource | null {
+    if (!item.productSource) return null;
+    if (item.productSource === "LOCAL") return ProductSource.LOCAL;
+    return item.productSource as ProductSource;
+  }
+
+  private cleanSourceProductId(value: unknown) {
+    const text = String(value ?? "").trim();
+    return text.length > 0 ? text : null;
   }
 
   private toNumber(

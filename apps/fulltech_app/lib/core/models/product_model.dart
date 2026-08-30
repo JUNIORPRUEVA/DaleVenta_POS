@@ -55,6 +55,8 @@ class ProductModel {
   final String stockDecimal;
   final String unitOfMeasureId;
   final UnitOfMeasureModel unitOfMeasure;
+  final String productSource;
+  final String sourceProductId;
   final String? fotoUrl;
   final String? originalFotoUrl;
   final String? imageKey;
@@ -79,6 +81,8 @@ class ProductModel {
     String? stockDecimal,
     String? unitOfMeasureId,
     UnitOfMeasureModel? unitOfMeasure,
+    String? productSource,
+    String? sourceProductId,
     this.categoria,
     this.fotoUrl,
     this.originalFotoUrl,
@@ -92,7 +96,9 @@ class ProductModel {
     this.taxPriceMode,
   }) : stockDecimal = stockDecimal ?? (stock?.toString() ?? '0'),
        unitOfMeasureId = unitOfMeasureId ?? UnitOfMeasureModel.unit.id,
-       unitOfMeasure = unitOfMeasure ?? UnitOfMeasureModel.unit;
+       unitOfMeasure = unitOfMeasure ?? UnitOfMeasureModel.unit,
+       productSource = productSource ?? 'LOCAL',
+       sourceProductId = sourceProductId ?? id;
 
   ProductModel copyWith({
     String? id,
@@ -106,6 +112,8 @@ class ProductModel {
     String? stockDecimal,
     String? unitOfMeasureId,
     UnitOfMeasureModel? unitOfMeasure,
+    String? productSource,
+    String? sourceProductId,
     String? categoria,
     String? fotoUrl,
     String? originalFotoUrl,
@@ -130,6 +138,8 @@ class ProductModel {
       stockDecimal: stockDecimal ?? this.stockDecimal,
       unitOfMeasureId: unitOfMeasureId ?? this.unitOfMeasureId,
       unitOfMeasure: unitOfMeasure ?? this.unitOfMeasure,
+      productSource: productSource ?? this.productSource,
+      sourceProductId: sourceProductId ?? this.sourceProductId,
       categoria: categoria ?? this.categoria,
       fotoUrl: fotoUrl ?? this.fotoUrl,
       originalFotoUrl: originalFotoUrl ?? this.originalFotoUrl,
@@ -212,6 +222,17 @@ class ProductModel {
     );
     final productId = _asNullableString(json['id']) ?? '';
     final productName = _asNullableString(json['nombre']) ?? '';
+    final productSource =
+        _asNullableString(json['productSource'] ?? json['product_source']) ??
+        (productId.isEmpty ? 'LOCAL' : 'LOCAL');
+    final sourceProductId =
+        _asNullableString(
+          json['sourceProductId'] ??
+              json['source_product_id'] ??
+              json['externalProductId'] ??
+              json['external_product_id'],
+        ) ??
+        productId;
 
     debugLogProductImageResolution(
       productId: productId,
@@ -232,6 +253,8 @@ class ProductModel {
       stockDecimal: _asNullableString(json['stockDecimal']) ?? '$rawStock',
       unitOfMeasureId: unitId,
       unitOfMeasure: parsedUnit.copyWith(id: unitId),
+      productSource: productSource,
+      sourceProductId: sourceProductId,
       categoria: categoria,
       fotoUrl: normalizedFotoUrl.isEmpty ? null : normalizedFotoUrl,
       originalFotoUrl: foto,
@@ -262,6 +285,8 @@ class ProductModel {
       'stockDecimal': stockDecimal,
       'unitOfMeasureId': unitOfMeasureId,
       'unitOfMeasure': unitOfMeasure.toJson(),
+      'productSource': productSource,
+      'sourceProductId': sourceProductId,
       'categoria': categoria,
       'fotoUrl': fotoUrl,
       'originalFotoUrl': originalFotoUrl,

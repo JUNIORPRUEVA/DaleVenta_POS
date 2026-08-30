@@ -327,7 +327,11 @@ export class ReportsService {
       for (const item of categoryItems) {
         const itemCategory = this.itemCategory(item);
         const itemUnit = this.itemUnit(item);
-        const productKey = `${item.productId ?? item.productNameSnapshot}:${itemUnit.unitCode}`;
+        const productIdentity =
+          item.productSource && item.sourceProductId
+            ? `${item.productSource}:${item.sourceProductId}`
+            : (item.productId ?? item.productNameSnapshot);
+        const productKey = `${productIdentity}:${itemUnit.unitCode}`;
         const product = productMap.get(productKey) ?? {
           productName: item.productNameSnapshot || "Producto sin nombre",
           totalSales: 0,

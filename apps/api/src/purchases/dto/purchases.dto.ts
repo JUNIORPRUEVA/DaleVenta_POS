@@ -40,6 +40,8 @@ export class UpsertSupplierDto {
 export class PurchaseOrderItemDto {
   @IsOptional() @IsUUID() productId?: string;
   @IsOptional() @IsUUID() externalProductId?: string;
+  @IsOptional() @IsIn(["LOCAL", "FULLPOS", "FULLPOS_DIRECT"]) productSource?: "LOCAL" | "FULLPOS" | "FULLPOS_DIRECT";
+  @IsOptional() @IsString() sourceProductId?: string;
   @IsString() productName!: string;
   @IsOptional() @IsString() productCode?: string;
   @IsOptional() @IsString() description?: string;

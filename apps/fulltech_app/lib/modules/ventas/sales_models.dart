@@ -113,6 +113,8 @@ class AdminSalesUsersSummary {
 class SaleItemModel {
   final String id;
   final String? productId;
+  final String? productSource;
+  final String? sourceProductId;
   final String productNameSnapshot;
   final String? productImageSnapshot;
   final double qty;
@@ -138,6 +140,8 @@ class SaleItemModel {
   const SaleItemModel({
     required this.id,
     required this.productId,
+    this.productSource,
+    this.sourceProductId,
     required this.productNameSnapshot,
     required this.productImageSnapshot,
     required this.qty,
@@ -177,6 +181,10 @@ class SaleItemModel {
     return SaleItemModel(
       id: (json['id'] ?? '').toString(),
       productId: json['productId']?.toString(),
+      productSource:
+          (json['productSource'] ?? json['product_source'])?.toString(),
+      sourceProductId:
+          (json['sourceProductId'] ?? json['source_product_id'])?.toString(),
       productNameSnapshot: (json['productNameSnapshot'] ?? '').toString(),
       productImageSnapshot: json['productImageSnapshot']?.toString(),
       qty: _toDouble(json['qty']),
@@ -404,6 +412,8 @@ class SaleModel {
 class SaleDraftItem {
   final ProductModel? product;
   final String? productId;
+  final String? productSource;
+  final String? sourceProductId;
   final String name;
   final String? imageUrl;
   final bool isExternal;
@@ -418,6 +428,8 @@ class SaleDraftItem {
   const SaleDraftItem({
     this.product,
     this.productId,
+    this.productSource,
+    this.sourceProductId,
     required this.name,
     required this.imageUrl,
     required this.isExternal,
@@ -441,6 +453,8 @@ class SaleDraftItem {
   SaleDraftItem copyWith({
     ProductModel? product,
     String? productId,
+    String? productSource,
+    String? sourceProductId,
     String? name,
     String? imageUrl,
     bool? isExternal,
@@ -455,6 +469,8 @@ class SaleDraftItem {
     return SaleDraftItem(
       product: product ?? this.product,
       productId: productId ?? this.productId,
+      productSource: productSource ?? this.productSource,
+      sourceProductId: sourceProductId ?? this.sourceProductId,
       name: name ?? this.name,
       imageUrl: imageUrl ?? this.imageUrl,
       isExternal: isExternal ?? this.isExternal,
@@ -471,6 +487,8 @@ class SaleDraftItem {
   Map<String, dynamic> toPayload() {
     return {
       if (productId != null) 'productId': productId,
+      if (productSource != null) 'productSource': productSource,
+      if (sourceProductId != null) 'sourceProductId': sourceProductId,
       if (productId == null) 'productName': name,
       'qty': qty,
       'priceSoldUnit': priceSoldUnit,
@@ -482,8 +500,14 @@ class SaleDraftItem {
 
   factory SaleDraftItem.fromPayload(Map<String, dynamic> json) {
     final productId = json['productId']?.toString();
+    final productSource = json['productSource']?.toString();
+    final sourceProductId = json['sourceProductId']?.toString();
     return SaleDraftItem(
       productId: productId?.trim().isEmpty == true ? null : productId,
+      productSource:
+          productSource?.trim().isEmpty == true ? null : productSource,
+      sourceProductId:
+          sourceProductId?.trim().isEmpty == true ? null : sourceProductId,
       name: (json['productName'] ?? json['productNameSnapshot'] ?? 'Producto')
           .toString(),
       imageUrl: json['productImageSnapshot']?.toString(),

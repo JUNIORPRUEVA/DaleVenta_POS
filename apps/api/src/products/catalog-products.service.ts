@@ -5,6 +5,8 @@ import {
   classifyFullposImageValue,
   normalizeFullposCatalogImageUrl,
 } from './fullpos-product-image.util';
+import { DEFAULT_UNIT_OF_MEASURE } from './unit-of-measure.util';
+import type { ProductSource } from './product-source.resolver';
 
 type FullposIntegrationProduct = {
   id: string | number;
@@ -61,6 +63,13 @@ type RemoteImageValidation = {
 
 type CatalogProductView = {
   id: string;
+  productSource: 'FULLPOS' | 'FULLPOS_DIRECT';
+  sourceProductId: string;
+  unitOfMeasureId: string;
+  unitOfMeasure: typeof DEFAULT_UNIT_OF_MEASURE & {
+    id: string;
+    category: string;
+  };
   nombre: string;
   descripcion: string | null;
   codigo: string | null;
@@ -85,6 +94,12 @@ type CatalogProductsResponse = {
   total: number;
   fetchedAt: string;
   items: CatalogProductView[];
+};
+
+type CatalogProductsOptions = {
+  companyId?: string;
+  source?: ProductSource;
+  fullposCompanyId?: string | null;
 };
 
 type CatalogSourceMode = 'direct-db' | 'integration-api';
@@ -123,8 +138,6 @@ type FullposDirectSchema = {
 
 type DirectProductRow = Record<string, unknown>;
 
-const FULLTECH_ALLOWED_FULLPOS_COMPANY_ID = '2';
-
 @Injectable()
 export class CatalogProductsService {
   private readonly logger = new Logger(CatalogProductsService.name);
@@ -160,8 +173,8 @@ export class CatalogProductsService {
     this.fullposDirectCompanyId = (
       config.get<string>('FULLPOS_DIRECT_COMPANY_ID') ??
       config.get<string>('FULLPOS_COMPANY_ID') ??
-      FULLTECH_ALLOWED_FULLPOS_COMPANY_ID
-    ).trim() || FULLTECH_ALLOWED_FULLPOS_COMPANY_ID;
+      ''
+    ).trim();
     this.fullposDirectProductsTable = (config.get<string>('FULLPOS_DIRECT_PRODUCTS_TABLE') ?? '').trim();
     this.fullposDirectCompanyColumn = (config.get<string>('FULLPOS_DIRECT_COMPANY_COLUMN') ?? '').trim();
     this.fullposValidateImages = rawValidateImages.length > 0
@@ -178,13 +191,13 @@ export class CatalogProductsService {
     }
   }
 
-  async findAll(): Promise<CatalogProductsResponse> {
-    const mode = this.resolveMode();
+  async findAll(options: CatalogProductsOptions = {}): Promise<CatalogProductsResponse> {
+    const mode = this.resolveMode(options.source);
 
     if (mode === 'direct-db') {
       try {
-        const response = await this.findAllFromDirectDb();
-        this.logger.log(`[catalog-products] source=FULLPOS_DIRECT total=${response.total}`);
+        const response = await this.findAllFromDirectDb(options);
+        this.logger.log(`[catalog-products] source=FULLPOS_DIRECT tenant=${options.companyId ?? 'legacy'} total=${response.total}`);
         return response;
       } catch (error) {
         const message = this.describeDirectDbError(error);
@@ -194,8 +207,8 @@ export class CatalogProductsService {
           this.logger.warn(
             `[catalog-products][direct-db] falling back to FULLPOS integration API after direct DB failure. error=${message}`,
           );
-          const response = await this.findAllFromIntegrationApi();
-          this.logger.log(`[catalog-products] source=FULLPOS total=${response.total} fallback=direct-db`);
+          const response = await this.findAllFromIntegrationApi(options);
+          this.logger.log(`[catalog-products] source=FULLPOS tenant=${options.companyId ?? 'legacy'} total=${response.total} fallback=direct-db`);
           return response;
         }
 
@@ -205,13 +218,13 @@ export class CatalogProductsService {
       }
     }
 
-    const response = await this.findAllFromIntegrationApi();
-    this.logger.log(`[catalog-products] source=FULLPOS total=${response.total}`);
+    const response = await this.findAllFromIntegrationApi(options);
+    this.logger.log(`[catalog-products] source=FULLPOS tenant=${options.companyId ?? 'legacy'} total=${response.total}`);
     return response;
   }
 
-  async findOne(id: string): Promise<CatalogProductView> {
-    const response = await this.findAll();
+  async findOne(id: string, options: CatalogProductsOptions = {}): Promise<CatalogProductView> {
+    const response = await this.findAll(options);
     const found = response.items.find((item) => item.id === id);
     if (!found) {
       throw new NotFoundException('Product not found');
@@ -219,12 +232,13 @@ export class CatalogProductsService {
     return found;
   }
 
-  private resolveMode(): CatalogSourceMode {
-    if (this.productsSourcePreference === 'FULLPOS') {
+  private resolveMode(source?: ProductSource): CatalogSourceMode {
+    const preference = source ?? this.productsSourcePreference;
+    if (preference === 'FULLPOS') {
       return 'integration-api';
     }
 
-    if (this.productsSourcePreference === 'FULLPOS_DIRECT') {
+    if (preference === 'FULLPOS_DIRECT') {
       return this.fullposDirectDatabaseUrl ? 'direct-db' : 'integration-api';
     }
 
@@ -239,11 +253,12 @@ export class CatalogProductsService {
     return this.fullposBaseUrl.length > 0 && this.fullposIntegrationToken.length > 0;
   }
 
-  private async findAllFromDirectDb(): Promise<CatalogProductsResponse> {
-    this.ensureDirectDbConfigured();
+  private async findAllFromDirectDb(options: CatalogProductsOptions): Promise<CatalogProductsResponse> {
+    const fullposCompanyId = this.resolveFullposCompanyId(options);
+    this.ensureDirectDbConfigured(fullposCompanyId);
 
     const schema = await this.getDirectSchema();
-    const rows = await this.queryDirectProducts(schema);
+    const rows = await this.queryDirectProducts(schema, fullposCompanyId);
     const imageStats = { empty: 0, relative: 0, absolute: 0 };
 
     const mapped = await Promise.all(rows.map(async (row) => {
@@ -258,6 +273,10 @@ export class CatalogProductsService {
 
       return {
         id: this.pickString(row.id)?.trim() ?? '',
+        productSource: 'FULLPOS_DIRECT',
+        sourceProductId: this.pickString(row.id)?.trim() ?? '',
+        unitOfMeasureId: 'UNIT',
+        unitOfMeasure: this.defaultExternalUnitOfMeasure(),
         nombre: this.pickString(row.nombre) ?? 'Producto sin nombre',
         descripcion: this.pickString(row.descripcion),
         codigo: this.pickString(row.codigo),
@@ -280,7 +299,7 @@ export class CatalogProductsService {
     const activeItems = mapped.filter((item) => item.activo);
 
     this.logger.log(
-      `[catalog-products][direct-db] company=${this.fullposDirectCompanyId} raw=${rows.length} active=${activeItems.length} images(empty=${imageStats.empty},relative=${imageStats.relative},absolute=${imageStats.absolute}) table=${schema.productTable}`,
+      `[catalog-products][direct-db] company=${fullposCompanyId} raw=${rows.length} active=${activeItems.length} images(empty=${imageStats.empty},relative=${imageStats.relative},absolute=${imageStats.absolute}) table=${schema.productTable}`,
     );
 
     return {
@@ -292,10 +311,10 @@ export class CatalogProductsService {
     };
   }
 
-  private async findAllFromIntegrationApi(): Promise<CatalogProductsResponse> {
+  private async findAllFromIntegrationApi(options: CatalogProductsOptions): Promise<CatalogProductsResponse> {
     this.ensureIntegrationConfigured();
 
-    const rawItems = await this.fetchAllRawProducts();
+    const rawItems = await this.fetchAllRawProducts(options.fullposCompanyId);
     const imageStats = { empty: 0, relative: 0, absolute: 0 };
 
     const mapped = await Promise.all(
@@ -309,7 +328,7 @@ export class CatalogProductsService {
     const activeItems = mapped.filter((item): item is CatalogProductView => item != null && item.activo);
 
     this.logger.log(
-      `[catalog-products][integration-api] raw=${rawItems.length} active=${activeItems.length} images(empty=${imageStats.empty},relative=${imageStats.relative},absolute=${imageStats.absolute})`,
+      `[catalog-products][integration-api] company=${options.fullposCompanyId ?? 'legacy'} raw=${rawItems.length} active=${activeItems.length} images(empty=${imageStats.empty},relative=${imageStats.relative},absolute=${imageStats.absolute})`,
     );
 
     return {
@@ -330,17 +349,18 @@ export class CatalogProductsService {
     }
   }
 
-  private ensureDirectDbConfigured() {
+  private ensureDirectDbConfigured(fullposCompanyId = this.fullposDirectCompanyId) {
+    this.ensureDirectDbConnectionConfigured();
+    if (!fullposCompanyId) {
+      throw new ServiceUnavailableException(
+        'La empresa no tiene mapeo FULLPOS_DIRECT configurado',
+      );
+    }
+  }
+
+  private ensureDirectDbConnectionConfigured() {
     if (!this.fullposDirectDatabaseUrl) {
       throw new ServiceUnavailableException('FULLPOS_DIRECT_DATABASE_URL no está configurado');
-    }
-    if (!this.fullposDirectCompanyId) {
-      throw new ServiceUnavailableException('FULLPOS_DIRECT_COMPANY_ID no está configurado');
-    }
-    if (this.fullposDirectCompanyId !== FULLTECH_ALLOWED_FULLPOS_COMPANY_ID) {
-      throw new ServiceUnavailableException(
-        `FULLTECH solo permite catalogo de FULLPOS company ${FULLTECH_ALLOWED_FULLPOS_COMPANY_ID}`,
-      );
     }
     if (!this.fullposDirectPool) {
       throw new ServiceUnavailableException('No se pudo inicializar la conexión directa a FULLPOS');
@@ -355,7 +375,7 @@ export class CatalogProductsService {
   }
 
   private async detectDirectSchema(): Promise<FullposDirectSchema> {
-    this.ensureDirectDbConfigured();
+    this.ensureDirectDbConnectionConfigured();
 
     const pool = this.fullposDirectPool!;
     const columnRows = await pool.query<{
@@ -537,8 +557,8 @@ export class CatalogProductsService {
     };
   }
 
-  private async queryDirectProducts(schema: FullposDirectSchema): Promise<DirectProductRow[]> {
-    this.ensureDirectDbConfigured();
+  private async queryDirectProducts(schema: FullposDirectSchema, fullposCompanyId: string): Promise<DirectProductRow[]> {
+    this.ensureDirectDbConfigured(fullposCompanyId);
 
     const pool = this.fullposDirectPool!;
     const p = 'p';
@@ -590,7 +610,7 @@ export class CatalogProductsService {
       limit 5000
     `;
 
-    const result = await pool.query(query, [this.fullposDirectCompanyId]);
+    const result = await pool.query(query, [fullposCompanyId]);
     return result.rows as DirectProductRow[];
   }
 
@@ -609,13 +629,16 @@ export class CatalogProductsService {
     return `${alias}.${this.q(column)}::text as ${this.q(output)}`;
   }
 
-  private async fetchAllRawProducts(): Promise<FullposIntegrationProduct[]> {
+  private async fetchAllRawProducts(fullposCompanyId?: string | null): Promise<FullposIntegrationProduct[]> {
     const items: FullposIntegrationProduct[] = [];
     let cursor: string | null = null;
 
     for (let page = 0; page < 50; page += 1) {
       const url = new URL(`${this.fullposBaseUrl}/api/integrations/products`);
       url.searchParams.set('limit', '500');
+      if (fullposCompanyId) {
+        url.searchParams.set('companyId', fullposCompanyId);
+      }
       if (cursor) {
         url.searchParams.set('cursor', cursor);
       }
@@ -629,6 +652,7 @@ export class CatalogProductsService {
           headers: {
             Accept: 'application/json',
             Authorization: `Bearer ${this.fullposIntegrationToken}`,
+            ...(fullposCompanyId ? { 'X-Fullpos-Company-Id': fullposCompanyId } : {}),
           },
           signal: controller.signal,
         });
@@ -680,6 +704,10 @@ export class CatalogProductsService {
 
     return {
       id: this.pickString(item.id)?.trim() ?? '',
+      productSource: 'FULLPOS',
+      sourceProductId: this.pickString(item.id)?.trim() ?? '',
+      unitOfMeasureId: 'UNIT',
+      unitOfMeasure: this.defaultExternalUnitOfMeasure(),
       nombre: this.pickString(item.name, item.nombre) ?? 'Producto sin nombre',
       descripcion: this.pickString(item.description, item.descripcion, item.details, item.detail),
       codigo: this.pickString(item.sku, item.code, item.codigo, item.barcode),
@@ -771,6 +799,24 @@ export class CatalogProductsService {
 
   private resolveActive(item: FullposIntegrationProduct): boolean {
     return this.asBoolean(item.active, item.is_active, item.enabled, item.status, item.estado);
+  }
+
+  private resolveFullposCompanyId(options: CatalogProductsOptions): string {
+    const companyId = (options.fullposCompanyId ?? this.fullposDirectCompanyId).trim();
+    if (!companyId) {
+      throw new ServiceUnavailableException(
+        'La empresa no tiene mapeo de compañía FULLPOS configurado.',
+      );
+    }
+    return companyId;
+  }
+
+  private defaultExternalUnitOfMeasure() {
+    return {
+      id: 'UNIT',
+      category: 'COUNT',
+      ...DEFAULT_UNIT_OF_MEASURE,
+    };
   }
 
   private async validateFullposImageUrl(url: string | null): Promise<string | null> {

@@ -4,6 +4,8 @@ import '../../core/models/product_model.dart';
 
 class CotizacionItem {
   final String productId;
+  final String? productSource;
+  final String? sourceProductId;
   final String nombre;
   final String? imageUrl;
   final double? originalUnitPrice;
@@ -31,6 +33,8 @@ class CotizacionItem {
 
   const CotizacionItem({
     required this.productId,
+    this.productSource,
+    this.sourceProductId,
     required this.nombre,
     required this.imageUrl,
     this.originalUnitPrice,
@@ -79,6 +83,8 @@ class CotizacionItem {
 
   CotizacionItem copyWith({
     String? productId,
+    String? productSource,
+    String? sourceProductId,
     String? nombre,
     String? imageUrl,
     double? originalUnitPrice,
@@ -106,6 +112,8 @@ class CotizacionItem {
   }) {
     return CotizacionItem(
       productId: productId ?? this.productId,
+      productSource: productSource ?? this.productSource,
+      sourceProductId: sourceProductId ?? this.sourceProductId,
       nombre: nombre ?? this.nombre,
       imageUrl: imageUrl ?? this.imageUrl,
       originalUnitPrice: originalUnitPrice ?? this.originalUnitPrice,
@@ -136,6 +144,8 @@ class CotizacionItem {
 
   Map<String, dynamic> toMap() => {
     'productId': productId,
+    'productSource': productSource,
+    'sourceProductId': sourceProductId,
     'nombre': nombre,
     'imageUrl': imageUrl,
     'originalUnitPrice': originalUnitPrice,
@@ -164,6 +174,10 @@ class CotizacionItem {
 
   Map<String, dynamic> toCreateDto() => {
     if (_isUuid(productId)) 'productId': productId,
+    if (productSource != null && productSource!.trim().isNotEmpty)
+      'productSource': productSource,
+    if (sourceProductId != null && sourceProductId!.trim().isNotEmpty)
+      'sourceProductId': sourceProductId,
     'productName': nombre,
     if (imageUrl != null && imageUrl!.trim().isNotEmpty)
       'productImageSnapshot': imageUrl,
@@ -199,6 +213,8 @@ class CotizacionItem {
   factory CotizacionItem.fromMap(Map<String, dynamic> map) {
     return CotizacionItem(
       productId: (map['productId'] ?? '').toString(),
+      productSource: map['productSource']?.toString(),
+      sourceProductId: map['sourceProductId']?.toString(),
       nombre: (map['nombre'] ?? '').toString(),
       imageUrl: map['imageUrl']?.toString(),
       originalUnitPrice: (map['originalUnitPrice'] as num?)?.toDouble(),
@@ -250,6 +266,10 @@ class CotizacionItem {
     final isExternalItem = !_isUuid((map['productId'] ?? '').toString());
     return CotizacionItem(
       productId: (map['productId'] ?? '').toString(),
+      productSource:
+          (map['productSource'] ?? map['product_source'])?.toString(),
+      sourceProductId:
+          (map['sourceProductId'] ?? map['source_product_id'])?.toString(),
       nombre:
           (map['productNameSnapshot'] ??
                   map['productName'] ??

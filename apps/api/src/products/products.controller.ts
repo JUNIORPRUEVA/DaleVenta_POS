@@ -71,11 +71,8 @@ export class ProductsController {
   @Header('Expires', '0')
   @Header('Surrogate-Control', 'no-store')
   @Get('source')
-  source() {
-    return {
-      source: this.products.getSource(),
-      readOnly: this.products.isReadOnly(),
-    };
+  source(@Req() req: Request) {
+    return this.products.sourceInfo(req.user as TenantUser);
   }
 
   @Header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
@@ -187,7 +184,7 @@ export class ProductsController {
     })
   )
   async upload(@Req() req: Request, @UploadedFile() file?: Express.Multer.File) {
-    if (this.products.isReadOnly()) {
+    if (await this.products.isReadOnly(req.user as TenantUser)) {
       throw new ConflictException('Productos en modo solo-lectura: no se permite subir imágenes aquí.');
     }
     if (!file) throw new BadRequestException('No se subió ningún archivo');
@@ -218,7 +215,7 @@ export class ProductsController {
   @Roles(Role.ADMIN, Role.ASISTENTE)
   @Post('import-image-url')
   async importImageUrl(@Req() req: Request, @Body() dto: ImportProductImageUrlDto) {
-    if (this.products.isReadOnly()) {
+    if (await this.products.isReadOnly(req.user as TenantUser)) {
       throw new ConflictException('Productos en modo solo-lectura: no se permite subir imágenes aquí.');
     }
     const remoteUrl = dto.url.trim();

@@ -2459,7 +2459,16 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       _snack(quantityError);
       return;
     }
-    final idx = _cart.indexWhere((item) => item.productId == product.id);
+    final isUuid = RegExp(
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+    ).hasMatch(product.id);
+    final productId = isUuid ? product.id : null;
+    final sourceProductId = isUuid ? product.id : product.sourceProductId;
+    final idx = _cart.indexWhere(
+      (item) =>
+          item.productId == productId &&
+          item.sourceProductId == sourceProductId,
+    );
     setState(() {
       if (idx >= 0) {
         final next = [..._cart];
@@ -2473,7 +2482,9 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
           ..._cart,
           PurchaseDraftItem(
             product: product,
-            productId: product.id,
+            productId: productId,
+            productSource: isUuid ? 'LOCAL' : product.productSource,
+            sourceProductId: sourceProductId,
             productName: product.nombre,
             productCode: product.codigo,
             description: product.descripcion,

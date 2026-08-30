@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Prisma, PurchaseOrderStatus, Role } from "@prisma/client";
+import { Prisma, ProductSource, PurchaseOrderStatus, Role } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -506,6 +506,8 @@ export class PurchasesService {
           items: {
             create: normalized.map((item) => ({
               purchaseOrderItemId: item.current.id,
+              productSource: item.current.productSource,
+              sourceProductId: item.current.sourceProductId,
               quantityReceived: item.quantityReceived,
               unitCodeSnapshot: item.unit.code,
               unitNameSnapshot: item.unit.name,
@@ -539,9 +541,17 @@ export class PurchasesService {
         });
 
         if (dto.updateInventory) {
+          if (
+            item.current.productSource &&
+            item.current.productSource !== ProductSource.LOCAL
+          ) {
+            throw new BadRequestException(
+              "Recepciones de productos FULLPOS requieren stock writable validado.",
+            );
+          }
           if (item.current.productId) {
-            await tx.product.update({
-              where: { id: item.current.productId },
+            await tx.product.updateMany({
+              where: { id: item.current.productId, companyId: order.companyId },
               data: {
                 stock: { increment: item.quantityReceived },
                 costo: item.unitCost,
@@ -848,6 +858,12 @@ export class PurchasesService {
         data: {
           productId: product?.id,
           externalProductId: this.cleanId(item.externalProductId),
+          productSource: product
+            ? ProductSource.LOCAL
+            : this.normalizeProductSource(item.productSource),
+          sourceProductId: product
+            ? product.id
+            : this.clean(item.sourceProductId),
           productNameSnapshot: name,
           productCodeSnapshot: this.clean(item.productCode),
           descriptionSnapshot: this.clean(item.description),
@@ -871,6 +887,18 @@ export class PurchasesService {
         subtotal,
       };
     });
+  }
+
+  private normalizeProductSource(value: unknown): ProductSource | null {
+    const source = String(value ?? "").trim().toUpperCase();
+    if (
+      source === "LOCAL" ||
+      source === "FULLPOS" ||
+      source === "FULLPOS_DIRECT"
+    ) {
+      return source as ProductSource;
+    }
+    return null;
   }
 
   private computeTotals(

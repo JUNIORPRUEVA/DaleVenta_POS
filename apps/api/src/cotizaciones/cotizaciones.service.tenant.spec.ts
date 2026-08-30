@@ -132,4 +132,31 @@ describe("CotizacionesService tenant isolation", () => {
       },
     });
   });
+
+  it("preserves FULLPOS product identity on quote lines without live catalog dependency", async () => {
+    const prisma = {
+      product: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const service = serviceWith(prisma);
+
+    const [item] = await (service as any).normalizeItems(user.companyId, [
+      {
+        productName: "Producto externo",
+        productSource: "FULLPOS",
+        sourceProductId: "same-remote-id",
+        qty: 2.375,
+        unitPrice: 100,
+        costUnitSnapshot: 50,
+      },
+    ]);
+
+    expect(item).toMatchObject({
+      productId: null,
+      productSource: "FULLPOS",
+      sourceProductId: "same-remote-id",
+      productNameSnapshot: "Producto externo",
+      unitCodeSnapshot: "UNIT",
+    });
+    expect(prisma.product.findMany).not.toHaveBeenCalled();
+  });
 });

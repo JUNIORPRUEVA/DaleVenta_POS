@@ -12,10 +12,25 @@ describe("SettingsService company master data protection", () => {
   };
 
   function buildService(prisma: any) {
+    const productSourceResolver = {
+      resolveForCompany: jest.fn(async (companyId: string) => ({
+        companyId,
+        source: "LOCAL",
+        readOnly: false,
+        fullposCompanyId: null,
+        supportsDecimalStock: true,
+        supportsNativeUom: true,
+        supportsProductCreate: true,
+        supportsProductEdit: true,
+        supportsStockAdjustment: true,
+        resolution: "safe-default",
+      })),
+    };
     return new SettingsService(
       prisma,
       {} as any,
       { emitCompany: jest.fn() } as any,
+      productSourceResolver as any,
       {
         getCompanyFiscalSettings: jest.fn().mockResolvedValue(fiscal),
         updateFiscalSettings: jest.fn(),
@@ -260,6 +275,20 @@ describe("SettingsService company master data protection", () => {
       prisma as any,
       {} as any,
       { emitCompany: jest.fn() } as any,
+      {
+        resolveForCompany: jest.fn(async (companyId: string) => ({
+          companyId,
+          source: "LOCAL",
+          readOnly: false,
+          fullposCompanyId: null,
+          supportsDecimalStock: true,
+          supportsNativeUom: true,
+          supportsProductCreate: true,
+          supportsProductEdit: true,
+          supportsStockAdjustment: true,
+          resolution: "safe-default",
+        })),
+      } as any,
       taxes as any,
     );
 

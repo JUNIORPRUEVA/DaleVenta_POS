@@ -18,14 +18,13 @@ const createClient = (require("socket.io-client") as { io: unknown }).io as (
   options?: Record<string, unknown>,
 ) => ClientSocket;
 
-const FULLTECH_ALLOWED_FULLPOS_COMPANY_ID = 2;
-
 @Injectable()
 export class CatalogRealtimeRelayService implements OnModuleDestroy {
   private readonly logger = new Logger(CatalogRealtimeRelayService.name);
   private readonly jwtSecret: string;
   private readonly fullposBaseUrl: string;
   private readonly fullposIntegrationToken: string;
+  private readonly fullposRealtimeCompanyId: string;
   private io: Server | null = null;
   private upstream: ClientSocket | null = null;
   private started = false;
@@ -40,6 +39,12 @@ export class CatalogRealtimeRelayService implements OnModuleDestroy {
       .replace(/\/$/, "");
     this.fullposIntegrationToken = (
       config.get<string>("FULLPOS_INTEGRATION_TOKEN") ?? ""
+    ).trim();
+    this.fullposRealtimeCompanyId = (
+      config.get<string>("FULLPOS_REALTIME_COMPANY_ID") ??
+      config.get<string>("FULLPOS_COMPANY_ID") ??
+      config.get<string>("FULLPOS_DIRECT_COMPANY_ID") ??
+      ""
     ).trim();
   }
 
@@ -162,13 +167,15 @@ export class CatalogRealtimeRelayService implements OnModuleDestroy {
       reconnectionDelay: 1500,
       auth: {
         token: this.fullposIntegrationToken,
-        expectedCompanyId: FULLTECH_ALLOWED_FULLPOS_COMPANY_ID,
+        ...(this.fullposRealtimeCompanyId
+          ? { expectedCompanyId: this.fullposRealtimeCompanyId }
+          : {}),
       },
     });
 
     upstream.on("connect", () => {
       this.logger.log(
-        `Catalog realtime relay connected to FULLPOS company ${FULLTECH_ALLOWED_FULLPOS_COMPANY_ID}`,
+        `Catalog realtime relay connected to FULLPOS company ${this.fullposRealtimeCompanyId || "token-scoped"}`,
       );
     });
 
@@ -185,15 +192,33 @@ export class CatalogRealtimeRelayService implements OnModuleDestroy {
     upstream.on("product.event", (payload: unknown) => {
       if (!this.io) return;
       if (!payload || typeof payload !== "object") return;
+      const payloadRecord = payload as {
+        eventId?: unknown;
+        type?: unknown;
+        product?: unknown;
+        companyId?: unknown;
+        company_id?: unknown;
+      };
+      const companyId = (
+        payloadRecord.companyId ??
+        payloadRecord.company_id ??
+        this.fullposRealtimeCompanyId
+      )
+        ?.toString?.()
+        .trim();
+      const event = {
+        eventId: payloadRecord.eventId?.toString() ?? crypto.randomUUID(),
+        type: payloadRecord.type?.toString() ?? "product.updated",
+        companyId: companyId || null,
+        product: payloadRecord.product,
+      };
 
-      this.io.to("catalog").emit("product.event", {
-        eventId:
-          (payload as { eventId?: unknown }).eventId?.toString() ??
-          crypto.randomUUID(),
-        type:
-          (payload as { type?: unknown }).type?.toString() ?? "product.updated",
-        product: (payload as { product?: unknown }).product,
-      });
+      if (companyId) {
+        this.io.to(`company:${companyId}`).emit("product.event", event);
+        return;
+      }
+
+      this.io.to("catalog").emit("product.event", event);
     });
 
     upstream.connect();
