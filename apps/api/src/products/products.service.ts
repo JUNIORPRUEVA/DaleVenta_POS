@@ -165,7 +165,9 @@ export class ProductsService {
           ...DEFAULT_UNIT_OF_MEASURE,
         };
       }
-      throw new BadRequestException("La unidad de medida no pertenece a esta empresa.");
+      throw new BadRequestException(
+        "La unidad de medida no pertenece a esta empresa.",
+      );
     }
 
     const unit = await tx.unitOfMeasure.findFirst({
@@ -185,7 +187,9 @@ export class ProductsService {
     });
 
     if (!unit) {
-      throw new BadRequestException("La unidad de medida no pertenece a esta empresa.");
+      throw new BadRequestException(
+        "La unidad de medida no pertenece a esta empresa.",
+      );
     }
 
     return unit;
@@ -203,7 +207,8 @@ export class ProductsService {
       name: source.name ?? DEFAULT_UNIT_OF_MEASURE.name,
       symbol: source.symbol ?? DEFAULT_UNIT_OF_MEASURE.symbol,
       category: source.category ?? "COUNT",
-      allowDecimals: source.allowDecimals ?? DEFAULT_UNIT_OF_MEASURE.allowDecimals,
+      allowDecimals:
+        source.allowDecimals ?? DEFAULT_UNIT_OF_MEASURE.allowDecimals,
       precision: source.precision ?? DEFAULT_UNIT_OF_MEASURE.precision,
     };
   }
@@ -500,7 +505,11 @@ export class ProductsService {
               operationId: dto.operationId,
               result: "existing",
             });
-            return this.productResponse(tx, companyId, existingOperationProduct.id);
+            return this.productResponse(
+              tx,
+              companyId,
+              existingOperationProduct.id,
+            );
           }
         }
 
@@ -796,6 +805,7 @@ export class ProductsService {
       const current = await tx.product.findFirst({
         where: { id, companyId },
         select: {
+          stock: true,
           unitOfMeasureId: true,
           unitOfMeasure: {
             select: {
@@ -816,6 +826,18 @@ export class ProductsService {
         dto.unitOfMeasureId === undefined
           ? this.mapUnitOfMeasure(current.unitOfMeasure)
           : await this.resolveUnitOfMeasure(tx, companyId, dto.unitOfMeasureId);
+      if (
+        dto.unitOfMeasureId !== undefined &&
+        unitOfMeasure.id !== current.unitOfMeasureId
+      ) {
+        const hasStock = new Prisma.Decimal(current.stock ?? 0).abs().gt(0);
+        const referenceCount = await this.productReferenceCount(tx, id);
+        if (hasStock || referenceCount > 0) {
+          throw new BadRequestException(
+            "No se puede cambiar la unidad de medida de un producto con stock o historial.",
+          );
+        }
+      }
       const stock =
         dto.stock === undefined ? undefined : new Prisma.Decimal(dto.stock);
       if (stock !== undefined) {

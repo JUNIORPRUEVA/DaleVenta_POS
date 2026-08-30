@@ -7,16 +7,23 @@ import compression from 'compression';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { NestExpressApplication } from '@nestjs/platform-express';
+import {
+  ExpressAdapter,
+  type NestExpressApplication,
+} from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { CatalogRealtimeRelayService } from './products/catalog-realtime-relay.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    cors: false,
-    bodyParser: false,
-  });
+  const app = await NestFactory.create<NestExpressApplication>(
+    AppModule,
+    new ExpressAdapter(),
+    {
+      cors: false,
+      bodyParser: false,
+    },
+  );
   app.set('trust proxy', 1);
 
   // Basic request logging (method/url/status/duration).
@@ -114,4 +121,3 @@ async function bootstrap() {
 }
 
 bootstrap();
-

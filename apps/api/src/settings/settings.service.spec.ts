@@ -1,8 +1,8 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
-import { Role } from '@prisma/client';
-import { SettingsService } from './settings.service';
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
+import { Role } from "@prisma/client";
+import { SettingsService } from "./settings.service";
 
-describe('SettingsService company master data protection', () => {
+describe("SettingsService company master data protection", () => {
   const fiscal = {
     taxEnabled: false,
     defaultTaxId: null,
@@ -23,63 +23,66 @@ describe('SettingsService company master data protection', () => {
     );
   }
 
-  it('serves companies.name as the canonical companyName when appConfig is stale', async () => {
+  it("serves companies.name as the canonical companyName when appConfig is stale", async () => {
     const prisma = {
       company: {
-        findUnique: jest.fn().mockResolvedValue({ name: 'Nombre Nuevo' }),
+        findUnique: jest.fn().mockResolvedValue({
+          name: "Nombre Nuevo",
+          measurementUnitsEnabled: false,
+        }),
       },
       appConfig: {
         upsert: jest.fn().mockResolvedValue({
-          companyName: 'Nombre Viejo',
-          rnc: '',
-          phone: '',
-          phonePreferential: '',
-          address: '',
-          description: '',
-          instagramUrl: '',
-          facebookUrl: '',
-          websiteUrl: '',
-          gpsLocationUrl: '',
-          businessHours: '',
+          companyName: "Nombre Viejo",
+          rnc: "",
+          phone: "",
+          phonePreferential: "",
+          address: "",
+          description: "",
+          instagramUrl: "",
+          facebookUrl: "",
+          websiteUrl: "",
+          gpsLocationUrl: "",
+          businessHours: "",
           bankAccounts: [],
-          legalRepresentativeName: '',
-          legalRepresentativeCedula: '',
-          legalRepresentativeRole: '',
-          legalRepresentativeNationality: '',
-          legalRepresentativeCivilStatus: '',
+          legalRepresentativeName: "",
+          legalRepresentativeCedula: "",
+          legalRepresentativeRole: "",
+          legalRepresentativeNationality: "",
+          legalRepresentativeCivilStatus: "",
           logoBase64: null,
           openAiApiKey: null,
-          openAiModel: 'gpt-4o-mini',
-          evolutionApiBaseUrl: '',
-          evolutionApiInstanceName: '',
+          openAiModel: "gpt-4o-mini",
+          evolutionApiBaseUrl: "",
+          evolutionApiInstanceName: "",
           evolutionApiApiKey: null,
           whatsappWebhookEnabled: false,
           adminAuthorizationPinHash: null,
         }),
-        update: jest.fn().mockResolvedValue({ id: 'company_company-a' }),
+        update: jest.fn().mockResolvedValue({ id: "company_company-a" }),
       },
     };
     const service = buildService(prisma);
 
     const settings = await service.getSettings({
-      id: 'user-a',
+      id: "user-a",
       role: Role.CAJERO,
-      companyId: 'company-a',
+      companyId: "company-a",
     });
 
-    expect(settings.companyName).toBe('Nombre Nuevo');
+    expect(settings.companyName).toBe("Nombre Nuevo");
     expect(prisma.company.findUnique).toHaveBeenCalledWith({
-      where: { id: 'company-a' },
-      select: { name: true },
+      where: { id: "company-a" },
+      select: { name: true, measurementUnitsEnabled: true },
     });
     expect(prisma.appConfig.update).toHaveBeenCalledWith({
-      where: { companyId: 'company-a' },
-      data: { companyName: 'Nombre Nuevo' },
+      where: { companyId: "company-a" },
+      data: { companyName: "Nombre Nuevo" },
       select: { id: true },
     });
   });
 
-  it('rejects stale company writes from non-admin users before touching prisma', async () => {
+  it("rejects stale company writes from non-admin users before touching prisma", async () => {
     const prisma = {
       $transaction: jest.fn(),
     };
@@ -87,14 +90,14 @@ describe('SettingsService company master data protection', () => {
 
     await expect(
       service.updateSettings(
-        { id: 'employee-a', role: Role.CAJERO, companyId: 'company-a' },
-        { companyName: 'Nombre Viejo' },
+        { id: "employee-a", role: Role.CAJERO, companyId: "company-a" },
+        { companyName: "Nombre Viejo" },
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('rejects empty company names on the dedicated rename endpoint', async () => {
+  it("rejects empty company names on the dedicated rename endpoint", async () => {
     const prisma = {
       $transaction: jest.fn(),
     };
@@ -102,14 +105,14 @@ describe('SettingsService company master data protection', () => {
 
     await expect(
       service.updateCompanyName(
-        { id: 'admin-a', role: Role.ADMIN, companyId: 'company-a' },
-        { companyName: '   ' },
+        { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+        { companyName: "   " },
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('rejects renames from non-admin users before touching prisma', async () => {
+  it("rejects renames from non-admin users before touching prisma", async () => {
     const prisma = {
       $transaction: jest.fn(),
     };
@@ -117,43 +120,43 @@ describe('SettingsService company master data protection', () => {
 
     await expect(
       service.updateCompanyName(
-        { id: 'cashier-a', role: Role.CAJERO, companyId: 'company-a' },
-        { companyName: 'Nombre Nuevo' },
+        { id: "cashier-a", role: Role.CAJERO, companyId: "company-a" },
+        { companyName: "Nombre Nuevo" },
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('renames only through the explicit endpoint, tenant-scoped and audited', async () => {
+  it("renames only through the explicit endpoint, tenant-scoped and audited", async () => {
     const tx = {
       company: {
-        findUnique: jest.fn().mockResolvedValue({ name: 'Nombre Viejo' }),
-        update: jest.fn().mockResolvedValue({ id: 'company-a' }),
+        findUnique: jest.fn().mockResolvedValue({ name: "Nombre Viejo" }),
+        update: jest.fn().mockResolvedValue({ id: "company-a" }),
       },
       appConfig: {
         upsert: jest.fn().mockResolvedValue({
-          companyName: 'Nombre Nuevo',
-          rnc: '',
-          phone: '',
-          phonePreferential: '',
-          address: '',
-          description: '',
-          instagramUrl: '',
-          facebookUrl: '',
-          websiteUrl: '',
-          gpsLocationUrl: '',
-          businessHours: '',
+          companyName: "Nombre Nuevo",
+          rnc: "",
+          phone: "",
+          phonePreferential: "",
+          address: "",
+          description: "",
+          instagramUrl: "",
+          facebookUrl: "",
+          websiteUrl: "",
+          gpsLocationUrl: "",
+          businessHours: "",
           bankAccounts: [],
-          legalRepresentativeName: '',
-          legalRepresentativeCedula: '',
-          legalRepresentativeRole: '',
-          legalRepresentativeNationality: '',
-          legalRepresentativeCivilStatus: '',
+          legalRepresentativeName: "",
+          legalRepresentativeCedula: "",
+          legalRepresentativeRole: "",
+          legalRepresentativeNationality: "",
+          legalRepresentativeCivilStatus: "",
           logoBase64: null,
           openAiApiKey: null,
-          openAiModel: 'gpt-4o-mini',
-          evolutionApiBaseUrl: '',
-          evolutionApiInstanceName: '',
+          openAiModel: "gpt-4o-mini",
+          evolutionApiBaseUrl: "",
+          evolutionApiInstanceName: "",
           evolutionApiApiKey: null,
           whatsappWebhookEnabled: false,
           adminAuthorizationPinHash: null,
@@ -169,38 +172,38 @@ describe('SettingsService company master data protection', () => {
     const service = buildService(prisma);
 
     await service.updateCompanyName(
-      { id: 'admin-a', role: Role.ADMIN, companyId: 'company-a' },
-      { companyName: 'Nombre Nuevo' },
+      { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+      { companyName: "Nombre Nuevo" },
     );
 
     expect(tx.company.update).toHaveBeenCalledWith({
-      where: { id: 'company-a' },
-      data: { name: 'Nombre Nuevo' },
+      where: { id: "company-a" },
+      data: { name: "Nombre Nuevo" },
       select: { id: true },
     });
     expect(tx.company.update).not.toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'company-b' } }),
+      expect.objectContaining({ where: { id: "company-b" } }),
     );
     expect(tx.appConfig.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ update: { companyName: 'Nombre Nuevo' } }),
+      expect.objectContaining({ update: { companyName: "Nombre Nuevo" } }),
     );
     expect(tx.companyLicenseAuditLog.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          companyId: 'company-a',
-          actorId: 'admin-a',
-          action: 'settings.company_name_update',
-          before: { companyName: 'Nombre Viejo' },
-          after: { companyName: 'Nombre Nuevo' },
+          companyId: "company-a",
+          actorId: "admin-a",
+          action: "settings.company_name_update",
+          before: { companyName: "Nombre Viejo" },
+          after: { companyName: "Nombre Nuevo" },
         }),
       }),
     );
   });
 
-  it('persists fiscal false values without touching Company.name', async () => {
+  it("persists fiscal false values without touching Company.name", async () => {
     let fiscalState = {
       taxEnabled: true,
-      defaultTaxId: 'tax-18',
+      defaultTaxId: "tax-18",
       defaultTaxRate: 0.18,
       pricesIncludeTax: true,
       ncfEnabled: true,
@@ -214,33 +217,33 @@ describe('SettingsService company master data protection', () => {
     };
     const tx = {
       company: {
-        findUnique: jest.fn().mockResolvedValue({ name: 'FullPOS Cloud' }),
+        findUnique: jest.fn().mockResolvedValue({ name: "FullPOS Cloud" }),
         update: jest.fn().mockResolvedValue({}),
       },
       appConfig: {
         upsert: jest.fn().mockResolvedValue({
-          companyName: 'FullPOS Cloud',
-          rnc: '',
-          phone: '',
-          phonePreferential: '',
-          address: '',
-          description: '',
-          instagramUrl: '',
-          facebookUrl: '',
-          websiteUrl: '',
-          gpsLocationUrl: '',
-          businessHours: '',
+          companyName: "FullPOS Cloud",
+          rnc: "",
+          phone: "",
+          phonePreferential: "",
+          address: "",
+          description: "",
+          instagramUrl: "",
+          facebookUrl: "",
+          websiteUrl: "",
+          gpsLocationUrl: "",
+          businessHours: "",
           bankAccounts: [],
-          legalRepresentativeName: '',
-          legalRepresentativeCedula: '',
-          legalRepresentativeRole: '',
-          legalRepresentativeNationality: '',
-          legalRepresentativeCivilStatus: '',
+          legalRepresentativeName: "",
+          legalRepresentativeCedula: "",
+          legalRepresentativeRole: "",
+          legalRepresentativeNationality: "",
+          legalRepresentativeCivilStatus: "",
           logoBase64: null,
           openAiApiKey: null,
-          openAiModel: 'gpt-4o-mini',
-          evolutionApiBaseUrl: '',
-          evolutionApiInstanceName: '',
+          openAiModel: "gpt-4o-mini",
+          evolutionApiBaseUrl: "",
+          evolutionApiInstanceName: "",
           evolutionApiApiKey: null,
           whatsappWebhookEnabled: false,
           adminAuthorizationPinHash: null,
@@ -261,11 +264,11 @@ describe('SettingsService company master data protection', () => {
     );
 
     const response = await service.updateSettings(
-      { id: 'admin-a', role: Role.ADMIN, companyId: 'company-a' },
+      { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
       {
         // Payload legado: contiene companyName, pero el PATCH genérico NO debe
         // modificar Company.name (ni propagarlo a AppConfig).
-        companyName: 'DaleVenta POS',
+        companyName: "DaleVenta POS",
         taxEnabled: false,
         pricesIncludeTax: false,
         ncfEnabled: false,
@@ -275,9 +278,9 @@ describe('SettingsService company master data protection', () => {
 
     expect(tx.company.update).not.toHaveBeenCalled();
     const upsertCall = tx.appConfig.upsert.mock.calls[0][0];
-    expect(upsertCall.update).not.toHaveProperty('companyName');
+    expect(upsertCall.update).not.toHaveProperty("companyName");
     expect(taxes.updateFiscalSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ companyId: 'company-a' }),
+      expect.objectContaining({ companyId: "company-a" }),
       {
         taxEnabled: false,
         defaultTaxRate: 0.18,
@@ -290,36 +293,39 @@ describe('SettingsService company master data protection', () => {
     expect(response.ncfEnabled).toBe(false);
   });
 
-  it('persists measurementUnitsEnabled without touching Company.name', async () => {
+  it("persists measurementUnitsEnabled on Company without changing Company.name", async () => {
     const tx = {
       company: {
-        findUnique: jest.fn().mockResolvedValue({ name: 'FullPOS Cloud' }),
+        findUnique: jest.fn().mockResolvedValue({
+          name: "FullPOS Cloud",
+          measurementUnitsEnabled: false,
+        }),
         update: jest.fn().mockResolvedValue({}),
       },
       appConfig: {
         upsert: jest.fn().mockResolvedValue({
-          companyName: 'FullPOS Cloud',
-          rnc: '',
-          phone: '',
-          phonePreferential: '',
-          address: '',
-          description: '',
-          instagramUrl: '',
-          facebookUrl: '',
-          websiteUrl: '',
-          gpsLocationUrl: '',
-          businessHours: '',
+          companyName: "FullPOS Cloud",
+          rnc: "",
+          phone: "",
+          phonePreferential: "",
+          address: "",
+          description: "",
+          instagramUrl: "",
+          facebookUrl: "",
+          websiteUrl: "",
+          gpsLocationUrl: "",
+          businessHours: "",
           bankAccounts: [],
-          legalRepresentativeName: '',
-          legalRepresentativeCedula: '',
-          legalRepresentativeRole: '',
-          legalRepresentativeNationality: '',
-          legalRepresentativeCivilStatus: '',
+          legalRepresentativeName: "",
+          legalRepresentativeCedula: "",
+          legalRepresentativeRole: "",
+          legalRepresentativeNationality: "",
+          legalRepresentativeCivilStatus: "",
           logoBase64: null,
           openAiApiKey: null,
-          openAiModel: 'gpt-4o-mini',
-          evolutionApiBaseUrl: '',
-          evolutionApiInstanceName: '',
+          openAiModel: "gpt-4o-mini",
+          evolutionApiBaseUrl: "",
+          evolutionApiInstanceName: "",
           evolutionApiApiKey: null,
           whatsappWebhookEnabled: false,
           measurementUnitsEnabled: true,
@@ -333,12 +339,25 @@ describe('SettingsService company master data protection', () => {
     const service = buildService(prisma);
 
     const response = await service.updateSettings(
-      { id: 'admin-a', role: Role.ADMIN, companyId: 'company-a' },
+      { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
       { measurementUnitsEnabled: true },
     );
 
-    expect(tx.company.update).not.toHaveBeenCalled();
-    expect(tx.appConfig.upsert.mock.calls[0][0].update).toMatchObject({
+    expect(tx.company.update).toHaveBeenCalledWith({
+      where: { id: "company-a" },
+      data: { measurementUnitsEnabled: true },
+      select: { id: true },
+    });
+    expect(tx.company.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ name: "" }) }),
+    );
+    expect(tx.appConfig.upsert.mock.calls[0][0].update).not.toHaveProperty(
+      "measurementUnitsEnabled",
+    );
+    expect(tx.appConfig.upsert.mock.calls[0][0].update).not.toHaveProperty(
+      "companyName",
+    );
+    expect(tx.company.update.mock.calls[0][0].data).toMatchObject({
       measurementUnitsEnabled: true,
     });
     expect(response.measurementUnitsEnabled).toBe(true);

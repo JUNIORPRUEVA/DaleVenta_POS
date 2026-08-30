@@ -60,6 +60,8 @@ type NormalizedSaleItem = {
   lineTotal?: Prisma.Decimal;
 };
 
+const SALE_TRANSACTION_OPTIONS = { maxWait: 10000, timeout: 20000 } as const;
+
 @Injectable()
 export class SalesService {
   constructor(
@@ -708,7 +710,9 @@ export class SalesService {
               exemptAmount: new Prisma.Decimal(item.exemptAmount ?? 0),
               taxIncluded: item.taxIncluded ?? false,
               taxExempt: item.taxExempt ?? false,
-              lineTotal: new Prisma.Decimal(item.lineTotal ?? item.subtotalSold),
+              lineTotal: new Prisma.Decimal(
+                item.lineTotal ?? item.subtotalSold,
+              ),
             })),
           };
         })()
@@ -750,8 +754,8 @@ export class SalesService {
     let totalSold = sourceQuotation
       ? new Prisma.Decimal(sourceQuotation.total)
       : fiscalSettings.taxEnabled
-      ? taxCalculation.total
-      : new Prisma.Decimal(taxCalculation.discountAmount);
+        ? taxCalculation.total
+        : new Prisma.Decimal(taxCalculation.discountAmount);
     let totalCost = new Prisma.Decimal(0);
     let totalProfit = new Prisma.Decimal(0);
 
@@ -884,7 +888,9 @@ export class SalesService {
       null;
 
     if (requestedVoucherType && !fiscalSettings.ncfEnabled) {
-      throw new BadRequestException("Los comprobantes fiscales no están activados para esta empresa.");
+      throw new BadRequestException(
+        "Los comprobantes fiscales no están activados para esta empresa.",
+      );
     }
 
     if (fiscalSettings.ncfEnabled && requestedVoucherType) {
@@ -1077,7 +1083,7 @@ export class SalesService {
         }
 
         return sale;
-      });
+      }, SALE_TRANSACTION_OPTIONS);
       this.emitSaleEvent(companyId, "sale.created", sale.id, {
         userId: user.id,
         cashSessionId: sale.cashSessionId,
@@ -1143,7 +1149,9 @@ export class SalesService {
           },
         })
       : [];
-    const productMap = new Map(products.map((product) => [product.id, product]));
+    const productMap = new Map(
+      products.map((product) => [product.id, product]),
+    );
     const normalizedItems = dto.items.map((item, index) =>
       this.normalizeItem(item, index, productMap),
     );
@@ -1339,7 +1347,9 @@ export class SalesService {
       }
 
       const returned = await this.prisma.$transaction(async (tx) => {
-        const originalItems = new Map(sale!.items.map((item) => [item.id, item]));
+        const originalItems = new Map(
+          sale!.items.map((item) => [item.id, item]),
+        );
         const requestedItems =
           dto.items && dto.items.length
             ? dto.items.map((item) => ({
@@ -1432,7 +1442,9 @@ export class SalesService {
             .toDecimalPlaces(2)
             .neg();
           const commercialProfit = lineTotal.minus(subtotalCost);
-          const netTaxProfit = taxableBase.plus(exemptAmount).minus(subtotalCost);
+          const netTaxProfit = taxableBase
+            .plus(exemptAmount)
+            .minus(subtotalCost);
           return {
             original,
             data: {
@@ -1526,7 +1538,9 @@ export class SalesService {
             customerId: sale!.customerId,
             cashSessionId: activeSession.id,
             saleDate: new Date(),
-            note: dto.reason?.trim() || "DEVOLUCION: venta devuelta desde historial.",
+            note:
+              dto.reason?.trim() ||
+              "DEVOLUCION: venta devuelta desde historial.",
             paymentMethod: "refund",
             paymentCashAmount: totalSold,
             paymentTransferAmount: new Prisma.Decimal(0),
@@ -1567,7 +1581,7 @@ export class SalesService {
           },
           include: this.saleInclude(),
         });
-      });
+      }, SALE_TRANSACTION_OPTIONS);
       this.emitSaleEvent(companyId, "sale.returned", saleId, {
         userId: requestUser.id,
         cashSessionId: returned.cashSessionId,
