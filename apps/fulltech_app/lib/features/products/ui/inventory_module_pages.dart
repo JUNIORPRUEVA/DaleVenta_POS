@@ -5364,7 +5364,12 @@ class _CategoryEditorDialogState extends State<_CategoryEditorDialog> {
       );
       if (!mounted || result == null) return;
       final file = result.files.single;
-      final bytes = file.bytes;
+      final rawBytes =
+          file.bytes ??
+          ((file.path ?? '').trim().isEmpty
+              ? null
+              : await readLocalFileBytes(file.path!));
+      final bytes = rawBytes == null ? null : Uint8List.fromList(rawBytes);
       if (bytes == null || bytes.isEmpty) {
         throw StateError('No se pudo leer la imagen seleccionada');
       }
@@ -5427,8 +5432,13 @@ class _CategoryEditorDialogState extends State<_CategoryEditorDialog> {
       try {
         final bytes = await readLocalFileBytes(_pickedImagePath!);
         base64ToSave = bytes.isEmpty ? null : base64Encode(bytes);
-      } catch (_) {
-        base64ToSave = null;
+      } catch (e) {
+        if (!mounted) return;
+        setState(
+          () => _error =
+              'No se pudo guardar la foto de la categoría. Intenta seleccionarla nuevamente: $e',
+        );
+        return;
       }
     }
     if (!mounted) return;

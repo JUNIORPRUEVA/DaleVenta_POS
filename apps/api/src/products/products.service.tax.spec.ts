@@ -78,7 +78,7 @@ describe("ProductsService fiscal validation", () => {
     };
     const transactionClient = {
       product: {
-        findFirst: jest.fn().mockResolvedValue(null),
+        findFirst: jest.fn().mockResolvedValue(createdProduct),
         findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn().mockResolvedValue(createdProduct),
       },
@@ -133,7 +133,7 @@ describe("ProductsService fiscal validation", () => {
     };
     const transactionClient = {
       product: {
-        findFirst: jest.fn().mockResolvedValue(null),
+        findFirst: jest.fn().mockResolvedValue(createdProduct),
         findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn().mockResolvedValue(createdProduct),
       },

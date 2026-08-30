@@ -175,7 +175,7 @@ class AuthRepository {
     if (licenseInactive) {
       return ApiException.detailed(
         message:
-            'Tu licencia no está activa. Puedes comprar o renovar tu acceso por WhatsApp al 829-534-4286.',
+            'Tu licencia no está activa. Puedes comprar o renovar tu acceso por WhatsApp al 829-531-9442.',
         code: error.code,
         type: error.type,
         displayCode: 'LICENSE_INACTIVE',
@@ -265,7 +265,7 @@ class AuthRepository {
     if (error.type == ApiErrorType.timeout) {
       return ApiException.detailed(
         message:
-            'El servidor tardó demasiado en responder. Revisa tu conexión e inténtalo nuevamente.',
+            'El servicio tardó demasiado en responder. Revisa tu conexión e inténtalo nuevamente.',
         code: error.code,
         type: error.type,
         displayCode: error.displayCode,
@@ -282,8 +282,7 @@ class AuthRepository {
         error.type == ApiErrorType.tls ||
         error.type == ApiErrorType.network) {
       return ApiException.detailed(
-        message:
-            'No pudimos conectar con el servidor. Verifica tu internet e intenta otra vez.',
+        message: _authConnectionMessage(error.type, action: 'iniciar sesión'),
         code: error.code,
         type: error.type,
         displayCode: error.displayCode,
@@ -298,7 +297,7 @@ class AuthRepository {
     if (error.type == ApiErrorType.config) {
       return ApiException.detailed(
         message:
-            'La app no tiene una configuración válida para conectarse al backend. Revisa la configuración del sistema.',
+            'La app no está lista para conectarse. Revisa que tengas la versión correcta instalada.',
         code: error.code,
         type: error.type,
         displayCode: error.displayCode,
@@ -313,7 +312,7 @@ class AuthRepository {
     if (error.type == ApiErrorType.server) {
       return ApiException.detailed(
         message:
-            'El servidor presentó un problema al procesar el inicio de sesión. Intenta nuevamente en unos momentos.',
+            'El servicio presentó un problema al procesar el inicio de sesión. Intenta nuevamente en unos momentos.',
         code: error.code,
         type: error.type,
         displayCode: error.displayCode,
@@ -339,6 +338,98 @@ class AuthRepository {
     );
   }
 
+  ApiException _mapRegisterBusinessError(ApiException error) {
+    if (error.type == ApiErrorType.timeout) {
+      return ApiException.detailed(
+        message:
+            'La creación de tu negocio tardó más de lo esperado. Revisa tu conexión e intenta otra vez.',
+        code: error.code,
+        type: error.type,
+        displayCode: error.displayCode,
+        technicalDetails: error.technicalDetails,
+        responseBody: error.responseBody,
+        uri: error.uri,
+        method: error.method,
+        retryable: true,
+      );
+    }
+
+    if (error.type == ApiErrorType.noInternet ||
+        error.type == ApiErrorType.dns ||
+        error.type == ApiErrorType.tls ||
+        error.type == ApiErrorType.network) {
+      return ApiException.detailed(
+        message: _authConnectionMessage(error.type, action: 'crear tu negocio'),
+        code: error.code,
+        type: error.type,
+        displayCode: error.displayCode,
+        technicalDetails: error.technicalDetails,
+        responseBody: error.responseBody,
+        uri: error.uri,
+        method: error.method,
+        retryable: true,
+      );
+    }
+
+    if (error.type == ApiErrorType.config) {
+      return ApiException.detailed(
+        message:
+            'La app no está lista para crear negocios. Revisa que tengas la versión correcta instalada.',
+        code: error.code,
+        type: error.type,
+        displayCode: error.displayCode,
+        technicalDetails: error.technicalDetails,
+        responseBody: error.responseBody,
+        uri: error.uri,
+        method: error.method,
+        retryable: false,
+      );
+    }
+
+    if (error.type == ApiErrorType.server) {
+      return ApiException.detailed(
+        message:
+            'El servicio tuvo un problema al crear tu negocio. Intenta nuevamente en unos minutos.',
+        code: error.code,
+        type: error.type,
+        displayCode: error.displayCode,
+        technicalDetails: error.technicalDetails,
+        responseBody: error.responseBody,
+        uri: error.uri,
+        method: error.method,
+        retryable: true,
+      );
+    }
+
+    return error;
+  }
+
+  String _authConnectionMessage(ApiErrorType type, {required String action}) {
+    switch (type) {
+      case ApiErrorType.noInternet:
+        return 'No hay conexión a internet para $action. Conéctate y vuelve a intentar.';
+      case ApiErrorType.dns:
+        return 'No pudimos encontrar el servicio de FullPOS Cloud. Revisa tu internet o cambia de red e intenta otra vez.';
+      case ApiErrorType.tls:
+        return 'La conexión segura fue rechazada. Revisa la fecha y hora de tu PC, tu antivirus o la red donde estás conectado.';
+      case ApiErrorType.network:
+        return 'La conexión se interrumpió antes de completar la operación. Intenta otra vez en unos segundos.';
+      case ApiErrorType.timeout:
+        return 'El servicio tardó más de lo esperado. Revisa tu conexión e intenta otra vez.';
+      case ApiErrorType.badRequest:
+      case ApiErrorType.unauthorized:
+      case ApiErrorType.forbidden:
+      case ApiErrorType.notFound:
+      case ApiErrorType.conflict:
+      case ApiErrorType.server:
+      case ApiErrorType.parse:
+      case ApiErrorType.cancelled:
+      case ApiErrorType.config:
+      case ApiErrorType.unknown:
+        return 'No se pudo $action en este momento. Intenta nuevamente.';
+    }
+  }
+
   UserModel? _userFromLoginResponse(dynamic data) {
     if (data is! Map) return null;
     final user = data['user'];
@@ -352,6 +443,49 @@ class AuthRepository {
     return UserModel.fromJson(normalized);
   }
 
+  UserModel _ensureCompanyFromAccessToken(UserModel user, String? accessToken) {
+    if (user.companyId?.trim().isNotEmpty ?? false) return user;
+
+    final jwtCompanyId = _companyIdFromAccessToken(accessToken);
+    if (jwtCompanyId == null) return user;
+
+    return UserModel.fromJson({...user.toJson(), 'companyId': jwtCompanyId});
+  }
+
+  UserModel _requireReadySession(
+    UserModel user, {
+    required bool accountCreated,
+  }) {
+    final userId = user.id.trim();
+    final email = user.email.trim();
+    final companyId = user.companyId?.trim() ?? '';
+    if (userId.isNotEmpty && email.isNotEmpty && companyId.isNotEmpty) {
+      return user;
+    }
+
+    throw ApiException.detailed(
+      message: accountCreated
+          ? 'Tu negocio fue creado, pero no pudimos preparar el acceso automático. Vuelve al acceso e inicia sesión con el correo y la contraseña que acabas de registrar.'
+          : 'No pudimos preparar tu acceso. Intenta iniciar sesión nuevamente.',
+      type: ApiErrorType.parse,
+      displayCode: accountCreated
+          ? 'CREATED_SESSION_INCOMPLETE'
+          : 'SESSION_INCOMPLETE',
+      retryable: false,
+    );
+  }
+
+  Future<UserModel> _saveReadyRegisteredUser(UserModel user) async {
+    try {
+      final readyUser = _requireReadySession(user, accountCreated: true);
+      await _storage.saveUserSnapshot(readyUser);
+      return readyUser;
+    } on ApiException {
+      await _safeClearTokens();
+      rethrow;
+    }
+  }
+
   String? _companyIdFromAccessToken(String? accessToken) {
     if (accessToken == null || accessToken.trim().isEmpty) return null;
 
@@ -362,9 +496,7 @@ class AuthRepository {
       while (payload.length % 4 != 0) {
         payload += '=';
       }
-      final decoded = jsonDecode(
-        utf8.decode(base64.decode(payload)),
-      );
+      final decoded = jsonDecode(utf8.decode(base64.decode(payload)));
       if (decoded is! Map) return null;
       final companyId = decoded['companyId']?.toString().trim();
       return companyId == null || companyId.isEmpty ? null : companyId;
@@ -449,28 +581,39 @@ class AuthRepository {
               ),
             )
             .timeout(_loginTimeout);
-        final user = _userFromMeResponse(me.data, access);
+        final user = _requireReadySession(
+          _userFromMeResponse(me.data, access),
+          accountCreated: false,
+        );
         await _storage.saveUserSnapshot(user);
         return user;
       } on DioException {
         final fallbackUser = _userFromLoginResponse(res.data);
         if (fallbackUser != null) {
-          await _storage.saveUserSnapshot(fallbackUser);
-          return fallbackUser;
+          final user = _requireReadySession(
+            _ensureCompanyFromAccessToken(fallbackUser, access),
+            accountCreated: false,
+          );
+          await _storage.saveUserSnapshot(user);
+          return user;
         }
         rethrow;
       } on TimeoutException {
         final fallbackUser = _userFromLoginResponse(res.data);
         if (fallbackUser != null) {
-          await _storage.saveUserSnapshot(fallbackUser);
-          return fallbackUser;
+          final user = _requireReadySession(
+            _ensureCompanyFromAccessToken(fallbackUser, access),
+            accountCreated: false,
+          );
+          await _storage.saveUserSnapshot(user);
+          return user;
         }
         rethrow;
       }
     } on TimeoutException {
       throw const ApiException.detailed(
         message:
-            'El servidor tardó demasiado en responder. Inténtalo de nuevo.',
+            'El servicio tardó demasiado en responder. Inténtalo de nuevo.',
         type: ApiErrorType.timeout,
         displayCode: 'NETWORK_TIMEOUT',
         retryable: true,
@@ -496,20 +639,51 @@ class AuthRepository {
       }
       final fallbackUser = _userFromLoginResponse(res.data);
       if (fallbackUser == null) {
-        throw ApiException('No se recibio la sesion creada');
+        await _safeClearTokens();
+        throw const ApiException.detailed(
+          message:
+              'Tu negocio fue creado, pero no pudimos preparar el acceso automático. Vuelve al acceso e inicia sesión con el correo y la contraseña que acabas de registrar.',
+          type: ApiErrorType.parse,
+          displayCode: 'CREATED_SESSION_INCOMPLETE',
+          retryable: false,
+        );
       }
-      await _storage.saveUserSnapshot(fallbackUser);
-      return fallbackUser;
+      try {
+        final me = await _dio
+            .get(
+              ApiRoutes.usersMe,
+              options: Options(
+                extra: const {'disableOfflineCache': true, 'skipLoader': true},
+              ),
+            )
+            .timeout(_loginTimeout);
+        return await _saveReadyRegisteredUser(
+          _userFromMeResponse(me.data, access),
+        );
+      } on DioException {
+        return await _saveReadyRegisteredUser(
+          _ensureCompanyFromAccessToken(fallbackUser, access),
+        );
+      } on TimeoutException {
+        return await _saveReadyRegisteredUser(
+          _ensureCompanyFromAccessToken(fallbackUser, access),
+        );
+      } on ApiException {
+        await _safeClearTokens();
+        rethrow;
+      }
     } on TimeoutException {
       throw const ApiException.detailed(
         message:
-            'El servidor tardó demasiado creando tu negocio. Inténtalo de nuevo.',
+            'El servicio tardó demasiado creando tu negocio. Inténtalo de nuevo.',
         type: ApiErrorType.timeout,
         displayCode: 'NETWORK_TIMEOUT',
         retryable: true,
       );
     } on DioException catch (e) {
-      throw _mapDioError(e, 'No se pudo crear el negocio');
+      throw _mapRegisterBusinessError(
+        _mapDioError(e, 'No se pudo crear el negocio'),
+      );
     }
   }
 
@@ -526,7 +700,7 @@ class AuthRepository {
     } on TimeoutException {
       throw const ApiException.detailed(
         message:
-            'El servidor tardó demasiado procesando la solicitud. Inténtalo de nuevo.',
+            'El servicio tardó demasiado procesando la solicitud. Inténtalo de nuevo.',
         type: ApiErrorType.timeout,
         displayCode: 'NETWORK_TIMEOUT',
         retryable: true,
@@ -550,7 +724,7 @@ class AuthRepository {
     } on TimeoutException {
       throw const ApiException.detailed(
         message:
-            'El servidor tardó demasiado restableciendo la contraseña. Inténtalo de nuevo.',
+            'El servicio tardó demasiado restableciendo la contraseña. Inténtalo de nuevo.',
         type: ApiErrorType.timeout,
         displayCode: 'NETWORK_TIMEOUT',
         retryable: true,
@@ -572,7 +746,7 @@ class AuthRepository {
       throw _mapDioError(e, 'No se pudo preparar la eliminacion de cuenta');
     } on TimeoutException {
       throw const ApiException.detailed(
-        message: 'El servidor tardó demasiado preparando la eliminación.',
+        message: 'El servicio tardó demasiado preparando la eliminación.',
         type: ApiErrorType.timeout,
         displayCode: 'NETWORK_TIMEOUT',
         retryable: true,
@@ -605,7 +779,7 @@ class AuthRepository {
     } on TimeoutException {
       throw const ApiException.detailed(
         message:
-            'El servidor tardó demasiado eliminando la cuenta. Verifica el estado antes de intentar de nuevo.',
+            'El servicio tardó demasiado eliminando la cuenta. Verifica el estado antes de intentar de nuevo.',
         type: ApiErrorType.timeout,
         displayCode: 'NETWORK_TIMEOUT',
         retryable: true,

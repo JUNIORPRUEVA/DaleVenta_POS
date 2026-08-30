@@ -20,8 +20,15 @@ final appBootstrapStatusProvider = Provider<AppBootstrapStatus>((ref) {
   final user = auth.user;
   final userId = user?.id.trim() ?? '';
   final companyId = user?.companyId?.trim() ?? '';
-  if (auth.restoringSession || userId.isEmpty || companyId.isEmpty) {
+  if (auth.restoringSession) {
     return AppBootstrapStatus.authenticatedLoadingCompany;
+  }
+  if (userId.isEmpty || companyId.isEmpty) {
+    TraceLog.log(
+      'AppBootstrap',
+      'ACTIVE_COMPANY_RESOLUTION_ERROR missing identity userId=$userId companyId=$companyId',
+    );
+    return AppBootstrapStatus.error;
   }
 
   final company = ref.watch(companySettingsProvider);

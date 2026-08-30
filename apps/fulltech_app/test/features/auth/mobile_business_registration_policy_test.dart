@@ -7,6 +7,7 @@ import 'package:daleventa_pos/core/errors/api_exception.dart';
 import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:daleventa_pos/core/routing/app_router.dart';
 import 'package:daleventa_pos/core/routing/routes.dart';
+import 'package:daleventa_pos/features/auth/presentation/landing_screen.dart';
 import 'package:daleventa_pos/features/auth/presentation/login_screen.dart';
 import 'package:daleventa_pos/features/auth/presentation/register_screen.dart';
 import 'package:dio/dio.dart';
@@ -200,6 +201,20 @@ void main() {
     expect(router.routeInformationProvider.value.uri.path, Routes.register);
     expect(find.byType(RegisterScreen), findsOneWidget);
     expect(find.text('Crear empresa'), findsOneWidget);
+  });
+
+  testWidgets('Windows root route opens login instead of public landing', (
+    tester,
+  ) async {
+    final router = await pumpAppRouter(
+      tester,
+      registrationDisabled: false,
+      platform: TargetPlatform.windows,
+    );
+
+    expect(router.routeInformationProvider.value.uri.path, Routes.login);
+    expect(find.byType(LoginScreen), findsOneWidget);
+    expect(find.byType(LandingScreen), findsNothing);
   });
 
   test('mobile registerBusiness guard prevents repository call', () async {

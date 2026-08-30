@@ -24,6 +24,10 @@ export class CreateProductDto {
   @IsString()
   operationId?: string;
 
+  @IsOptional()
+  @IsString()
+  unitOfMeasureId?: string;
+
   @IsNumber()
   @Min(0)
   precio!: number;

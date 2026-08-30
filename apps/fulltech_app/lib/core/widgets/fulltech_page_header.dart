@@ -7,6 +7,7 @@ class FullTechPageHeader extends StatelessWidget
   const FullTechPageHeader({
     super.key,
     required this.title,
+    this.subtitle,
     this.onMenuPressed,
     this.actions,
     this.bottom,
@@ -18,6 +19,7 @@ class FullTechPageHeader extends StatelessWidget
   });
 
   final String title;
+  final String? subtitle;
   final VoidCallback? onMenuPressed;
   final List<Widget>? actions;
   final PreferredSizeWidget? bottom;
@@ -31,6 +33,7 @@ class FullTechPageHeader extends StatelessWidget
   Widget build(BuildContext context) {
     return CustomAppBar(
       title: title,
+      subtitle: subtitle,
       onMenuPressed: showDrawerButton ? onMenuPressed : null,
       actions: actions,
       bottom: bottom,

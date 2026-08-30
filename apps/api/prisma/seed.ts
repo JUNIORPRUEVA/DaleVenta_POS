@@ -3,6 +3,33 @@ import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+const globalUnits = [
+  { id: 'UNIT', code: 'UNIT', name: 'Unidad', symbol: 'u', category: 'COUNT', allowDecimals: false, precision: 0 },
+  { id: 'YARD', code: 'YARD', name: 'Yarda', symbol: 'yd', category: 'LENGTH', allowDecimals: true, precision: 3 },
+  { id: 'METER', code: 'METER', name: 'Metro', symbol: 'm', category: 'LENGTH', allowDecimals: true, precision: 3 },
+  { id: 'FOOT', code: 'FOOT', name: 'Pie', symbol: 'ft', category: 'LENGTH', allowDecimals: true, precision: 3 },
+  { id: 'INCH', code: 'INCH', name: 'Pulgada', symbol: 'in', category: 'LENGTH', allowDecimals: true, precision: 3 },
+  { id: 'POUND', code: 'POUND', name: 'Libra', symbol: 'lb', category: 'WEIGHT', allowDecimals: true, precision: 3 },
+  { id: 'KILOGRAM', code: 'KILOGRAM', name: 'Kilogramo', symbol: 'kg', category: 'WEIGHT', allowDecimals: true, precision: 3 },
+  { id: 'GRAM', code: 'GRAM', name: 'Gramo', symbol: 'g', category: 'WEIGHT', allowDecimals: true, precision: 3 },
+  { id: 'OUNCE', code: 'OUNCE', name: 'Onza', symbol: 'oz', category: 'WEIGHT', allowDecimals: true, precision: 3 },
+  { id: 'LITER', code: 'LITER', name: 'Litro', symbol: 'L', category: 'VOLUME', allowDecimals: true, precision: 3 },
+  { id: 'MILLILITER', code: 'MILLILITER', name: 'Mililitro', symbol: 'ml', category: 'VOLUME', allowDecimals: true, precision: 3 },
+  { id: 'GALLON', code: 'GALLON', name: 'Galon', symbol: 'gal', category: 'VOLUME', allowDecimals: true, precision: 3 },
+] as const;
+
+async function upsertGlobalUnits() {
+  if (!prisma.unitOfMeasure?.upsert) return { skipped: true, count: 0 };
+  for (const unit of globalUnits) {
+    await prisma.unitOfMeasure.upsert({
+      where: { id: unit.id },
+      update: {},
+      create: unit,
+    });
+  }
+  return { skipped: false, count: globalUnits.length };
+}
+
 function isMissingUserTable(error: unknown) {
   if (typeof error === 'object' && error !== null) {
     const value = error as { code?: unknown; message?: unknown };
@@ -54,6 +81,7 @@ async function main() {
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@daleventa.local';
   const adminPassword = process.env.ADMIN_PASSWORD;
   if (!adminPassword) throw new Error('ADMIN_PASSWORD is required to run seed');
+  const units = await upsertGlobalUnits();
 
   const admin = await upsertUser({
     email: adminEmail,
@@ -66,6 +94,7 @@ async function main() {
   console.log('Seed completed (admin enforced):', {
     admin: admin.email,
     role: 'ADMIN',
+    globalUnits: units.skipped ? 'skipped' : units.count,
     mode: admin.fallback ? 'users-table-fallback' : 'prisma-user-model'
   });
 }

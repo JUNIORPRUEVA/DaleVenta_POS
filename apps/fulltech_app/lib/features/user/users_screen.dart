@@ -2575,7 +2575,6 @@ class _UserRowCardState extends State<_UserRowCard> {
             constraints: const BoxConstraints(minHeight: 62),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.zero,
               border: Border(
                 left: BorderSide(
                   color: widget.selected

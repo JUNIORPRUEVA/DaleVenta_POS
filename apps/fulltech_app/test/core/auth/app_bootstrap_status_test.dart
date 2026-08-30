@@ -74,7 +74,7 @@ void main() {
     },
   );
 
-  test('authenticated session without companyId never becomes app ready', () {
+  test('authenticated session without companyId becomes recoverable error', () {
     final container = ProviderContainer(
       overrides: [
         authStateProvider.overrideWith(
@@ -98,7 +98,7 @@ void main() {
 
     expect(
       container.read(appBootstrapStatusProvider),
-      AppBootstrapStatus.authenticatedLoadingCompany,
+      AppBootstrapStatus.error,
     );
   });
 

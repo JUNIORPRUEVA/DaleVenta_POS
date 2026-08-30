@@ -120,6 +120,15 @@ describe("CotizacionesService tenant isolation", () => {
         taxTreatment: true,
         taxRate: true,
         taxPriceMode: true,
+        unitOfMeasure: {
+          select: {
+            code: true,
+            name: true,
+            symbol: true,
+            allowDecimals: true,
+            precision: true,
+          },
+        },
       },
     });
   });

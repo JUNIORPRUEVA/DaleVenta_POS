@@ -8,7 +8,6 @@ import '../auth/app_role.dart';
 import '../auth/auth_provider.dart';
 import '../routing/routes.dart';
 import '../design_system/icons/app_icon.dart';
-import '../design_system/icons/app_icon_sizes.dart';
 import '../design_system/icons/app_icons.dart';
 import '../theme/role_branding.dart';
 import '../routing/app_navigator.dart';
@@ -16,6 +15,7 @@ import 'user_avatar.dart';
 
 class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
   final String title;
+  final String? subtitle;
   final Widget? titleWidget;
   final VoidCallback? onMenuPressed;
   final Widget? leading;
@@ -35,6 +35,7 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
   const CustomAppBar({
     super.key,
     required this.title,
+    this.subtitle,
     this.titleWidget,
     this.onMenuPressed,
     this.leading,
@@ -68,7 +69,7 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
     final appBarColor = branding.drawerSolidColor;
     const desktopForeground = Color(0xFF111827);
     const desktopAccent = Color(0xFF1957E6);
-    const desktopLine = Color(0xFFD3E0E7);
+    const desktopLine = Color(0xFF9FB6C8);
     final shadowColor = Colors.black.withValues(
       alpha: highContrast
           ? 0.28
@@ -96,7 +97,7 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
 
     final drawerButton = (onMenuPressed != null || hasDrawer)
         ? Padding(
-            padding: const EdgeInsets.only(left: 10, top: 8, bottom: 8),
+            padding: const EdgeInsets.only(left: 10, top: 10, bottom: 10),
             child: _ElegantAppBarMenuButton(
               isMobile: isMobileLayout,
               onPressed:
@@ -117,14 +118,48 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
     final resolvedTitle =
         titleWidget ??
         (!(showLogo || showDepartmentLabel)
-            ? Text(
-                title,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: isMobileLayout ? Colors.white : desktopForeground,
-                  fontWeight: FontWeight.w900,
-                ),
-              )
+            ? (subtitle == null || subtitle!.trim().isEmpty
+                  ? Text(
+                      title,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isMobileLayout
+                            ? Colors.white
+                            : desktopForeground,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    )
+                  : Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: isMobileLayout
+                                ? Colors.white
+                                : desktopForeground,
+                            fontSize: 17,
+                            height: 1.05,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle!.trim(),
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: isMobileLayout
+                                ? Colors.white.withValues(alpha: 0.78)
+                                : const Color(0xFF64748B),
+                            fontSize: 10.5,
+                            height: 1,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ))
             : Row(
                 children: [
                   if (showLogo)
@@ -237,7 +272,7 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFEAF1FF),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFCFE0FF)),
+        border: Border.all(color: const Color(0xFF9FB6C8)),
       ),
       padding: const EdgeInsets.all(2),
       child: child,
@@ -345,15 +380,13 @@ class _ElegantAppBarMenuButtonState extends State<_ElegantAppBarMenuButton> {
   @override
   Widget build(BuildContext context) {
     final active = _hovered || _pressed;
-    final foreground = widget.isMobile
-        ? Colors.white
-        : (active ? const Color(0xFF1957E6) : const Color(0xFF24445A));
+    final foreground = Colors.white;
     final background = widget.isMobile
         ? Colors.white.withValues(alpha: active ? 0.22 : 0.14)
-        : (active ? const Color(0xFFFFFFFF) : const Color(0xFFF7FAFC));
+        : const Color(0xFF1957E6);
     final borderColor = widget.isMobile
         ? Colors.white.withValues(alpha: active ? 0.32 : 0.18)
-        : (active ? const Color(0xFF9FBCFF) : const Color(0xFFD4E2EA));
+        : const Color(0xFF1957E6);
 
     return Tooltip(
       message: 'Abrir menú',
@@ -370,25 +403,26 @@ class _ElegantAppBarMenuButtonState extends State<_ElegantAppBarMenuButton> {
           onTapUp: (_) => setState(() => _pressed = false),
           onTap: widget.onPressed,
           child: AnimatedScale(
-            scale: _pressed ? 0.94 : (_hovered ? 1.035 : 1),
+            scale: _pressed ? 0.96 : (_hovered ? 1.015 : 1),
             duration: const Duration(milliseconds: 140),
             curve: Curves.easeOutCubic,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOutCubic,
-              width: 40,
-              height: 40,
+              width: 32,
+              height: 32,
               decoration: BoxDecoration(
                 color: background,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(7),
                 border: Border.all(color: borderColor),
                 boxShadow: [
                   BoxShadow(
                     color: const Color(
                       0xFF1957E6,
-                    ).withValues(alpha: active ? 0.18 : 0.07),
-                    blurRadius: active ? 16 : 9,
-                    offset: Offset(0, active ? 6 : 3),
+                    ).withValues(alpha: active ? 0.24 : 0.16),
+                    blurRadius: active ? 11 : 8,
+                    spreadRadius: -5,
+                    offset: Offset(0, active ? 5 : 3),
                   ),
                 ],
               ),
@@ -397,15 +431,48 @@ class _ElegantAppBarMenuButtonState extends State<_ElegantAppBarMenuButton> {
                 duration: const Duration(milliseconds: 150),
                 curve: Curves.easeOutCubic,
                 child: Center(
-                  child: AppIcon(
-                    AppIcons.menu,
-                    size: AppIconSizes.navigation,
-                    color: foreground,
-                    semanticLabel: 'Abrir menú',
-                  ),
+                  child: _ModernMenuGlyph(color: foreground, active: active),
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ModernMenuGlyph extends StatelessWidget {
+  const _ModernMenuGlyph({required this.color, required this.active});
+
+  final Color color;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget bar(double width) {
+      return AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+        width: width,
+        height: 2.2,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(999),
+        ),
+      );
+    }
+
+    return Semantics(
+      label: 'Abrir menú',
+      child: ExcludeSemantics(
+        child: SizedBox(
+          width: 15,
+          height: 11,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [bar(active ? 15 : 13), bar(15), bar(active ? 11 : 13)],
           ),
         ),
       ),

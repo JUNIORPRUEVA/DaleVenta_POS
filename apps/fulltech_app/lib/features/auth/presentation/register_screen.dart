@@ -23,17 +23,127 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _phone = TextEditingController();
   final _businessName = TextEditingController();
   final _password = TextEditingController();
+  _RegisterNoticeData? _notice;
   bool _obscurePassword = true;
   bool _acceptedTerms = true;
 
   @override
+  void initState() {
+    super.initState();
+    _ownerName.addListener(_clearNoticeOnInput);
+    _email.addListener(_clearNoticeOnInput);
+    _phone.addListener(_clearNoticeOnInput);
+    _businessName.addListener(_clearNoticeOnInput);
+    _password.addListener(_clearNoticeOnInput);
+  }
+
+  @override
   void dispose() {
+    _ownerName.removeListener(_clearNoticeOnInput);
+    _email.removeListener(_clearNoticeOnInput);
+    _phone.removeListener(_clearNoticeOnInput);
+    _businessName.removeListener(_clearNoticeOnInput);
+    _password.removeListener(_clearNoticeOnInput);
     _ownerName.dispose();
     _email.dispose();
     _phone.dispose();
     _businessName.dispose();
     _password.dispose();
     super.dispose();
+  }
+
+  void _clearNoticeOnInput() {
+    if (_notice == null || !mounted) return;
+    setState(() => _notice = null);
+  }
+
+  _RegisterNoticeData _buildErrorNotice(ApiException error) {
+    if (error.displayCode == 'CREATED_SESSION_INCOMPLETE') {
+      return _RegisterNoticeData(
+        title: 'Negocio creado',
+        message: error.message,
+        helpText:
+            'Para evitar duplicar la cuenta, usa Ya tengo cuenta e inicia sesión con estos mismos datos.',
+      );
+    }
+
+    switch (error.type) {
+      case ApiErrorType.badRequest:
+        return _RegisterNoticeData(
+          title: 'Revisa los datos',
+          message: error.message,
+          helpText:
+              'Corrige la información marcada y vuelve a presionar Crear mi negocio.',
+        );
+      case ApiErrorType.conflict:
+        return _RegisterNoticeData(
+          title: 'Cuenta existente',
+          message: error.message,
+          helpText:
+              'Ese correo o negocio ya puede estar registrado. Intenta iniciar sesión o usa otro correo.',
+        );
+      case ApiErrorType.noInternet:
+        return _RegisterNoticeData(
+          title: 'Sin conexión',
+          message: error.message,
+          helpText:
+              'Conecta la PC a internet y vuelve a intentar cuando la señal esté estable.',
+        );
+      case ApiErrorType.dns:
+        return _RegisterNoticeData(
+          title: 'Servicio no encontrado',
+          message: error.message,
+          helpText:
+              'Prueba cambiar de red o reiniciar el internet antes de intentar otra vez.',
+        );
+      case ApiErrorType.tls:
+        return _RegisterNoticeData(
+          title: 'Conexión segura rechazada',
+          message: error.message,
+          helpText:
+              'Verifica la fecha y hora de la PC. Si usas antivirus o red empresarial, puede estar bloqueando la conexión.',
+        );
+      case ApiErrorType.network:
+        return _RegisterNoticeData(
+          title: 'Conexión interrumpida',
+          message: error.message,
+          helpText:
+              'Espera unos segundos y vuelve a intentar. Si continúa, prueba otra red.',
+        );
+      case ApiErrorType.timeout:
+        return _RegisterNoticeData(
+          title: 'Tiempo de espera agotado',
+          message: error.message,
+          helpText:
+              'La creación tardó demasiado. Revisa tu conexión y vuelve a intentar.',
+        );
+      case ApiErrorType.config:
+        return _RegisterNoticeData(
+          title: 'App no configurada',
+          message: error.message,
+          helpText:
+              'Instala la versión más reciente o contacta a soporte para validar la instalación.',
+        );
+      case ApiErrorType.server:
+        return _RegisterNoticeData(
+          title: 'Servicio no disponible',
+          message: error.message,
+          helpText:
+              'El servicio tuvo un problema temporal. Intenta nuevamente en un momento.',
+        );
+      case ApiErrorType.unauthorized:
+      case ApiErrorType.forbidden:
+      case ApiErrorType.notFound:
+      case ApiErrorType.parse:
+      case ApiErrorType.cancelled:
+      case ApiErrorType.unknown:
+        return _RegisterNoticeData(
+          title: 'No se pudo crear',
+          message: error.message,
+          helpText:
+              'Revisa los datos ingresados o vuelve a intentar en unos segundos.',
+        );
+    }
   }
 
   Future<void> _submit() async {
@@ -75,6 +185,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     };
 
     try {
+      if (mounted) setState(() => _notice = null);
       await ref.read(authStateProvider.notifier).registerBusiness(payload);
       if (!mounted) return;
       context.go(
@@ -84,9 +195,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       );
     } on ApiException catch (error) {
       if (!mounted) return;
+      final notice = _buildErrorNotice(error);
+      setState(() => _notice = notice);
       await AppFeedback.showError(
         context,
-        error.message,
+        '${notice.title}. ${notice.message}',
         scope: 'RegisterScreen',
       );
     }
@@ -205,6 +318,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                 ),
                               ),
                             ),
+                            if (_notice != null) ...[
+                              const SizedBox(height: 10),
+                              _RegisterNoticeCard(data: _notice!),
+                            ],
                             const SizedBox(height: 10),
                             SizedBox(
                               height: 52,
@@ -326,6 +443,79 @@ class _Header extends StatelessWidget {
           icon: const Icon(Icons.close_rounded),
         ),
       ],
+    );
+  }
+}
+
+class _RegisterNoticeData {
+  const _RegisterNoticeData({
+    required this.title,
+    required this.message,
+    required this.helpText,
+  });
+
+  final String title;
+  final String message;
+  final String helpText;
+}
+
+class _RegisterNoticeCard extends StatelessWidget {
+  const _RegisterNoticeCard({required this.data});
+
+  final _RegisterNoticeData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.errorContainer,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colorScheme.error.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.error_outline_rounded, color: colorScheme.error),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  data.title,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: colorScheme.onErrorContainer,
+                    fontWeight: FontWeight.w900,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  data.message,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onErrorContainer,
+                    fontWeight: FontWeight.w700,
+                    height: 1.3,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  data.helpText,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onErrorContainer.withValues(alpha: 0.86),
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

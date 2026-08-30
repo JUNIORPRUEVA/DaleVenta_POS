@@ -353,24 +353,27 @@ final routerProvider = Provider<GoRouter>((ref) {
         return Routes.login;
       }
 
-      if (registrationDisabled && path == Routes.landing) {
-        return Routes.login;
-      }
-
       if (isPasswordRecoveryRoute) {
         return null;
       }
 
       final bootstrap = ref.read(appBootstrapStatusProvider);
+      final publicLandingEnabled = _isPublicLandingEnabled(
+        registrationDisabled,
+      );
 
       final isAuthRoute =
           path == Routes.login ||
           (!registrationDisabled && path == Routes.register) ||
-          path == Routes.landing;
+          (publicLandingEnabled && path == Routes.landing);
       final isSplashRoute = path == Routes.splash;
 
       String defaultAuthedRoute() {
         return RouteAccess.defaultHomeForUser(auth.user);
+      }
+
+      String unauthenticatedEntryRoute() {
+        return publicLandingEnabled ? Routes.landing : Routes.login;
       }
 
       final bootstrappingAuthenticatedSession =
@@ -386,12 +389,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         if (bootstrap == AppBootstrapStatus.ready) {
           return defaultAuthedRoute();
         }
-        return registrationDisabled ? Routes.login : Routes.landing;
+        return unauthenticatedEntryRoute();
+      }
+
+      if (!publicLandingEnabled && path == Routes.landing) {
+        return isAuth ? defaultAuthedRoute() : Routes.login;
       }
 
       if (!isAuth) {
         if (isAuthRoute) return null;
-        return registrationDisabled ? Routes.login : Routes.landing;
+        return unauthenticatedEntryRoute();
       }
 
       if (isAuth && isAuthRoute) {
@@ -421,6 +428,10 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
   );
 });
+
+bool _isPublicLandingEnabled(bool registrationDisabled) {
+  return kIsWeb && !registrationDisabled;
+}
 
 String? _passwordRecoveryLocationFrom(Uri uri) {
   final path = uri.path.isEmpty ? Routes.landing : uri.path;

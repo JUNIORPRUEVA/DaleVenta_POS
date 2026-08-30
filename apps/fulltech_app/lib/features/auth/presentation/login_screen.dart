@@ -98,7 +98,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         helpText:
             'La empresa está bloqueada, vencida o sin licencia vigente. Para continuar debes renovar o comprar una licencia.',
         actionLabel: 'Comprar por WhatsApp',
-        actionUri: Uri.https('wa.me', '/18295344286', {
+        actionUri: Uri.https('wa.me', '/18295319442', {
           'text':
               'Hola, necesito comprar o renovar mi licencia de FullPOS Cloud.',
         }),
@@ -121,29 +121,53 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               'Si tu acceso deberia estar activo, comunicate con administracion.',
         );
       case ApiErrorType.noInternet:
-      case ApiErrorType.dns:
-      case ApiErrorType.tls:
-      case ApiErrorType.network:
-      case ApiErrorType.timeout:
         return _LoginNoticeData.error(
-          title: 'No se pudo conectar',
+          title: 'Sin conexión',
           message: error.message,
           helpText:
-              'Verifica tu conexion a internet y vuelve a intentar en unos segundos.',
+              'Conecta la PC a internet y vuelve a intentar cuando la señal esté estable.',
+        );
+      case ApiErrorType.dns:
+        return _LoginNoticeData.error(
+          title: 'Servicio no encontrado',
+          message: error.message,
+          helpText:
+              'Prueba cambiar de red o reiniciar el internet antes de intentar otra vez.',
+        );
+      case ApiErrorType.tls:
+        return _LoginNoticeData.error(
+          title: 'Conexión segura rechazada',
+          message: error.message,
+          helpText:
+              'Verifica la fecha y hora de la PC. Si usas antivirus o red empresarial, puede estar bloqueando la conexión.',
+        );
+      case ApiErrorType.network:
+        return _LoginNoticeData.error(
+          title: 'Conexión interrumpida',
+          message: error.message,
+          helpText:
+              'Espera unos segundos y vuelve a intentar. Si continúa, prueba otra red.',
+        );
+      case ApiErrorType.timeout:
+        return _LoginNoticeData.error(
+          title: 'Tiempo de espera agotado',
+          message: error.message,
+          helpText:
+              'La respuesta tardó demasiado. Revisa tu conexión y vuelve a intentar.',
         );
       case ApiErrorType.config:
         return _LoginNoticeData.error(
-          title: 'Configuracion pendiente',
+          title: 'App no configurada',
           message: error.message,
           helpText:
-              'La aplicacion necesita una configuracion valida del backend para continuar.',
+              'Instala la versión más reciente o contacta a soporte para validar la instalación.',
         );
       case ApiErrorType.server:
         return _LoginNoticeData.error(
-          title: 'Servidor no disponible',
+          title: 'Servicio no disponible',
           message: error.message,
           helpText:
-              'El sistema esta respondiendo con un problema interno. Intenta nuevamente en un momento.',
+              'El servicio tuvo un problema temporal. Intenta nuevamente en un momento.',
         );
       case ApiErrorType.badRequest:
       case ApiErrorType.notFound:

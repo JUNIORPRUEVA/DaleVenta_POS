@@ -37,6 +37,12 @@ import {
 import { SendCotizacionWhatsappDto } from "./dto/send-cotizacion-whatsapp.dto";
 import { UpdateCotizacionDto } from "./dto/update-cotizacion.dto";
 import { TaxService } from "../tax/tax.service";
+import {
+  DEFAULT_UNIT_OF_MEASURE,
+  unitSnapshotFields,
+  validateQuantityForUnit,
+  type UnitOfMeasureSnapshot,
+} from "../products/unit-of-measure.util";
 
 type AiRuntimeConfig = {
   apiKey: string;
@@ -730,6 +736,10 @@ export class CotizacionesService {
                 productImageSnapshot: item.productImageSnapshot,
                 originalUnitPriceSnapshot: item.originalUnitPriceSnapshot,
                 qty: item.qty,
+                unitCodeSnapshot: item.unitCodeSnapshot,
+                unitNameSnapshot: item.unitNameSnapshot,
+                unitSymbolSnapshot: item.unitSymbolSnapshot,
+                unitPrecisionSnapshot: item.unitPrecisionSnapshot,
                 unitPrice: item.unitPrice,
                 costUnitSnapshot: item.costUnitSnapshot,
                 subtotalCost: item.subtotalCost,
@@ -970,6 +980,10 @@ export class CotizacionesService {
                     productImageSnapshot: item.productImageSnapshot,
                     originalUnitPriceSnapshot: item.originalUnitPriceSnapshot,
                     qty: item.qty,
+                    unitCodeSnapshot: item.unitCodeSnapshot,
+                    unitNameSnapshot: item.unitNameSnapshot,
+                    unitSymbolSnapshot: item.unitSymbolSnapshot,
+                    unitPrecisionSnapshot: item.unitPrecisionSnapshot,
                     unitPrice: item.unitPrice,
                     costUnitSnapshot: item.costUnitSnapshot,
                     subtotalCost: item.subtotalCost,
@@ -1391,6 +1405,7 @@ export class CotizacionesService {
       taxTreatment: ProductTaxTreatment;
       taxRate: Prisma.Decimal | null;
       taxPriceMode: TaxPriceMode | null;
+      unitOfMeasure: UnitOfMeasureSnapshot | null;
     }> = [];
     if (productIds.length) {
       products = await this.prisma.product.findMany({
@@ -1403,6 +1418,15 @@ export class CotizacionesService {
           taxTreatment: true,
           taxRate: true,
           taxPriceMode: true,
+          unitOfMeasure: {
+            select: {
+              code: true,
+              name: true,
+              symbol: true,
+              allowDecimals: true,
+              precision: true,
+            },
+          },
         },
       });
     }
@@ -1426,6 +1450,13 @@ export class CotizacionesService {
         throw new BadRequestException(
           `Producto inválido en item #${index + 1}`,
         );
+      }
+      if (product) {
+        validateQuantityForUnit({
+          quantity: qty,
+          unit: product.unitOfMeasure,
+          label: `item #${index + 1}`,
+        });
       }
 
       const productNameSnapshot = product?.nombre ?? item.productName?.trim();
@@ -1457,6 +1488,7 @@ export class CotizacionesService {
         productImageSnapshot,
         originalUnitPriceSnapshot,
         qty,
+        ...unitSnapshotFields(product?.unitOfMeasure ?? DEFAULT_UNIT_OF_MEASURE),
         unitPrice,
         costUnitSnapshot,
         subtotalCost,

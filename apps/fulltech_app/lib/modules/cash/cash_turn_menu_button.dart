@@ -42,15 +42,17 @@ class CashTurnMenuButton extends ConsumerWidget {
           // recreado mientras el diálogo estuvo abierto, y usar una referencia
           // vieja lanzaría 'Tried to use ActiveCashSessionController after
           // dispose was called'.
-          final controller =
-              ref.read(activeCashSessionControllerProvider.notifier);
+          final controller = ref.read(
+            activeCashSessionControllerProvider.notifier,
+          );
           await controller.open(amount);
         },
       );
       if (!context.mounted) return;
       if (opened == true) {
-        final controller =
-            ref.read(activeCashSessionControllerProvider.notifier);
+        final controller = ref.read(
+          activeCashSessionControllerProvider.notifier,
+        );
         await controller.refresh();
         if (!context.mounted) return;
         showCashToast(context, 'Caja abierta');
@@ -76,15 +78,15 @@ class CashTurnMenuButton extends ConsumerWidget {
         context,
         expectedCash: summary.expectedCash,
         onCloseShift: (amount) {
-          final controller =
-              ref.read(activeCashSessionControllerProvider.notifier);
+          final controller = ref.read(
+            activeCashSessionControllerProvider.notifier,
+          );
           return controller.close(amount);
         },
       );
       if (!context.mounted) return;
       if (result?.success != true) return;
-      final controller =
-          ref.read(activeCashSessionControllerProvider.notifier);
+      final controller = ref.read(activeCashSessionControllerProvider.notifier);
       await controller.refresh();
       if (!context.mounted) return;
       final printResult = result?.printResult;
@@ -174,15 +176,15 @@ class CashTurnMenuButton extends ConsumerWidget {
     final unverified = ref.watch(cashStateUnverifiedProvider);
 
     return PopupMenuButton<String>(
-      tooltip: 'Turno actual',
-      offset: const Offset(0, 44),
+      tooltip: 'Estado del turno',
+      offset: const Offset(0, 42),
       color: Colors.white,
       elevation: 8,
       shadowColor: Colors.black.withValues(alpha: 0.10),
       constraints: const BoxConstraints(minWidth: 292),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: Color(0xFFDDE7EE)),
+        side: const BorderSide(color: Color(0xFF9FB6C8)),
       ),
       itemBuilder: (menuContext) => [
         if (unverified)
@@ -260,9 +262,8 @@ class CashTurnMenuButton extends ConsumerWidget {
         ),
       ],
       child: _TurnTopbarButton(
-        icon: active == null
-            ? Icons.point_of_sale_outlined
-            : Icons.store_rounded,
+        open: active != null,
+        unverified: unverified,
         compact: compact,
       ),
     );
@@ -270,22 +271,57 @@ class CashTurnMenuButton extends ConsumerWidget {
 }
 
 class _TurnTopbarButton extends StatefulWidget {
-  const _TurnTopbarButton({required this.icon, required this.compact});
+  const _TurnTopbarButton({
+    required this.open,
+    required this.unverified,
+    required this.compact,
+  });
 
-  final IconData icon;
+  final bool open;
+  final bool unverified;
   final bool compact;
 
   @override
   State<_TurnTopbarButton> createState() => _TurnTopbarButtonState();
 }
 
-class _TurnTopbarButtonState extends State<_TurnTopbarButton> {
+class _TurnTopbarButtonState extends State<_TurnTopbarButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseController;
+  late final CurvedAnimation _pulse;
   bool _hovered = false;
   bool _pressed = false;
 
   @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1450),
+    )..repeat(reverse: true);
+    _pulse = CurvedAnimation(
+      parent: _pulseController,
+      curve: Curves.easeInOutCubic,
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final active = _hovered || _pressed;
+    final open = widget.open;
+    final accent = open ? const Color(0xFF1957E6) : const Color(0xFF64748B);
+    final accentSoft = open ? const Color(0xFFE4F8FF) : const Color(0xFFF1F5F9);
+    final borderColor = open
+        ? const Color(0xFF9FB6C8)
+        : const Color(0xFF9FB6C8);
+    final label = open ? 'Abierto' : 'Cerrado';
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -305,68 +341,88 @@ class _TurnTopbarButtonState extends State<_TurnTopbarButton> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOutCubic,
-            height: 40,
+            height: 36,
             padding: EdgeInsets.fromLTRB(
-              widget.compact ? 9 : 10,
-              5,
-              widget.compact ? 9 : 11,
-              5,
+              widget.compact ? 8 : 9,
+              4,
+              widget.compact ? 8 : 9,
+              4,
             ),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: active
-                    ? const [Color(0xFFFFFFFF), Color(0xFFEAF1FF)]
-                    : const [Color(0xFFFFFFFF), Color(0xFFF7FAFC)],
-              ),
+              color: const Color(0xFFE4F8FF),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: active
-                    ? const Color(0xFF9FBCFF)
-                    : const Color(0xFFCFE0FF),
+                color: active ? const Color(0xFF8EDBFF) : borderColor,
               ),
               boxShadow: [
                 BoxShadow(
                   color: const Color(
-                    0xFF1957E6,
-                  ).withValues(alpha: active ? 0.14 : 0.08),
-                  blurRadius: active ? 18 : 10,
-                  offset: Offset(0, active ? 7 : 3),
+                    0xFF0D5EA6,
+                  ).withValues(alpha: active ? 0.12 : 0.055),
+                  blurRadius: active ? 16 : 10,
+                  spreadRadius: -5,
+                  offset: Offset(0, active ? 7 : 4),
                 ),
               ],
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 26,
-                  height: 26,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEAF1FF),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(
-                    widget.icon,
-                    color: active
-                        ? const Color(0xFF1957E6)
-                        : const Color(0xFF123A75),
-                    size: 16,
-                  ),
-                ),
                 if (!widget.compact) ...[
-                  const SizedBox(width: 8),
-                  Text(
-                    'Turno actual',
-                    style: TextStyle(
-                      color: active
-                          ? const Color(0xFF1957E6)
-                          : const Color(0xFF123A75),
-                      fontWeight: FontWeight.w900,
-                      fontSize: 12.5,
-                      letterSpacing: 0,
-                    ),
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Turno',
+                        style: TextStyle(
+                          color: Color(0xFF64748B),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 9.5,
+                          height: 1,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (open)
+                            _TurnLiveDot(animation: _pulse, compact: true)
+                          else
+                            _TurnClosedDot(
+                              color: accent,
+                              background: accentSoft,
+                              compact: true,
+                            ),
+                          const SizedBox(width: 5),
+                          Text(
+                            label,
+                            style: TextStyle(
+                              color: open ? const Color(0xFF0D5EA6) : accent,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 12,
+                              height: 1,
+                              letterSpacing: 0,
+                            ),
+                          ),
+                          if (widget.unverified) ...[
+                            const SizedBox(width: 6),
+                            Icon(
+                              Icons.cloud_off_rounded,
+                              size: 13,
+                              color: const Color(0xFFF59E0B),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
                   ),
+                ] else ...[
+                  if (open)
+                    _TurnLiveDot(animation: _pulse)
+                  else
+                    _TurnClosedDot(color: accent, background: accentSoft),
                 ],
                 const SizedBox(width: 5),
                 AnimatedRotation(
@@ -375,9 +431,7 @@ class _TurnTopbarButtonState extends State<_TurnTopbarButton> {
                   curve: Curves.easeOutCubic,
                   child: Icon(
                     Icons.keyboard_arrow_down_rounded,
-                    color: active
-                        ? const Color(0xFF1957E6)
-                        : const Color(0xFF123A75),
+                    color: const Color(0xFF0D5EA6),
                     size: 18,
                   ),
                 ),
@@ -385,6 +439,83 @@ class _TurnTopbarButtonState extends State<_TurnTopbarButton> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _TurnLiveDot extends StatelessWidget {
+  const _TurnLiveDot({required this.animation, this.compact = false});
+
+  final Animation<double> animation;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final boxSize = compact ? 8.0 : 18.0;
+    final dotSize = compact ? 6.0 : 8.0;
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, child) {
+        final t = animation.value;
+        return SizedBox(
+          width: boxSize,
+          height: boxSize,
+          child: Center(
+            child: Transform.scale(
+              scale: 0.78 + (t * 0.34),
+              child: Container(
+                width: dotSize,
+                height: dotSize,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1957E6),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(
+                        0xFF1957E6,
+                      ).withValues(alpha: 0.18 + (0.12 * t)),
+                      blurRadius: compact ? 5 : 8,
+                      spreadRadius: compact ? 0 : 1,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _TurnClosedDot extends StatelessWidget {
+  const _TurnClosedDot({
+    required this.color,
+    required this.background,
+    this.compact = false,
+  });
+
+  final Color color;
+  final Color background;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final boxSize = compact ? 8.0 : 18.0;
+    final dotSize = compact ? 6.0 : 7.0;
+    return Container(
+      width: boxSize,
+      height: boxSize,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: compact ? Colors.transparent : background,
+        shape: BoxShape.circle,
+      ),
+      child: Container(
+        width: dotSize,
+        height: dotSize,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       ),
     );
   }

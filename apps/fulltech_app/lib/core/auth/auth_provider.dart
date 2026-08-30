@@ -280,6 +280,7 @@ class AuthController extends StateNotifier<AuthState> {
       );
       return true;
     } catch (_) {
+      await ref.read(tokenStorageProvider).clearTokens();
       state = AuthState(
         initialized: true,
         isAuthenticated: false,
@@ -318,6 +319,7 @@ class AuthController extends StateNotifier<AuthState> {
       );
       return true;
     } catch (_) {
+      await ref.read(tokenStorageProvider).clearTokens();
       state = AuthState(
         initialized: true,
         isAuthenticated: false,

@@ -71,7 +71,7 @@ Variables a definir en EasyPanel (Runtime Env):
 - `API_TIMEOUT_MS` (opcional)
 - `SUPPORT_EMAIL` (opcional, usado por `/support`, `/privacy`, `/account-deletion` y `/contact`)
 - `SUPPORT_PHONE` (opcional)
-- `SUPPORT_WHATSAPP` (opcional, en formato internacional sin `+`, ej. `18295344286`)
+- `SUPPORT_WHATSAPP` (opcional, en formato internacional sin `+`, ej. `18295319442`)
 - `SUPPORT_HOURS` (opcional)
 
 ### Recomendado (PWA): Proxy same-origin (evita CORS/XHR)

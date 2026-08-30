@@ -16,6 +16,12 @@ import { requireTenant } from "../auth/tenant-context";
 import { R2Service } from "../storage/r2.service";
 import { buildTenantObjectKey } from "../storage/helpers/storage_helpers";
 import {
+  DEFAULT_UNIT_OF_MEASURE,
+  unitSnapshotFields,
+  validateQuantityForUnit,
+  type UnitOfMeasureSnapshot,
+} from "../products/unit-of-measure.util";
+import {
   CreatePurchaseInvoiceDto,
   CreatePurchaseOrderPdfShareLinkDto,
   CreatePurchaseOrderDto,
@@ -465,9 +471,22 @@ export class PurchasesService {
         throw new BadRequestException(
           `La cantidad recibida supera lo pendiente para ${current.productNameSnapshot}.`,
         );
+      const unit = {
+        code: current.unitCodeSnapshot,
+        name: current.unitNameSnapshot,
+        symbol: current.unitSymbolSnapshot,
+        precision: current.unitPrecisionSnapshot,
+        allowDecimals: current.unitPrecisionSnapshot > 0,
+      };
+      validateQuantityForUnit({
+        quantity: qty,
+        unit,
+        label: `recepción de ${current.productNameSnapshot}`,
+      });
       return {
         current,
         quantityReceived: qty,
+        unit,
         unitCost: new Prisma.Decimal(item.unitCost),
         condition: this.clean(item.condition),
         notes: this.clean(item.notes),
@@ -488,6 +507,10 @@ export class PurchasesService {
             create: normalized.map((item) => ({
               purchaseOrderItemId: item.current.id,
               quantityReceived: item.quantityReceived,
+              unitCodeSnapshot: item.unit.code,
+              unitNameSnapshot: item.unit.name,
+              unitSymbolSnapshot: item.unit.symbol,
+              unitPrecisionSnapshot: item.unit.precision,
               unitCost: item.unitCost,
               condition: item.condition,
               notes: item.notes,
@@ -760,6 +783,17 @@ export class PurchasesService {
     const products = productIds.length
       ? await this.prisma.product.findMany({
           where: { id: { in: productIds }, companyId },
+          include: {
+            unitOfMeasure: {
+              select: {
+                code: true,
+                name: true,
+                symbol: true,
+                allowDecimals: true,
+                precision: true,
+              },
+            },
+          },
         })
       : [];
     const supplierIds = [
@@ -796,8 +830,19 @@ export class PurchasesService {
         throw new BadRequestException(
           "Las cantidades deben ser mayores que cero.",
         );
+      if (product) {
+        validateQuantityForUnit({
+          quantity,
+          unit: product.unitOfMeasure as UnitOfMeasureSnapshot,
+          label: `línea ${index + 1}`,
+        });
+      }
       if (unitCost.lt(0))
         throw new BadRequestException("Los montos no pueden ser negativos.");
+      const unitFields = unitSnapshotFields(
+        (product?.unitOfMeasure as UnitOfMeasureSnapshot | undefined) ??
+          DEFAULT_UNIT_OF_MEASURE,
+      );
       const subtotal = quantity.mul(unitCost).toDecimalPlaces(2);
       return {
         data: {
@@ -810,6 +855,7 @@ export class PurchasesService {
           quantity,
           receivedQuantity: new Prisma.Decimal(0),
           pendingQuantity: quantity,
+          ...unitFields,
           unitCost,
           subtotal,
           supplierId: this.validatedSupplierId(

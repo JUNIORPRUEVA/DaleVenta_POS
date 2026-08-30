@@ -7,6 +7,9 @@ import '../../../core/routing/routes.dart';
 import '../../../core/utils/safe_url_launcher.dart';
 import 'pwa_install_prompt.dart';
 
+const _supportPhoneDisplay = '829-531-9442';
+const _supportWhatsappIntl = '18295319442';
+
 class LandingScreen extends StatelessWidget {
   const LandingScreen({super.key});
 
@@ -18,63 +21,93 @@ class LandingScreen extends StatelessWidget {
     final isMobile = MediaQuery.sizeOf(context).width < 760;
     final businessRegistrationDisabled =
         isBusinessRegistrationDisabledOnCurrentPlatform;
+    final baseTheme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F8FB),
+      backgroundColor: const Color(0xFFF3F7FA),
       endDrawer: const _LandingDrawer(),
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1180),
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      isMobile ? 18 : 38,
-                      isMobile ? 16 : 26,
-                      isMobile ? 18 : 38,
-                      30,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _TopBar(
-                          isMobile: isMobile,
-                          businessRegistrationDisabled:
-                              businessRegistrationDisabled,
+        child: Theme(
+          data: baseTheme.copyWith(
+            textTheme: baseTheme.textTheme.apply(fontFamily: 'Manrope'),
+            primaryTextTheme: baseTheme.primaryTextTheme.apply(
+              fontFamily: 'Manrope',
+            ),
+          ),
+          child: DefaultTextStyle.merge(
+            style: const TextStyle(fontFamily: 'Manrope'),
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1180),
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          isMobile ? 18 : 38,
+                          isMobile ? 16 : 26,
+                          isMobile ? 18 : 38,
+                          30,
                         ),
-                        SizedBox(height: isMobile ? 24 : 44),
-                        _Hero(
-                          isMobile: isMobile,
-                          businessRegistrationDisabled:
-                              businessRegistrationDisabled,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _TopBar(
+                              isMobile: isMobile,
+                              businessRegistrationDisabled:
+                                  businessRegistrationDisabled,
+                            ),
+                            SizedBox(height: isMobile ? 24 : 42),
+                            _Hero(
+                              isMobile: isMobile,
+                              businessRegistrationDisabled:
+                                  businessRegistrationDisabled,
+                            ),
+                            const SizedBox(height: 24),
+                            const _ProofSection(),
+                            const SizedBox(height: 24),
+                            const _ModulesSection(),
+                            const SizedBox(height: 24),
+                            const _PlatformGuideSection(),
+                            const SizedBox(height: 24),
+                            const _PricingSection(),
+                            const SizedBox(height: 24),
+                            const _InstallPanel(),
+                            if (isMobile) ...[
+                              const SizedBox(height: 18),
+                              const _HeroImage(),
+                            ],
+                            const SizedBox(height: 28),
+                            const _BusinessSection(),
+                            const SizedBox(height: 28),
+                            const _MobileExperienceSection(),
+                            const SizedBox(height: 28),
+                            const _PlatformSecuritySection(),
+                            const SizedBox(height: 28),
+                            const _FinalCtaSection(),
+                            const SizedBox(height: 22),
+                            const _Footer(),
+                          ],
                         ),
-                        const SizedBox(height: 18),
-                        const _InstallPanel(),
-                        if (isMobile) ...[
-                          const SizedBox(height: 18),
-                          const _HeroImage(),
-                        ],
-                        const SizedBox(height: 28),
-                        const _ProofSection(),
-                        const SizedBox(height: 28),
-                        const _BusinessSection(),
-                        const SizedBox(height: 28),
-                        const _MobileExperienceSection(),
-                        const SizedBox(height: 28),
-                        const _PlatformSecuritySection(),
-                        const SizedBox(height: 22),
-                        const _Footer(),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
+    );
+  }
+
+  static Future<void> openWhatsApp(BuildContext context) {
+    return safeOpenWhatsApp(
+      context,
+      _supportWhatsAppUri(
+        'Hola, quiero informacion sobre FullPOS Cloud y la oferta de licencia anual.',
+      ),
+      copiedMessage: 'No se pudo abrir WhatsApp. Enlace copiado.',
     );
   }
 
@@ -93,6 +126,10 @@ class LandingScreen extends StatelessWidget {
       copiedMessage: 'No se pudo abrir la descarga. Link copiado.',
     );
   }
+}
+
+Uri _supportWhatsAppUri(String text) {
+  return Uri.https('wa.me', '/$_supportWhatsappIntl', {'text': text});
 }
 
 class _TopBar extends StatelessWidget {
@@ -141,7 +178,7 @@ class _TopBar extends StatelessWidget {
                 ),
               ),
               Text(
-                'POS en la nube para colmados, farmacias y tiendas',
+                'Sistema POS multi plataforma para vender y controlar',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -164,7 +201,11 @@ class _TopBar extends StatelessWidget {
         else ...[
           TextButton(
             onPressed: () => _showInfoSheet(context),
-            child: const Text('Beneficios'),
+            child: const Text('Plataformas'),
+          ),
+          TextButton(
+            onPressed: () => LandingScreen.openWhatsApp(context),
+            child: const Text(_supportPhoneDisplay),
           ),
           TextButton(
             onPressed: () => context.go(Routes.login),
@@ -201,30 +242,31 @@ class _Hero extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            _Pill('PWA web'),
+            _Pill('Web/PWA'),
             _Pill('Windows'),
             _Pill('Android'),
-            _Pill('Datos seguros'),
+            _Pill('iPhone'),
+            _Pill('Multi empresa'),
           ],
         ),
         const SizedBox(height: 16),
         Text(
-          'FullPOS Cloud',
+          'POS en la nube para vender desde cualquier dispositivo',
           style: TextStyle(
             color: const Color(0xFF0B1728),
-            fontSize: isMobile ? 42 : 66,
-            height: 1,
-            fontWeight: FontWeight.w900,
+            fontSize: isMobile ? 38 : 58,
+            height: 1.03,
+            fontWeight: FontWeight.w800,
           ),
         ),
         const SizedBox(height: 14),
         const Text(
-          'Factura, cobra y controla tu negocio completo desde la nube. Ideal para colmados, farmacias, minimarkets y tiendas que necesitan vender rapido sin perder control del inventario.',
+          'FullPOS Cloud une facturacion, inventario, caja, compras, clientes y reportes en una experiencia rapida para mostrador, telefono y navegador.',
           style: TextStyle(
             color: Color(0xFF3E536B),
             fontSize: 17,
             height: 1.5,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w500,
           ),
         ),
         const SizedBox(height: 18),
@@ -236,9 +278,9 @@ class _Hero extends StatelessWidget {
           children: [
             if (!businessRegistrationDisabled)
               FilledButton.icon(
-                onPressed: () => context.go(Routes.register),
+                onPressed: () => LandingScreen.openWhatsApp(context),
                 icon: const Icon(Icons.rocket_launch_rounded, size: 19),
-                label: const Text('Crear mi cuenta'),
+                label: const Text('Comprar por WhatsApp'),
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 22,
@@ -264,6 +306,8 @@ class _Hero extends StatelessWidget {
             ),
           ],
         ),
+        const SizedBox(height: 18),
+        const _HeroOfferStrip(),
       ],
     );
 
@@ -325,17 +369,143 @@ class _HeroImage extends StatelessWidget {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: AspectRatio(
-                aspectRatio: compact ? 1.12 : 1.38,
-                child: Image.asset(
-                  'assets/image/landing-pos-cloud.png',
-                  fit: compact ? BoxFit.scaleDown : BoxFit.cover,
-                ),
+              child: Stack(
+                children: [
+                  AspectRatio(
+                    aspectRatio: compact ? 1.12 : 1.38,
+                    child: Image.asset(
+                      'assets/image/landing-pos-cloud.png',
+                      fit: compact ? BoxFit.scaleDown : BoxFit.cover,
+                    ),
+                  ),
+                  Positioned(
+                    left: 14,
+                    top: 14,
+                    child: _GlassBadge(
+                      icon: Icons.cloud_done_rounded,
+                      label: 'Nube + POS',
+                    ),
+                  ),
+                  Positioned(
+                    right: 14,
+                    bottom: 14,
+                    child: _GlassBadge(
+                      icon: Icons.devices_rounded,
+                      label: 'Web, Windows y movil',
+                    ),
+                  ),
+                ],
               ),
             ),
           );
         },
       ),
+    );
+  }
+}
+
+class _GlassBadge extends StatelessWidget {
+  const _GlassBadge({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.86),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.9)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1F0B1728),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: const Color(0xFF1D4ED8), size: 16),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFF10233D),
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HeroOfferStrip extends StatelessWidget {
+  const _HeroOfferStrip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8E8),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFF4D38B)),
+      ),
+      child: const Wrap(
+        spacing: 14,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          _OfferMini(icon: Icons.sell_rounded, text: 'RD\$ 1,000 mensual'),
+          _OfferMini(
+            icon: Icons.groups_2_rounded,
+            text: '2 usuarios incluidos',
+          ),
+          _OfferMini(icon: Icons.inventory_2_rounded, text: '100 productos'),
+          _OfferMini(
+            icon: Icons.savings_rounded,
+            text: 'Ahorra RD\$ 2,000 anual',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OfferMini extends StatelessWidget {
+  const _OfferMini({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: const Color(0xFF9A5A00), size: 18),
+        const SizedBox(width: 7),
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF5C3B00),
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -360,9 +530,9 @@ class _InstallPanel extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final columns = constraints.maxWidth > 900
-              ? 3
-              : constraints.maxWidth > 620
+          final columns = constraints.maxWidth > 980
+              ? 4
+              : constraints.maxWidth > 660
               ? 2
               : 1;
           final gap = 12.0;
@@ -370,9 +540,9 @@ class _InstallPanel extends StatelessWidget {
               (constraints.maxWidth - (gap * (columns - 1))) / columns;
           final actions = [
             _InstallAction(
-              icon: Icons.add_to_home_screen_rounded,
-              title: 'Instalar PWA',
-              copy: 'Abre como app desde Chrome o Edge.',
+              icon: Icons.language_rounded,
+              title: 'Web / PWA',
+              copy: 'Usalo desde Chrome, Edge o Safari.',
               label: 'Instalar',
               isPrimary: true,
               onTap: () => _requestInstall(context),
@@ -380,16 +550,23 @@ class _InstallPanel extends StatelessWidget {
             _InstallAction(
               icon: Icons.desktop_windows_rounded,
               title: 'Windows',
-              copy: 'Para caja y mostrador.',
+              copy: 'Caja, mostrador e impresion.',
               label: 'Descargar',
               onTap: () => LandingScreen.openWindowsDownload(context),
             ),
             _InstallAction(
               icon: Icons.android_rounded,
-              title: 'Android APK',
-              copy: 'Para telefono o tablet.',
+              title: 'Android',
+              copy: 'Telefono o tablet del equipo.',
               label: 'Descargar',
               onTap: () => LandingScreen.openAndroidDownload(context),
+            ),
+            _InstallAction(
+              icon: Icons.phone_iphone_rounded,
+              title: 'iPhone',
+              copy: 'Acceso desde Safari como PWA.',
+              label: 'Ver PWA',
+              onTap: () => _requestInstall(context),
             ),
           ];
           return Wrap(
@@ -513,18 +690,18 @@ class _ProofSection extends StatelessWidget {
     final items = [
       _ProofItem(
         Icons.point_of_sale_rounded,
-        'Venta rapida',
-        'Catalogo visual, tickets y cobro en pocos toques.',
+        'Facturacion rapida',
+        'Catalogo visual, tickets, cotizaciones y cobro en pocos toques.',
       ),
       _ProofItem(
         Icons.inventory_2_rounded,
-        'Inventario claro',
-        'Stock bajo, categorias, ajustes y conteo.',
+        'Inventario conectado',
+        'Stock bajo, categorias, ajustes, conteo y compras relacionadas.',
       ),
       _ProofItem(
-        Icons.receipt_long_rounded,
-        'Control completo',
-        'Compras, clientes, reportes y contabilidad conectados.',
+        Icons.analytics_rounded,
+        'Reportes para decidir',
+        'Ventas, utilidad, categorias, metodos de pago y movimientos claros.',
       ),
     ];
 
@@ -622,21 +799,554 @@ class _ProofCard extends StatelessWidget {
   }
 }
 
+class _ModulesSection extends StatelessWidget {
+  const _ModulesSection();
+
+  @override
+  Widget build(BuildContext context) {
+    const items = [
+      _ModuleItem(
+        Icons.point_of_sale_rounded,
+        'Facturacion POS',
+        'Ventas rapidas, tickets, impuestos, cobro y flujo de mostrador.',
+      ),
+      _ModuleItem(
+        Icons.request_quote_rounded,
+        'Cotizaciones',
+        'Presupuestos, historial, clientes y documentos listos para compartir.',
+      ),
+      _ModuleItem(
+        Icons.inventory_2_rounded,
+        'Inventario',
+        'Productos, categorias, costos, precios, stock bajo y conteos.',
+      ),
+      _ModuleItem(
+        Icons.shopping_bag_rounded,
+        'Compras',
+        'Ordenes, suplidores, facturas de compra y productos por reponer.',
+      ),
+      _ModuleItem(
+        Icons.account_balance_wallet_rounded,
+        'Caja',
+        'Turnos, ingresos, gastos, movimientos y cierre diario del efectivo.',
+      ),
+      _ModuleItem(
+        Icons.people_alt_rounded,
+        'Clientes',
+        'Registro de clientes, historial comercial y datos de contacto.',
+      ),
+      _ModuleItem(
+        Icons.analytics_rounded,
+        'Reportes',
+        'Ventas, utilidad, ticket promedio, categorias y metodos de pago.',
+      ),
+      _ModuleItem(
+        Icons.account_balance_rounded,
+        'Contabilidad',
+        'Cierres, depositos, pagos pendientes y control administrativo.',
+      ),
+      _ModuleItem(
+        Icons.admin_panel_settings_rounded,
+        'Usuarios y permisos',
+        'Accesos por rol para que cada empleado vea solo lo necesario.',
+      ),
+      _ModuleItem(
+        Icons.cloud_sync_rounded,
+        'Trabajo en la nube',
+        'Datos disponibles para equipos autorizados desde distintos equipos.',
+      ),
+      _ModuleItem(
+        Icons.print_rounded,
+        'Impresion y documentos',
+        'Tickets, PDFs, comprobantes y documentos comerciales del negocio.',
+      ),
+      _ModuleItem(
+        Icons.workspace_premium_rounded,
+        'Licencias y soporte',
+        'Control de acceso, renovacion y soporte directo por WhatsApp.',
+      ),
+    ];
+
+    return _SectionShell(
+      eyebrow: 'Sistema POS completo',
+      title: 'Todo lo que necesita tu punto de venta en una sola pagina',
+      copy:
+          'FullPOS Cloud cubre el ciclo diario del negocio: vender, cobrar, comprar, controlar inventario, revisar utilidad y administrar usuarios.',
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = constraints.maxWidth > 980
+              ? 4
+              : constraints.maxWidth > 680
+              ? 3
+              : constraints.maxWidth > 460
+              ? 2
+              : 1;
+
+          return GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: items.length,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              mainAxisExtent: 176,
+            ),
+            itemBuilder: (context, index) => _ModuleCard(item: items[index]),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _PlatformGuideSection extends StatelessWidget {
+  const _PlatformGuideSection();
+
+  @override
+  Widget build(BuildContext context) {
+    const items = [
+      _PlatformItem(
+        Icons.language_rounded,
+        'Web / PWA',
+        'Abre el sistema en el navegador e instalalo como app desde Chrome, Edge o Safari.',
+      ),
+      _PlatformItem(
+        Icons.desktop_windows_rounded,
+        'Windows',
+        'Descarga el instalador para caja, mostrador, facturacion e impresion.',
+      ),
+      _PlatformItem(
+        Icons.android_rounded,
+        'Android',
+        'Usa la app en telefonos y tablets para vender, consultar y operar con tu equipo.',
+      ),
+      _PlatformItem(
+        Icons.phone_iphone_rounded,
+        'iPhone',
+        'Instala la PWA desde Safari y trabaja con la misma cuenta y datos del negocio.',
+      ),
+    ];
+
+    return _SectionShell(
+      eyebrow: 'Web, movil y escritorio',
+      title: 'Un sistema potente multi plataforma',
+      copy:
+          'Puedes trabajar en la nube desde la web, instalar la PWA, usar Windows en el punto de venta y operar desde Android o iPhone cuando necesites movilidad.',
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = constraints.maxWidth > 860
+              ? 4
+              : constraints.maxWidth > 560
+              ? 2
+              : 1;
+          return GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: items.length,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              mainAxisExtent: 172,
+            ),
+            itemBuilder: (context, index) => _PlatformCard(item: items[index]),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _SectionShell extends StatelessWidget {
+  const _SectionShell({
+    required this.eyebrow,
+    required this.title,
+    required this.copy,
+    required this.child,
+  });
+
+  final String eyebrow;
+  final String title;
+  final String copy;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDCE8EF)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SectionHeader(eyebrow: eyebrow, title: title, copy: copy),
+          const SizedBox(height: 18),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _ModuleItem {
+  const _ModuleItem(this.icon, this.title, this.copy);
+
+  final IconData icon;
+  final String title;
+  final String copy;
+}
+
+class _PlatformItem {
+  const _PlatformItem(this.icon, this.title, this.copy);
+
+  final IconData icon;
+  final String title;
+  final String copy;
+}
+
+class _ModuleCard extends StatelessWidget {
+  const _ModuleCard({required this.item});
+
+  final _ModuleItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    return _FeatureTile(
+      icon: item.icon,
+      title: item.title,
+      copy: item.copy,
+      accent: const Color(0xFF1D4ED8),
+      background: const Color(0xFFEAF2FF),
+    );
+  }
+}
+
+class _PlatformCard extends StatelessWidget {
+  const _PlatformCard({required this.item});
+
+  final _PlatformItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    return _FeatureTile(
+      icon: item.icon,
+      title: item.title,
+      copy: item.copy,
+      accent: const Color(0xFF0F8C7D),
+      background: const Color(0xFFE8F8F5),
+    );
+  }
+}
+
+class _FeatureTile extends StatelessWidget {
+  const _FeatureTile({
+    required this.icon,
+    required this.title,
+    required this.copy,
+    required this.accent,
+    required this.background,
+  });
+
+  final IconData icon;
+  final String title;
+  final String copy;
+  final Color accent;
+  final Color background;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFCFE),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDCE8EF)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: background,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: accent, size: 22),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF0D1B2A),
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            copy,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF60748C),
+              fontSize: 12,
+              height: 1.35,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PricingSection extends StatelessWidget {
+  const _PricingSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDCE8EF)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x100B2744),
+            blurRadius: 24,
+            offset: Offset(0, 14),
+          ),
+        ],
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 760;
+          final plan = _PlanCard(compact: compact);
+          final copy = _PricingCopy(compact: compact);
+
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [copy, const SizedBox(height: 16), plan],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(flex: 6, child: copy),
+              const SizedBox(width: 22),
+              Expanded(flex: 4, child: plan),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _PricingCopy extends StatelessWidget {
+  const _PricingCopy({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionHeader(
+          eyebrow: 'Oferta de lanzamiento',
+          title: 'Plan basico para negocios que quieren empezar ordenados',
+          copy:
+              'Incluye dos usuarios y hasta 100 productos. Para equipos mas grandes, inventarios avanzados o necesidades especiales, escribenos y preparamos un plan a la medida.',
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: const [
+            _CheckChip(label: '2 usuarios'),
+            _CheckChip(label: '100 productos'),
+            _CheckChip(label: 'Web, PWA, Android, iPhone y Windows'),
+            _CheckChip(label: 'Soporte por WhatsApp'),
+          ],
+        ),
+        const SizedBox(height: 18),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            FilledButton.icon(
+              onPressed: () => LandingScreen.openWhatsApp(context),
+              icon: const Icon(Icons.chat_rounded, size: 18),
+              label: const Text('Escribir al WhatsApp'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => context.go(Routes.login),
+              icon: const Icon(Icons.login_rounded, size: 18),
+              label: const Text('Ya tengo cuenta'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _PlanCard extends StatelessWidget {
+  const _PlanCard({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B1728),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF20344C)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: const Color(0xFF16A394).withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: const Color(0xFF58D7CA)),
+            ),
+            child: const Text(
+              'Plan basico',
+              style: TextStyle(
+                color: Color(0xFFA7FFF6),
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'RD\$ 1,000',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 38,
+              height: 1,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'mensuales',
+            style: TextStyle(
+              color: Color(0xFFC9D7E8),
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const _PlanDivider(),
+          const SizedBox(height: 16),
+          const _PlanRow('Licencia anual', 'RD\$ 10,000'),
+          const SizedBox(height: 8),
+          const _PlanRow('Descuento anual', 'RD\$ 2,000'),
+          const SizedBox(height: 8),
+          const _PlanRow('Incluye', '2 usuarios + 100 productos'),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => LandingScreen.openWhatsApp(context),
+              icon: const Icon(Icons.local_offer_rounded, size: 18),
+              label: const Text('Quiero la oferta'),
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Planes avanzados disponibles por cotizacion.',
+            style: TextStyle(
+              color: Color(0xFFAEBFD2),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlanDivider extends StatelessWidget {
+  const _PlanDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(height: 1, color: Colors.white.withValues(alpha: 0.12));
+  }
+}
+
+class _PlanRow extends StatelessWidget {
+  const _PlanRow(this.label, this.value);
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFFAEBFD2),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _BusinessSection extends StatelessWidget {
   const _BusinessSection();
 
   @override
   Widget build(BuildContext context) {
     return const _SplitSection(
-      eyebrow: 'Hecho para vender mas ordenado',
-      title: 'Colmados, farmacias y tiendas pueden operar sin complicarse',
+      eyebrow: 'Operaciones completas',
+      title: 'Todo el negocio organizado desde una sola plataforma',
       copy:
-          'FullPOS Cloud ayuda a tu equipo a facturar rapido, evitar ventas sin stock, revisar ganancias y mantener cada movimiento del negocio bajo control.',
+          'FullPOS Cloud esta preparado para negocios que necesitan velocidad en caja, control de inventario, clientes, cotizaciones, compras y reportes sin perder orden.',
       points: [
         'Facturacion y cotizaciones',
         'Inventario por categorias',
         'Compras y suplidores',
-        'Reportes para decidir mejor',
+        'Reportes de ventas y utilidad',
       ],
       image: 'assets/image/landing-mobile-sale.png',
       imageOnRight: true,
@@ -650,14 +1360,14 @@ class _MobileExperienceSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const _SplitSection(
-      eyebrow: 'Experiencia clara para tu equipo',
-      title: 'Un menu limpio para entrar rapido a cada modulo',
+      eyebrow: 'Experiencia multi plataforma',
+      title: 'Una interfaz clara para web, movil y escritorio',
       copy:
-          'Ventas, caja, clientes, inventario, compras, reportes y contabilidad quedan organizados para que el usuario encuentre lo que necesita sin perder tiempo.',
+          'Trabaja desde Windows en el mostrador, Android en el telefono, iPhone desde Safari y web/PWA en el navegador. Cada usuario entra solo a lo que necesita.',
       points: [
         'Menu por modulos',
-        'Acceso rapido desde movil',
-        'Diseño preparado para PWA',
+        'Acceso rapido desde movil y escritorio',
+        'Diseño preparado para PWA web',
         'Sesiones y permisos de usuario',
       ],
       image: 'assets/image/landing-mobile-drawer.png',
@@ -807,10 +1517,10 @@ class _PlatformSecuritySection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const _SectionHeader(
-            eyebrow: 'Sistema en la nube',
-            title: 'Tus datos disponibles y protegidos',
+            eyebrow: 'Nube, permisos y continuidad',
+            title: 'Un POS potente para crecer sin cambiar de sistema',
             copy:
-                'El negocio puede trabajar desde web, Windows o Android con informacion centralizada, usuarios controlados y actualizaciones de PWA sin instalaciones pesadas.',
+                'La informacion queda centralizada por empresa y disponible para el equipo autorizado. Ideal para empezar con el plan basico y escalar a un plan avanzado cuando el negocio lo pida.',
           ),
           const SizedBox(height: 16),
           LayoutBuilder(
@@ -824,7 +1534,10 @@ class _PlatformSecuritySection extends StatelessWidget {
                 _SecurityItem(Icons.cloud_done_rounded, 'Nube centralizada'),
                 _SecurityItem(Icons.lock_rounded, 'Acceso protegido'),
                 _SecurityItem(Icons.sync_rounded, 'Actualizaciones simples'),
-                _SecurityItem(Icons.devices_rounded, 'Multi-plataforma'),
+                _SecurityItem(
+                  Icons.devices_rounded,
+                  'Windows, Android, iPhone y web',
+                ),
               ];
               return GridView.builder(
                 shrinkWrap: true,
@@ -923,8 +1636,8 @@ class _ValueBullets extends StatelessWidget {
   Widget build(BuildContext context) {
     const bullets = [
       (Icons.speed_rounded, 'Vende rapido'),
-      (Icons.inventory_rounded, 'Controla stock'),
-      (Icons.account_balance_rounded, 'Cierra el dia'),
+      (Icons.devices_rounded, 'Multi plataforma'),
+      (Icons.account_balance_rounded, 'Control diario'),
     ];
 
     Widget bullet((IconData, String) item, bool stacked) {
@@ -1110,6 +1823,11 @@ class _LandingDrawer extends StatelessWidget {
                 onTap: () => context.go(Routes.register),
               ),
             _DrawerAction(
+              icon: Icons.chat_rounded,
+              label: 'WhatsApp $_supportPhoneDisplay',
+              onTap: () => LandingScreen.openWhatsApp(context),
+            ),
+            _DrawerAction(
               icon: Icons.login_rounded,
               label: 'Iniciar sesion',
               onTap: () => context.go(Routes.login),
@@ -1137,6 +1855,87 @@ class _LandingDrawer extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _FinalCtaSection extends StatelessWidget {
+  const _FinalCtaSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B1728),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF1E3554)),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 680;
+          final text = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              Text(
+                'Empieza con FullPOS Cloud hoy',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  height: 1.12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Plan basico desde RD\$ 1,000 mensual. Instalable como PWA, disponible para Windows, Android e iPhone, con soporte directo por WhatsApp.',
+                style: TextStyle(
+                  color: Color(0xFFC9D7E8),
+                  fontSize: 14,
+                  height: 1.45,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          );
+          final actions = Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            alignment: compact ? WrapAlignment.start : WrapAlignment.end,
+            children: [
+              FilledButton.icon(
+                onPressed: () => LandingScreen.openWhatsApp(context),
+                icon: const Icon(Icons.chat_rounded, size: 18),
+                label: const Text('WhatsApp $_supportPhoneDisplay'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => context.go(Routes.login),
+                icon: const Icon(Icons.login_rounded, size: 18),
+                label: const Text('Iniciar sesion'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.45)),
+                ),
+              ),
+            ],
+          );
+
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [text, const SizedBox(height: 16), actions],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: text),
+              const SizedBox(width: 22),
+              actions,
+            ],
+          );
+        },
       ),
     );
   }
@@ -1172,7 +1971,7 @@ class _Footer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Text(
-      '© 2026 FullPOS Cloud - Facturacion, inventario y gestion comercial en la nube.',
+      '© 2026 FullPOS Cloud - POS multi plataforma para facturacion, inventario y gestion comercial.',
       textAlign: TextAlign.center,
       style: TextStyle(
         color: Color(0xFF66788D),
@@ -1208,7 +2007,7 @@ void _showInfoSheet(BuildContext context) {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'FullPOS Cloud resume tu operacion diaria',
+              'FullPOS Cloud conecta tu operacion diaria',
               style: TextStyle(
                 color: Color(0xFF0D1B2A),
                 fontSize: 20,
@@ -1217,7 +2016,7 @@ void _showInfoSheet(BuildContext context) {
             ),
             SizedBox(height: 10),
             Text(
-              'Facturacion, inventario, compras, clientes, caja, reportes y contabilidad trabajan juntos para que el negocio venda mas ordenado desde cualquier dispositivo.',
+              'Facturacion, inventario, compras, clientes, caja, reportes y contabilidad trabajan juntos desde web/PWA, Windows, Android e iPhone. Plan basico desde RD\$ 1,000 mensual. WhatsApp: $_supportPhoneDisplay.',
               style: TextStyle(
                 color: Color(0xFF60748C),
                 fontSize: 14,

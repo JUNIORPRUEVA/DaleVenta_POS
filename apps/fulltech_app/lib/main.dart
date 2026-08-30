@@ -396,7 +396,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 class LicensePurchaseOverlay extends ConsumerWidget {
   const LicensePurchaseOverlay({super.key});
 
-  static const _phone = '18295344286';
+  static const _phone = '18295319442';
 
   Uri get _whatsAppUri => Uri.https('wa.me', '/$_phone', {
     'text':
@@ -511,7 +511,7 @@ class LicensePurchaseOverlay extends ConsumerWidget {
                           SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              'Compra directa por WhatsApp: 829-534-4286',
+                              'Compra directa por WhatsApp: 829-531-9442',
                               style: TextStyle(
                                 color: Color(0xFF183548),
                                 fontSize: 14,

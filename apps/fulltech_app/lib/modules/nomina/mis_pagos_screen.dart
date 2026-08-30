@@ -29,7 +29,7 @@ class _MisPagosScreenState extends ConsumerState<MisPagosScreen>
     with WidgetsBindingObserver {
   static const String _companyName = 'FULLTECH, SRL';
   static const String _companyRnc = '133080209';
-  static const String _companyPhone = '8295344286';
+  static const String _companyPhone = '8295319442';
 
   bool _loading = true;
   bool _syncing = false;

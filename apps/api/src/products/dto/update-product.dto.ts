@@ -26,6 +26,10 @@ export class UpdateProductDto {
   operationId?: string;
 
   @IsOptional()
+  @IsString()
+  unitOfMeasureId?: string;
+
+  @IsOptional()
   @IsNumber()
   @Min(0)
   precio?: number;

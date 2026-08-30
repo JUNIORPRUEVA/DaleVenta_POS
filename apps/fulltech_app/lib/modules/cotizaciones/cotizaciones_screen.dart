@@ -30,6 +30,7 @@ import '../../core/errors/api_exception.dart';
 import '../../core/license/license_repository.dart';
 import '../../core/models/user_model.dart';
 import '../../core/models/product_model.dart';
+import '../../core/offline/sync_status_menu_button.dart';
 import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/realtime/catalog_realtime_service.dart';
 import '../../core/routing/app_route_observer.dart';
@@ -250,6 +251,16 @@ bool shouldShowBillingItbis({
   return taxEnabled && taxAmount > 0;
 }
 
+typedef _CatalogProductAddCallback =
+    void Function(ProductModel product, Offset? globalStart);
+
+const Color _billingBorderColor = Color(0xFFD3E0E7);
+const Color _billingSubtleBorderColor = Color(0xFFE4EDF2);
+const String _billingClientIconAsset = 'assets/image/billing/client.png';
+const String _billingActionsIconAsset = 'assets/image/billing/actions.png';
+const String _billingDeleteIconAsset = 'assets/image/billing/delete.png';
+const String _billingQuoteIconAsset = 'assets/image/billing/quote.png';
+
 /// Devuelve el id del ticket que debe quedar ACTIVO después de retirar el
 /// ticket completado [removedId] de la lista de tickets abiertos
 /// ([orderedTicketIds], en el orden visual actual de la barra inferior).
@@ -278,7 +289,7 @@ String? nextActiveTicketIdAfterRemoval(
 }
 
 class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
-    with WidgetsBindingObserver
+    with WidgetsBindingObserver, TickerProviderStateMixin
     implements RouteAware {
   static const double _desktopBreakpoint = 900;
   static const String _editorDraftCachePrefix = 'cotizaciones:editorDraft:';
@@ -300,6 +311,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   final TextEditingController _searchCtrl = TextEditingController();
   final FocusNode _mobileSearchFocusNode = FocusNode();
+  final GlobalKey _desktopCartAnimationTargetKey = GlobalKey();
 
   final List<CotizacionItem> _items = [];
   List<ProductModel> _productos = const [];
@@ -1067,13 +1079,28 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   List<String> get _categories {
-    final values = _productos
-        .map((product) => product.categoriaLabel.trim())
-        .where((label) => label.isNotEmpty)
-        .toSet()
-        .toList();
-    values.sort((left, right) => left.compareTo(right));
-    return values;
+    return _catalogCategories(ref.read(inventoryCategoriesProvider).items);
+  }
+
+  List<String> _catalogCategories(
+    List<InventoryCategoryModel> managedCategories,
+  ) {
+    final byKey = <String, String>{};
+    void addCategory(String value) {
+      final label = value.trim();
+      if (label.isEmpty) return;
+      byKey.putIfAbsent(label.toLowerCase(), () => label);
+    }
+
+    for (final product in _productos) {
+      addCategory(product.categoriaLabel);
+    }
+    for (final category in managedCategories) {
+      addCategory(category.name);
+    }
+    final unique = byKey.values.toList();
+    unique.sort((left, right) => left.compareTo(right));
+    return unique;
   }
 
   bool get _hasCategoryFilter => _selectedCategories.isNotEmpty;
@@ -2897,6 +2924,81 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     }
   }
 
+  void _addProductFromDesktopCatalog(
+    ProductModel product,
+    Offset? globalStart,
+  ) {
+    _playAddToCartAnimation(product, globalStart);
+    _addProduct(product);
+  }
+
+  void _playAddToCartAnimation(ProductModel product, Offset? globalStart) {
+    final size = MediaQuery.maybeSizeOf(context);
+    if (size == null || size.width < _desktopBreakpoint) return;
+
+    final overlay = Overlay.maybeOf(context);
+    final overlayBox = overlay?.context.findRenderObject() as RenderBox?;
+    final targetBox =
+        _desktopCartAnimationTargetKey.currentContext?.findRenderObject()
+            as RenderBox?;
+    if (overlay == null ||
+        overlayBox == null ||
+        targetBox == null ||
+        !targetBox.hasSize) {
+      return;
+    }
+
+    final fallbackStart = Offset(size.width * 0.42, size.height * 0.42);
+    final start = overlayBox.globalToLocal(globalStart ?? fallbackStart);
+    final targetGlobal = targetBox.localToGlobal(
+      Offset(34, targetBox.size.height * 0.18),
+    );
+    final end = overlayBox.globalToLocal(targetGlobal);
+    final controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 560),
+    );
+    final curve = CurvedAnimation(
+      parent: controller,
+      curve: Curves.easeOutCubic,
+    );
+
+    late final OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (context) {
+        return AnimatedBuilder(
+          animation: curve,
+          builder: (context, child) {
+            final t = curve.value;
+            final position = Offset.lerp(start, end, t)!;
+            final lift = ui.lerpDouble(0, -46, (1 - (2 * t - 1).abs()))!;
+            final scale = ui.lerpDouble(0.92, 0.56, t)!;
+            final opacity = t < 0.76 ? 1.0 : (1 - ((t - 0.76) / 0.24));
+
+            return Positioned(
+              left: position.dx - 20,
+              top: position.dy + lift - 20,
+              child: IgnorePointer(
+                child: Opacity(
+                  opacity: opacity.clamp(0.0, 1.0),
+                  child: Transform.scale(scale: scale, child: child),
+                ),
+              ),
+            );
+          },
+          child: _AddToCartFlightBadge(product: product),
+        );
+      },
+    );
+
+    overlay.insert(entry);
+    controller.forward().whenComplete(() {
+      entry.remove();
+      curve.dispose();
+      controller.dispose();
+    });
+  }
+
   Future<void> _openExternalItemDialog({int? editIndex}) async {
     final isDesktop = MediaQuery.sizeOf(context).width >= _desktopBreakpoint;
     if (isDesktop) {
@@ -4097,11 +4199,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             TextButton.icon(
-                                              onPressed: () => setStateDialog(
-                                                () {
-                                                  detailClient = client;
-                                                },
-                                              ),
+                                              onPressed: () =>
+                                                  setStateDialog(() {
+                                                    detailClient = client;
+                                                  }),
                                               style: TextButton.styleFrom(
                                                 padding:
                                                     const EdgeInsets.symmetric(
@@ -4200,11 +4301,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                           children: [
                                             IconButton(
                                               tooltip: 'Ver cliente',
-                                              onPressed: () => setStateDialog(
-                                                () {
-                                                  detailClient = client;
-                                                },
-                                              ),
+                                              onPressed: () =>
+                                                  setStateDialog(() {
+                                                    detailClient = client;
+                                                  }),
                                               iconSize: 20,
                                               visualDensity:
                                                   VisualDensity.compact,
@@ -5001,13 +5101,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   List<String> _inventoryCategories() {
-    final categories = _productos
-        .map((product) => product.categoriaLabel)
-        .where((category) => category.trim().isNotEmpty)
-        .toSet()
-        .toList();
-    categories.sort();
-    return categories;
+    return _catalogCategories(ref.read(inventoryCategoriesProvider).items);
   }
 
   Future<void> _openInventoryCatalog() async {
@@ -5726,19 +5820,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       title: 'Facturación',
       preferDrawerLeading: true,
       actions: [
+        const SizedBox(width: 10),
         const CashTurnMenuButton(),
-        const SizedBox(width: 8),
-        _QuotationTopbarMenu(
-          onQuote: _saveCurrentAsQuotation,
-          onHistory: () => context.go(Routes.cotizacionesHistorial),
-          onPdf: _openPdfPreview,
-        ),
-        _ClientTopbarAction(
-          hasClient:
-              (_selectedClientId ?? '').trim().isNotEmpty &&
-              _selectedClientName.trim() != 'Sin cliente',
-          onPressed: _openClientDialog,
-        ),
+        const SizedBox(width: 18),
+        const SyncStatusMenuButton(),
+        const SizedBox(width: 3),
         if (showAiBanner)
           IconButton(
             tooltip: 'Cerrar comentario IA',
@@ -6700,6 +6786,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     final isAdmin = currentUser?.appRole == AppRole.admin;
     final showAiBanner = _shouldShowAiBanner(aiState);
     final managedCategories = ref.watch(inventoryCategoriesProvider).items;
+    final desktopCategories = _catalogCategories(managedCategories);
+    final hasDesktopCategories = desktopCategories.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 0),
       child: Column(
@@ -6748,7 +6836,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                           child: _DesktopCatalogPane(
                             searchController: _searchCtrl,
                             selectedCategories: _selectedCategories,
-                            categories: _categories,
+                            categories: desktopCategories,
                             managedCategories: managedCategories,
                             allProducts: _productos,
                             visibleProducts: _visibleProducts,
@@ -6766,7 +6854,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                 }),
                             onClearCategories: () =>
                                 _commitEditorChange(_selectedCategories.clear),
-                            onAddProduct: _addProduct,
+                            onAddProduct: _addProductFromDesktopCatalog,
                             onAddExternalItem: () => _openExternalItemDialog(),
                             onOpenNewProduct: _openInventoryCatalog,
                             onOpenStockAdjustments: _openStockAdjustments,
@@ -6774,69 +6862,78 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                         ),
                         SizedBox(
                           width: sidePaneWidth,
-                          child: _DesktopQuotePanel(
-                            items: _items,
-                            selectedClientName: _selectedClientName,
-                            selectedClientPhone: _selectedClientPhone,
-                            includeItbis: _shouldShowItbis,
-                            subtotalBeforeDiscount: _subtotalBeforeDiscount,
-                            discountAmount: _lineDiscountAmount,
-                            generalDiscountAmount:
-                                _effectiveGeneralDiscountAmount,
-                            subtotal: _subtotal,
-                            itbisAmount: _taxAmount,
-                            total: _total,
-                            isAdmin: isAdmin,
-                            utilityAmount: _utilityAmount,
-                            money: _money,
-                            onPickClient: _openClientDialog,
-                            onClearClient: () => _commitEditorChange(() {
-                              _selectedClientId = null;
-                              _selectedClientName = 'Sin cliente';
-                              _selectedClientPhone = null;
-                              _fiscalCustomerTaxId = '';
-                              _fiscalCustomerName = '';
-                            }),
-                            onOpenHistory: _openRecentSalesPanel,
-                            onOpenFiscalData: _shouldShowItbis
-                                ? () => unawaited(
-                                    _openMobileFiscalInvoicePanel(
-                                      authorized: true,
-                                    ),
-                                  )
-                                : null,
-                            fiscalLabel: _fiscalInvoiceLabel,
-                            hasNote: _note.trim().isNotEmpty,
-                            onOpenNote: _openNoteDialog,
-                            onClear: !_hasEditorContent
-                                ? null
-                                : () {
-                                    unawaited(_confirmAndClearSale());
-                                  },
-                            onFinalize: _openCheckoutDialog,
-                            onApplyGeneralDiscount: _applyGeneralDiscount,
-                            onMinusQty: (index) =>
-                                _setQty(index, _items[index].qty - 1),
-                            onPlusQty: (index) =>
-                                _setQty(index, _items[index].qty + 1),
-                            onChangePrice: _setUnitPrice,
-                            onEditLine: _openLineEditor,
-                            onEditExternalItem: (index) =>
-                                _openExternalItemDialog(editIndex: index),
-                            isOutOfStock: (item) {
-                              if (item.isExternal) return false;
-                              final official = _findOfficialProduct(
-                                item.productId,
-                              );
-                              return official != null &&
-                                  (official.stock == null ||
-                                      official.stock! <= 0);
-                            },
-                            isItemExempt: _isBillingItemExempt,
-                            onRemoveItem: (index) {
-                              if (index < 0 || index >= _items.length) return;
-                              _commitEditorChange(() => _items.removeAt(index));
-                            },
+                          child: KeyedSubtree(
+                            key: _desktopCartAnimationTargetKey,
+                            child: _DesktopQuotePanel(
+                              items: _items,
+                              selectedClientName: _selectedClientName,
+                              selectedClientPhone: _selectedClientPhone,
+                              includeItbis: _shouldShowItbis,
+                              subtotalBeforeDiscount: _subtotalBeforeDiscount,
+                              discountAmount: _lineDiscountAmount,
+                              generalDiscountAmount:
+                                  _effectiveGeneralDiscountAmount,
+                              subtotal: _subtotal,
+                              itbisAmount: _taxAmount,
+                              total: _total,
+                              isAdmin: isAdmin,
+                              utilityAmount: _utilityAmount,
+                              money: _money,
+                              onPickClient: _openClientDialog,
+                              onClearClient: () => _commitEditorChange(() {
+                                _selectedClientId = null;
+                                _selectedClientName = 'Sin cliente';
+                                _selectedClientPhone = null;
+                                _fiscalCustomerTaxId = '';
+                                _fiscalCustomerName = '';
+                              }),
+                              onOpenHistory: _openRecentSalesPanel,
+                              onQuote: _saveCurrentAsQuotation,
+                              onPdf: _openPdfPreview,
+                              onOpenFiscalData: _shouldShowItbis
+                                  ? () => unawaited(
+                                      _openMobileFiscalInvoicePanel(
+                                        authorized: true,
+                                      ),
+                                    )
+                                  : null,
+                              fiscalLabel: _fiscalInvoiceLabel,
+                              hasNote: _note.trim().isNotEmpty,
+                              onOpenNote: _openNoteDialog,
+                              onClear: !_hasEditorContent
+                                  ? null
+                                  : () {
+                                      unawaited(_confirmAndClearSale());
+                                    },
+                              onFinalize: _openCheckoutDialog,
+                              onApplyGeneralDiscount: _applyGeneralDiscount,
+                              onMinusQty: (index) =>
+                                  _setQty(index, _items[index].qty - 1),
+                              onPlusQty: (index) =>
+                                  _setQty(index, _items[index].qty + 1),
+                              onChangePrice: _setUnitPrice,
+                              onEditLine: _openLineEditor,
+                              onEditExternalItem: (index) =>
+                                  _openExternalItemDialog(editIndex: index),
+                              isOutOfStock: (item) {
+                                if (item.isExternal) return false;
+                                final official = _findOfficialProduct(
+                                  item.productId,
+                                );
+                                return official != null &&
+                                    (official.stock == null ||
+                                        official.stock! <= 0);
+                              },
+                              isItemExempt: _isBillingItemExempt,
+                              onRemoveItem: (index) {
+                                if (index < 0 || index >= _items.length) {
+                                  return;
+                                }
+                                _commitEditorChange(
+                                  () => _items.removeAt(index),
+                                );
+                              },
+                            ),
                           ),
                         ),
                       ],
@@ -6941,11 +7038,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     ),
                     if (!overlayOpen)
                       Positioned(
-                        left: 12,
-                        bottom: 12,
+                        left: hasDesktopCategories
+                            ? _DesktopCategoryRail.collapsedWidth + 8
+                            : 12,
+                        bottom: 10,
                         child: _AnimatedCalculatorFab(
                           open: _showDesktopCalculator,
                           onTap: _toggleDesktopCalculator,
+                          filled: true,
                         ),
                       ),
                   ],
@@ -7764,86 +7864,6 @@ class _InventoryActionDrawerTile extends StatelessWidget {
   }
 }
 
-class _QuotationTopbarMenu extends StatelessWidget {
-  const _QuotationTopbarMenu({
-    required this.onQuote,
-    required this.onHistory,
-    required this.onPdf,
-  });
-
-  final VoidCallback onQuote;
-  final VoidCallback onHistory;
-  final VoidCallback onPdf;
-
-  void _runAfterMenuCloses(VoidCallback action) {
-    Future<void>.delayed(const Duration(milliseconds: 120), action);
-  }
-
-  void _activateMenuItem(BuildContext menuContext, VoidCallback action) {
-    Navigator.of(menuContext).pop();
-    _runAfterMenuCloses(action);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: PopupMenuButton<String>(
-        tooltip: 'Cotizaciones',
-        offset: const Offset(0, 42),
-        elevation: 8,
-        color: Colors.white,
-        shadowColor: Colors.black.withValues(alpha: 0.10),
-        constraints: const BoxConstraints(minWidth: 282),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: const BorderSide(color: Color(0xFFDDE7EE)),
-        ),
-        itemBuilder: (menuContext) => [
-          PopupMenuItem(
-            enabled: false,
-            padding: EdgeInsets.zero,
-            child: _QuotationMenuItem(
-              icon: Icons.request_quote_outlined,
-              title: 'Cotizar',
-              onTap: () => _activateMenuItem(menuContext, onQuote),
-              helpText:
-                  'Guarda el ticket actual como cotización para poder retomarlo, compartirlo o convertirlo en una venta más adelante sin perder los productos agregados.',
-            ),
-          ),
-          PopupMenuItem(
-            enabled: false,
-            padding: EdgeInsets.zero,
-            child: _QuotationMenuItem(
-              icon: Icons.history_edu_outlined,
-              title: 'Lista de cotizaciones',
-              onTap: () => _activateMenuItem(menuContext, onHistory),
-              helpText:
-                  'Abre el historial de cotizaciones guardadas para buscar, revisar, reutilizar o dar seguimiento a propuestas anteriores.',
-            ),
-          ),
-          PopupMenuItem(
-            enabled: false,
-            padding: EdgeInsets.zero,
-            child: _QuotationMenuItem(
-              icon: Icons.picture_as_pdf_outlined,
-              title: 'Ver PDF',
-              onTap: () => _activateMenuItem(menuContext, onPdf),
-              helpText:
-                  'Genera una vista previa del documento PDF del ticket actual para revisarlo, imprimirlo o compartirlo con el cliente.',
-            ),
-          ),
-        ],
-        child: const _TopbarActionShell(
-          icon: Icons.request_quote_outlined,
-          label: 'Cotizaciones',
-          hasChevron: true,
-        ),
-      ),
-    );
-  }
-}
-
 class _TopbarActionShell extends StatefulWidget {
   const _TopbarActionShell({
     required this.icon,
@@ -7851,7 +7871,9 @@ class _TopbarActionShell extends StatefulWidget {
     this.leading,
     this.hasChevron = false,
     this.primary = false,
+    this.softPrimary = false,
     this.minWidth,
+    this.height = 40,
   });
 
   final IconData icon;
@@ -7859,7 +7881,9 @@ class _TopbarActionShell extends StatefulWidget {
   final Widget? leading;
   final bool hasChevron;
   final bool primary;
+  final bool softPrimary;
   final double? minWidth;
+  final double height;
 
   @override
   State<_TopbarActionShell> createState() => _TopbarActionShellState();
@@ -7872,15 +7896,18 @@ class _TopbarActionShellState extends State<_TopbarActionShell> {
   @override
   Widget build(BuildContext context) {
     final active = _hovered || _pressed;
-    final foreground = widget.primary
+    final useBlueFill = widget.primary && !widget.softPrimary;
+    final foreground = useBlueFill
         ? Colors.white
         : (active ? const Color(0xFF1957E6) : const Color(0xFF123A75));
-    final iconBg = widget.primary
+    final iconBg = useBlueFill
         ? Colors.white.withValues(alpha: active ? 0.20 : 0.14)
-        : const Color(0xFFEAF1FF);
-    final borderColor = widget.primary
+        : (widget.softPrimary
+              ? const Color(0xFFF2F7FF)
+              : const Color(0xFFEAF1FF));
+    final borderColor = useBlueFill
         ? const Color(0xFF7DA2FF)
-        : (active ? const Color(0xFF9FBCFF) : const Color(0xFFCFE0FF));
+        : _billingBorderColor;
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -7900,17 +7927,21 @@ class _TopbarActionShellState extends State<_TopbarActionShell> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOutCubic,
-            height: 40,
+            height: widget.height,
             constraints: BoxConstraints(minWidth: widget.minWidth ?? 0),
             padding: const EdgeInsets.fromLTRB(10, 5, 11, 5),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: widget.primary
+                colors: useBlueFill
                     ? (active
                           ? const [Color(0xFF2E6BFF), Color(0xFF164ED6)]
                           : const [Color(0xFF1F62FF), Color(0xFF1957E6)])
+                    : widget.softPrimary
+                    ? (active
+                          ? const [Color(0xFFFFFFFF), Color(0xFFEAF1FF)]
+                          : const [Color(0xFFFFFFFF), Color(0xFFFFFFFF)])
                     : (active
                           ? const [Color(0xFFFFFFFF), Color(0xFFEAF1FF)]
                           : const [Color(0xFFFFFFFF), Color(0xFFF7FAFC)]),
@@ -7921,7 +7952,7 @@ class _TopbarActionShellState extends State<_TopbarActionShell> {
                 BoxShadow(
                   color: const Color(
                     0xFF1957E6,
-                  ).withValues(alpha: widget.primary ? 0.22 : 0.10),
+                  ).withValues(alpha: useBlueFill ? 0.22 : 0.10),
                   blurRadius: active ? 18 : 10,
                   offset: Offset(0, active ? 7 : 3),
                 ),
@@ -7936,7 +7967,7 @@ class _TopbarActionShellState extends State<_TopbarActionShell> {
                   decoration: BoxDecoration(
                     color: iconBg,
                     borderRadius: BorderRadius.circular(6),
-                    border: widget.primary
+                    border: useBlueFill
                         ? Border.all(color: Colors.white24)
                         : null,
                   ),
@@ -8264,7 +8295,7 @@ class _CompanyAccountMenu extends ConsumerWidget {
         shadowColor: Colors.black.withValues(alpha: 0.10),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
-          side: const BorderSide(color: Color(0xFFDDE7EE)),
+          side: const BorderSide(color: _billingBorderColor),
         ),
         constraints: const BoxConstraints(minWidth: 340, maxWidth: 340),
         itemBuilder: (menuContext) => [
@@ -8430,10 +8461,12 @@ class _CompanyAccountMenu extends ConsumerWidget {
         child: _TopbarActionShell(
           icon: Icons.storefront_rounded,
           label: companyName,
-          leading: _CompanyLogoBox(logoBase64: logoBase64, size: 26),
+          leading: _CompanyLogoBox(logoBase64: logoBase64, size: 24),
           hasChevron: true,
           primary: true,
-          minWidth: 132,
+          softPrimary: true,
+          minWidth: 126,
+          height: 36,
         ),
       ),
     );
@@ -8514,7 +8547,7 @@ void _openUpgradeWhatsApp(BuildContext context) {
     Uri(
       scheme: 'https',
       host: 'wa.me',
-      path: '18295344286',
+      path: '18295319442',
       queryParameters: {'text': 'Quiero hacer un upgrade'},
     ),
   );
@@ -8798,7 +8831,7 @@ class _LicenseDetailsCardState extends State<_LicenseDetailsCard> {
           if ((businessAddress != null && businessAddress.isNotEmpty) ||
               hasKey ||
               hasNotes) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 0),
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
@@ -9144,7 +9177,7 @@ class _CompanySidePanelScaffold extends StatelessWidget {
           height: double.infinity,
           decoration: const BoxDecoration(
             color: Color(0xFFF8FAFC),
-            border: Border(left: BorderSide(color: Color(0xFFD3E0E7))),
+            border: Border(left: BorderSide(color: _billingBorderColor)),
             boxShadow: [
               BoxShadow(
                 color: Color(0x1F0F172A),
@@ -9162,7 +9195,7 @@ class _CompanySidePanelScaffold extends StatelessWidget {
                   decoration: const BoxDecoration(
                     color: Colors.white,
                     border: Border(
-                      bottom: BorderSide(color: Color(0xFFDDE7EE)),
+                      bottom: BorderSide(color: _billingBorderColor),
                     ),
                   ),
                   child: Row(
@@ -9303,7 +9336,7 @@ class _CompanySideSurface extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFDDE7EE)),
+        border: Border.all(color: _billingBorderColor),
       ),
       child: child,
     );
@@ -9324,7 +9357,7 @@ class _CompanySideIcon extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFF2F7FF),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: const Color(0xFFDDEAFF)),
+        border: Border.all(color: _billingBorderColor),
       ),
       child: Icon(icon, size: size * 0.48, color: const Color(0xFF1957E6)),
     );
@@ -9654,118 +9687,6 @@ class _CompanyMenuItemState extends State<_CompanyMenuItem> {
   }
 }
 
-class _QuotationMenuItem extends StatefulWidget {
-  const _QuotationMenuItem({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-    required this.helpText,
-  });
-
-  final IconData icon;
-  final String title;
-  final VoidCallback onTap;
-  final String helpText;
-
-  @override
-  State<_QuotationMenuItem> createState() => _QuotationMenuItemState();
-}
-
-class _QuotationMenuItemState extends State<_QuotationMenuItem> {
-  bool _showHelp = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 282,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: widget.onTap,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 31,
-                      height: 31,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF7FAFC),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFFDDE7EE)),
-                      ),
-                      child: Icon(
-                        widget.icon,
-                        color: const Color(0xFF1957E6),
-                        size: 16,
-                      ),
-                    ),
-                    const SizedBox(width: 11),
-                    Expanded(
-                      child: Text(
-                        widget.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF183548),
-                          fontWeight: FontWeight.w900,
-                          fontSize: 13,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                    ),
-                    Tooltip(
-                      message: _showHelp ? 'Ocultar ayuda' : 'Ayuda',
-                      child: SizedBox(
-                        width: 28,
-                        height: 28,
-                        child: IconButton(
-                          onPressed: () =>
-                              setState(() => _showHelp = !_showHelp),
-                          padding: EdgeInsets.zero,
-                          visualDensity: VisualDensity.compact,
-                          style: IconButton.styleFrom(
-                            foregroundColor: _showHelp
-                                ? const Color(0xFF1957E6)
-                                : const Color(0xFF64748B),
-                            hoverColor: const Color(0xFFEFF4F8),
-                            highlightColor: const Color(0xFFDDE7EE),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                          ),
-                          icon: Icon(
-                            _showHelp
-                                ? Icons.help_rounded
-                                : Icons.help_outline_rounded,
-                            size: 17,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                AnimatedCrossFade(
-                  firstChild: const SizedBox.shrink(),
-                  secondChild: _InlineMenuHelp(text: widget.helpText),
-                  crossFadeState: _showHelp
-                      ? CrossFadeState.showSecond
-                      : CrossFadeState.showFirst,
-                  duration: const Duration(milliseconds: 150),
-                  sizeCurve: Curves.easeOutCubic,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _InlineMenuHelp extends StatelessWidget {
   const _InlineMenuHelp({required this.text});
 
@@ -9780,7 +9701,7 @@ class _InlineMenuHelp extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFF4F8FF),
         borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: const Color(0xFFDDEAFF)),
+        border: Border.all(color: _billingBorderColor),
       ),
       child: Text(
         text,
@@ -10063,7 +9984,7 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
           backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
-            side: const BorderSide(color: Color(0xFFDDE7EE)),
+            side: const BorderSide(color: _billingBorderColor),
           ),
           child: ConstrainedBox(
             constraints: BoxConstraints(
@@ -10947,7 +10868,7 @@ class _QuoteClientDetailLine extends StatelessWidget {
             decoration: BoxDecoration(
               color: const Color(0xFFEAF1FF),
               borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: const Color(0xFFCFE0FF)),
+              border: Border.all(color: _billingBorderColor),
             ),
             child: Icon(icon, color: const Color(0xFF1957E6), size: 18),
           ),
@@ -11183,7 +11104,7 @@ class _ProductThumbCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Color(0xFF2563EB),
+                          color: Color(0xFF1E293B),
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                           height: 1,
@@ -11201,7 +11122,7 @@ class _ProductThumbCard extends StatelessWidget {
                               decoration: BoxDecoration(
                                 color: outOfStock
                                     ? const Color(0xFFFEF2F2)
-                                    : const Color(0xFFDCFCE7),
+                                    : const Color(0xFFE4F8FF),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
@@ -11211,7 +11132,7 @@ class _ProductThumbCard extends StatelessWidget {
                                 style: TextStyle(
                                   color: outOfStock
                                       ? const Color(0xFFDC2626)
-                                      : const Color(0xFF15803D),
+                                      : const Color(0xFF0D5EA6),
                                   fontSize: 10,
                                   fontWeight: FontWeight.w500,
                                   height: 1,
@@ -11224,12 +11145,13 @@ class _ProductThumbCard extends StatelessWidget {
                             width: 34,
                             height: 34,
                             decoration: BoxDecoration(
-                              color: const Color(0xFFEFF6FF),
+                              color: const Color(0xFFE4F8FF),
                               borderRadius: BorderRadius.circular(11),
+                              border: Border.all(color: _billingBorderColor),
                             ),
                             child: const Icon(
                               Icons.add_rounded,
-                              color: Color(0xFF2563EB),
+                              color: Color(0xFF0D5EA6),
                               size: 22,
                             ),
                           ),
@@ -11453,6 +11375,10 @@ class _ProductPreviewPlaceholder extends StatelessWidget {
   }
 }
 
+const bool _useModernDesktopCatalogGrid = true;
+const double _desktopCatalogToolbarControlHeight = 42.0;
+const double _desktopCatalogToolbarRadius = 7.0;
+
 class _DesktopCatalogPane extends StatefulWidget {
   const _DesktopCatalogPane({
     required this.searchController,
@@ -11487,7 +11413,7 @@ class _DesktopCatalogPane extends StatefulWidget {
   final VoidCallback onSearchSubmitted;
   final ValueChanged<String> onToggleCategory;
   final VoidCallback onClearCategories;
-  final ValueChanged<ProductModel> onAddProduct;
+  final _CatalogProductAddCallback onAddProduct;
   final VoidCallback onAddExternalItem;
   final VoidCallback onOpenNewProduct;
   final VoidCallback onOpenStockAdjustments;
@@ -11498,6 +11424,7 @@ class _DesktopCatalogPane extends StatefulWidget {
 
 class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
   late final ScrollController _gridScrollController;
+  bool _categoryRailExpanded = false;
 
   @override
   void initState() {
@@ -11511,236 +11438,404 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
     super.dispose();
   }
 
+  void _handleCategoryRailExpansionChanged(bool expanded) {
+    if (_categoryRailExpanded == expanded) return;
+    setState(() => _categoryRailExpanded = expanded);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final hasCategories = widget.categories.isNotEmpty;
+    final catalogLeftInset = hasCategories ? 0.0 : 8.0;
 
     return DecoratedBox(
       decoration: const BoxDecoration(
         color: Color(0xFFEFF5F8),
-        border: Border(right: BorderSide(color: Color(0xFFD3E0E7))),
+        border: Border(right: BorderSide(color: _billingBorderColor)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 10, 10),
-        child: Column(
-          children: [
-            Row(
+      child: _useModernDesktopCatalogGrid
+          ? Stack(
               children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 44,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(7),
-                        border: Border.all(color: const Color(0xFFD4E0E8)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(
-                              0xFF0B2A3A,
-                            ).withValues(alpha: 0.05),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (hasCategories) ...[
+                      const SizedBox(
+                        width: _DesktopCategoryRail.collapsedWidth,
                       ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 36,
-                            height: 36,
-                            margin: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1957E6),
-                              borderRadius: BorderRadius.circular(6),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(
-                                    0xFF1957E6,
-                                  ).withValues(alpha: 0.18),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.search_rounded,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                          ),
-                          Container(
-                            width: 1,
-                            height: 24,
-                            color: const Color(0xFFE2EBF0),
-                          ),
-                          Expanded(
-                            child: TextField(
-                              controller: widget.searchController,
-                              onChanged: (_) => widget.onSearchChanged(),
-                              textInputAction: TextInputAction.search,
-                              onSubmitted: (_) => widget.onSearchSubmitted(),
-                              textAlignVertical: TextAlignVertical.center,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.2,
-                              ),
-                              decoration: InputDecoration(
-                                hintText:
-                                    'Buscar producto por nombre o código...',
-                                hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                                  color: const Color(0xFF617383),
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.2,
-                                ),
-                                filled: true,
-                                fillColor: Colors.transparent,
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 11,
-                                ),
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                disabledBorder: InputBorder.none,
-                              ),
-                            ),
-                          ),
-                          if (widget.searchController.text.trim().isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 6),
-                              child: IconButton(
-                                tooltip: 'Limpiar búsqueda',
-                                onPressed: () {
-                                  widget.searchController.clear();
-                                  widget.onSearchChanged();
-                                },
-                                icon: const Icon(
-                                  Icons.close_rounded,
-                                  size: 18,
-                                  color: Color(0xFF617383),
-                                ),
-                                visualDensity: VisualDensity.compact,
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints.tightFor(
-                                  width: 32,
-                                  height: 32,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                _CatalogLineActionButton(
-                  icon: AppIcons.productAdd,
-                  label: 'Nuevo producto',
-                  onPressed: widget.onOpenNewProduct,
-                ),
-                const SizedBox(width: 8),
-                _CatalogLineActionButton(
-                  icon: AppIcons.stockAdd,
-                  label: 'Agregar stock',
-                  filled: true,
-                  onPressed: widget.onOpenStockAdjustments,
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            _DesktopCategoryStrip(
-              categories: widget.categories,
-              allProducts: widget.allProducts,
-              managedCategories: widget.managedCategories,
-              selectedCategories: widget.selectedCategories,
-              onToggleCategory: widget.onToggleCategory,
-              onClearCategories: widget.onClearCategories,
-            ),
-            const SizedBox(height: 6),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final width = constraints.maxWidth;
-                  final columns = width >= 1600
-                      ? 8
-                      : width >= 1280
-                      ? 7
-                      : width >= 1000
-                      ? 6
-                      : 5;
-                  const spacing = 8.0;
-                  final cardWidth = (width - spacing * (columns - 1)) / columns;
-                  final cardHeight = (cardWidth * 1.02).clamp(95.0, 128.0);
-                  final manualHeight = cardHeight * 2 + spacing;
-                  final firstRowsCapacity = (columns - 1) * 2;
-                  var maxRow = 1;
-                  if (widget.visibleProducts.length > firstRowsCapacity) {
-                    final remaining =
-                        widget.visibleProducts.length - firstRowsCapacity;
-                    maxRow += (remaining / columns).ceil();
-                  }
-                  final contentHeight =
-                      (maxRow + 1) * cardHeight + maxRow * spacing;
-
-                  return Scrollbar(
-                    controller: _gridScrollController,
-                    thumbVisibility: true,
-                    interactive: true,
-                    child: SingleChildScrollView(
-                      controller: _gridScrollController,
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      child: SizedBox(
-                        height: contentHeight.clamp(
-                          constraints.maxHeight,
-                          double.infinity,
-                        ),
-                        child: Stack(
+                      const SizedBox(width: 6),
+                    ],
+                    Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(catalogLeftInset, 4, 8, 8),
+                        child: Column(
                           children: [
-                            Positioned(
-                              left: 0,
-                              top: 0,
-                              width: cardWidth,
-                              height: manualHeight,
-                              child: _DesktopExternalProductCard(
-                                onTap: widget.onAddExternalItem,
+                            _buildDesktopCatalogCommandBar(theme),
+                            const SizedBox(height: 8),
+                            Expanded(
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  return _buildModernDesktopCatalogGrid(
+                                    constraints,
+                                  );
+                                },
                               ),
                             ),
-                            for (
-                              var index = 0;
-                              index < widget.visibleProducts.length;
-                              index++
-                            )
-                              Positioned(
-                                left:
-                                    _desktopCatalogProductColumn(
-                                      index,
-                                      columns,
-                                    ) *
-                                    (cardWidth + spacing),
-                                top:
-                                    _desktopCatalogProductRow(index, columns) *
-                                    (cardHeight + spacing),
-                                width: cardWidth,
-                                height: cardHeight,
-                                child: _DesktopProductCard(
-                                  product: widget.visibleProducts[index],
-                                  money: widget.money,
-                                  onTap: () => widget.onAddProduct(
-                                    widget.visibleProducts[index],
-                                  ),
-                                ),
-                              ),
                           ],
                         ),
                       ),
                     ),
-                  );
-                },
+                  ],
+                ),
+                if (hasCategories)
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    child: _DesktopCategoryRail(
+                      categories: widget.categories,
+                      allProducts: widget.allProducts,
+                      managedCategories: widget.managedCategories,
+                      selectedCategories: widget.selectedCategories,
+                      onToggleCategory: widget.onToggleCategory,
+                      onClearCategories: widget.onClearCategories,
+                      onExpansionChanged: _handleCategoryRailExpansionChanged,
+                    ),
+                  ),
+              ],
+            )
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(2, 2, 8, 8),
+                  child: Column(
+                    children: [
+                      _buildDesktopCatalogCommandBar(theme),
+                      _DesktopCategoryStrip(
+                        categories: widget.categories,
+                        allProducts: widget.allProducts,
+                        managedCategories: widget.managedCategories,
+                        selectedCategories: widget.selectedCategories,
+                        onToggleCategory: widget.onToggleCategory,
+                        onClearCategories: widget.onClearCategories,
+                      ),
+                      const SizedBox(height: 6),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(2, 0, 8, 8),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        return _buildLegacyDesktopCatalogGrid(constraints);
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildDesktopCatalogCommandBar(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, 0),
+      child: SizedBox(
+        height: _desktopCatalogToolbarControlHeight,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(
+                    _desktopCatalogToolbarRadius,
+                  ),
+                  border: Border.all(color: _billingBorderColor),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0B2A3A).withValues(alpha: 0.035),
+                      blurRadius: 10,
+                      spreadRadius: -6,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: TextField(
+                  controller: widget.searchController,
+                  onChanged: (_) => widget.onSearchChanged(),
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (_) => widget.onSearchSubmitted(),
+                  textAlignVertical: TextAlignVertical.center,
+                  cursorHeight: 18,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    height: 1,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0,
+                  ),
+                  strutStyle: const StrutStyle(
+                    height: 1,
+                    forceStrutHeight: true,
+                  ),
+                  decoration: InputDecoration(
+                    constraints: const BoxConstraints.tightFor(
+                      height: _desktopCatalogToolbarControlHeight,
+                    ),
+                    hintText: 'Buscar producto por nombre o código...',
+                    hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                      height: 1,
+                      color: const Color(0xFF6A7F90),
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0,
+                    ),
+                    prefixIcon: const Center(
+                      child: Icon(
+                        Icons.search_rounded,
+                        color: Color(0xFF64748B),
+                        size: 18,
+                      ),
+                    ),
+                    prefixIconConstraints: const BoxConstraints.tightFor(
+                      width: 42,
+                      height: _desktopCatalogToolbarControlHeight,
+                    ),
+                    suffixIcon: widget.searchController.text.trim().isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Limpiar búsqueda',
+                            onPressed: () {
+                              widget.searchController.clear();
+                              widget.onSearchChanged();
+                            },
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              size: 18,
+                              color: Color(0xFF617383),
+                            ),
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints.tightFor(
+                              width: 34,
+                              height: _desktopCatalogToolbarControlHeight,
+                            ),
+                          ),
+                    suffixIconConstraints: const BoxConstraints.tightFor(
+                      width: 38,
+                      height: _desktopCatalogToolbarControlHeight,
+                    ),
+                    filled: true,
+                    fillColor: Colors.transparent,
+                    isDense: true,
+                    isCollapsed: true,
+                    contentPadding: const EdgeInsets.only(right: 8),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                  ),
+                ),
               ),
             ),
+            const SizedBox(width: 10),
+            _CatalogLineActionButton(
+              icon: AppIcons.stockAdd,
+              label: 'Agregar stock',
+              width: 132,
+              onPressed: widget.onOpenStockAdjustments,
+            ),
+            const SizedBox(width: 7),
+            _CatalogLineActionButton(
+              icon: AppIcons.productAdd,
+              label: 'Nuevo producto',
+              width: 142,
+              filled: true,
+              onPressed: widget.onOpenNewProduct,
+            ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModernDesktopCatalogGrid(BoxConstraints constraints) {
+    final width = constraints.maxWidth;
+    const horizontalGutter = 6.0;
+    final layoutWidth = (width - (horizontalGutter * 2)).clamp(
+      240.0,
+      double.infinity,
+    );
+    final targetTileWidth = layoutWidth >= 1500
+        ? 176.0
+        : layoutWidth >= 1180
+        ? 166.0
+        : 156.0;
+    final columns = (layoutWidth / targetTileWidth).ceil().clamp(2, 9);
+    const spacing = 11.0;
+    final cardWidth = (layoutWidth - spacing * (columns - 1)) / columns;
+    final cardHeight = (cardWidth / 0.72).clamp(194.0, 224.0);
+    final quickSaleWidth = cardWidth;
+    final quickSaleHeight = cardHeight;
+    final totalSlots = widget.visibleProducts.length + 1;
+    final rows = (totalSlots / columns).ceil().clamp(1, 999);
+    final contentHeight = rows * cardHeight + (rows - 1) * spacing;
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(
+              context,
+            ).copyWith(scrollbars: false),
+            child: SingleChildScrollView(
+              controller: _gridScrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(
+                horizontalGutter,
+                0,
+                horizontalGutter,
+                12,
+              ),
+              child: SizedBox(
+                height: contentHeight.clamp(
+                  constraints.maxHeight,
+                  double.infinity,
+                ),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      width: quickSaleWidth,
+                      height: quickSaleHeight,
+                      child: _DesktopManualSaleGridCard(
+                        onTap: widget.onAddExternalItem,
+                      ),
+                    ),
+                    for (
+                      var index = 0;
+                      index < widget.visibleProducts.length;
+                      index++
+                    )
+                      Positioned(
+                        left: ((index + 1) % columns) * (cardWidth + spacing),
+                        top: ((index + 1) ~/ columns) * (cardHeight + spacing),
+                        width: cardWidth,
+                        height: cardHeight,
+                        child: _ModernDesktopProductCard(
+                          product: widget.visibleProducts[index],
+                          money: widget.money,
+                          onTap: (globalStart) => widget.onAddProduct(
+                            widget.visibleProducts[index],
+                            globalStart,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        const Positioned(
+          left: horizontalGutter,
+          right: horizontalGutter,
+          top: 0,
+          height: 8,
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0x66EFF5F8),
+                    Color(0x22EFF5F8),
+                    Color(0x00EFF5F8),
+                  ],
+                  stops: [0, 0.55, 1],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLegacyDesktopCatalogGrid(BoxConstraints constraints) {
+    final width = constraints.maxWidth;
+    const horizontalGutter = 6.0;
+    final layoutWidth = (width - (horizontalGutter * 2)).clamp(
+      240.0,
+      double.infinity,
+    );
+    final columns = layoutWidth >= 1600
+        ? 8
+        : layoutWidth >= 1280
+        ? 7
+        : layoutWidth >= 1000
+        ? 6
+        : 5;
+    const spacing = 8.0;
+    final cardWidth = (layoutWidth - spacing * (columns - 1)) / columns;
+    final cardHeight = (cardWidth * 1.02).clamp(95.0, 128.0);
+    final manualHeight = cardHeight * 2 + spacing;
+    final firstRowsCapacity = (columns - 1) * 2;
+    var maxRow = 1;
+    if (widget.visibleProducts.length > firstRowsCapacity) {
+      final remaining = widget.visibleProducts.length - firstRowsCapacity;
+      maxRow += (remaining / columns).ceil();
+    }
+    final contentHeight = (maxRow + 1) * cardHeight + maxRow * spacing;
+
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+      child: SingleChildScrollView(
+        controller: _gridScrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: horizontalGutter),
+        child: SizedBox(
+          height: contentHeight.clamp(constraints.maxHeight, double.infinity),
+          child: Stack(
+            children: [
+              Positioned(
+                left: 0,
+                top: 0,
+                width: cardWidth,
+                height: manualHeight,
+                child: _DesktopExternalProductCard(
+                  onTap: widget.onAddExternalItem,
+                ),
+              ),
+              for (
+                var index = 0;
+                index < widget.visibleProducts.length;
+                index++
+              )
+                Positioned(
+                  left:
+                      _desktopCatalogProductColumn(index, columns) *
+                      (cardWidth + spacing),
+                  top:
+                      _desktopCatalogProductRow(index, columns) *
+                      (cardHeight + spacing),
+                  width: cardWidth,
+                  height: cardHeight,
+                  child: _DesktopProductCard(
+                    product: widget.visibleProducts[index],
+                    money: widget.money,
+                    onTap: () => widget.onAddProduct(
+                      widget.visibleProducts[index],
+                      null,
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -11967,7 +12062,7 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
     return DecoratedBox(
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(right: BorderSide(color: Color(0xFFD3E0E7))),
+        border: Border(right: BorderSide(color: _billingBorderColor)),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
@@ -12343,7 +12438,7 @@ class _DesktopCalculatorPaneState extends State<_DesktopCalculatorPane> {
         height: double.infinity,
         decoration: const BoxDecoration(
           color: Color(0xFFF8FBFF),
-          border: Border(right: BorderSide(color: Color(0xFFD3E0E7))),
+          border: Border(right: BorderSide(color: _billingBorderColor)),
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -12354,7 +12449,7 @@ class _DesktopCalculatorPaneState extends State<_DesktopCalculatorPane> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFD3E0E7)),
+                  border: Border.all(color: _billingBorderColor),
                 ),
                 child: Row(
                   children: [
@@ -12410,7 +12505,7 @@ class _DesktopCalculatorPaneState extends State<_DesktopCalculatorPane> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFD3E0E7)),
+                  border: Border.all(color: _billingBorderColor),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -12535,7 +12630,7 @@ class _CalculatorButton extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: filled ? const Color(0xFF1957E6) : const Color(0xFFD3E0E7),
+              color: filled ? const Color(0xFF1957E6) : _billingBorderColor,
             ),
           ),
           child: Text(
@@ -12648,6 +12743,426 @@ class _ExpressionEvaluator {
   }
 }
 
+enum _DesktopSaleHeaderAction { quote, invoiceType, note }
+
+class _BillingPngIcon extends StatelessWidget {
+  const _BillingPngIcon({
+    required this.asset,
+    required this.size,
+    this.fit = BoxFit.contain,
+  });
+
+  final String asset;
+  final double size;
+  final BoxFit fit;
+
+  @override
+  Widget build(BuildContext context) {
+    final pixelRatio = MediaQuery.devicePixelRatioOf(context);
+    final cacheSize = (size * pixelRatio).ceil().clamp(32, 96);
+    return Image.asset(
+      asset,
+      width: size,
+      height: size,
+      fit: fit,
+      cacheWidth: cacheSize,
+      cacheHeight: cacheSize,
+      filterQuality: FilterQuality.medium,
+      gaplessPlayback: true,
+      errorBuilder: (context, error, stackTrace) {
+        return Icon(
+          Icons.image_not_supported_outlined,
+          size: size,
+          color: const Color(0xFF111827),
+        );
+      },
+    );
+  }
+}
+
+class _DesktopSaleHeaderBar extends StatelessWidget {
+  const _DesktopSaleHeaderBar({
+    required this.hasClient,
+    required this.clientName,
+    required this.clientPhone,
+    required this.fiscalLabel,
+    required this.hasNote,
+    required this.onPickClient,
+    required this.onClearClient,
+    required this.onQuote,
+    required this.onOpenFiscalData,
+    required this.onOpenNote,
+    required this.onPdf,
+  });
+
+  final bool hasClient;
+  final String clientName;
+  final String clientPhone;
+  final String fiscalLabel;
+  final bool hasNote;
+  final VoidCallback onPickClient;
+  final VoidCallback onClearClient;
+  final VoidCallback onQuote;
+  final VoidCallback? onOpenFiscalData;
+  final VoidCallback onOpenNote;
+  final VoidCallback onPdf;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolvedClient = hasClient ? clientName.trim() : 'Agregar cliente';
+
+    return Material(
+      color: const Color(0xFFFCFEFF),
+      child: Container(
+        decoration: const BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: _billingSubtleBorderColor, width: 1),
+          ),
+        ),
+        child: SizedBox(
+          height: 48,
+          child: Row(
+            children: [
+              const SizedBox(width: 10),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 286),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: onPickClient,
+                        borderRadius: BorderRadius.circular(7),
+                        child: Container(
+                          height: 36,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: hasClient
+                                ? const Color(0xFFF8FBFF)
+                                : Colors.white,
+                            borderRadius: BorderRadius.circular(7),
+                            border: Border.all(
+                              color: _billingSubtleBorderColor,
+                              width: 1,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(
+                                  0xFF0B2A3A,
+                                ).withValues(alpha: 0.025),
+                                blurRadius: 9,
+                                spreadRadius: -7,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Opacity(
+                                opacity: hasClient ? 1 : 0.72,
+                                child: const _BillingPngIcon(
+                                  asset: _billingClientIconAsset,
+                                  size: 21,
+                                ),
+                              ),
+                              const SizedBox(width: 7),
+                              Flexible(
+                                child: Text(
+                                  resolvedClient,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: hasClient
+                                        ? const Color(0xFF111827)
+                                        : const Color(0xFF516579),
+                                    fontSize: 12.7,
+                                    height: 1,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0,
+                                  ),
+                                ),
+                              ),
+                              if (hasClient && clientPhone.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 105,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(999),
+                                    border: Border.all(
+                                      color: _billingSubtleBorderColor,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    clientPhone,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Color(0xFF52677C),
+                                      fontSize: 10.6,
+                                      height: 1,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                              ] else if (!hasClient) ...[
+                                const SizedBox(width: 9),
+                                Container(
+                                  width: 20,
+                                  height: 20,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFFEAF1FF),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.add_rounded,
+                                    size: 15,
+                                    color: Color(0xFF1957E6),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (hasClient)
+                _DesktopSaleHeaderIconButton(
+                  tooltip: 'Quitar cliente',
+                  icon: Icons.close_rounded,
+                  onPressed: onClearClient,
+                  muted: true,
+                ),
+              const SizedBox(width: 5),
+              _DesktopSaleActionsMenu(
+                fiscalLabel: fiscalLabel,
+                hasNote: hasNote,
+                onQuote: onQuote,
+                onOpenFiscalData: onOpenFiscalData,
+                onOpenNote: onOpenNote,
+              ),
+              const SizedBox(width: 5),
+              _DesktopSaleHeaderIconButton(
+                tooltip: 'Ver PDF',
+                asset: _billingQuoteIconAsset,
+                onPressed: onPdf,
+                iconSize: 30,
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopSaleHeaderIconButton extends StatelessWidget {
+  const _DesktopSaleHeaderIconButton({
+    required this.tooltip,
+    this.icon,
+    this.asset,
+    required this.onPressed,
+    this.muted = false,
+    this.iconSize,
+  });
+
+  final String tooltip;
+  final IconData? icon;
+  final String? asset;
+  final VoidCallback onPressed;
+  final bool muted;
+  final double? iconSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = muted
+        ? const Color(0xFF64748B)
+        : const Color(0xFF111827);
+    return Tooltip(
+      message: tooltip,
+      child: SizedBox(
+        width: muted ? 30 : 38,
+        height: 38,
+        child: IconButton(
+          onPressed: onPressed,
+          padding: EdgeInsets.zero,
+          visualDensity: VisualDensity.compact,
+          style: IconButton.styleFrom(
+            backgroundColor: muted ? Colors.transparent : Colors.white,
+            foregroundColor: foreground,
+            hoverColor: const Color(0xFFEAF1FF),
+            highlightColor: const Color(0xFFDDEAFF),
+            side: muted
+                ? BorderSide.none
+                : const BorderSide(color: _billingBorderColor),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(5),
+            ),
+          ),
+          icon: asset == null
+              ? Icon(icon, size: muted ? 18 : 23)
+              : _BillingPngIcon(
+                  asset: asset!,
+                  size: iconSize ?? 22,
+                  fit: BoxFit.contain,
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopSaleActionsMenu extends StatelessWidget {
+  const _DesktopSaleActionsMenu({
+    required this.fiscalLabel,
+    required this.hasNote,
+    required this.onQuote,
+    required this.onOpenFiscalData,
+    required this.onOpenNote,
+  });
+
+  final String fiscalLabel;
+  final bool hasNote;
+  final VoidCallback onQuote;
+  final VoidCallback? onOpenFiscalData;
+  final VoidCallback onOpenNote;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 38,
+      height: 38,
+      child: PopupMenuButton<_DesktopSaleHeaderAction>(
+        tooltip: 'Acciones',
+        padding: EdgeInsets.zero,
+        position: PopupMenuPosition.under,
+        color: Colors.white,
+        surfaceTintColor: Colors.white,
+        elevation: 8,
+        shadowColor: Colors.black.withValues(alpha: 0.10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: _billingBorderColor),
+        ),
+        onSelected: (action) {
+          switch (action) {
+            case _DesktopSaleHeaderAction.quote:
+              onQuote();
+              return;
+            case _DesktopSaleHeaderAction.invoiceType:
+              onOpenFiscalData?.call();
+              return;
+            case _DesktopSaleHeaderAction.note:
+              onOpenNote();
+              return;
+          }
+        },
+        itemBuilder: (context) => [
+          const PopupMenuItem(
+            value: _DesktopSaleHeaderAction.quote,
+            child: _DesktopSaleActionMenuRow(
+              asset: _billingQuoteIconAsset,
+              label: 'Cotizar',
+            ),
+          ),
+          if (onOpenFiscalData != null)
+            PopupMenuItem(
+              value: _DesktopSaleHeaderAction.invoiceType,
+              child: _DesktopSaleActionMenuRow(
+                icon: Icons.receipt_long_outlined,
+                label: 'Tipo de factura',
+                trailing: fiscalLabel,
+              ),
+            ),
+          PopupMenuItem(
+            value: _DesktopSaleHeaderAction.note,
+            child: _DesktopSaleActionMenuRow(
+              icon: hasNote
+                  ? Icons.sticky_note_2_rounded
+                  : Icons.sticky_note_2_outlined,
+              label: hasNote ? 'Editar nota' : 'Agregar nota',
+            ),
+          ),
+        ],
+        icon: const _BillingPngIcon(asset: _billingActionsIconAsset, size: 26),
+        iconColor: const Color(0xFF111827),
+        style: IconButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF111827),
+          hoverColor: const Color(0xFFEAF1FF),
+          side: const BorderSide(color: _billingBorderColor),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopSaleActionMenuRow extends StatelessWidget {
+  const _DesktopSaleActionMenuRow({
+    this.icon,
+    this.asset,
+    required this.label,
+    this.trailing,
+  });
+
+  final IconData? icon;
+  final String? asset;
+  final String label;
+  final String? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 228,
+      child: Row(
+        children: [
+          if (asset == null)
+            Icon(icon, size: 17, color: const Color(0xFF1957E6))
+          else
+            _BillingPngIcon(asset: asset!, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xFF183548),
+                fontWeight: FontWeight.w900,
+                fontSize: 12.5,
+              ),
+            ),
+          ),
+          if ((trailing ?? '').trim().isNotEmpty)
+            Text(
+              trailing!.trim(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.w800,
+                fontSize: 10.5,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DesktopQuotePanel extends StatelessWidget {
   const _DesktopQuotePanel({
     required this.items,
@@ -12666,6 +13181,8 @@ class _DesktopQuotePanel extends StatelessWidget {
     required this.onPickClient,
     required this.onClearClient,
     required this.onOpenHistory,
+    required this.onQuote,
+    required this.onPdf,
     required this.onOpenFiscalData,
     required this.fiscalLabel,
     required this.hasNote,
@@ -12699,6 +13216,8 @@ class _DesktopQuotePanel extends StatelessWidget {
   final VoidCallback onPickClient;
   final VoidCallback onClearClient;
   final VoidCallback onOpenHistory;
+  final VoidCallback onQuote;
+  final VoidCallback onPdf;
   final VoidCallback? onOpenFiscalData;
   final String fiscalLabel;
   final bool hasNote;
@@ -12724,8 +13243,8 @@ class _DesktopQuotePanel extends StatelessWidget {
         selectedClientName.trim() != 'Sin cliente';
     final clientPhone = (selectedClientPhone ?? '').trim();
     final itemCountText = items.length == 1
-        ? '1 producto'
-        : '${items.length} productos';
+        ? '1 producto agregado'
+        : '${items.length} productos agregados';
     final shouldShowTotalsBreakdown =
         discountAmount > 0 ||
         generalDiscountAmount > 0 ||
@@ -12735,191 +13254,26 @@ class _DesktopQuotePanel extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: Colors.white,
-        border: const Border(top: BorderSide(color: Color(0xFFD3E0E7))),
+        border: const Border(top: BorderSide(color: _billingBorderColor)),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+        padding: EdgeInsets.zero,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (hasClient) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Material(
-                  color: const Color(0xFFFCFEFF),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    side: const BorderSide(color: Color(0xFFEAF0F4)),
-                  ),
-                  child: InkWell(
-                    onTap: onPickClient,
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 7,
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 34,
-                            height: 34,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF2F7FF),
-                              borderRadius: BorderRadius.circular(5),
-                              border: Border.all(
-                                color: const Color(0xFFDDEAFF),
-                              ),
-                            ),
-                            child: const Icon(
-                              Icons.person_outline_rounded,
-                              size: 18,
-                              color: Color(0xFF1957E6),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: LayoutBuilder(
-                              builder: (context, constraints) {
-                                final showInlinePhone =
-                                    clientPhone.isNotEmpty &&
-                                    constraints.maxWidth >= 260;
-                                final nameStyle = theme.textTheme.titleSmall
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w900,
-                                      color: const Color(0xFF183548),
-                                      letterSpacing: 0,
-                                    );
-                                final phoneStyle = theme.textTheme.bodySmall
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w800,
-                                      color: const Color(0xFF5E7180),
-                                      letterSpacing: 0,
-                                    );
-
-                                if (showInlinePhone) {
-                                  return Row(
-                                    children: [
-                                      Expanded(
-                                        child: Row(
-                                          children: [
-                                            Text(
-                                              'Cliente',
-                                              style: theme.textTheme.labelSmall
-                                                  ?.copyWith(
-                                                    color: const Color(
-                                                      0xFF6B7F90,
-                                                    ),
-                                                    fontWeight: FontWeight.w800,
-                                                    letterSpacing: 0,
-                                                  ),
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Expanded(
-                                              child: Text(
-                                                selectedClientName.trim(),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: nameStyle,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        constraints: const BoxConstraints(
-                                          maxWidth: 128,
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFF6FAFF),
-                                          borderRadius: BorderRadius.circular(
-                                            999,
-                                          ),
-                                          border: Border.all(
-                                            color: const Color(0xFFDDEAFF),
-                                          ),
-                                        ),
-                                        child: Text(
-                                          'Tel: $clientPhone',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: phoneStyle,
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                }
-
-                                return Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      'Cliente',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: theme.textTheme.labelSmall
-                                          ?.copyWith(
-                                            color: const Color(0xFF6B7F90),
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 0,
-                                          ),
-                                    ),
-                                    Text(
-                                      selectedClientName.trim(),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: nameStyle,
-                                    ),
-                                    if (clientPhone.isNotEmpty)
-                                      Text(
-                                        'Tel: $clientPhone',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: phoneStyle,
-                                      ),
-                                  ],
-                                );
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Tooltip(
-                            message: 'Quitar cliente',
-                            child: SizedBox(
-                              width: 28,
-                              height: 28,
-                              child: IconButton(
-                                onPressed: onClearClient,
-                                padding: EdgeInsets.zero,
-                                visualDensity: VisualDensity.compact,
-                                style: IconButton.styleFrom(
-                                  backgroundColor: Colors.transparent,
-                                  foregroundColor: const Color(0xFF64748B),
-                                  hoverColor: const Color(0xFFEFF4F8),
-                                  highlightColor: const Color(0xFFDDE7EE),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(5),
-                                  ),
-                                ),
-                                icon: const Icon(Icons.close_rounded, size: 17),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-            ],
+            _DesktopSaleHeaderBar(
+              hasClient: hasClient,
+              clientName: selectedClientName,
+              clientPhone: clientPhone,
+              fiscalLabel: fiscalLabel,
+              hasNote: hasNote,
+              onPickClient: onPickClient,
+              onClearClient: onClearClient,
+              onQuote: onQuote,
+              onOpenFiscalData: onOpenFiscalData,
+              onOpenNote: onOpenNote,
+              onPdf: onPdf,
+            ),
             Expanded(
               child: items.isEmpty
                   ? Center(
@@ -12977,8 +13331,8 @@ class _DesktopQuotePanel extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     border: Border(
-                      top: BorderSide(color: const Color(0xFFE2EAF0)),
-                      bottom: BorderSide(color: const Color(0xFFE2EAF0)),
+                      top: BorderSide(color: _billingBorderColor),
+                      bottom: BorderSide(color: _billingBorderColor),
                     ),
                   ),
                   child: Column(
@@ -13061,9 +13415,9 @@ class _DesktopQuotePanel extends StatelessWidget {
                       child: OutlinedButton(
                         onPressed: onOpenHistory,
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF1957E6),
+                          foregroundColor: const Color(0xFF111827),
                           side: const BorderSide(
-                            color: Color(0xFFBFD0DD),
+                            color: _billingBorderColor,
                             width: 1.35,
                           ),
                           shape: RoundedRectangleBorder(
@@ -13074,7 +13428,7 @@ class _DesktopQuotePanel extends StatelessWidget {
                         child: const Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.receipt_long_outlined),
+                            Icon(Icons.receipt_rounded, size: 24),
                             SizedBox(height: 2),
                             Text(
                               'Ventas',
@@ -13098,8 +13452,8 @@ class _DesktopQuotePanel extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   border: Border(
-                    top: BorderSide(color: const Color(0xFFE2EAF0)),
-                    bottom: BorderSide(color: const Color(0xFFE2EAF0)),
+                    top: BorderSide(color: _billingBorderColor),
+                    bottom: BorderSide(color: _billingBorderColor),
                   ),
                 ),
                 child: Row(
@@ -13123,50 +13477,12 @@ class _DesktopQuotePanel extends StatelessWidget {
                       ),
                     ),
                     const Spacer(),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (includeItbis) ...[
-                          TextButton.icon(
-                            onPressed: onOpenFiscalData,
-                            icon: const Icon(
-                              Icons.receipt_long_outlined,
-                              size: 16,
-                            ),
-                            label: Text(
-                              fiscalLabel,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            style: TextButton.styleFrom(
-                              foregroundColor: const Color(0xFF1957E6),
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                        ],
-                        _DesktopPanelSwitchAction(
-                          icon: Icons.sticky_note_2_outlined,
-                          label: 'Notas',
-                          value: hasNote,
-                          helpTitle: 'Notas de la venta',
-                          helpMessage:
-                              'Al tocar este switch se abre el editor de notas para escribir información adicional de la venta. Sirve para dejar observaciones internas o detalles para el comprobante. Si ya no necesitas verla o editarla, vuelve a tocar Notas y cierra el editor al finalizar.',
-                          onTap: onOpenNote,
-                        ),
-                      ],
-                    ),
                     TextButton.icon(
                       onPressed: onClear,
                       icon: const Icon(Icons.close, size: 16),
                       label: const Text('Cancelar venta'),
                       style: TextButton.styleFrom(
-                        foregroundColor: Colors.red.shade600,
+                        foregroundColor: const Color(0xFF1957E6),
                         textStyle: const TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 12,
@@ -13272,7 +13588,7 @@ class _DesktopFiscalInvoicePanelState
         height: double.infinity,
         decoration: const BoxDecoration(
           color: Color(0xFFF8FBFF),
-          border: Border(right: BorderSide(color: Color(0xFFD3E0E7))),
+          border: Border(right: BorderSide(color: _billingBorderColor)),
           boxShadow: [
             BoxShadow(
               color: Color(0x260B2A3A),
@@ -13334,7 +13650,7 @@ class _DesktopFiscalInvoicePanelState
                           message:
                               'No hay secuencias NCF activas configuradas para B01/B02.',
                           color: Color(0xFFF8FBFF),
-                          borderColor: Color(0xFFD3E0E7),
+                          borderColor: _billingBorderColor,
                         )
                       else
                         Wrap(
@@ -13362,7 +13678,7 @@ class _DesktopFiscalInvoicePanelState
                         icon: Icons.receipt_long_outlined,
                         message: 'Venta sin comprobante fiscal.',
                         color: Color(0xFFF8FBFF),
-                        borderColor: Color(0xFFD3E0E7),
+                        borderColor: _billingBorderColor,
                       ),
                   ],
                 ),
@@ -13482,9 +13798,7 @@ class _InvoiceTypeTile extends StatelessWidget {
             color: selected ? const Color(0xFFEAF1FF) : Colors.white,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: selected
-                  ? const Color(0xFF1957E6)
-                  : const Color(0xFFD3E0E7),
+              color: selected ? const Color(0xFF1957E6) : _billingBorderColor,
               width: selected ? 1.4 : 1,
             ),
           ),
@@ -13531,14 +13845,10 @@ class _VoucherChoiceChip extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: selected
-                ? const Color(0xFFEAF1FF)
-                : scheme.surface,
+            color: selected ? const Color(0xFFEAF1FF) : scheme.surface,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: selected
-                  ? const Color(0xFF1957E6)
-                  : const Color(0xFFD3E0E7),
+              color: selected ? const Color(0xFF1957E6) : _billingBorderColor,
               width: selected ? 1.3 : 1,
             ),
           ),
@@ -13787,58 +14097,583 @@ class _CatalogLineActionButton extends StatelessWidget {
   const _CatalogLineActionButton({
     required this.icon,
     required this.label,
+    required this.width,
     required this.onPressed,
     this.filled = false,
   });
 
   final AppIconData icon;
   final String label;
+  final double width;
   final VoidCallback onPressed;
   final bool filled;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final background = filled ? const Color(0xFF1957E6) : Colors.white;
-    final foreground = filled ? Colors.white : const Color(0xFF174EA6);
-    final borderColor = filled
-        ? const Color(0xFF1957E6)
-        : const Color(0xFFC7D7FF);
+    final background = filled ? const Color(0xFFE4F8FF) : Colors.white;
+    final foreground = const Color(0xFF0D5EA6);
+    const borderColor = _billingBorderColor;
 
     return SizedBox(
-      height: 42,
+      width: width,
+      height: _desktopCatalogToolbarControlHeight,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(_desktopCatalogToolbarRadius),
           boxShadow: [
             BoxShadow(
               color: const Color(
                 0xFF123A6F,
-              ).withValues(alpha: filled ? 0.14 : 0.06),
-              blurRadius: filled ? 14 : 10,
-              offset: const Offset(0, 4),
+              ).withValues(alpha: filled ? 0.065 : 0.035),
+              blurRadius: filled ? 10 : 7,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
         child: OutlinedButton.icon(
           onPressed: onPressed,
-          icon: AppIcon(icon, size: 17.5, color: foreground, strokeWidth: 2),
+          icon: AppIcon(icon, size: 17, color: foreground, strokeWidth: 2),
           label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
           style: OutlinedButton.styleFrom(
             backgroundColor: background,
             foregroundColor: foreground,
             side: BorderSide(color: borderColor, width: 1.1),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            fixedSize: Size(width, _desktopCatalogToolbarControlHeight),
+            minimumSize: Size(width, _desktopCatalogToolbarControlHeight),
+            maximumSize: Size(width, _desktopCatalogToolbarControlHeight),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
             textStyle: theme.textTheme.labelLarge?.copyWith(
               fontWeight: FontWeight.w800,
-              fontSize: 12.4,
+              fontSize: 12.1,
             ),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(_desktopCatalogToolbarRadius),
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _DesktopCategoryRail extends StatefulWidget {
+  const _DesktopCategoryRail({
+    required this.categories,
+    required this.allProducts,
+    required this.managedCategories,
+    required this.selectedCategories,
+    required this.onToggleCategory,
+    required this.onClearCategories,
+    required this.onExpansionChanged,
+  });
+
+  static const double collapsedWidth = 56.0;
+  static const double expandedWidth = 216.0;
+
+  final List<String> categories;
+  final List<ProductModel> allProducts;
+  final List<InventoryCategoryModel> managedCategories;
+  final Set<String> selectedCategories;
+  final ValueChanged<String> onToggleCategory;
+  final VoidCallback onClearCategories;
+  final ValueChanged<bool> onExpansionChanged;
+
+  @override
+  State<_DesktopCategoryRail> createState() => _DesktopCategoryRailState();
+}
+
+class _DesktopCategoryRailState extends State<_DesktopCategoryRail> {
+  bool _expanded = false;
+  bool _labelsVisible = false;
+  Timer? _labelRevealTimer;
+  Timer? _collapseTimer;
+
+  void _setExpanded(bool value) {
+    _collapseTimer?.cancel();
+    _labelRevealTimer?.cancel();
+    if (_expanded == value) {
+      if (value && !_labelsVisible) {
+        _labelRevealTimer = Timer(const Duration(milliseconds: 65), () {
+          if (!mounted || !_expanded) return;
+          setState(() => _labelsVisible = true);
+        });
+      }
+      return;
+    }
+
+    if (!value) {
+      setState(() {
+        _expanded = false;
+        _labelsVisible = false;
+      });
+      widget.onExpansionChanged(false);
+      return;
+    }
+
+    setState(() => _expanded = true);
+    widget.onExpansionChanged(true);
+    _labelRevealTimer = Timer(const Duration(milliseconds: 95), () {
+      if (!mounted || !_expanded) return;
+      setState(() => _labelsVisible = true);
+    });
+  }
+
+  void _scheduleCollapse() {
+    _collapseTimer?.cancel();
+    _labelRevealTimer?.cancel();
+    if (_labelsVisible) {
+      setState(() => _labelsVisible = false);
+    }
+    _collapseTimer = Timer(const Duration(milliseconds: 120), () {
+      if (!mounted) return;
+      setState(() => _expanded = false);
+      widget.onExpansionChanged(false);
+    });
+  }
+
+  ProductModel? _thumbnailProduct(String category) {
+    for (final product in widget.allProducts) {
+      if (product.categoriaLabel == category) return product;
+    }
+    return null;
+  }
+
+  InventoryCategoryModel? _managedCategory(String category) {
+    final target = category.trim().toLowerCase();
+    for (final item in widget.managedCategories) {
+      if (item.name.trim().toLowerCase() == target) return item;
+    }
+    return null;
+  }
+
+  @override
+  void dispose() {
+    _labelRevealTimer?.cancel();
+    _collapseTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasFilter = widget.selectedCategories.isNotEmpty;
+    final width = _expanded
+        ? _DesktopCategoryRail.expandedWidth
+        : _DesktopCategoryRail.collapsedWidth;
+
+    return MouseRegion(
+      onEnter: (_) => _setExpanded(true),
+      onExit: (_) => _scheduleCollapse(),
+      child: Container(
+        width: width,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.zero,
+          border: Border.all(color: _billingBorderColor),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(
+                0xFF0F2440,
+              ).withValues(alpha: _expanded ? 0.10 : 0.04),
+              blurRadius: _expanded ? 18 : 10,
+              spreadRadius: _expanded ? -12 : -7,
+              offset: Offset(_expanded ? 7 : 2, 0),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final headerHeight = hasFilter ? 44.0 : 0.0;
+            const itemExtent = 48.0;
+            if (widget.categories.isEmpty) {
+              return Column(
+                children: [
+                  if (hasFilter)
+                    SizedBox(
+                      height: headerHeight,
+                      child: _DesktopCategoryRailHeader(
+                        expanded: _expanded,
+                        labelsVisible: _labelsVisible,
+                        onClear: widget.onClearCategories,
+                      ),
+                    ),
+                ],
+              );
+            }
+            final maxVisible =
+                ((constraints.maxHeight - headerHeight - 12) / itemExtent)
+                    .floor()
+                    .clamp(1, widget.categories.length);
+            final visibleCategories = widget.categories.toList(growable: false);
+            final canScroll = widget.categories.length > maxVisible;
+
+            return Column(
+              children: [
+                if (hasFilter)
+                  SizedBox(
+                    height: headerHeight,
+                    child: _DesktopCategoryRailHeader(
+                      expanded: _expanded,
+                      labelsVisible: _labelsVisible,
+                      onClear: widget.onClearCategories,
+                    ),
+                  ),
+                Expanded(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: _expanded
+                          ? Colors.transparent
+                          : const Color(0x00FFFFFF),
+                    ),
+                    child: ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(3, 5, 5, 8),
+                      physics: canScroll
+                          ? const AlwaysScrollableScrollPhysics()
+                          : const NeverScrollableScrollPhysics(),
+                      itemCount: visibleCategories.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 5),
+                      itemBuilder: (context, index) {
+                        final category = visibleCategories[index];
+                        return _DesktopCategoryRailItem(
+                          label: category,
+                          product: _thumbnailProduct(category),
+                          managedCategory: _managedCategory(category),
+                          selected: widget.selectedCategories.contains(
+                            category,
+                          ),
+                          expanded: _expanded,
+                          labelsVisible: _labelsVisible,
+                          onTap: () => widget.onToggleCategory(category),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopCategoryRailHeader extends StatelessWidget {
+  const _DesktopCategoryRailHeader({
+    required this.expanded,
+    required this.labelsVisible,
+    required this.onClear,
+  });
+
+  final bool expanded;
+  final bool labelsVisible;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final clearIcon = Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF1FF),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1957E6).withValues(alpha: 0.10),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: const Center(
+        child: _BillingPngIcon(asset: _billingDeleteIconAsset, size: 23),
+      ),
+    );
+
+    final content = expanded
+        ? Row(
+            children: [
+              const SizedBox(
+                width: _DesktopCategoryRail.collapsedWidth,
+                child: Center(),
+              ),
+              Expanded(
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 90),
+                  opacity: labelsVisible ? 1 : 0,
+                  child: const Text(
+                    'Limpiar filtro',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Color(0xFF1957E6),
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          )
+        : const SizedBox.expand();
+
+    final child = expanded
+        ? Stack(
+            children: [
+              Positioned.fill(child: content),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: SizedBox(
+                  width: _DesktopCategoryRail.collapsedWidth,
+                  child: Center(child: clearIcon),
+                ),
+              ),
+            ],
+          )
+        : Center(child: clearIcon);
+
+    final button = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(7),
+        hoverColor: Colors.transparent,
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        overlayColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.hovered)) {
+            return const Color(0xFFEAF1FF).withValues(alpha: 0.62);
+          }
+          if (states.contains(WidgetState.pressed)) {
+            return const Color(0xFFDCE8FF).withValues(alpha: 0.62);
+          }
+          return Colors.transparent;
+        }),
+        onTap: onClear,
+        child: SizedBox.expand(child: child),
+      ),
+    );
+
+    return button;
+  }
+}
+
+class _DesktopCategoryRailItem extends StatelessWidget {
+  const _DesktopCategoryRailItem({
+    required this.label,
+    required this.product,
+    required this.managedCategory,
+    required this.selected,
+    required this.expanded,
+    required this.labelsVisible,
+    required this.onTap,
+  });
+
+  final String label;
+  final ProductModel? product;
+  final InventoryCategoryModel? managedCategory;
+  final bool selected;
+  final bool expanded;
+  final bool labelsVisible;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = product?.displayFotoUrl?.trim() ?? '';
+    final categoryImageBytes = _decodeManagedCategoryImage(
+      managedCategory?.imageBase64,
+    );
+    final normalizedLabel = label.trim().toUpperCase();
+    final image = _DesktopCategoryRailImage(
+      imageUrl: imageUrl,
+      product: product,
+      categoryImageBytes: categoryImageBytes,
+      selected: selected,
+    );
+
+    if (!expanded) {
+      return Tooltip(
+        message: normalizedLabel,
+        waitDuration: const Duration(milliseconds: 260),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(999),
+            hoverColor: const Color(0xFFEAF1FF).withValues(alpha: 0.55),
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+            onTap: onTap,
+            child: SizedBox(
+              height: 42,
+              width: double.infinity,
+              child: Center(child: image),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final item = Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(7),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(7),
+        hoverColor: Colors.transparent,
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        overlayColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.hovered)) {
+            return const Color(0xFFEAF1FF).withValues(alpha: 0.62);
+          }
+          if (states.contains(WidgetState.pressed)) {
+            return const Color(0xFFDCE8FF).withValues(alpha: 0.62);
+          }
+          return Colors.transparent;
+        }),
+        onTap: onTap,
+        child: Container(
+          height: 42,
+          width: double.infinity,
+          margin: const EdgeInsets.symmetric(horizontal: 1),
+          padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(7),
+            color: selected ? const Color(0xFFF4F8FF) : Colors.transparent,
+            border: Border.all(
+              color: selected ? const Color(0xFFD7E3FF) : Colors.transparent,
+              width: 1,
+            ),
+            boxShadow: [
+              if (selected)
+                BoxShadow(
+                  color: const Color(0xFF1957E6).withValues(alpha: 0.055),
+                  blurRadius: 9,
+                  spreadRadius: -5,
+                  offset: const Offset(0, 3),
+                ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              if (selected && expanded)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    width: 3,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1957E6),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+              Row(
+                children: [
+                  image,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 90),
+                      opacity: labelsVisible ? 1 : 0,
+                      child: Text(
+                        normalizedLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: selected
+                              ? const Color(0xFF143C94)
+                              : const Color(0xFF243142),
+                          fontSize: 11,
+                          height: 1,
+                          fontWeight: selected
+                              ? FontWeight.w900
+                              : FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    return item;
+  }
+}
+
+class _DesktopCategoryRailImage extends StatelessWidget {
+  const _DesktopCategoryRailImage({
+    required this.imageUrl,
+    required this.product,
+    required this.categoryImageBytes,
+    required this.selected,
+  });
+
+  final String imageUrl;
+  final ProductModel? product;
+  final Uint8List? categoryImageBytes;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: selected ? const Color(0xFF1957E6) : const Color(0x00FFFFFF),
+          width: 1.6,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color:
+                (selected ? const Color(0xFF1957E6) : const Color(0xFF0F2440))
+                    .withValues(alpha: selected ? 0.18 : 0.09),
+            blurRadius: selected ? 13 : 9,
+            spreadRadius: selected ? -2 : 0,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: categoryImageBytes != null
+          ? Image.memory(
+              categoryImageBytes!,
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.high,
+            )
+          : imageUrl.isEmpty || product == null
+          ? const Icon(
+              Icons.inventory_2_outlined,
+              color: Color(0xFF8DA2B4),
+              size: 20,
+            )
+          : ProductNetworkImage(
+              imageUrl: imageUrl,
+              productId: product!.id,
+              productName: product!.nombre,
+              originalUrl: product!.originalFotoUrl,
+              fit: BoxFit.cover,
+              loading: const Icon(
+                Icons.inventory_2_outlined,
+                color: Color(0xFF8DA2B4),
+                size: 20,
+              ),
+              fallback: const Icon(
+                Icons.inventory_2_outlined,
+                color: Color(0xFF8DA2B4),
+                size: 20,
+              ),
+            ),
     );
   }
 }
@@ -14033,7 +14868,7 @@ class _DesktopCategoryOverflowButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFD3E0E7)),
+            border: Border.all(color: _billingBorderColor),
           ),
           child: const Center(
             child: AppIcon(AppIcons.more, size: 19, color: Color(0xFF50697A)),
@@ -14088,9 +14923,7 @@ class _DesktopCategoryStripItem extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: selected
-                    ? const Color(0xFF1957E6)
-                    : const Color(0xFFD3E0E7),
+                color: selected ? const Color(0xFF1957E6) : _billingBorderColor,
                 width: selected ? 1.2 : 1,
               ),
             ),
@@ -14185,6 +15018,440 @@ Uint8List? _decodeManagedCategoryImage(String? value) {
   }
 }
 
+class _AddToCartFlightBadge extends StatelessWidget {
+  const _AddToCartFlightBadge({required this.product});
+
+  final ProductModel product;
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = (product.displayFotoUrl ?? '').trim();
+
+    return Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFD9E5FF)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1957E6).withValues(alpha: 0.18),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: imageUrl.isEmpty
+                  ? const Icon(
+                      Icons.inventory_2_outlined,
+                      color: Color(0xFF1957E6),
+                      size: 22,
+                    )
+                  : ProductNetworkImage(
+                      imageUrl: imageUrl,
+                      productId: product.id,
+                      productName: product.nombre,
+                      originalUrl: product.originalFotoUrl,
+                      fit: BoxFit.contain,
+                      loading: const Icon(
+                        Icons.inventory_2_outlined,
+                        color: Color(0xFF1957E6),
+                        size: 20,
+                      ),
+                      fallback: const Icon(
+                        Icons.inventory_2_outlined,
+                        color: Color(0xFF1957E6),
+                        size: 20,
+                      ),
+                    ),
+            ),
+          ),
+          Positioned(
+            right: 2,
+            bottom: 2,
+            child: Container(
+              width: 15,
+              height: 15,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1957E6),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 1.4),
+              ),
+              child: const Icon(
+                Icons.add_rounded,
+                color: Colors.white,
+                size: 11,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModernDesktopProductCard extends StatefulWidget {
+  const _ModernDesktopProductCard({
+    required this.product,
+    required this.money,
+    required this.onTap,
+  });
+
+  final ProductModel product;
+  final String Function(double) money;
+  final ValueChanged<Offset?> onTap;
+
+  @override
+  State<_ModernDesktopProductCard> createState() =>
+      _ModernDesktopProductCardState();
+}
+
+class _ModernDesktopProductCardState extends State<_ModernDesktopProductCard> {
+  bool _hovered = false;
+  Offset? _lastTapGlobalPosition;
+
+  @override
+  Widget build(BuildContext context) {
+    final product = widget.product;
+    final imageUrl = (product.displayFotoUrl ?? '').trim();
+    final stock = product.stock;
+    final hasStock = stock != null && stock > 0;
+    final stockColor = stock == null
+        ? const Color(0xFF64748B)
+        : hasStock
+        ? const Color(0xFF0D5EA6)
+        : const Color(0xFF143C94);
+    final stockBackground = stock == null
+        ? const Color(0xFFEFF4F8)
+        : hasStock
+        ? const Color(0xFFE4F8FF)
+        : const Color(0xFFEAF1FF);
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedScale(
+        scale: _hovered ? 1.025 : 1,
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOutCubic,
+        child: Material(
+          color: const Color(0xFFF3F7FF),
+          borderRadius: BorderRadius.circular(8),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTapDown: (details) =>
+                _lastTapGlobalPosition = details.globalPosition,
+            onTap: () => widget.onTap(_lastTapGlobalPosition),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 140),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 9),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _hovered
+                      ? const Color(0xFFD2DDF0)
+                      : const Color(0xFFEEF2F7),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(
+                      0xFF0F2440,
+                    ).withValues(alpha: _hovered ? 0.09 : 0.04),
+                    blurRadius: _hovered ? 16 : 10,
+                    offset: Offset(0, _hovered ? 7 : 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 6,
+                    child: Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.all(12),
+                      child: imageUrl.isEmpty
+                          ? const Icon(
+                              Icons.inventory_2_outlined,
+                              size: 36,
+                              color: Color(0xFF94A3B8),
+                            )
+                          : ProductNetworkImage(
+                              imageUrl: imageUrl,
+                              productId: product.id,
+                              productName: product.nombre,
+                              originalUrl: product.originalFotoUrl,
+                              fit: BoxFit.contain,
+                              loading: const Icon(
+                                Icons.inventory_2_outlined,
+                                size: 32,
+                                color: Color(0xFF94A3B8),
+                              ),
+                              fallback: const Icon(
+                                Icons.broken_image_outlined,
+                                size: 32,
+                                color: Color(0xFF94A3B8),
+                              ),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 9),
+                  SizedBox(
+                    height: 34,
+                    child: Text(
+                      product.nombre.toUpperCase(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF243142),
+                        fontSize: 11,
+                        height: 1.18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    widget.money(product.precio),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF243142),
+                      fontSize: 12.5,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const Spacer(),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Container(
+                          height: 22,
+                          padding: const EdgeInsets.symmetric(horizontal: 7),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: stockBackground,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            _formatProductStock(stock),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: stockColor,
+                              fontSize: 9.5,
+                              height: 1,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Tooltip(
+                        message: 'Agregar producto',
+                        child: Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEAF1FF),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: _billingBorderColor),
+                          ),
+                          child: const Icon(
+                            Icons.add_rounded,
+                            color: Color(0xFF0D5EA6),
+                            size: 21,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopManualSaleGridCard extends StatefulWidget {
+  const _DesktopManualSaleGridCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  State<_DesktopManualSaleGridCard> createState() =>
+      _DesktopManualSaleGridCardState();
+}
+
+class _DesktopManualSaleGridCardState
+    extends State<_DesktopManualSaleGridCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedScale(
+        scale: _hovered ? 0.985 : 1,
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOutCubic,
+        child: Material(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: widget.onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 140),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.fromLTRB(11, 11, 11, 9),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3F7FF),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _hovered
+                      ? const Color(0xFF7EA4FF)
+                      : const Color(0xFFBFD3FF),
+                  width: _hovered ? 1.3 : 1.1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(
+                      0xFF1957E6,
+                    ).withValues(alpha: _hovered ? 0.15 : 0.075),
+                    blurRadius: _hovered ? 20 : 13,
+                    offset: Offset(0, _hovered ? 9 : 5),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        height: 23,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE4F8FF),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'Rápido',
+                          style: TextStyle(
+                            color: Color(0xFF0D5EA6),
+                            fontSize: 9.5,
+                            height: 1,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 140),
+                        width: _hovered ? 42 : 32,
+                        height: 3,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1957E6),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 58,
+                          height: 58,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEAF1FF),
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(
+                                  0xFF1957E6,
+                                ).withValues(alpha: 0.10),
+                                blurRadius: 13,
+                                spreadRadius: -5,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.add_shopping_cart_rounded,
+                            color: Color(0xFF1957E6),
+                            size: 32,
+                          ),
+                        ),
+                        const SizedBox(height: 13),
+                        const Text(
+                          'VENTA RÁPIDA',
+                          maxLines: 1,
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Color(0xFF17243A),
+                            fontSize: 12.4,
+                            height: 1,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      const Spacer(),
+                      Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEAF1FF),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: _billingBorderColor),
+                        ),
+                        child: const Icon(
+                          Icons.add_rounded,
+                          color: Color(0xFF0D5EA6),
+                          size: 22,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _DesktopProductCard extends StatelessWidget {
   const _DesktopProductCard({
     required this.product,
@@ -14204,7 +15471,7 @@ class _DesktopProductCard extends StatelessWidget {
     final stockColor = stock == null
         ? const Color(0xFF64748B)
         : stock <= 0
-        ? const Color(0xFFDC2626)
+        ? const Color(0xFF143C94)
         : const Color(0xFF1957E6);
 
     return MouseRegion(
@@ -14525,7 +15792,7 @@ class _DesktopExternalProductCardState
                           decoration: BoxDecoration(
                             color: const Color(0xFFEAF1FF),
                             shape: BoxShape.circle,
-                            border: Border.all(color: const Color(0xFFCFE0FF)),
+                            border: Border.all(color: _billingBorderColor),
                           ),
                           child: const Icon(
                             Icons.help_outline_rounded,
@@ -14548,9 +15815,7 @@ class _DesktopExternalProductCardState
                             decoration: BoxDecoration(
                               color: const Color(0xFFEAF1FF),
                               borderRadius: BorderRadius.circular(22),
-                              border: Border.all(
-                                color: const Color(0xFFCFE0FF),
-                              ),
+                              border: Border.all(color: _billingBorderColor),
                             ),
                             child: const Icon(
                               Icons.add_shopping_cart_rounded,
@@ -14929,11 +16194,11 @@ class _LineEditDialogState extends State<_LineEditDialog> {
       contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFFD3E0E7)),
+        borderSide: const BorderSide(color: _billingBorderColor),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFFD3E0E7)),
+        borderSide: const BorderSide(color: _billingBorderColor),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
@@ -15051,55 +16316,15 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
       child: InkWell(
         onDoubleTap: widget.onEditLine,
         child: Ink(
-          padding: const EdgeInsets.fromLTRB(5, 7, 2, 7),
+          padding: const EdgeInsets.fromLTRB(12, 7, 8, 7),
           decoration: const BoxDecoration(
             color: Colors.white,
             border: Border(
-              bottom: BorderSide(color: Color(0xFFE2EAF0), width: 1),
+              bottom: BorderSide(color: _billingBorderColor, width: 1),
             ),
           ),
           child: Row(
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SizedBox(
-                  width: 28,
-                  height: 28,
-                  child: (item.imageUrl ?? '').trim().isEmpty
-                      ? Container(
-                          color: item.isExternal
-                              ? const Color(0xFFEAF1FF)
-                              : theme.colorScheme.surfaceContainerHighest,
-                          child: Icon(
-                            item.isExternal
-                                ? Icons.edit_note_outlined
-                                : Icons.inventory_2_outlined,
-                            size: 15,
-                            color: item.isExternal
-                                ? const Color(0xFF1957E6)
-                                : null,
-                          ),
-                        )
-                      : ProductNetworkImage(
-                          imageUrl: item.imageUrl!,
-                          productId: item.productId,
-                          productName: item.nombre,
-                          originalUrl: item.imageUrl,
-                          fit: BoxFit.cover,
-                          loading: Container(
-                            color: theme.colorScheme.surfaceContainerHighest,
-                          ),
-                          fallback: Container(
-                            color: theme.colorScheme.surfaceContainerHighest,
-                            child: const Icon(
-                              Icons.broken_image_outlined,
-                              size: 14,
-                            ),
-                          ),
-                        ),
-                ),
-              ),
-              const SizedBox(width: 8),
               Expanded(
                 flex: 6,
                 child: Column(
@@ -15114,7 +16339,7 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: Color(0xFFDC2626),
+                            color: Color(0xFF1957E6),
                             fontSize: 8.5,
                             fontWeight: FontWeight.w900,
                             height: 1,
@@ -15130,13 +16355,13 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                           vertical: 1.5,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE7F6EC),
+                          color: const Color(0xFFEAF1FF),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Text(
                           'EXENTO',
                           style: TextStyle(
-                            color: Color(0xFF15803D),
+                            color: Color(0xFF1957E6),
                             fontSize: 8.5,
                             fontWeight: FontWeight.w800,
                             height: 1.1,
@@ -15188,18 +16413,25 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
               ),
               const SizedBox(width: 4),
               SizedBox(
-                width: 56,
+                width: 52,
                 child: InkWell(
                   onTap: _showFullPrice,
-                  child: Text(
-                    _formatAccountingInput(item.unitPrice),
-                    textAlign: TextAlign.right,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: const Color(0xFF52677C),
-                      fontWeight: FontWeight.w800,
-                      fontSize: 11,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        _formatAccountingInput(item.unitPrice),
+                        textAlign: TextAlign.right,
+                        maxLines: 1,
+                        softWrap: false,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: const Color(0xFF52677C),
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -15224,8 +16456,8 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                 icon: AppIcons.remove,
               ),
               SizedBox(
-                width: 30,
-                height: 30,
+                width: 24,
+                height: 28,
                 child: Center(
                   child: Text(
                     qtyText,
@@ -15245,21 +16477,28 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
                 onPressed: widget.onPlus,
                 icon: AppIcons.add,
               ),
-              const SizedBox(width: 2),
+              const SizedBox(width: 4),
               SizedBox(
-                width: 72,
-                child: Text(
-                  widget.money(item.total),
-                  textAlign: TextAlign.right,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 12,
+                width: 92,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      widget.money(item.total),
+                      textAlign: TextAlign.right,
+                      maxLines: 1,
+                      softWrap: false,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(width: 2),
+              const SizedBox(width: 4),
               _DesktopTicketRemoveButton(
                 tooltip: 'Quitar de la venta',
                 onPressed: widget.onRemove,
@@ -15288,20 +16527,23 @@ class _DesktopTicketQtyButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: SizedBox(
-        width: 30,
-        height: 30,
+        width: 26,
+        height: 26,
         child: IconButton(
           onPressed: onPressed,
           padding: EdgeInsets.zero,
           visualDensity: VisualDensity.compact,
           style: IconButton.styleFrom(
-            backgroundColor: Colors.transparent,
+            backgroundColor: Colors.white,
             foregroundColor: const Color(0xFF1957E6),
-            hoverColor: const Color(0xFFEAF1FF),
-            highlightColor: const Color(0xFFDCE8FF),
-            shape: const CircleBorder(),
+            hoverColor: const Color(0xFFE7F8EE),
+            highlightColor: const Color(0xFFD8F3E4),
+            side: const BorderSide(color: _billingBorderColor, width: 1),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(6),
+            ),
           ),
-          icon: AppIcon(icon, size: 20, strokeWidth: 2.5),
+          icon: AppIcon(icon, size: 17.5, strokeWidth: 2.5),
         ),
       ),
     );
@@ -15322,8 +16564,8 @@ class _DesktopTicketRemoveButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: SizedBox(
-        width: 30,
-        height: 30,
+        width: 26,
+        height: 26,
         child: IconButton(
           onPressed: onPressed,
           padding: EdgeInsets.zero,
@@ -15335,7 +16577,7 @@ class _DesktopTicketRemoveButton extends StatelessWidget {
             highlightColor: const Color(0xFFDDE7EE),
             shape: const CircleBorder(),
           ),
-          icon: const Icon(Icons.remove_circle_outline_rounded, size: 19),
+          icon: const Icon(Icons.remove_circle_outline_rounded, size: 18),
         ),
       ),
     );
@@ -15398,7 +16640,7 @@ class _AnimatedCalculatorFabState extends State<_AnimatedCalculatorFab>
 
   @override
   Widget build(BuildContext context) {
-    const size = 56.0;
+    final size = widget.compact ? 46.0 : 52.0;
     final isPrimary = widget.open || widget.filled;
     return Tooltip(
       message: widget.open ? 'Cerrar calculadora' : 'Abrir calculadora',
@@ -15406,11 +16648,11 @@ class _AnimatedCalculatorFabState extends State<_AnimatedCalculatorFab>
         animation: _pulse,
         builder: (context, child) {
           final t = _pulse.value;
-          final glow = 0.20 * (1 - t);
-          final halo = size * (1.0 + 0.03 * t);
+          final glow = 0.10 * (1 - t);
+          final halo = size * (1.0 + 0.02 * t);
           return SizedBox(
-            width: halo + 12,
-            height: halo + 12,
+            width: halo + 8,
+            height: halo + 8,
             child: Stack(
               alignment: Alignment.center,
               children: [
@@ -15431,32 +16673,31 @@ class _AnimatedCalculatorFabState extends State<_AnimatedCalculatorFab>
           color: Colors.transparent,
           child: InkWell(
             onTap: widget.onTap,
-            borderRadius: BorderRadius.circular(widget.compact ? 14 : 28),
+            borderRadius: BorderRadius.circular(999),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 340),
               curve: Curves.easeInOutCubic,
               width: size,
               height: size,
               decoration: BoxDecoration(
-                color: isPrimary ? const Color(0xFF1957E6) : Colors.white,
-                shape: widget.compact ? BoxShape.rectangle : BoxShape.circle,
-                borderRadius: widget.compact ? BorderRadius.circular(14) : null,
+                color: const Color(0xFF1957E6),
+                shape: BoxShape.circle,
                 border: Border.all(
                   color: const Color(0xFF1957E6),
-                  width: isPrimary ? 2 : 1.5,
+                  width: isPrimary ? 1.8 : 1.3,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF1957E6).withValues(alpha: 0.28),
-                    blurRadius: 20,
-                    offset: const Offset(0, 9),
+                    color: const Color(0xFF1957E6).withValues(alpha: 0.20),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
                   ),
                 ],
               ),
               child: Icon(
                 Icons.calculate_outlined,
-                size: widget.compact ? 26 : 27,
-                color: isPrimary ? Colors.white : const Color(0xFF1957E6),
+                size: widget.compact ? 23 : 26,
+                color: Colors.white,
               ),
             ),
           ),
@@ -15489,63 +16730,97 @@ class _DesktopSalesTicketFooter extends StatelessWidget {
 
     return Container(
       height: 42,
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF8FBFD),
-        border: Border(
-          top: BorderSide(color: Color(0xFFC9D8E2)),
-          bottom: BorderSide(color: Color(0xFFE4EDF2)),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6FAFD),
+        border: const Border(
+          top: BorderSide(color: _billingBorderColor),
+          bottom: BorderSide(color: _billingBorderColor),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0B2A3A).withValues(alpha: 0.045),
+            blurRadius: 14,
+            offset: const Offset(0, -5),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          Tooltip(
-            message: 'Nuevo ticket',
-            child: SizedBox(
-              width: 34,
-              height: 34,
-              child: FilledButton(
-                onPressed: onCreateTicket,
-                style: FilledButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  backgroundColor: const Color(0xFF1957E6),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (var index = 0; index < tickets.length; index++) ...[
+                    if (index > 0) ...[
+                      const SizedBox(width: 6),
+                      const _TicketInlineDivider(),
+                      const SizedBox(width: 6),
+                    ],
+                    Builder(
+                      builder: (context) {
+                        final ticket = tickets[index];
+                        final selected = ticket.id == activeTicketId;
+                        final count = ticket.items.length;
+                        return _DesktopFooterTicketChip(
+                          label: ticket.label(index),
+                          itemCount: count,
+                          selected: selected,
+                          onTap: () => onSwitchTicket(ticket.id),
+                          onRename: () => onRenameTicket(ticket.id),
+                          onDelete: () => onDeleteTicket(ticket.id),
+                        );
+                      },
+                    ),
+                  ],
+                  const SizedBox(width: 6),
+                  Tooltip(
+                    message: 'Nuevo ticket',
+                    child: SizedBox(
+                      width: 30,
+                      height: 30,
+                      child: OutlinedButton(
+                        onPressed: onCreateTicket,
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF1957E6),
+                          side: const BorderSide(
+                            color: _billingBorderColor,
+                            width: 1,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        child: const Icon(Icons.add_rounded, size: 18),
+                      ),
+                    ),
                   ),
-                ),
-                child: const Icon(Icons.add_rounded, size: 20),
+                ],
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          const _TicketFooterSeparator(),
-          Expanded(
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: tickets.length,
-              separatorBuilder: (_, __) => const _TicketFooterSeparator(),
-              itemBuilder: (context, index) {
-                final ticket = tickets[index];
-                final selected = ticket.id == activeTicketId;
-                final count = ticket.items.length;
-                return _DesktopFooterTicketChip(
-                  label: ticket.label(index),
-                  itemCount: count,
-                  selected: selected,
-                  onTap: () => onSwitchTicket(ticket.id),
-                  onRename: () => onRenameTicket(ticket.id),
-                  onDelete: () => onDeleteTicket(ticket.id),
-                );
-              },
-            ),
-          ),
+          const SizedBox(width: 10),
           const _TicketFooterSeparator(),
           const SizedBox(width: 10),
-          Text(
-            '${tickets.length} tickets',
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: const Color(0xFF476374),
-              fontWeight: FontWeight.w800,
+          Container(
+            height: 28,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: _billingBorderColor),
+            ),
+            child: Text(
+              '${tickets.length} tickets',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: const Color(0xFF476374),
+                fontWeight: FontWeight.w800,
+                height: 1,
+              ),
             ),
           ),
         ],
@@ -15573,87 +16848,125 @@ class _DesktopFooterTicketChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = selected ? const Color(0xFFEAF1FF) : const Color(0xFFF8FBFD);
+    final bg = selected ? Colors.white : const Color(0x00FFFFFF);
     final border = selected ? const Color(0xFF1957E6) : Colors.transparent;
     final fg = selected ? const Color(0xFF1957E6) : const Color(0xFF183548);
     final hasItems = itemCount > 0;
 
-    return Material(
-      color: bg,
-      child: InkWell(
-        onTap: onTap,
-        child: SizedBox(
-          width: 148,
-          height: 42,
-          child: DecoratedBox(
-            decoration: BoxDecoration(border: Border.all(color: border)),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 2, 0),
-              child: Row(
-                children: [
-                  AppIcon(AppIcons.ticket, size: 16.5, color: fg),
-                  const SizedBox(width: 7),
-                  Expanded(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: fg,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 12,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 140),
+      curve: Curves.easeOutCubic,
+      width: 148,
+      height: 34,
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: border, width: selected ? 1.2 : 1),
+        boxShadow: [
+          if (selected)
+            BoxShadow(
+              color: const Color(0xFF1957E6).withValues(alpha: 0.07),
+              blurRadius: 8,
+              spreadRadius: -5,
+              offset: const Offset(0, 3),
+            ),
+        ],
+      ),
+      child: Material(
+        color: bg,
+        borderRadius: BorderRadius.circular(4),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 0, 2, 0),
+                child: Row(
+                  children: [
+                    AppIcon(AppIcons.ticket, size: 16.5, color: fg),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: fg,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
-                  ),
-                  if (hasItems) const _TicketActivityDot(),
-                  SizedBox(
-                    width: 28,
-                    height: 32,
-                    child: PopupMenuButton<_FooterTicketAction>(
-                      tooltip: 'Opciones del ticket',
-                      padding: EdgeInsets.zero,
-                      color: const Color(0xFFFFFFFF),
-                      iconSize: 17,
-                      position: PopupMenuPosition.under,
-                      onSelected: (action) {
-                        switch (action) {
-                          case _FooterTicketAction.rename:
-                            onRename();
-                            return;
-                          case _FooterTicketAction.delete:
-                            onDelete();
-                            return;
-                        }
-                      },
-                      itemBuilder: (context) => const [
-                        PopupMenuItem(
-                          value: _FooterTicketAction.rename,
-                          child: _FooterTicketMenuEntry(
-                            icon: Icons.edit_outlined,
-                            label: 'Editar',
+                    if (hasItems) const _TicketActivityDot(),
+                    SizedBox(
+                      width: 27,
+                      height: 30,
+                      child: PopupMenuButton<_FooterTicketAction>(
+                        tooltip: 'Opciones del ticket',
+                        padding: EdgeInsets.zero,
+                        color: const Color(0xFFFFFFFF),
+                        iconSize: 17,
+                        position: PopupMenuPosition.under,
+                        onSelected: (action) {
+                          switch (action) {
+                            case _FooterTicketAction.rename:
+                              onRename();
+                              return;
+                            case _FooterTicketAction.delete:
+                              onDelete();
+                              return;
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(
+                            value: _FooterTicketAction.rename,
+                            child: _FooterTicketMenuEntry(
+                              icon: Icons.edit_outlined,
+                              label: 'Editar',
+                            ),
                           ),
-                        ),
-                        PopupMenuItem(
-                          value: _FooterTicketAction.delete,
-                          child: _FooterTicketMenuEntry(
-                            icon: Icons.delete_outline,
-                            label: 'Eliminar',
+                          PopupMenuItem(
+                            value: _FooterTicketAction.delete,
+                            child: _FooterTicketMenuEntry(
+                              icon: Icons.delete_outline,
+                              label: 'Eliminar',
+                            ),
                           ),
+                        ],
+                        icon: AppIcon(
+                          AppIcons.moreVertical,
+                          size: 17,
+                          color: selected
+                              ? const Color(0xFF1957E6)
+                              : const Color(0xFF647985),
                         ),
-                      ],
-                      icon: AppIcon(
-                        AppIcons.moreVertical,
-                        size: 17,
-                        color: selected
-                            ? const Color(0xFF1957E6)
-                            : const Color(0xFF647985),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
+            if (selected)
+              Positioned(
+                left: 0,
+                top: 0,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 140),
+                  curve: Curves.easeOutCubic,
+                  width: 58,
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1957E6),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(4),
+                      bottomRight: Radius.circular(5),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -15667,7 +16980,26 @@ class _TicketFooterSeparator extends StatelessWidget {
   Widget build(BuildContext context) {
     return Align(
       alignment: Alignment.center,
-      child: Container(width: 1, height: 28, color: const Color(0xFFD8E5EC)),
+      child: Container(width: 1, height: 24, color: _billingBorderColor),
+    );
+  }
+}
+
+class _TicketInlineDivider extends StatelessWidget {
+  const _TicketInlineDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.center,
+      child: Container(
+        width: 1,
+        height: 20,
+        decoration: BoxDecoration(
+          color: _billingBorderColor.withValues(alpha: 0.82),
+          borderRadius: BorderRadius.circular(999),
+        ),
+      ),
     );
   }
 }

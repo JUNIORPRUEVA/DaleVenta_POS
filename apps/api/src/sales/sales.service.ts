@@ -13,6 +13,12 @@ import * as path from "node:path";
 import { PrismaService } from "../prisma/prisma.service";
 import { CatalogRealtimeRelayService } from "../products/catalog-realtime-relay.service";
 import { TaxService } from "../tax/tax.service";
+import {
+  DEFAULT_UNIT_OF_MEASURE,
+  unitSnapshotFields,
+  validateQuantityForUnit,
+  type UnitOfMeasureSnapshot,
+} from "../products/unit-of-measure.util";
 import { NcfService } from "../tax/ncf.service";
 import {
   isAdminLike,
@@ -31,6 +37,10 @@ type NormalizedSaleItem = {
   productNameSnapshot: string;
   productImageSnapshot: string | null;
   qty: Prisma.Decimal;
+  unitCodeSnapshot: string;
+  unitNameSnapshot: string;
+  unitSymbolSnapshot: string;
+  unitPrecisionSnapshot: number;
   priceSoldUnit: Prisma.Decimal;
   originalUnitPriceSnapshot?: Prisma.Decimal;
   costUnitSnapshot: Prisma.Decimal;
@@ -87,6 +97,15 @@ export class SalesService {
               taxTreatment: true,
               taxRate: true,
               taxPriceMode: true,
+              unitOfMeasure: {
+                select: {
+                  code: true,
+                  name: true,
+                  symbol: true,
+                  allowDecimals: true,
+                  precision: true,
+                },
+              },
             },
           },
         },
@@ -585,6 +604,7 @@ export class SalesService {
       taxTreatment: "INHERIT" | "TAXABLE" | "EXEMPT";
       taxRate: Prisma.Decimal | null;
       taxPriceMode: "NO_TAX" | "TAX_ADDED" | "TAX_INCLUDED" | null;
+      unitOfMeasure: UnitOfMeasureSnapshot | null;
     }> = [];
     if (productIds.length) {
       try {
@@ -599,6 +619,15 @@ export class SalesService {
             taxTreatment: true,
             taxRate: true,
             taxPriceMode: true,
+            unitOfMeasure: {
+              select: {
+                code: true,
+                name: true,
+                symbol: true,
+                allowDecimals: true,
+                precision: true,
+              },
+            },
           },
         });
       } catch (error) {
@@ -625,6 +654,10 @@ export class SalesService {
             productNameSnapshot: item.productNameSnapshot,
             productImageSnapshot: item.productImageSnapshot,
             qty,
+            unitCodeSnapshot: item.unitCodeSnapshot,
+            unitNameSnapshot: item.unitNameSnapshot,
+            unitSymbolSnapshot: item.unitSymbolSnapshot,
+            unitPrecisionSnapshot: item.unitPrecisionSnapshot,
             priceSoldUnit,
             costUnitSnapshot,
             subtotalSold: lineTotal,
@@ -1012,6 +1045,10 @@ export class SalesService {
                 productNameSnapshot: item.productNameSnapshot,
                 productImageSnapshot: item.productImageSnapshot,
                 qty: item.qty,
+                unitCodeSnapshot: item.unitCodeSnapshot,
+                unitNameSnapshot: item.unitNameSnapshot,
+                unitSymbolSnapshot: item.unitSymbolSnapshot,
+                unitPrecisionSnapshot: item.unitPrecisionSnapshot,
                 priceSoldUnit: item.priceSoldUnit,
                 costUnitSnapshot: item.costUnitSnapshot,
                 subtotalCost: item.subtotalCost,
@@ -1094,6 +1131,15 @@ export class SalesService {
             taxTreatment: true,
             taxRate: true,
             taxPriceMode: true,
+            unitOfMeasure: {
+              select: {
+                code: true,
+                name: true,
+                symbol: true,
+                allowDecimals: true,
+                precision: true,
+              },
+            },
           },
         })
       : [];
@@ -1337,6 +1383,17 @@ export class SalesService {
               `Cantidad inválida en devolución #${index + 1}`,
             );
           }
+          validateQuantityForUnit({
+            quantity: request.qty,
+            unit: {
+              code: original.unitCodeSnapshot,
+              name: original.unitNameSnapshot,
+              symbol: original.unitSymbolSnapshot,
+              precision: original.unitPrecisionSnapshot,
+              allowDecimals: original.unitPrecisionSnapshot > 0,
+            },
+            label: `devolución #${index + 1}`,
+          });
           const alreadyReturned =
             refundedQty.get(original.id) ?? new Prisma.Decimal(0);
           const remainingQty = original.qty.minus(alreadyReturned);
@@ -1384,6 +1441,10 @@ export class SalesService {
               productNameSnapshot: original.productNameSnapshot,
               productImageSnapshot: original.productImageSnapshot,
               qty: request.qty,
+              unitCodeSnapshot: original.unitCodeSnapshot,
+              unitNameSnapshot: original.unitNameSnapshot,
+              unitSymbolSnapshot: original.unitSymbolSnapshot,
+              unitPrecisionSnapshot: original.unitPrecisionSnapshot,
               priceSoldUnit: original.priceSoldUnit,
               grossAmount,
               lineDiscountAmount,
@@ -1639,6 +1700,7 @@ export class SalesService {
         taxTreatment: "INHERIT" | "TAXABLE" | "EXEMPT";
         taxRate: Prisma.Decimal | null;
         taxPriceMode: "NO_TAX" | "TAX_ADDED" | "TAX_INCLUDED" | null;
+        unitOfMeasure: UnitOfMeasureSnapshot | null;
       }
     >,
   ): NormalizedSaleItem {
@@ -1660,6 +1722,11 @@ export class SalesService {
           `Producto inválido en item #${index + 1}`,
         );
       }
+      validateQuantityForUnit({
+        quantity: qty,
+        unit: product.unitOfMeasure,
+        label: `item #${index + 1}`,
+      });
 
       const costUnitSnapshot = new Prisma.Decimal(product.costo);
       const subtotalSold = qty.mul(priceSoldUnit);
@@ -1671,6 +1738,7 @@ export class SalesService {
         productNameSnapshot: product.nombre,
         productImageSnapshot: product.imagen,
         qty,
+        ...unitSnapshotFields(product.unitOfMeasure),
         priceSoldUnit,
         originalUnitPriceSnapshot:
           item.originalUnitPriceSnapshot === undefined
@@ -1713,6 +1781,7 @@ export class SalesService {
       productNameSnapshot: productName,
       productImageSnapshot: null,
       qty,
+      ...unitSnapshotFields(DEFAULT_UNIT_OF_MEASURE),
       priceSoldUnit,
       originalUnitPriceSnapshot:
         item.originalUnitPriceSnapshot === undefined

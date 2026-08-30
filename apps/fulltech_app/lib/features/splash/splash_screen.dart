@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/app_bootstrap_status.dart';
 import '../../core/auth/auth_provider.dart';
+import '../../core/company/company_settings_repository.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -18,6 +20,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   late final AnimationController _controller;
   late final Animation<double> _intro;
   late final Animation<double> _pulse;
+  Timer? _slowStartupTimer;
+  bool _showRecoveryActions = false;
 
   @override
   void initState() {
@@ -31,18 +35,40 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       curve: const Interval(0.0, 0.62, curve: Curves.easeOutCubic),
     );
     _pulse = CurvedAnimation(parent: _controller, curve: Curves.easeInOutSine);
+    _slowStartupTimer = Timer(const Duration(seconds: 30), () {
+      if (!mounted) return;
+      setState(() => _showRecoveryActions = true);
+    });
   }
 
   @override
   void dispose() {
+    _slowStartupTimer?.cancel();
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _retryPreparation() async {
+    setState(() => _showRecoveryActions = false);
+    _slowStartupTimer?.cancel();
+    _slowStartupTimer = Timer(const Duration(seconds: 30), () {
+      if (!mounted) return;
+      setState(() => _showRecoveryActions = true);
+    });
+    ref.invalidate(companySettingsProvider);
+    await ref.read(authStateProvider.notifier).refreshCurrentUser(silent: true);
+  }
+
+  Future<void> _returnToAccess() async {
+    await ref.read(authStateProvider.notifier).logout();
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authStateProvider);
     final bootstrap = ref.watch(appBootstrapStatusProvider);
+    final showRecovery =
+        _showRecoveryActions || bootstrap == AppBootstrapStatus.error;
     final size = MediaQuery.sizeOf(context);
     final compact = size.width < 560 || size.height < 680;
     final logoSize = compact ? 116.0 : 146.0;
@@ -148,6 +174,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                             );
                           },
                         ),
+                        if (showRecovery) ...[
+                          const SizedBox(height: 22),
+                          _SplashRecoveryActions(
+                            failed: bootstrap == AppBootstrapStatus.error,
+                            onRetry: _retryPreparation,
+                            onReturnToAccess: _returnToAccess,
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -157,6 +191,67 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SplashRecoveryActions extends StatelessWidget {
+  const _SplashRecoveryActions({
+    required this.failed,
+    required this.onRetry,
+    required this.onReturnToAccess,
+  });
+
+  final bool failed;
+  final VoidCallback onRetry;
+  final VoidCallback onReturnToAccess;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          failed
+              ? 'No pudimos preparar tu empresa.'
+              : 'Esto está tomando más de lo normal.',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleSmall?.copyWith(
+            color: const Color(0xFF0F172A),
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Puedes intentar de nuevo o volver al acceso para entrar otra vez.',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: const Color(0xFF64748B),
+            fontWeight: FontWeight.w700,
+            height: 1.3,
+          ),
+        ),
+        const SizedBox(height: 14),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Reintentar'),
+            ),
+            OutlinedButton.icon(
+              onPressed: onReturnToAccess,
+              icon: const Icon(Icons.logout_rounded),
+              label: const Text('Volver al acceso'),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

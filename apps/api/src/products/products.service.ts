@@ -14,6 +14,12 @@ import { LicenseService } from "../license/license.service";
 import { CatalogProductsService } from "./catalog-products.service";
 import { CreateProductDto } from "./dto/create-product.dto";
 import { UpdateProductDto } from "./dto/update-product.dto";
+import {
+  DEFAULT_UNIT_OF_MEASURE,
+  DEFAULT_UNIT_OF_MEASURE_ID,
+  validateQuantityForUnit,
+  type UnitOfMeasureSnapshot,
+} from "./unit-of-measure.util";
 
 type ProductsSource = "FULLPOS" | "FULLPOS_DIRECT" | "LOCAL";
 
@@ -142,6 +148,66 @@ export class ProductsService {
     };
   }
 
+  private async resolveUnitOfMeasure(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    unitOfMeasureId?: string | null,
+  ): Promise<UnitOfMeasureSnapshot & { id: string }> {
+    const id = (unitOfMeasureId ?? DEFAULT_UNIT_OF_MEASURE_ID).trim();
+    if (!id) {
+      throw new BadRequestException("Unidad de medida inválida.");
+    }
+
+    if (!(tx as any).unitOfMeasure?.findFirst) {
+      if (id === DEFAULT_UNIT_OF_MEASURE_ID) {
+        return {
+          id: DEFAULT_UNIT_OF_MEASURE_ID,
+          ...DEFAULT_UNIT_OF_MEASURE,
+        };
+      }
+      throw new BadRequestException("La unidad de medida no pertenece a esta empresa.");
+    }
+
+    const unit = await tx.unitOfMeasure.findFirst({
+      where: {
+        id,
+        active: true,
+        OR: [{ companyId: null }, { companyId }],
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        symbol: true,
+        allowDecimals: true,
+        precision: true,
+      },
+    });
+
+    if (!unit) {
+      throw new BadRequestException("La unidad de medida no pertenece a esta empresa.");
+    }
+
+    return unit;
+  }
+
+  private mapUnitOfMeasure(unit: any) {
+    const source = unit ?? {
+      id: DEFAULT_UNIT_OF_MEASURE_ID,
+      category: "COUNT",
+      ...DEFAULT_UNIT_OF_MEASURE,
+    };
+    return {
+      id: source.id ?? DEFAULT_UNIT_OF_MEASURE_ID,
+      code: source.code ?? DEFAULT_UNIT_OF_MEASURE.code,
+      name: source.name ?? DEFAULT_UNIT_OF_MEASURE.name,
+      symbol: source.symbol ?? DEFAULT_UNIT_OF_MEASURE.symbol,
+      category: source.category ?? "COUNT",
+      allowDecimals: source.allowDecimals ?? DEFAULT_UNIT_OF_MEASURE.allowDecimals,
+      precision: source.precision ?? DEFAULT_UNIT_OF_MEASURE.precision,
+    };
+  }
+
   private normalizeProductCode(dto: {
     codigo?: string;
     code?: string;
@@ -264,6 +330,7 @@ export class ProductsService {
       precio?: Prisma.Decimal | number | string | null;
       costo?: Prisma.Decimal | number | string | null;
       stock?: Prisma.Decimal | number | string | null;
+      unitOfMeasureId?: string | null;
     },
   ) {
     return {
@@ -276,6 +343,7 @@ export class ProductsService {
       precio: new Prisma.Decimal(data.precio ?? 0),
       costo: new Prisma.Decimal(data.costo ?? 0),
       stock: new Prisma.Decimal(data.stock ?? 0),
+      unitOfMeasureId: data.unitOfMeasureId ?? DEFAULT_UNIT_OF_MEASURE_ID,
     };
   }
 
@@ -302,6 +370,7 @@ export class ProductsService {
       precio?: Prisma.Decimal | number | string | null;
       costo?: Prisma.Decimal | number | string | null;
       stock?: Prisma.Decimal | number | string | null;
+      unitOfMeasureId?: string | null;
     },
     excludeId?: string,
   ) {
@@ -359,6 +428,21 @@ export class ProductsService {
     return { deleted, skipped };
   }
 
+  private async productResponse(
+    tx: Prisma.TransactionClient | PrismaService,
+    companyId: string,
+    productId: string,
+  ) {
+    const product = await tx.product.findFirst({
+      where: { id: productId, companyId },
+      select: this.catalogProductSelect(),
+    });
+    if (!product) {
+      throw new NotFoundException("Producto no encontrado");
+    }
+    return this.mapProduct(product as any);
+  }
+
   async create(user: TenantUser, dto: CreateProductDto): Promise<any> {
     this.assertWritable();
     const companyId = requireTenant(user);
@@ -391,7 +475,7 @@ export class ProductsService {
               operationId: dto.operationId,
               result: "existing",
             });
-            return this.mapProduct(existingOperationProduct);
+            return this.productResponse(tx, companyId, existingOperationProduct.id);
           }
         }
 
@@ -426,6 +510,18 @@ export class ProductsService {
           companyId,
           dto,
         );
+        const unitOfMeasure = await this.resolveUnitOfMeasure(
+          tx,
+          companyId,
+          dto.unitOfMeasureId,
+        );
+        const stock = new Prisma.Decimal(dto.stock ?? 0);
+        validateQuantityForUnit({
+          quantity: stock,
+          unit: unitOfMeasure,
+          label: "stock del producto",
+          allowZero: true,
+        });
         const data = {
           id: operationProductId ?? undefined,
           nombre: dto.nombre,
@@ -433,7 +529,8 @@ export class ProductsService {
           categoria: dto.categoria,
           precio: new Prisma.Decimal(dto.precio),
           costo: new Prisma.Decimal(dto.costo),
-          stock: new Prisma.Decimal(dto.stock ?? 0),
+          stock,
+          unitOfMeasureId: unitOfMeasure.id,
           ...fiscalData,
           imagen: normalizedImagePath,
           imageStorageProvider: imageKey ? "r2" : undefined,
@@ -488,7 +585,7 @@ export class ProductsService {
             operationId: dto.operationId,
             result: `updated-existing deletedDuplicates=${prune.deleted} skippedDuplicates=${prune.skipped}`,
           });
-          return this.mapProduct(product);
+          return this.productResponse(tx, companyId, product.id);
         }
 
         try {
@@ -509,7 +606,7 @@ export class ProductsService {
             result: "created",
           });
           await this.pruneSafeDuplicateProducts(tx, companyId, product);
-          return this.mapProduct(product);
+          return this.productResponse(tx, companyId, product.id);
         } catch (error) {
           if (this.isUniqueConstraint(error)) {
             throw error;
@@ -517,7 +614,7 @@ export class ProductsService {
           if (!this.isSchemaMismatch(error)) throw error;
           const product = await tx.product.create({ data });
           await this.pruneSafeDuplicateProducts(tx, companyId, product);
-          return this.mapProduct(product);
+          return this.productResponse(tx, companyId, product.id);
         }
       });
     } catch (error) {
@@ -538,7 +635,7 @@ export class ProductsService {
               operationId: dto.operationId,
               result: "existing",
             });
-            return this.mapProduct(existing);
+            return this.productResponse(this.prisma, companyId, existing.id);
           }
         }
         throw new ConflictException(
@@ -619,7 +716,7 @@ export class ProductsService {
       });
     }
     if (!product) throw new NotFoundException("Product not found");
-    return this.mapProduct(product);
+    return this.productResponse(this.prisma, companyId, product.id);
   }
 
   async update(
@@ -671,6 +768,39 @@ export class ProductsService {
         companyId,
         dto,
       );
+      const current = await tx.product.findFirst({
+        where: { id, companyId },
+        select: {
+          unitOfMeasureId: true,
+          unitOfMeasure: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              symbol: true,
+              allowDecimals: true,
+              precision: true,
+            },
+          },
+        },
+      });
+      if (!current) {
+        throw new NotFoundException("Producto no encontrado");
+      }
+      const unitOfMeasure =
+        dto.unitOfMeasureId === undefined
+          ? this.mapUnitOfMeasure(current.unitOfMeasure)
+          : await this.resolveUnitOfMeasure(tx, companyId, dto.unitOfMeasureId);
+      const stock =
+        dto.stock === undefined ? undefined : new Prisma.Decimal(dto.stock);
+      if (stock !== undefined) {
+        validateQuantityForUnit({
+          quantity: stock,
+          unit: unitOfMeasure,
+          label: "stock del producto",
+          allowZero: true,
+        });
+      }
       const data = {
         nombre: dto.nombre,
         codigo: this.hasProductCodeInput(dto)
@@ -681,8 +811,9 @@ export class ProductsService {
           dto.precio === undefined ? undefined : new Prisma.Decimal(dto.precio),
         costo:
           dto.costo === undefined ? undefined : new Prisma.Decimal(dto.costo),
-        stock:
-          dto.stock === undefined ? undefined : new Prisma.Decimal(dto.stock),
+        stock,
+        unitOfMeasureId:
+          dto.unitOfMeasureId === undefined ? undefined : unitOfMeasure.id,
         ...fiscalData,
         imagen: normalizedImagePath,
         imageStorageProvider:
@@ -734,7 +865,7 @@ export class ProductsService {
           operationId: dto.operationId,
           result: `updated deletedDuplicates=${prune.deleted} skippedDuplicates=${prune.skipped}`,
         });
-        return this.mapProduct(updated);
+        return this.productResponse(tx, companyId, updated.id);
       } catch (error) {
         if (this.isUniqueConstraint(error)) {
           throw new ConflictException(
@@ -756,7 +887,7 @@ export class ProductsService {
           throw new NotFoundException("Producto no encontrado");
         }
         await this.pruneSafeDuplicateProducts(tx, companyId, updated);
-        return this.mapProduct(updated);
+        return this.productResponse(tx, companyId, updated.id);
       }
     });
   }
@@ -806,6 +937,19 @@ export class ProductsService {
       imagen: true,
       imageKey: true,
       imageUpdatedAt: true,
+      unitOfMeasureId: true,
+      unitOfMeasure: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          symbol: true,
+          category: true,
+          allowDecimals: true,
+          precision: true,
+          active: true,
+        },
+      },
     };
   }
 
@@ -832,8 +976,11 @@ export class ProductsService {
       barcode: productAny.codigo ?? null,
       stock: Number(product.stock ?? 0),
       cantidadDisponible: Number(product.stock ?? 0),
+      stockDecimal: product.stock?.toString?.() ?? String(product.stock ?? 0),
       categoria: product.categoria ?? null,
       categoriaNombre: product.categoria ?? null,
+      unitOfMeasureId: productAny.unitOfMeasureId ?? DEFAULT_UNIT_OF_MEASURE_ID,
+      unitOfMeasure: this.mapUnitOfMeasure(productAny.unitOfMeasure),
       taxTreatment: productAny.taxTreatment ?? "INHERIT",
       taxRate: productAny.taxRate == null ? null : Number(productAny.taxRate),
       taxPriceMode: productAny.taxPriceMode ?? null,

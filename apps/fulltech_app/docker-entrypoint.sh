@@ -35,8 +35,8 @@ fi
 API_BASE_URL_ESC="$(js_escape "${API_BASE_URL:-}")"
 API_TIMEOUT_MS_ESC="$(js_escape "${API_TIMEOUT_MS:-}")"
 SUPPORT_EMAIL_ESC="$(js_escape "${SUPPORT_EMAIL:-ventas@fulltechrd.com}")"
-SUPPORT_PHONE_ESC="$(js_escape "${SUPPORT_PHONE:-829-534-4286}")"
-SUPPORT_WHATSAPP_ESC="$(js_escape "${SUPPORT_WHATSAPP:-18295344286}")"
+SUPPORT_PHONE_ESC="$(js_escape "${SUPPORT_PHONE:-829-531-9442}")"
+SUPPORT_WHATSAPP_ESC="$(js_escape "${SUPPORT_WHATSAPP:-18295319442}")"
 SUPPORT_HOURS_ESC="$(js_escape "${SUPPORT_HOURS:-Lunes a viernes de 9:00 a.m. a 6:00 p.m. AST}")"
 cat > "$WEB_ROOT/env.js" <<EOF
 // Generated at container start

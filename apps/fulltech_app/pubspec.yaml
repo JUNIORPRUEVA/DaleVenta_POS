@@ -141,6 +141,7 @@ flutter:
   assets:
     - assets/
     - assets/image/
+    - assets/image/billing/
     - assets/image/logo.png
     - assets/fonts/manrope/
     - .env
