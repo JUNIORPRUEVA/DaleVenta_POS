@@ -2,14 +2,22 @@ import { ConfigService } from "@nestjs/config";
 import { ProductsService } from "./products.service";
 
 describe("ProductsService tenant isolation (multiempresa)", () => {
-  function buildService(findMany: jest.Mock) {
+  function buildService(
+    findMany: jest.Mock,
+    options: {
+      config?: Record<string, string>;
+      catalogProducts?: { findAll?: jest.Mock };
+    } = {},
+  ) {
     const prisma = {
       product: { findMany },
     };
     const service = new ProductsService(
       prisma as never,
-      {} as never,
-      { get: jest.fn().mockReturnValue("") } as unknown as ConfigService,
+      (options.catalogProducts ?? {}) as never,
+      {
+        get: jest.fn((key: string) => options.config?.[key] ?? ""),
+      } as unknown as ConfigService,
       {
         assertCanCreateProduct: jest.fn().mockResolvedValue(undefined),
       } as never,
@@ -160,5 +168,28 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
     expect(select.imageStorageProvider).toBeUndefined();
     expect(select.imageMimeType).toBeUndefined();
     expect(select.imageOriginalFileName).toBeUndefined();
+  });
+
+  it("respects PRODUCTS_SOURCE=FULLPOS instead of reading the empty local Product table", async () => {
+    const findMany = jest.fn();
+    const catalogFindAll = jest.fn().mockResolvedValue({
+      items: [{ id: "external-1", nombre: "Producto externo" }],
+    });
+    const { service } = buildService(findMany, {
+      config: { PRODUCTS_SOURCE: "FULLPOS" },
+      catalogProducts: { findAll: catalogFindAll },
+    });
+
+    const result = await service.findAll({
+      id: "user-a",
+      role: "ADMIN",
+      companyId: companyA,
+    } as never);
+
+    expect(catalogFindAll).toHaveBeenCalledTimes(1);
+    expect(findMany).not.toHaveBeenCalled();
+    expect(result).toEqual([{ id: "external-1", nombre: "Producto externo" }]);
+    expect(service.getSource()).toBe("FULLPOS");
+    expect(service.isReadOnly()).toBe(true);
   });
 });

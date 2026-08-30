@@ -158,6 +158,7 @@ describe("PHASE 2.6 UoM manual UAT on isolated test database", () => {
     await admin.end();
 
     process.env.DATABASE_URL = appUrl;
+    process.env.PRODUCTS_SOURCE = "LOCAL";
     process.env.JWT_SECRET = process.env.JWT_SECRET || "phase26-uat-secret";
     const prismaCli = resolve(
       process.cwd(),
@@ -170,7 +171,7 @@ describe("PHASE 2.6 UoM manual UAT on isolated test database", () => {
     );
     execFileSync(process.execPath, [prismaCli, "migrate", "deploy"], {
       cwd: process.cwd(),
-      env: { ...process.env, DATABASE_URL: appUrl },
+      env: { ...process.env, DATABASE_URL: appUrl, PRODUCTS_SOURCE: "LOCAL" },
       stdio: "pipe",
     });
 

@@ -82,6 +82,7 @@ export class ProductsController {
   @Header('Pragma', 'no-cache')
   @Header('Expires', '0')
   @Header('Surrogate-Control', 'no-store')
+  @UseGuards(AuthGuard('jwt'))
   @Get('unit-of-measures')
   unitOfMeasures(@Req() req: Request) {
     return this.products.listUnitOfMeasures(req.user as TenantUser);

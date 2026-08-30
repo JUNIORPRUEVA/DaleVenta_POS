@@ -54,10 +54,10 @@ export class ProductsService {
       .trim()
       .toUpperCase();
     let computed: ProductsSource = "LOCAL";
-    if (rawSource && rawSource !== "LOCAL") {
-      this.logger.warn(
-        `PRODUCTS_SOURCE=${rawSource} ignorado: el catálogo administrado por FullTech usa fuente LOCAL.`,
-      );
+    if (rawSource === "FULLPOS" || rawSource === "FULLPOS_DIRECT") {
+      computed = rawSource;
+    } else if (rawSource && rawSource !== "LOCAL") {
+      this.logger.warn(`PRODUCTS_SOURCE=${rawSource} inválido; usando LOCAL.`);
     }
 
     this.productsSource = computed;
