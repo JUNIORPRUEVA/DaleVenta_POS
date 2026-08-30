@@ -15,6 +15,7 @@ import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/uom/uom_formatters.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -836,7 +837,9 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
               align: pw.TextAlign.left,
               strong: true,
             ),
-            _tableCell(item.qty.toStringAsFixed(item.qty % 1 == 0 ? 0 : 2)),
+            _tableCell(
+              formatQuantityWithUnit(item.qty, unit: item.unitSnapshot),
+            ),
             _tableCell(
               formatRdCurrencyAccounting(item.priceSoldUnit),
               align: pw.TextAlign.right,
@@ -2236,7 +2239,7 @@ class _ItemLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final qty = item.qty.toStringAsFixed(item.qty % 1 == 0 ? 0 : 2);
+    final qty = formatQuantityWithUnit(item.qty, unit: item.unitSnapshot);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(

@@ -9,6 +9,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:daleventa_pos/core/company/company_settings_model.dart';
+import 'package:daleventa_pos/core/company/company_settings_repository.dart';
 import 'package:daleventa_pos/core/models/product_model.dart';
 import 'package:daleventa_pos/core/tax/product_tax_options_provider.dart';
 import 'package:daleventa_pos/features/catalogo/data/catalog_repository.dart';
@@ -44,6 +45,11 @@ class _FakeCatalogRepository extends CatalogRepository {
 
   @override
   Future<void> saveProductsSnapshot(List<ProductModel> items) async {}
+
+  @override
+  Future<List<UnitOfMeasureModel>> fetchUnitOfMeasures() async {
+    return const [UnitOfMeasureModel.unit];
+  }
 
   @override
   Future<String> uploadImage({
@@ -97,6 +103,9 @@ Future<void> _pumpEditor(
             settings: CompanySettings.empty(),
             activeTaxes: const [],
           ),
+        ),
+        companySettingsProvider.overrideWith(
+          (ref) async => CompanySettings.empty(),
         ),
       ],
       child: MaterialApp(

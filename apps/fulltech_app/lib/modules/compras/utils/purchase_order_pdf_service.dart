@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 
 import '../../../core/company/company_settings_model.dart';
 import '../../../core/pdf/pdf_kit.dart';
+import '../../../core/uom/uom_formatters.dart';
 import '../purchase_models.dart';
 
 /// Builds the Purchase Order PDF using the same visual language as
@@ -257,7 +258,7 @@ List<pw.Widget> _detailSection(
             ),
             pdfDescriptionCell(item.productName),
             pdfBodyCell(
-              qtyFmt.format(item.quantity),
+              formatQuantityWithUnit(item.quantity, unit: item.unitSnapshot),
               align: pw.TextAlign.center,
             ),
             pdfBodyCell(money.format(item.unitCost), align: pw.TextAlign.right),
@@ -378,9 +379,11 @@ pw.Widget _totalsPanel(PurchaseOrderModel order, NumberFormat money) {
         if (order.shippingCost != 0)
           pdfTotalLine('Transporte', money.format(order.shippingCost)),
         if (order.additionalCost != 0)
-          pdfTotalLine('Costos adicionales', money.format(order.additionalCost)),
-        if (order.tax != 0)
-          pdfTotalLine('Impuestos', money.format(order.tax)),
+          pdfTotalLine(
+            'Costos adicionales',
+            money.format(order.additionalCost),
+          ),
+        if (order.tax != 0) pdfTotalLine('Impuestos', money.format(order.tax)),
         pw.Padding(
           padding: const pw.EdgeInsets.symmetric(vertical: 8),
           child: pw.Container(height: 1, color: PdfKitColors.softLine),

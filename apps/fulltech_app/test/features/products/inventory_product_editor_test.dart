@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:daleventa_pos/core/company/company_settings_model.dart';
+import 'package:daleventa_pos/core/company/company_settings_repository.dart';
 import 'package:daleventa_pos/core/models/product_model.dart';
 import 'package:daleventa_pos/core/tax/product_tax_options_provider.dart';
 import 'package:daleventa_pos/core/utils/money_formatters.dart';
@@ -49,6 +50,11 @@ class _FakeCatalogRepository extends CatalogRepository {
   }
 
   @override
+  Future<List<UnitOfMeasureModel>> fetchUnitOfMeasures() async {
+    return const [UnitOfMeasureModel.unit];
+  }
+
+  @override
   Future<ProductModel> createProduct({
     required String nombre,
     String? codigo,
@@ -61,6 +67,8 @@ class _FakeCatalogRepository extends CatalogRepository {
     String? taxTreatment,
     double? taxRate,
     String? taxPriceMode,
+    String? unitOfMeasureId,
+    UnitOfMeasureModel? unitOfMeasure,
     bool skipLoader = false,
   }) async {
     creates += 1;
@@ -98,6 +106,8 @@ class _FakeCatalogRepository extends CatalogRepository {
     String? taxTreatment,
     double? taxRate,
     String? taxPriceMode,
+    String? unitOfMeasureId,
+    UnitOfMeasureModel? unitOfMeasure,
     bool skipLoader = false,
   }) async {
     updates += 1;
@@ -192,6 +202,9 @@ Future<ProductFormResult?> _pumpEditor(
                 activeTaxes: const [],
               ),
         ),
+        companySettingsProvider.overrideWith(
+          (ref) async => CompanySettings.empty(),
+        ),
       ],
       child: MaterialApp(
         home: Builder(
@@ -243,6 +256,9 @@ Future<void> _pumpMobileInventory(
             settings: CompanySettings.empty(),
             activeTaxes: const [],
           ),
+        ),
+        companySettingsProvider.overrideWith(
+          (ref) async => CompanySettings.empty(),
         ),
       ],
       child: MaterialApp(
@@ -758,6 +774,9 @@ void main() {
         overrides: [
           catalogRepositoryProvider.overrideWithValue(repo),
           productTaxUiConfigProvider.overrideWith((ref) async => taxConfig),
+          companySettingsProvider.overrideWith(
+            (ref) async => CompanySettings.empty(),
+          ),
         ],
         child: MaterialApp(
           home: Builder(
@@ -831,6 +850,9 @@ void main() {
         overrides: [
           catalogRepositoryProvider.overrideWithValue(repo),
           productTaxUiConfigProvider.overrideWith((ref) async => taxConfig),
+          companySettingsProvider.overrideWith(
+            (ref) async => CompanySettings.empty(),
+          ),
         ],
         child: MaterialApp(
           home: Builder(
@@ -994,6 +1016,9 @@ void main() {
         overrides: [
           catalogRepositoryProvider.overrideWithValue(repo),
           productTaxUiConfigProvider.overrideWith((ref) async => taxConfig),
+          companySettingsProvider.overrideWith(
+            (ref) async => CompanySettings.empty(),
+          ),
         ],
         child: MaterialApp(
           home: Builder(
@@ -1146,6 +1171,9 @@ void main() {
           overrides: [
             catalogRepositoryProvider.overrideWithValue(repo),
             productTaxUiConfigProvider.overrideWith((ref) async => taxConfig),
+            companySettingsProvider.overrideWith(
+              (ref) async => CompanySettings.empty(),
+            ),
           ],
           child: MaterialApp(
             home: Builder(

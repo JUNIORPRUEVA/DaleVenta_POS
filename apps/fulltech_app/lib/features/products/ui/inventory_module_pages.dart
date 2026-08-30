@@ -19,10 +19,12 @@ import '../../../core/auth/app_role.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/cache/fulltech_cache_manager.dart';
 import '../../../core/cache/local_json_cache.dart';
+import '../../../core/company/company_settings_repository.dart';
 import '../../../core/models/product_model.dart';
 import '../../../core/tax/product_tax_options_provider.dart';
 import '../../../core/tax/product_tax_preview_calculator.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/uom/uom_formatters.dart';
 import '../../../core/utils/media_file_actions.dart';
 import '../../../core/utils/mobile_product_image_picker.dart';
 import '../../../core/utils/money_formatters.dart';
@@ -62,8 +64,11 @@ extension on _StockFilter {
 }
 
 String _stockText(double? value) {
-  if (value == null) return '0';
-  return value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(2);
+  return formatQuantityValue(value);
+}
+
+String _productStockText(ProductModel product) {
+  return formatQuantityWithUnit(product.stock, unit: product.unitOfMeasure);
 }
 
 double _stockOf(ProductModel product) => product.stock ?? 0;
@@ -1080,7 +1085,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                       : 'Sin SKU',
                   product.nombre,
                   product.categoriaLabel,
-                  _stockText(product.stock),
+                  _productStockText(product),
                   formatRdCurrencyAccounting(product.precio),
                 ],
             ],
@@ -6792,6 +6797,7 @@ InputDecoration _inventoryTextInputDecoration(
   String label, {
   String? hintText,
   Widget? prefixIcon,
+  String? suffixText,
 }) {
   const border = OutlineInputBorder(
     borderRadius: BorderRadius.zero,
@@ -6801,6 +6807,7 @@ InputDecoration _inventoryTextInputDecoration(
     labelText: label,
     hintText: hintText,
     prefixIcon: prefixIcon,
+    suffixText: suffixText,
     isDense: true,
     filled: true,
     fillColor: Colors.white,
@@ -7092,6 +7099,9 @@ class _InventoryProductEditorPageState
   String _taxTreatment = 'INHERIT';
   double? _taxRate;
   String? _taxPriceMode;
+  List<UnitOfMeasureModel> _unitOptions = const [UnitOfMeasureModel.unit];
+  UnitOfMeasureModel _selectedUnit = UnitOfMeasureModel.unit;
+  bool _loadingUnits = false;
 
   ProductModel? get _product => widget.product;
 
@@ -7137,7 +7147,29 @@ class _InventoryProductEditorPageState
     _taxTreatment = product?.taxTreatment ?? 'INHERIT';
     _taxRate = product?.taxRate;
     _taxPriceMode = product?.taxPriceMode;
+    _selectedUnit = product?.unitOfMeasure ?? UnitOfMeasureModel.unit;
+    unawaited(_loadUnitOptions());
     _maybeRecoverLostImage();
+  }
+
+  Future<void> _loadUnitOptions() async {
+    if (_loadingUnits) return;
+    setState(() => _loadingUnits = true);
+    final units = await ref
+        .read(catalogRepositoryProvider)
+        .fetchUnitOfMeasures();
+    if (!mounted) return;
+    final selected = units.firstWhere(
+      (unit) => unit.id == _selectedUnit.id || unit.code == _selectedUnit.code,
+      orElse: () => _selectedUnit,
+    );
+    setState(() {
+      _unitOptions = units.any((unit) => unit.id == selected.id)
+          ? units
+          : [selected, ...units];
+      _selectedUnit = selected;
+      _loadingUnits = false;
+    });
   }
 
   /// Recupera (solo Android) una imagen perdida por destrucción de la
@@ -7222,10 +7254,50 @@ class _InventoryProductEditorPageState
       _taxRate = null;
       _taxPriceMode = null;
       _formError = null;
+      _selectedUnit = UnitOfMeasureModel.unit;
     });
     if (pending != null) {
       unawaited(deleteMobileProductImageTemp(pending));
     }
+  }
+
+  Future<bool> _confirmUnitChangeIfNeeded({
+    required ProductModel product,
+    required UnitOfMeasureModel nextUnit,
+  }) async {
+    if (product.unitOfMeasureId == nextUnit.id ||
+        product.unitOfMeasure.code == nextUnit.code) {
+      return true;
+    }
+    final currentStock = product.stock ?? 0;
+    if (currentStock <= 0) return true;
+    if (product.unitOfMeasure.category != nextUnit.category) {
+      setState(() {
+        _formError =
+            'No se puede cambiar la unidad con stock existente si cambia la categoria de medida.';
+      });
+      return false;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cambiar unidad de medida'),
+        content: Text(
+          'Este producto tiene stock (${formatQuantityWithUnit(currentStock, unit: product.unitOfMeasure, includeUnitForUnit: true)}). El cambio solo afecta ventas y movimientos nuevos; los documentos anteriores conservan su unidad historica.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
   }
 
   double? _effectiveTaxRate(ProductTaxUiConfig? taxConfig) {
@@ -7486,6 +7558,15 @@ class _InventoryProductEditorPageState
     final stock = _parseInventoryNumber(_stockCtrl.text);
     final category = _categoryCtrl.text.trim();
     final taxConfig = ref.read(productTaxUiConfigProvider).valueOrNull;
+    final measurementUnitsEnabled =
+        ref
+            .read(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true;
+    final unitForSave = measurementUnitsEnabled
+        ? _selectedUnit
+        : UnitOfMeasureModel.unit;
     final taxEnabled = taxConfig?.settings.taxEnabled == true;
     final effectiveTaxRate = _effectiveTaxRate(taxConfig);
     if (name.isEmpty ||
@@ -7496,6 +7577,16 @@ class _InventoryProductEditorPageState
       setState(
         () => _formError = 'Completa nombre, precio, costo, stock y categoría',
       );
+      return;
+    }
+    final stockError = validateQuantityForUnit(
+      stock,
+      unit: unitForSave,
+      label: 'El stock',
+      allowZero: true,
+    );
+    if (stockError != null) {
+      setState(() => _formError = stockError);
       return;
     }
     if (taxEnabled && _taxTreatment == 'TAXABLE') {
@@ -7538,6 +7629,16 @@ class _InventoryProductEditorPageState
           : product?.taxPriceMode;
       ProductModel saved;
       final catalogController = ref.read(catalogControllerProvider.notifier);
+      if (product != null) {
+        final canChangeUnit = await _confirmUnitChangeIfNeeded(
+          product: product,
+          nextUnit: unitForSave,
+        );
+        if (!canChangeUnit) {
+          if (mounted) setState(() => _isSaving = false);
+          return;
+        }
+      }
 
       if (product == null) {
         saved =
@@ -7553,6 +7654,8 @@ class _InventoryProductEditorPageState
               taxTreatment: taxTreatmentForSave,
               taxRate: taxRateForSave,
               taxPriceMode: taxPriceModeForSave,
+              unitOfMeasureId: unitForSave.id,
+              unitOfMeasure: unitForSave,
             ) ??
             await repo.createProduct(
               nombre: name,
@@ -7566,6 +7669,8 @@ class _InventoryProductEditorPageState
               taxTreatment: taxTreatmentForSave,
               taxRate: taxRateForSave,
               taxPriceMode: taxPriceModeForSave,
+              unitOfMeasureId: unitForSave.id,
+              unitOfMeasure: unitForSave,
               skipLoader: true,
             );
       } else {
@@ -7583,6 +7688,8 @@ class _InventoryProductEditorPageState
               taxTreatment: taxTreatmentForSave,
               taxRate: taxRateForSave,
               taxPriceMode: taxPriceModeForSave,
+              unitOfMeasureId: unitForSave.id,
+              unitOfMeasure: unitForSave,
             ) ??
             await repo.updateProduct(
               id: product.id,
@@ -7597,6 +7704,8 @@ class _InventoryProductEditorPageState
               taxTreatment: taxTreatmentForSave,
               taxRate: taxRateForSave,
               taxPriceMode: taxPriceModeForSave,
+              unitOfMeasureId: unitForSave.id,
+              unitOfMeasure: unitForSave,
               skipLoader: true,
             );
       }
@@ -7674,6 +7783,12 @@ class _InventoryProductEditorPageState
     final taxConfigAsync = ref.watch(productTaxUiConfigProvider);
     final taxConfig = taxConfigAsync.valueOrNull;
     final showTaxSection = taxConfig?.settings.taxEnabled == true;
+    final measurementUnitsEnabled =
+        ref
+            .watch(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true;
 
     return _InventorySidePanelScaffold(
       title: product == null ? 'Nuevo producto' : 'Editar producto',
@@ -7747,11 +7862,43 @@ class _InventoryProductEditorPageState
                 focusNode: _stockFocus,
                 enabled: !_isSaving,
                 textInputAction: TextInputAction.next,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
+                keyboardType: TextInputType.numberWithOptions(
+                  decimal:
+                      measurementUnitsEnabled && _selectedUnit.allowDecimals,
                 ),
-                decoration: _inventoryTextInputDecoration('Stock disponible'),
+                decoration: _inventoryTextInputDecoration(
+                  'Stock disponible',
+                  suffixText: measurementUnitsEnabled && !_selectedUnit.isUnit
+                      ? _selectedUnit.symbol
+                      : null,
+                ),
               ),
+              if (measurementUnitsEnabled) ...[
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedUnit.id,
+                  isExpanded: true,
+                  decoration: _inventoryTextInputDecoration(
+                    _loadingUnits ? 'Cargando unidades...' : 'Unidad de medida',
+                  ),
+                  items: [
+                    for (final unit in _unitOptions)
+                      DropdownMenuItem<String>(
+                        value: unit.id,
+                        child: Text('${unit.name} (${unit.symbol})'),
+                      ),
+                  ],
+                  onChanged: _isSaving || _loadingUnits
+                      ? null
+                      : (value) {
+                          final next = _unitOptions.firstWhere(
+                            (unit) => unit.id == value,
+                            orElse: () => UnitOfMeasureModel.unit,
+                          );
+                          setState(() => _selectedUnit = next);
+                        },
+                ),
+              ],
               const SizedBox(height: 10),
               TextField(
                 controller: _categoryCtrl,

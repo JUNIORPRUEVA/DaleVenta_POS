@@ -77,6 +77,7 @@ class CompanySettings {
   final double defaultTaxRate;
   final bool pricesIncludeTax;
   final bool ncfEnabled;
+  final bool measurementUnitsEnabled;
 
   const CompanySettings({
     required this.companyName,
@@ -113,6 +114,7 @@ class CompanySettings {
     this.defaultTaxRate = 0,
     this.pricesIncludeTax = false,
     this.ncfEnabled = false,
+    this.measurementUnitsEnabled = false,
   });
 
   factory CompanySettings.empty() {
@@ -151,6 +153,7 @@ class CompanySettings {
       defaultTaxRate: 0,
       pricesIncludeTax: false,
       ncfEnabled: false,
+      measurementUnitsEnabled: false,
     );
   }
 
@@ -189,6 +192,7 @@ class CompanySettings {
     double? defaultTaxRate,
     bool? pricesIncludeTax,
     bool? ncfEnabled,
+    bool? measurementUnitsEnabled,
     bool clearLogo = false,
   }) {
     return CompanySettings(
@@ -235,6 +239,8 @@ class CompanySettings {
       defaultTaxRate: defaultTaxRate ?? this.defaultTaxRate,
       pricesIncludeTax: pricesIncludeTax ?? this.pricesIncludeTax,
       ncfEnabled: ncfEnabled ?? this.ncfEnabled,
+      measurementUnitsEnabled:
+          measurementUnitsEnabled ?? this.measurementUnitsEnabled,
     );
   }
 
@@ -273,6 +279,7 @@ class CompanySettings {
     'defaultTaxRate': defaultTaxRate,
     'pricesIncludeTax': pricesIncludeTax,
     'ncfEnabled': ncfEnabled,
+    'measurementUnitsEnabled': measurementUnitsEnabled,
   };
 
   factory CompanySettings.fromMap(Map<String, dynamic> map) {
@@ -325,6 +332,9 @@ class CompanySettings {
       defaultTaxRate: _double(map['defaultTaxRate']),
       pricesIncludeTax: map['pricesIncludeTax'] == true,
       ncfEnabled: map['ncfEnabled'] == true,
+      measurementUnitsEnabled:
+          map['measurementUnitsEnabled'] == true ||
+          map['measurement_units_enabled'] == true,
     );
   }
 }

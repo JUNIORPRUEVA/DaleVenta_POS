@@ -67,10 +67,10 @@ ALTER TABLE "Product"
 
 CREATE INDEX "Product_unit_of_measure_id_idx" ON "Product" ("unit_of_measure_id");
 
-ALTER TABLE "ServiceExecutionChange"
+ALTER TABLE "service_execution_changes"
   ALTER COLUMN "quantity" TYPE NUMERIC(18,6);
 
-ALTER TABLE "PurchaseOrderItem"
+ALTER TABLE "purchase_order_items"
   ALTER COLUMN "quantity" TYPE NUMERIC(18,6),
   ALTER COLUMN "received_quantity" TYPE NUMERIC(18,6),
   ALTER COLUMN "pending_quantity" TYPE NUMERIC(18,6),
@@ -79,7 +79,7 @@ ALTER TABLE "PurchaseOrderItem"
   ADD COLUMN "unit_symbol_snapshot" VARCHAR(16) NOT NULL DEFAULT 'u',
   ADD COLUMN "unit_precision_snapshot" INTEGER NOT NULL DEFAULT 0;
 
-ALTER TABLE "PurchaseReceiptItem"
+ALTER TABLE "purchase_receipt_items"
   ALTER COLUMN "quantity_received" TYPE NUMERIC(18,6),
   ADD COLUMN "unit_code_snapshot" VARCHAR(32) NOT NULL DEFAULT 'UNIT',
   ADD COLUMN "unit_name_snapshot" TEXT NOT NULL DEFAULT 'Unidad',

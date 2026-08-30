@@ -24,6 +24,7 @@ import '../../core/routing/routes.dart';
 import '../../core/tax/product_tax_options_provider.dart';
 import '../../core/tax/product_tax_preview_calculator.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/uom/uom_formatters.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
@@ -132,14 +133,14 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     if (product == null) {
       final visible = _filteredProducts;
       if (visible.length == 1) {
-        _addProduct(visible.first);
+        unawaited(_addProduct(visible.first));
         _searchCtrl.clear();
         setState(() {});
         _searchFocus.requestFocus();
       }
       return;
     }
-    _addProduct(product);
+    unawaited(_addProduct(product));
     _searchCtrl.clear();
     setState(() {});
     _searchFocus.requestFocus();
@@ -224,6 +225,26 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   bool _productHasNoStock(ProductModel product) {
     final stock = product.stock;
     return stock == null || stock <= 0;
+  }
+
+  bool get _measurementUnitsEnabled =>
+      ref.read(companySettingsProvider).valueOrNull?.measurementUnitsEnabled ==
+      true;
+
+  UnitOfMeasureModel _unitForProduct(ProductModel? product) {
+    if (!_measurementUnitsEnabled) return UnitOfMeasureModel.unit;
+    return product?.unitOfMeasure ?? UnitOfMeasureModel.unit;
+  }
+
+  UnitOfMeasureModel _unitForItem(SaleDraftItem item) =>
+      _unitForProduct(item.product);
+
+  String _formatItemQty(SaleDraftItem item) {
+    return formatQuantityWithUnit(
+      item.qty,
+      unit: _unitForItem(item),
+      includeUnitForUnit: false,
+    );
   }
 
   void _showNoStockNotice() {
@@ -1101,7 +1122,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
               money: _money,
               mobileGrid: mobileGrid,
               compactCard: compactCard,
-              onTap: () => _addProduct(product),
+              onTap: () => unawaited(_addProduct(product)),
             );
           },
         );
@@ -1209,9 +1230,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                     ),
                     itemBuilder: (context, index) {
                       final item = _cart[index];
-                      final qtyValue = item.qty % 1 == 0
-                          ? item.qty.toInt().toString()
-                          : item.qty.toStringAsFixed(2);
+                      final qtyValue = _formatItemQty(item);
                       final outOfStock = _hasNoStock(item);
                       return ListTile(
                         dense: true,
@@ -1386,7 +1405,11 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                         ),
                       ),
                       Text(
-                        '${_totalUnits.toStringAsFixed(_totalUnits % 1 == 0 ? 0 : 2)} uds',
+                        formatQuantityWithUnit(
+                          _totalUnits,
+                          unit: UnitOfMeasureModel.unit,
+                          includeUnitForUnit: true,
+                        ),
                         style: theme.textTheme.bodySmall?.copyWith(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w800,
@@ -1662,9 +1685,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                 const SizedBox(height: 4),
                             itemBuilder: (context, index) {
                               final item = _cart[index];
-                              final qtyValue = item.qty % 1 == 0
-                                  ? item.qty.toInt().toString()
-                                  : item.qty.toStringAsFixed(2);
+                              final qtyValue = _formatItemQty(item);
                               final outOfStock = _hasNoStock(item);
 
                               return Material(
@@ -2140,7 +2161,9 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                               dense: true,
                               title: Text(c.nombre),
                               subtitle: Text(
-                                details.isEmpty ? 'Sin datos fiscales' : details,
+                                details.isEmpty
+                                    ? 'Sin datos fiscales'
+                                    : details,
                               ),
                               trailing: TextButton.icon(
                                 onPressed: () {
@@ -2319,14 +2342,37 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     setState(() => _cart = [..._cart, item]);
   }
 
-  void _addProduct(ProductModel product) {
+  Future<void> _addProduct(ProductModel product) async {
     if (_productHasNoStock(product)) {
       _showNoStockNotice();
+    }
+    final unit = _unitForProduct(product);
+    final quantity = unit.isUnit
+        ? 1.0
+        : await _openMeasuredProductQuantityDialog(product);
+    if (quantity == null) return;
+    final quantityError = validateQuantityForUnit(
+      quantity,
+      unit: unit,
+      label: 'La cantidad',
+    );
+    if (quantityError != null) {
+      _showNoStockNotice();
+      return;
     }
     final idx = _cart.indexWhere((item) => item.product?.id == product.id);
     if (idx >= 0) {
       final current = _cart[idx];
-      _updateItem(idx, current.copyWith(qty: current.qty + 1));
+      final nextQty = current.qty + quantity;
+      if (quantityExceedsStock(nextQty, product)) {
+        _showNoStockNotice();
+        return;
+      }
+      _updateItem(idx, current.copyWith(qty: nextQty));
+      return;
+    }
+    if (quantityExceedsStock(quantity, product)) {
+      _showNoStockNotice();
       return;
     }
 
@@ -2344,12 +2390,95 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           name: product.nombre,
           imageUrl: product.displayFotoUrl,
           isExternal: productId == null,
-          qty: 1,
+          qty: quantity,
           priceSoldUnit: product.precio,
           costUnitSnapshot: product.costo,
         ),
       ];
     });
+  }
+
+  Future<double?> _openMeasuredProductQuantityDialog(
+    ProductModel product,
+  ) async {
+    final unit = _unitForProduct(product);
+    final qtyCtrl = TextEditingController(
+      text: formatQuantityValue(1, unit: unit),
+    );
+    String? errorText;
+    final quantity = await showDialog<double>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          return AlertDialog(
+            title: Text(product.nombre),
+            content: SizedBox(
+              width: 320,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: qtyCtrl,
+                    autofocus: true,
+                    keyboardType: TextInputType.numberWithOptions(
+                      decimal: unit.allowDecimals,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'Cantidad',
+                      suffixText: unit.symbol,
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                  if (errorText != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      errorText!,
+                      style: TextStyle(
+                        color: Theme.of(dialogContext).colorScheme.error,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final qty = parseDecimalInput(qtyCtrl.text);
+                  final validation = qty == null
+                      ? 'Ingresa una cantidad valida.'
+                      : validateQuantityForUnit(
+                          qty,
+                          unit: unit,
+                          label: 'La cantidad',
+                        );
+                  if (validation != null) {
+                    setDialogState(() => errorText = validation);
+                    return;
+                  }
+                  if (quantityExceedsStock(qty!, product)) {
+                    setDialogState(
+                      () => errorText = 'No hay stock suficiente.',
+                    );
+                    return;
+                  }
+                  Navigator.of(dialogContext).pop(qty);
+                },
+                child: const Text('Agregar'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    qtyCtrl.dispose();
+    return quantity;
   }
 
   void _updateItem(int index, SaleDraftItem next) {
@@ -2362,10 +2491,9 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
 
   Future<void> _openEditCartItemDialog(int index) async {
     final item = _cart[index];
+    final unit = _unitForItem(item);
     final qtyCtrl = TextEditingController(
-      text: item.qty % 1 == 0
-          ? item.qty.toInt().toString()
-          : item.qty.toStringAsFixed(2),
+      text: formatQuantityValue(item.qty, unit: unit),
     );
     final priceCtrl = TextEditingController(
       text: item.priceSoldUnit.toStringAsFixed(2),
@@ -2392,11 +2520,12 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                   const SizedBox(height: 10),
                   TextField(
                     controller: qtyCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
+                    keyboardType: TextInputType.numberWithOptions(
+                      decimal: unit.allowDecimals,
                     ),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Cantidad',
+                      suffixText: unit.isUnit ? null : unit.symbol,
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
@@ -2432,12 +2561,25 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
               ),
               FilledButton(
                 onPressed: () {
-                  final qty = double.tryParse(qtyCtrl.text.trim());
+                  final qty = parseDecimalInput(qtyCtrl.text);
                   final price = double.tryParse(priceCtrl.text.trim());
 
-                  if (qty == null || qty <= 0) {
+                  final qtyError = qty == null
+                      ? 'Ingresa una cantidad valida.'
+                      : validateQuantityForUnit(
+                          qty,
+                          unit: unit,
+                          label: 'La cantidad',
+                        );
+                  if (qtyError != null) {
+                    setDialogState(() => errorText = qtyError);
+                    return;
+                  }
+
+                  final product = item.product;
+                  if (product != null && quantityExceedsStock(qty!, product)) {
                     setDialogState(
-                      () => errorText = 'La cantidad debe ser mayor que 0',
+                      () => errorText = 'No hay stock suficiente.',
                     );
                     return;
                   }
@@ -2718,11 +2860,7 @@ class _SaleProductGridCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final stockValue = product.stock;
     final outOfStock = stockValue == null || stockValue <= 0;
-    final stockText = stockValue == null
-        ? '0'
-        : stockValue == stockValue.roundToDouble()
-        ? stockValue.toStringAsFixed(0)
-        : stockValue.toStringAsFixed(2);
+    final stockText = formatStockLabel(product, compact: true);
     final config = taxConfig;
     final taxPreview = config?.settings.taxEnabled == true
         ? ProductTaxPreviewCalculator.calculate(

@@ -41,6 +41,8 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
     String? taxTreatment,
     double? taxRate,
     String? taxPriceMode,
+    String? unitOfMeasureId,
+    UnitOfMeasureModel? unitOfMeasure,
     bool skipLoader = false,
   }) async {
     creates += 1;
@@ -78,6 +80,8 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
     String? taxTreatment,
     double? taxRate,
     String? taxPriceMode,
+    String? unitOfMeasureId,
+    UnitOfMeasureModel? unitOfMeasure,
     bool skipLoader = false,
   }) async {
     updates += 1;
@@ -217,62 +221,68 @@ void main() {
     },
   );
 
-  test('importación legacy sin columnas fiscales conserva predeterminado', () async {
-    final repo = _ImportFakeCatalogRepository([]);
-    final container = ProviderContainer(
-      overrides: [catalogRepositoryProvider.overrideWithValue(repo)],
-    );
-    addTearDown(container.dispose);
+  test(
+    'importación legacy sin columnas fiscales conserva predeterminado',
+    () async {
+      final repo = _ImportFakeCatalogRepository([]);
+      final container = ProviderContainer(
+        overrides: [catalogRepositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(container.dispose);
 
-    final controller = container.read(catalogControllerProvider.notifier);
-    await controller.load();
+      final controller = container.read(catalogControllerProvider.notifier);
+      await controller.load();
 
-    final result = await controller.importProducts(const [
-      CatalogImportDraft(
-        nombre: 'Producto legacy',
-        codigo: 'LEG-001',
-        precio: 100,
-        costo: 50,
-        stock: 2,
-        categoria: 'General',
-      ),
-    ]);
+      final result = await controller.importProducts(const [
+        CatalogImportDraft(
+          nombre: 'Producto legacy',
+          codigo: 'LEG-001',
+          precio: 100,
+          costo: 50,
+          stock: 2,
+          categoria: 'General',
+        ),
+      ]);
 
-    expect(result.created, 1);
-    expect(repo.lastTaxTreatment, isNull);
-    expect(repo.products.single.taxTreatment, 'INHERIT');
-  });
+      expect(result.created, 1);
+      expect(repo.lastTaxTreatment, isNull);
+      expect(repo.products.single.taxTreatment, 'INHERIT');
+    },
+  );
 
-  test('importación fiscal pasa tratamiento tasa y modo al repository', () async {
-    final repo = _ImportFakeCatalogRepository([]);
-    final container = ProviderContainer(
-      overrides: [catalogRepositoryProvider.overrideWithValue(repo)],
-    );
-    addTearDown(container.dispose);
+  test(
+    'importación fiscal pasa tratamiento tasa y modo al repository',
+    () async {
+      final repo = _ImportFakeCatalogRepository([]);
+      final container = ProviderContainer(
+        overrides: [catalogRepositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(container.dispose);
 
-    final controller = container.read(catalogControllerProvider.notifier);
-    await controller.load();
+      final controller = container.read(catalogControllerProvider.notifier);
+      await controller.load();
 
-    final result = await controller.importProducts(const [
-      CatalogImportDraft(
-        nombre: 'Producto gravado',
-        codigo: 'FIS-001',
-        precio: 1180,
-        costo: 600,
-        stock: 1,
-        categoria: 'Fiscal',
-        taxTreatment: 'TAXABLE',
-        taxRate: 0.18,
-        taxPriceMode: 'TAX_INCLUDED',
-      ),
-    ]);
+      final result = await controller.importProducts(const [
+        CatalogImportDraft(
+          nombre: 'Producto gravado',
+          codigo: 'FIS-001',
+          precio: 1180,
+          costo: 600,
+          stock: 1,
+          categoria: 'Fiscal',
+          taxTreatment: 'TAXABLE',
+          taxRate: 0.18,
+          taxPriceMode: 'TAX_INCLUDED',
+        ),
+      ]);
 
-    expect(result.created, 1);
-    expect(repo.lastTaxTreatment, 'TAXABLE');
-    expect(repo.lastTaxRate, 0.18);
-    expect(repo.lastTaxPriceMode, 'TAX_INCLUDED');
-    expect(repo.products.single.taxTreatment, 'TAXABLE');
-  });
+      expect(result.created, 1);
+      expect(repo.lastTaxTreatment, 'TAXABLE');
+      expect(repo.lastTaxRate, 0.18);
+      expect(repo.lastTaxPriceMode, 'TAX_INCLUDED');
+      expect(repo.products.single.taxTreatment, 'TAXABLE');
+    },
+  );
 
   test('eliminación optimista quita producto al instante', () async {
     final repo = _ImportFakeCatalogRepository([

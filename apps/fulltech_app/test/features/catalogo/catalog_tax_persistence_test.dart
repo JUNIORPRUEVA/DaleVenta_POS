@@ -67,6 +67,8 @@ class _TaxFakeCatalogRepository extends CatalogRepository {
     String? taxTreatment,
     double? taxRate,
     String? taxPriceMode,
+    String? unitOfMeasureId,
+    UnitOfMeasureModel? unitOfMeasure,
     bool skipLoader = false,
   }) async {
     lastTaxTreatment = taxTreatment;
@@ -103,6 +105,8 @@ class _TaxFakeCatalogRepository extends CatalogRepository {
     String? taxTreatment,
     double? taxRate,
     String? taxPriceMode,
+    String? unitOfMeasureId,
+    UnitOfMeasureModel? unitOfMeasure,
     bool skipLoader = false,
   }) async {
     lastTaxTreatment = taxTreatment;

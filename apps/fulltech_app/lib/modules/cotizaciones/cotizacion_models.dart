@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../../core/models/product_model.dart';
+
 class CotizacionItem {
   final String productId;
   final String nombre;
@@ -22,6 +24,10 @@ class CotizacionItem {
   final double? lineTotalSnapshot;
   final bool taxIncluded;
   final bool taxExempt;
+  final String unitCodeSnapshot;
+  final String unitNameSnapshot;
+  final String unitSymbolSnapshot;
+  final int unitPrecisionSnapshot;
 
   const CotizacionItem({
     required this.productId,
@@ -45,6 +51,10 @@ class CotizacionItem {
     this.lineTotalSnapshot,
     this.taxIncluded = false,
     this.taxExempt = false,
+    this.unitCodeSnapshot = 'UNIT',
+    this.unitNameSnapshot = 'Unidad',
+    this.unitSymbolSnapshot = 'u',
+    this.unitPrecisionSnapshot = 0,
   });
 
   bool get isExternal => !_isUuid(productId);
@@ -89,6 +99,10 @@ class CotizacionItem {
     double? lineTotalSnapshot,
     bool? taxIncluded,
     bool? taxExempt,
+    String? unitCodeSnapshot,
+    String? unitNameSnapshot,
+    String? unitSymbolSnapshot,
+    int? unitPrecisionSnapshot,
   }) {
     return CotizacionItem(
       productId: productId ?? this.productId,
@@ -112,6 +126,11 @@ class CotizacionItem {
       lineTotalSnapshot: lineTotalSnapshot ?? this.lineTotalSnapshot,
       taxIncluded: taxIncluded ?? this.taxIncluded,
       taxExempt: taxExempt ?? this.taxExempt,
+      unitCodeSnapshot: unitCodeSnapshot ?? this.unitCodeSnapshot,
+      unitNameSnapshot: unitNameSnapshot ?? this.unitNameSnapshot,
+      unitSymbolSnapshot: unitSymbolSnapshot ?? this.unitSymbolSnapshot,
+      unitPrecisionSnapshot:
+          unitPrecisionSnapshot ?? this.unitPrecisionSnapshot,
     );
   }
 
@@ -137,6 +156,10 @@ class CotizacionItem {
     'lineTotal': lineTotalSnapshot,
     'taxIncluded': taxIncluded,
     'taxExempt': taxExempt,
+    'unitCodeSnapshot': unitCodeSnapshot,
+    'unitNameSnapshot': unitNameSnapshot,
+    'unitSymbolSnapshot': unitSymbolSnapshot,
+    'unitPrecisionSnapshot': unitPrecisionSnapshot,
   };
 
   Map<String, dynamic> toCreateDto() => {
@@ -154,6 +177,16 @@ class CotizacionItem {
     if (taxRate > 0) 'taxRate': taxRate,
     if (taxPriceMode.trim().isNotEmpty) 'taxPriceMode': taxPriceMode,
   };
+
+  UnitOfMeasureModel get unitSnapshot => UnitOfMeasureModel(
+    id: unitCodeSnapshot,
+    code: unitCodeSnapshot,
+    name: unitNameSnapshot,
+    symbol: unitSymbolSnapshot,
+    category: unitCodeSnapshot == 'UNIT' ? 'COUNT' : 'MEASURE',
+    allowDecimals: unitPrecisionSnapshot > 0,
+    precision: unitPrecisionSnapshot,
+  );
 
   static bool _isUuid(String? value) {
     final v = (value ?? '').trim();
@@ -186,6 +219,17 @@ class CotizacionItem {
       lineTotalSnapshot: (map['lineTotal'] as num?)?.toDouble(),
       taxIncluded: map['taxIncluded'] == true,
       taxExempt: map['taxExempt'] == true,
+      unitCodeSnapshot:
+          (map['unitCodeSnapshot'] ?? map['unit_code_snapshot'] ?? 'UNIT')
+              .toString(),
+      unitNameSnapshot:
+          (map['unitNameSnapshot'] ?? map['unit_name_snapshot'] ?? 'Unidad')
+              .toString(),
+      unitSymbolSnapshot:
+          (map['unitSymbolSnapshot'] ?? map['unit_symbol_snapshot'] ?? 'u')
+              .toString(),
+      unitPrecisionSnapshot:
+          (map['unitPrecisionSnapshot'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -239,6 +283,18 @@ class CotizacionItem {
           : _asDouble(map['lineTotal']),
       taxIncluded: map['taxIncluded'] == true,
       taxExempt: map['taxExempt'] == true,
+      unitCodeSnapshot:
+          (map['unitCodeSnapshot'] ?? map['unit_code_snapshot'] ?? 'UNIT')
+              .toString(),
+      unitNameSnapshot:
+          (map['unitNameSnapshot'] ?? map['unit_name_snapshot'] ?? 'Unidad')
+              .toString(),
+      unitSymbolSnapshot:
+          (map['unitSymbolSnapshot'] ?? map['unit_symbol_snapshot'] ?? 'u')
+              .toString(),
+      unitPrecisionSnapshot: _asDouble(
+        map['unitPrecisionSnapshot'] ?? map['unit_precision_snapshot'],
+      ).toInt(),
     );
   }
 }

@@ -208,6 +208,31 @@ export class ProductsService {
     };
   }
 
+  async listUnitOfMeasures(user: TenantUser) {
+    const companyId = requireTenant(user);
+    if (!(this.prisma as any).unitOfMeasure?.findMany) {
+      return [this.mapUnitOfMeasure(null)];
+    }
+    const rows = await this.prisma.unitOfMeasure.findMany({
+      where: {
+        active: true,
+        OR: [{ companyId: null }, { companyId }],
+      },
+      orderBy: [{ companyId: "asc" }, { category: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        symbol: true,
+        category: true,
+        allowDecimals: true,
+        precision: true,
+      },
+    });
+    if (rows.length === 0) return [this.mapUnitOfMeasure(null)];
+    return rows.map((row) => this.mapUnitOfMeasure(row));
+  }
+
   private normalizeProductCode(dto: {
     codigo?: string;
     code?: string;

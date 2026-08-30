@@ -214,6 +214,10 @@ class PurchaseOrderItemModel {
     required this.unitCost,
     required this.subtotal,
     this.notes,
+    this.unitCodeSnapshot = 'UNIT',
+    this.unitNameSnapshot = 'Unidad',
+    this.unitSymbolSnapshot = 'u',
+    this.unitPrecisionSnapshot = 0,
   });
 
   final String id;
@@ -226,6 +230,10 @@ class PurchaseOrderItemModel {
   final double unitCost;
   final double subtotal;
   final String? notes;
+  final String unitCodeSnapshot;
+  final String unitNameSnapshot;
+  final String unitSymbolSnapshot;
+  final int unitPrecisionSnapshot;
 
   factory PurchaseOrderItemModel.fromJson(
     Map<String, dynamic> json,
@@ -246,6 +254,26 @@ class PurchaseOrderItemModel {
     unitCost: _num(json['unitCost'] ?? json['unit_cost']),
     subtotal: _num(json['subtotal']),
     notes: _str(json['notes']),
+    unitCodeSnapshot:
+        _str(json['unitCodeSnapshot'] ?? json['unit_code_snapshot']) ?? 'UNIT',
+    unitNameSnapshot:
+        _str(json['unitNameSnapshot'] ?? json['unit_name_snapshot']) ??
+        'Unidad',
+    unitSymbolSnapshot:
+        _str(json['unitSymbolSnapshot'] ?? json['unit_symbol_snapshot']) ?? 'u',
+    unitPrecisionSnapshot: _num(
+      json['unitPrecisionSnapshot'] ?? json['unit_precision_snapshot'],
+    ).toInt(),
+  );
+
+  UnitOfMeasureModel get unitSnapshot => UnitOfMeasureModel(
+    id: unitCodeSnapshot,
+    code: unitCodeSnapshot,
+    name: unitNameSnapshot,
+    symbol: unitSymbolSnapshot,
+    category: unitCodeSnapshot == 'UNIT' ? 'COUNT' : 'MEASURE',
+    allowDecimals: unitPrecisionSnapshot > 0,
+    precision: unitPrecisionSnapshot,
   );
 }
 

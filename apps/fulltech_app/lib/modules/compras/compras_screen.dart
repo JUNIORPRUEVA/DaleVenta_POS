@@ -16,6 +16,7 @@ import '../../core/errors/api_exception.dart';
 import '../../core/models/product_model.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/uom/uom_formatters.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -2447,12 +2448,23 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   }
 
   void _quickAddProduct(ProductModel product, {double initialQty = 1}) {
+    final unit = _unitForPurchaseProduct(product);
+    final quantity = initialQty.clamp(.0001, double.infinity).toDouble();
+    final quantityError = validateQuantityForUnit(
+      quantity,
+      unit: unit,
+      label: 'La cantidad',
+    );
+    if (quantityError != null) {
+      _snack(quantityError);
+      return;
+    }
     final idx = _cart.indexWhere((item) => item.productId == product.id);
     setState(() {
       if (idx >= 0) {
         final next = [..._cart];
         next[idx] = next[idx].copyWith(
-          quantity: next[idx].quantity + initialQty,
+          quantity: next[idx].quantity + quantity,
           supplierId: next[idx].supplierId ?? _selectedSupplierId,
         );
         _cart = next;
@@ -2466,7 +2478,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
             productCode: product.codigo,
             description: product.descripcion,
             image: product.displayFotoUrl,
-            quantity: initialQty.clamp(.0001, double.infinity).toDouble(),
+            quantity: quantity,
             unitCost: product.costo.clamp(0, double.infinity).toDouble(),
             supplierId: _selectedSupplierId,
           ),
@@ -2571,37 +2583,71 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
 
   Future<void> _editCartItem(int index) async {
     final item = _cart[index];
-    final qty = TextEditingController(text: _qty(item.quantity));
+    final unit = _unitForPurchaseItem(item);
+    final qty = TextEditingController(
+      text: formatQuantityValue(item.quantity, unit: unit),
+    );
     final cost = TextEditingController(text: item.unitCost.toStringAsFixed(2));
+    String? errorText;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(item.productName),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: qty,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Cantidad'),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(item.productName),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: qty,
+                keyboardType: TextInputType.numberWithOptions(
+                  decimal: unit.allowDecimals,
+                ),
+                decoration: InputDecoration(
+                  labelText: 'Cantidad',
+                  suffixText: unit.isUnit ? null : unit.symbol,
+                ),
+              ),
+              TextField(
+                controller: cost,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(labelText: 'Costo unitario'),
+              ),
+              if (errorText != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  errorText!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
             ),
-            TextField(
-              controller: cost,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Costo unitario'),
+            FilledButton(
+              onPressed: () {
+                final parsedQty = parseDecimalInput(qty.text);
+                final validation = parsedQty == null
+                    ? 'Ingresa una cantidad valida.'
+                    : validateQuantityForUnit(
+                        parsedQty,
+                        unit: unit,
+                        label: 'La cantidad',
+                      );
+                if (validation != null) {
+                  setDialogState(() => errorText = validation);
+                  return;
+                }
+                Navigator.pop(context, true);
+              },
+              child: const Text('Guardar'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Guardar'),
-          ),
-        ],
       ),
     );
     if (ok != true) return;
@@ -3551,8 +3597,21 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   String _money(double value) => formatRdCurrencyAccounting(value);
   String _qty(num value) =>
       value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(2);
-  double _parseAmount(String value) =>
-      double.tryParse(value.trim().replaceAll(',', '.')) ?? 0;
+  UnitOfMeasureModel _unitForPurchaseProduct(ProductModel? product) {
+    final enabled =
+        ref
+            .read(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true;
+    if (!enabled) return UnitOfMeasureModel.unit;
+    return product?.unitOfMeasure ?? UnitOfMeasureModel.unit;
+  }
+
+  UnitOfMeasureModel _unitForPurchaseItem(PurchaseDraftItem item) =>
+      _unitForPurchaseProduct(item.product);
+
+  double _parseAmount(String value) => parseDecimalInput(value) ?? 0;
   String _dateLabel(DateTime? value) {
     if (value == null) return '';
     final local = value.toLocal();
@@ -4251,7 +4310,7 @@ class _OrderDetailPanel extends StatelessWidget {
                                         ),
                                       ),
                                       Text(
-                                        '${qty(item.quantity)} x ${money(item.unitCost)}',
+                                        '${formatQuantityWithUnit(item.quantity, unit: item.unitSnapshot)} x ${money(item.unitCost)}',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: theme.textTheme.bodySmall,
@@ -4975,7 +5034,7 @@ class _PurchaseProductCard extends StatelessWidget {
                   left: 5,
                   top: 5,
                   child: _StockBadge(
-                    label: inStock ? 'Disp. ${qty(stock)}' : 'Sin stock',
+                    label: inStock ? formatStockLabel(product) : 'Sin stock',
                     danger: !inStock,
                   ),
                 ),
@@ -5178,7 +5237,7 @@ class _CartItemTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${qty(item.quantity)} x ${money(item.unitCost)}',
+                      '${formatQuantityWithUnit(item.quantity, unit: item.product?.unitOfMeasure ?? UnitOfMeasureModel.unit)} x ${money(item.unitCost)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(

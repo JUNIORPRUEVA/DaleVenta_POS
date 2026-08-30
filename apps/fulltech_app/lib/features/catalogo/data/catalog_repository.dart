@@ -71,6 +71,7 @@ class CatalogRepository {
             ? _asNullableDouble(payload['taxRate'])
             : null,
         taxPriceMode: payload['taxPriceMode']?.toString(),
+        unitOfMeasureId: payload['unitOfMeasureId']?.toString(),
         skipLoader: true,
       );
     });
@@ -91,6 +92,7 @@ class CatalogRepository {
             ? _asNullableDouble(payload['taxRate'])
             : null,
         taxPriceMode: payload['taxPriceMode']?.toString(),
+        unitOfMeasureId: payload['unitOfMeasureId']?.toString(),
         skipLoader: true,
       );
     });
@@ -432,6 +434,8 @@ class CatalogRepository {
     String? taxTreatment,
     double? taxRate,
     String? taxPriceMode,
+    String? unitOfMeasureId,
+    UnitOfMeasureModel? unitOfMeasure,
     bool skipLoader = false,
   }) async {
     final payload = _productPayload(
@@ -446,6 +450,7 @@ class CatalogRepository {
       taxTreatment: taxTreatment,
       taxRate: taxRate,
       taxPriceMode: taxPriceMode,
+      unitOfMeasureId: unitOfMeasureId,
     );
     try {
       return await _createProductRemote(
@@ -460,6 +465,7 @@ class CatalogRepository {
         taxTreatment: taxTreatment,
         taxRate: taxRate,
         taxPriceMode: taxPriceMode,
+        unitOfMeasureId: unitOfMeasureId,
         skipLoader: skipLoader,
       );
     } on DioException catch (e) {
@@ -494,6 +500,8 @@ class CatalogRepository {
         taxTreatment: taxTreatment ?? 'INHERIT',
         taxRate: taxRate,
         taxPriceMode: taxPriceMode,
+        unitOfMeasureId: unitOfMeasureId ?? UnitOfMeasureModel.unit.id,
+        unitOfMeasure: unitOfMeasure ?? UnitOfMeasureModel.unit,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -512,6 +520,7 @@ class CatalogRepository {
     String? taxTreatment,
     double? taxRate,
     String? taxPriceMode,
+    String? unitOfMeasureId,
     bool skipLoader = false,
   }) async {
     final res = await _dio.post(
@@ -529,6 +538,7 @@ class CatalogRepository {
         taxTreatment: taxTreatment,
         taxRate: taxRate,
         taxPriceMode: taxPriceMode,
+        unitOfMeasureId: unitOfMeasureId,
       ),
     );
     return ProductModel.fromJson((res.data as Map).cast<String, dynamic>());
@@ -547,6 +557,8 @@ class CatalogRepository {
     String? taxTreatment,
     double? taxRate,
     String? taxPriceMode,
+    String? unitOfMeasureId,
+    UnitOfMeasureModel? unitOfMeasure,
     bool skipLoader = false,
   }) async {
     final payload = _productPayload(
@@ -562,6 +574,7 @@ class CatalogRepository {
       taxTreatment: taxTreatment,
       taxRate: taxRate,
       taxPriceMode: taxPriceMode,
+      unitOfMeasureId: unitOfMeasureId,
     );
     try {
       return await _updateProductRemote(
@@ -577,6 +590,7 @@ class CatalogRepository {
         taxTreatment: taxTreatment,
         taxRate: taxRate,
         taxPriceMode: taxPriceMode,
+        unitOfMeasureId: unitOfMeasureId,
         skipLoader: skipLoader,
       );
     } on DioException catch (e) {
@@ -609,6 +623,8 @@ class CatalogRepository {
         taxTreatment: taxTreatment ?? 'INHERIT',
         taxRate: taxRate,
         taxPriceMode: taxPriceMode,
+        unitOfMeasureId: unitOfMeasureId ?? UnitOfMeasureModel.unit.id,
+        unitOfMeasure: unitOfMeasure ?? UnitOfMeasureModel.unit,
         updatedAt: DateTime.now(),
       );
     }
@@ -627,6 +643,7 @@ class CatalogRepository {
     String? taxTreatment,
     double? taxRate,
     String? taxPriceMode,
+    String? unitOfMeasureId,
     bool skipLoader = false,
   }) async {
     final res = await _dio.patch(
@@ -644,6 +661,7 @@ class CatalogRepository {
         taxTreatment: taxTreatment,
         taxRate: taxRate,
         taxPriceMode: taxPriceMode,
+        unitOfMeasureId: unitOfMeasureId,
       ),
     );
     return ProductModel.fromJson((res.data as Map).cast<String, dynamic>());
@@ -689,6 +707,7 @@ class CatalogRepository {
     String? taxTreatment,
     double? taxRate,
     String? taxPriceMode,
+    String? unitOfMeasureId,
   }) {
     final cleanCode = codigo?.trim();
     final safeCode = cleanCode?.isEmpty == true ? null : cleanCode;
@@ -704,6 +723,8 @@ class CatalogRepository {
       'precio': precio,
       'costo': costo,
       'stock': stock,
+      if ((unitOfMeasureId ?? '').trim().isNotEmpty)
+        'unitOfMeasureId': unitOfMeasureId!.trim(),
       if ((operationId ?? '').trim().isNotEmpty)
         'operationId': operationId!.trim(),
       if ((fotoUrl ?? '').trim().isNotEmpty) 'fotoUrl': fotoUrl!.trim(),
@@ -731,6 +752,27 @@ class CatalogRepository {
         ),
         e.response?.statusCode,
       );
+    }
+  }
+
+  Future<List<UnitOfMeasureModel>> fetchUnitOfMeasures() async {
+    try {
+      final res = await _dio.get(
+        ApiRoutes.productUnitOfMeasures,
+        options: Options(extra: const {'skipLoader': true}),
+      );
+      final rows = _extractRows(res.data);
+      if (rows.isEmpty && res.data is List) {
+        return (res.data as List)
+            .map(UnitOfMeasureModel.fromJson)
+            .toList(growable: false);
+      }
+      final units = rows
+          .map(UnitOfMeasureModel.fromJson)
+          .toList(growable: false);
+      return units.isEmpty ? const [UnitOfMeasureModel.unit] : units;
+    } catch (_) {
+      return const [UnitOfMeasureModel.unit];
     }
   }
 }

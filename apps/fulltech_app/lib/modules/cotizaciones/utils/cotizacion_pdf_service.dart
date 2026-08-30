@@ -6,8 +6,10 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../../core/company/company_settings_model.dart';
+import '../../../core/models/product_model.dart';
 import '../../../core/pdf/pdf_kit.dart';
 import '../../../core/tax/product_tax_preview_calculator.dart';
+import '../../../core/uom/uom_formatters.dart';
 import '../../../core/utils/pdf_file_actions.dart';
 import '../cotizacion_models.dart';
 
@@ -185,6 +187,7 @@ CotizacionPdfViewData buildCotizacionPdfViewData({
             fallback: 'Producto sin descripción',
           ),
           quantity: item.qty,
+          unit: item.unitSnapshot,
           unitPrice: _roundMoney(item.effectiveOriginalUnitPrice),
           grossAmount: gross,
           lineDiscountAmount: displayedLineDiscount,
@@ -443,7 +446,10 @@ List<pw.Widget> _detailSection(
           ),
           children: [
             _descriptionCell(item.description),
-            _bodyCell(qtyFmt.format(item.quantity), align: pw.TextAlign.center),
+            _bodyCell(
+              formatQuantityWithUnit(item.quantity, unit: item.unit),
+              align: pw.TextAlign.center,
+            ),
             _bodyCell(money.format(item.unitPrice), align: pw.TextAlign.right),
             if (hasProductDiscount)
               _bodyCell(
@@ -1107,6 +1113,7 @@ class CotizacionPdfLineData {
   const CotizacionPdfLineData({
     required this.description,
     required this.quantity,
+    required this.unit,
     required this.unitPrice,
     required this.grossAmount,
     required this.lineDiscountAmount,
@@ -1121,6 +1128,7 @@ class CotizacionPdfLineData {
 
   final String description;
   final double quantity;
+  final UnitOfMeasureModel unit;
   final double unitPrice;
   final double grossAmount;
   final double lineDiscountAmount;

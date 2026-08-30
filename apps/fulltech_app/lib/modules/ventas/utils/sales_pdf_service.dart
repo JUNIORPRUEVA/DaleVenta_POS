@@ -8,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../../core/company/company_settings_model.dart';
+import '../../../core/uom/uom_formatters.dart';
 import '../../../core/utils/money_formatters.dart';
 import '../sales_models.dart';
 
@@ -506,7 +507,10 @@ pw.Widget _invoiceDetailSection(
             _descriptionCell(
               isExempt && fiscal ? '$description  [EXENTO]' : description,
             ),
-            _bodyCell(qtyFmt.format(item.qty), align: pw.TextAlign.center),
+            _bodyCell(
+              formatQuantityWithUnit(item.qty, unit: item.unitSnapshot),
+              align: pw.TextAlign.center,
+            ),
             _bodyCell(
               money.format(_roundMoney(originalUnitPrice)),
               align: pw.TextAlign.right,

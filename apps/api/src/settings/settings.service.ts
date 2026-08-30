@@ -347,6 +347,7 @@ export class SettingsService {
       ),
       evolutionApiApiKey: this.stringValue(dto, 'evolutionApiApiKey'),
       whatsappWebhookEnabled: this.boolValue(dto, 'whatsappWebhookEnabled'),
+      measurementUnitsEnabled: this.boolValue(dto, 'measurementUnitsEnabled'),
     };
   }
 
@@ -376,6 +377,7 @@ export class SettingsService {
       evolutionApiInstanceName: string;
       evolutionApiApiKey: string | null;
       whatsappWebhookEnabled: boolean;
+      measurementUnitsEnabled?: boolean;
       adminAuthorizationPinHash: string | null;
     },
     fiscal: {
@@ -415,6 +417,7 @@ export class SettingsService {
       evolutionApiApiKey: '',
       hasEvolutionApiApiKey: Boolean(config.evolutionApiApiKey),
       whatsappWebhookEnabled: config.whatsappWebhookEnabled,
+      measurementUnitsEnabled: config.measurementUnitsEnabled === true,
       hasAdminAuthorizationPin: Boolean(config.adminAuthorizationPinHash),
       productsSource: 'LOCAL',
       productsReadOnly: false,

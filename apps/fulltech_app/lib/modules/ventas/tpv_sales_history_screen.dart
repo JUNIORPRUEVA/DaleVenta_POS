@@ -13,6 +13,7 @@ import '../../core/company/company_settings_repository.dart';
 import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/realtime/operations_refresh_signals.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/uom/uom_formatters.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -199,11 +200,6 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     final compact = sale.id.replaceAll('-', '');
     if (compact.length >= 8) return compact.substring(0, 8).toUpperCase();
     return compact.toUpperCase();
-  }
-
-  String _qty(double value) {
-    if (value == value.truncateToDouble()) return value.toStringAsFixed(0);
-    return value.toStringAsFixed(2);
   }
 
   Future<void> _openFilterPanel() async {
@@ -640,7 +636,10 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                                   sale: selected,
                                   dateFmt: _dateFmt,
                                   invoiceNumber: _invoiceNumber,
-                                  qty: _qty,
+                                  qty: (item) => formatQuantityWithUnit(
+                                    item.qty,
+                                    unit: item.unitSnapshot,
+                                  ),
                                   onClose: () =>
                                       setState(() => _selected = null),
                                   onReturn: selected.isDeleted
@@ -697,14 +696,9 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     final activeInvoices = _sales.where((s) => !s.isDeleted).length;
     final returnedInvoices = _sales.where((s) => s.isDeleted).length;
     final totalSold = _sales.fold(0.0, (sum, sale) => sum + sale.totalSold);
-    final totalItems = _sales.fold<int>(
+    final totalItemLines = _sales.fold<int>(
       0,
-      (sum, sale) =>
-          sum +
-          sale.items.fold<int>(
-            0,
-            (itemSum, item) => itemSum + item.qty.round(),
-          ),
+      (sum, sale) => sum + sale.items.length,
     );
     final uniqueCustomers = _sales
         .map((s) => (s.customerName ?? '').trim())
@@ -724,7 +718,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
           activeInvoices: activeInvoices,
           returnedInvoices: returnedInvoices,
           totalSold: totalSold,
-          totalItems: totalItems,
+          totalItems: totalItemLines,
           uniqueCustomers: uniqueCustomers,
         );
       },
@@ -758,7 +752,8 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                 sale: sale,
                 dateFmt: _dateFmt,
                 invoiceNumber: _invoiceNumber,
-                qty: _qty,
+                qty: (item) =>
+                    formatQuantityWithUnit(item.qty, unit: item.unitSnapshot),
                 onClose: () => Navigator.of(sheetContext).pop(),
                 onReturn: sale.isDeleted ? null : () => _returnSale(sale),
                 onPdf: () => _sharePdf(sale),
@@ -2012,7 +2007,7 @@ class _InvoiceDetailPanel extends StatelessWidget {
   final SaleModel sale;
   final DateFormat dateFmt;
   final String Function(SaleModel sale) invoiceNumber;
-  final String Function(double value) qty;
+  final String Function(SaleItemModel item) qty;
   final VoidCallback onClose;
   final VoidCallback onPdf;
   final VoidCallback onPrint;
@@ -2082,7 +2077,10 @@ class _InvoiceDetailPanel extends StatelessWidget {
                 if ((sale.fiscalCustomerTaxId ?? '').trim().isNotEmpty)
                   _DetailLine('RNC/Cédula', sale.fiscalCustomerTaxId!.trim()),
                 if ((sale.fiscalCustomerName ?? '').trim().isNotEmpty)
-                  _DetailLine('Cliente fiscal', sale.fiscalCustomerName!.trim()),
+                  _DetailLine(
+                    'Cliente fiscal',
+                    sale.fiscalCustomerName!.trim(),
+                  ),
               ],
             ),
           ),
@@ -2120,7 +2118,7 @@ class _InvoiceDetailPanel extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '${qty(item.qty)} x ${formatRdCurrencyAccounting(item.priceSoldUnit)}',
+                        '${qty(item)} x ${formatRdCurrencyAccounting(item.priceSoldUnit)}',
                         style: const TextStyle(color: AppColors.textMuted),
                       ),
                       const SizedBox(width: 12),
@@ -2494,7 +2492,7 @@ class _SalesSummaryDialog extends StatelessWidget {
                   ),
                   _SummaryMetric(
                     icon: Icons.shopping_bag_outlined,
-                    label: 'Artículos vendidos',
+                    label: 'Líneas vendidas',
                     value: '$totalItems',
                     accent: const Color(0xFF0E7490),
                   ),

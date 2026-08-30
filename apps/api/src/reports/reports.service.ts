@@ -21,6 +21,14 @@ type SaleOverviewRow = Prisma.SaleGetPayload<{
   };
 }>;
 type SaleOverviewItem = SaleOverviewRow["items"][number];
+type QuantityBucket = {
+  unitCode: string;
+  unitName: string;
+  unitSymbol: string;
+  unitPrecision: number;
+  quantity: number;
+  label: string;
+};
 
 @Injectable()
 export class ReportsService {
@@ -61,62 +69,71 @@ export class ReportsService {
       saleDate: range,
     };
 
-    const [sales, returnedSales, refundSales, products, movements] = await Promise.all([
-      this.prisma.sale.findMany({
-        where: saleWhere,
-        include: {
-          customer: { select: { id: true, nombre: true } },
-          items: {
-            include: {
-              product: { select: { categoria: true } },
+    const [sales, returnedSales, refundSales, products, movements] =
+      await Promise.all([
+        this.prisma.sale.findMany({
+          where: saleWhere,
+          include: {
+            customer: { select: { id: true, nombre: true } },
+            items: {
+              include: {
+                product: { select: { categoria: true } },
+              },
             },
           },
-        },
-        orderBy: { saleDate: "asc" },
-      }),
-      this.prisma.sale.findMany({
-        where: returnedWhere,
-        include: {
-          customer: { select: { id: true, nombre: true } },
-          items: {
-            include: {
-              product: { select: { categoria: true } },
+          orderBy: { saleDate: "asc" },
+        }),
+        this.prisma.sale.findMany({
+          where: returnedWhere,
+          include: {
+            customer: { select: { id: true, nombre: true } },
+            items: {
+              include: {
+                product: { select: { categoria: true } },
+              },
             },
           },
-        },
-        orderBy: { deletedAt: "asc" },
-      }),
-      this.prisma.sale.findMany({
-        where: refundWhere,
-        include: {
-          customer: { select: { id: true, nombre: true } },
-          items: {
-            include: {
-              product: { select: { categoria: true } },
+          orderBy: { deletedAt: "asc" },
+        }),
+        this.prisma.sale.findMany({
+          where: refundWhere,
+          include: {
+            customer: { select: { id: true, nombre: true } },
+            items: {
+              include: {
+                product: { select: { categoria: true } },
+              },
             },
           },
-        },
-        orderBy: { saleDate: "asc" },
-      }),
-      this.prisma.product.findMany({
-        where: { companyId },
-        select: {
-          id: true,
-          nombre: true,
-          categoria: true,
-          costo: true,
-          precio: true,
-          stock: true,
-        },
-      }),
-      this.prisma.cashMovement.findMany({
-        where: {
-          createdAt: range,
-          companyId,
-          ...(canSeeAll ? {} : { userId: user.id }),
-        },
-      }),
-    ]);
+          orderBy: { saleDate: "asc" },
+        }),
+        this.prisma.product.findMany({
+          where: { companyId },
+          select: {
+            id: true,
+            nombre: true,
+            categoria: true,
+            costo: true,
+            precio: true,
+            stock: true,
+            unitOfMeasure: {
+              select: {
+                code: true,
+                name: true,
+                symbol: true,
+                precision: true,
+              },
+            },
+          },
+        }),
+        this.prisma.cashMovement.findMany({
+          where: {
+            createdAt: range,
+            companyId,
+            ...(canSeeAll ? {} : { userId: user.id }),
+          },
+        }),
+      ]);
 
     const visibleSales = selectedCategory
       ? sales.filter(
@@ -182,8 +199,7 @@ export class ReportsService {
         acc.taxableBase += itemTaxableBase;
         acc.taxAmount += itemTaxAmount;
         acc.exemptAmount += itemExemptAmount;
-        acc.discountAmount +=
-          itemDiscountAmount + generalDiscount * allocation;
+        acc.discountAmount += itemDiscountAmount + generalDiscount * allocation;
         acc.totalCommission +=
           this.toNumber(sale.commissionAmount) * allocation;
         acc.cash += this.toNumber(sale.paymentCashAmount) * allocation;
@@ -208,18 +224,24 @@ export class ReportsService {
       (acc, sale) => {
         const categoryItems = this.saleItemsForCategory(sale, selectedCategory);
         acc.count += 1;
-        acc.amount += Math.abs(categoryItems.reduce(
-          (sum, item) => sum + this.toNumber(item.subtotalSold),
-          0,
-        ));
-        acc.cost += Math.abs(categoryItems.reduce(
-          (sum, item) => sum + this.toNumber(item.subtotalCost),
-          0,
-        ));
-        acc.profit += Math.abs(categoryItems.reduce(
-          (sum, item) => sum + this.toNumber(item.profit),
-          0,
-        ));
+        acc.amount += Math.abs(
+          categoryItems.reduce(
+            (sum, item) => sum + this.toNumber(item.subtotalSold),
+            0,
+          ),
+        );
+        acc.cost += Math.abs(
+          categoryItems.reduce(
+            (sum, item) => sum + this.toNumber(item.subtotalCost),
+            0,
+          ),
+        );
+        acc.profit += Math.abs(
+          categoryItems.reduce(
+            (sum, item) => sum + this.toNumber(item.profit),
+            0,
+          ),
+        );
         return acc;
       },
       { count: 0, amount: 0, cost: 0, profit: 0 },
@@ -248,6 +270,11 @@ export class ReportsService {
         productName: string;
         totalSales: number;
         totalQty: number;
+        unitCode: string;
+        unitName: string;
+        unitSymbol: string;
+        unitPrecision: number;
+        totalQtyLabel: string;
         totalProfit: number;
       }
     >();
@@ -263,6 +290,8 @@ export class ReportsService {
         totalCost: number;
         totalProfit: number;
         totalQty: number;
+        quantityBuckets: Map<string, QuantityBucket>;
+        totalQtyLabel: string;
         salesCount: number;
       }
     >();
@@ -297,15 +326,27 @@ export class ReportsService {
       const countedCategories = new Set<string>();
       for (const item of categoryItems) {
         const itemCategory = this.itemCategory(item);
-        const productKey = item.productId ?? item.productNameSnapshot;
+        const itemUnit = this.itemUnit(item);
+        const productKey = `${item.productId ?? item.productNameSnapshot}:${itemUnit.unitCode}`;
         const product = productMap.get(productKey) ?? {
           productName: item.productNameSnapshot || "Producto sin nombre",
           totalSales: 0,
           totalQty: 0,
+          unitCode: itemUnit.unitCode,
+          unitName: itemUnit.unitName,
+          unitSymbol: itemUnit.unitSymbol,
+          unitPrecision: itemUnit.unitPrecision,
+          totalQtyLabel: "0",
           totalProfit: 0,
         };
         product.totalSales += this.toNumber(item.subtotalSold);
         product.totalQty += this.toNumber(item.qty);
+        product.totalQtyLabel = this.quantityLabel(
+          product.totalQty,
+          product.unitSymbol,
+          product.unitPrecision,
+          product.unitCode,
+        );
         product.totalProfit += this.toNumber(item.profit);
         productMap.set(productKey, product);
 
@@ -315,12 +356,18 @@ export class ReportsService {
           totalCost: 0,
           totalProfit: 0,
           totalQty: 0,
+          quantityBuckets: new Map<string, QuantityBucket>(),
+          totalQtyLabel: "0",
           salesCount: 0,
         };
         category.totalSales += this.toNumber(item.subtotalSold);
         category.totalCost += this.toNumber(item.subtotalCost);
         category.totalProfit += this.toNumber(item.profit);
         category.totalQty += this.toNumber(item.qty);
+        this.addQuantityToBuckets(category.quantityBuckets, item);
+        category.totalQtyLabel = this.quantityBucketsLabel(
+          category.quantityBuckets,
+        );
         if (!countedCategories.has(itemCategory)) {
           category.salesCount += 1;
           countedCategories.add(itemCategory);
@@ -348,6 +395,7 @@ export class ReportsService {
         const price = this.toNumber(product.precio);
         acc.products += 1;
         acc.units += stock;
+        this.addInventoryQuantityToBuckets(acc.unitsByUnit, product);
         acc.costValue += stock * cost;
         acc.saleValue += stock * price;
         if (stock <= 0) acc.outOfStock += 1;
@@ -358,6 +406,7 @@ export class ReportsService {
       {
         products: 0,
         units: 0,
+        unitsByUnit: new Map<string, QuantityBucket>(),
         costValue: 0,
         saleValue: 0,
         outOfStock: 0,
@@ -477,10 +526,17 @@ export class ReportsService {
       topClients: [...clientMap.values()]
         .sort((a, b) => b.totalSpent - a.totalSpent)
         .slice(0, 10),
-      categoryProfits: [...categoryMap.values()].sort(
-        (a, b) => b.totalProfit - a.totalProfit,
-      ),
-      inventory,
+      categoryProfits: [...categoryMap.values()]
+        .map((row) => ({
+          ...row,
+          quantityBuckets: [...row.quantityBuckets.values()],
+        }))
+        .sort((a, b) => b.totalProfit - a.totalProfit),
+      inventory: {
+        ...inventory,
+        unitsByUnit: [...inventory.unitsByUnit.values()],
+        unitsLabel: this.quantityBucketsLabel(inventory.unitsByUnit),
+      },
       audit: {
         source: "database",
         saleRows: visibleSales.length,
@@ -515,6 +571,106 @@ export class ReportsService {
 
   private itemCategory(item: SaleOverviewItem) {
     return item.product?.categoria?.trim() || "Sin categoria";
+  }
+
+  private itemUnit(item: SaleOverviewItem) {
+    const unitCode =
+      (item as any).unitCodeSnapshot?.toString().trim() || "UNIT";
+    const unitName =
+      (item as any).unitNameSnapshot?.toString().trim() || "Unidad";
+    const unitSymbol =
+      (item as any).unitSymbolSnapshot?.toString().trim() ||
+      (unitCode === "UNIT" ? "u" : unitCode.toLowerCase());
+    const unitPrecision = Math.max(
+      0,
+      Number((item as any).unitPrecisionSnapshot ?? 0) || 0,
+    );
+    return { unitCode, unitName, unitSymbol, unitPrecision };
+  }
+
+  private addQuantityToBuckets(
+    buckets: Map<string, QuantityBucket>,
+    item: SaleOverviewItem,
+  ) {
+    const unit = this.itemUnit(item);
+    this.addQuantityBucket(
+      buckets,
+      unit.unitCode,
+      unit.unitName,
+      unit.unitSymbol,
+      unit.unitPrecision,
+      this.toNumber(item.qty),
+    );
+  }
+
+  private addInventoryQuantityToBuckets(
+    buckets: Map<string, QuantityBucket>,
+    product: {
+      stock: MoneyLike;
+      unitOfMeasure?: {
+        code: string;
+        name: string;
+        symbol: string;
+        precision: number;
+      } | null;
+    },
+  ) {
+    const unit = product.unitOfMeasure;
+    this.addQuantityBucket(
+      buckets,
+      unit?.code ?? "UNIT",
+      unit?.name ?? "Unidad",
+      unit?.symbol ?? "u",
+      unit?.precision ?? 0,
+      this.toNumber(product.stock),
+    );
+  }
+
+  private addQuantityBucket(
+    buckets: Map<string, QuantityBucket>,
+    unitCode: string,
+    unitName: string,
+    unitSymbol: string,
+    unitPrecision: number,
+    quantity: number,
+  ) {
+    const key = unitCode || "UNIT";
+    const current = buckets.get(key) ?? {
+      unitCode: key,
+      unitName,
+      unitSymbol,
+      unitPrecision,
+      quantity: 0,
+      label: "0",
+    };
+    current.quantity += quantity;
+    current.label = this.quantityLabel(
+      current.quantity,
+      current.unitSymbol,
+      current.unitPrecision,
+      current.unitCode,
+    );
+    buckets.set(key, current);
+  }
+
+  private quantityBucketsLabel(buckets: Map<string, QuantityBucket>) {
+    const values = [...buckets.values()];
+    if (!values.length) return "0";
+    return values.map((bucket) => bucket.label).join(" + ");
+  }
+
+  private quantityLabel(
+    quantity: number,
+    symbol: string,
+    precision: number,
+    code: string,
+  ) {
+    const decimals = code === "UNIT" || precision <= 0 ? 0 : precision;
+    const value = quantity.toLocaleString("es-DO", {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
+    return code === "UNIT" ? value : `${value} ${symbol}`;
   }
 
   private saleItemsForCategory(

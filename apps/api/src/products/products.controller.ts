@@ -82,6 +82,15 @@ export class ProductsController {
   @Header('Pragma', 'no-cache')
   @Header('Expires', '0')
   @Header('Surrogate-Control', 'no-store')
+  @Get('unit-of-measures')
+  unitOfMeasures(@Req() req: Request) {
+    return this.products.listUnitOfMeasures(req.user as TenantUser);
+  }
+
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
+  @Header('Surrogate-Control', 'no-store')
   @Get('image-proxy')
   async imageProxy(@Query('url') rawUrl: string | undefined, @Res() res: Response) {
     const url = (rawUrl ?? '').trim();

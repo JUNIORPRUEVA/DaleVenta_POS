@@ -12,8 +12,10 @@ import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/debug/debug_admin_action.dart';
+import '../../core/models/product_model.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/uom/uom_formatters.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -286,27 +288,24 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
   }
 
   List<_TopProductStat> _topProducts(VentasState state) {
-    final totals = <String, double>{};
+    final totals = <String, _TopProductStat>{};
     for (final sale in state.sales) {
       for (final item in sale.items) {
-        final key = item.productNameSnapshot.trim();
-        if (key.isEmpty) continue;
+        final name = item.productNameSnapshot.trim();
+        if (name.isEmpty) continue;
+        final unit = item.unitSnapshot;
+        final key = '${item.productId ?? name}:${unit.code}';
         totals.update(
           key,
-          (value) => value + item.qty,
-          ifAbsent: () => item.qty,
+          (value) => value.copyWith(quantity: value.quantity + item.qty),
+          ifAbsent: () =>
+              _TopProductStat(name: name, quantity: item.qty, unit: unit),
         );
       }
     }
 
-    final rows =
-        totals.entries
-            .map(
-              (entry) =>
-                  _TopProductStat(name: entry.key, quantity: entry.value),
-            )
-            .toList(growable: false)
-          ..sort((a, b) => b.quantity.compareTo(a.quantity));
+    final rows = totals.values.toList(growable: false)
+      ..sort((a, b) => b.quantity.compareTo(a.quantity));
     return rows.take(8).toList(growable: false);
   }
 
@@ -917,7 +916,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              '${item.productNameSnapshot} x${item.qty.toStringAsFixed(item.qty % 1 == 0 ? 0 : 2)}',
+                              '${item.productNameSnapshot} x${formatQuantityWithUnit(item.qty, unit: item.unitSnapshot)}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 12),
@@ -3472,7 +3471,7 @@ class _TopProductsCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(999),
                             ),
                             child: Text(
-                              'x${product.quantity.toStringAsFixed(product.quantity % 1 == 0 ? 0 : 2)}',
+                              'x${formatQuantityWithUnit(product.quantity, unit: product.unit)}',
                               style: Theme.of(context).textTheme.labelMedium
                                   ?.copyWith(
                                     color: Theme.of(
@@ -3515,8 +3514,21 @@ class _SalesDayPoint {
 }
 
 class _TopProductStat {
-  const _TopProductStat({required this.name, required this.quantity});
+  const _TopProductStat({
+    required this.name,
+    required this.quantity,
+    required this.unit,
+  });
 
   final String name;
   final double quantity;
+  final UnitOfMeasureModel unit;
+
+  _TopProductStat copyWith({double? quantity}) {
+    return _TopProductStat(
+      name: name,
+      quantity: quantity ?? this.quantity,
+      unit: unit,
+    );
+  }
 }

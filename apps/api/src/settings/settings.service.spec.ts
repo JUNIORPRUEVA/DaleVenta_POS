@@ -289,4 +289,58 @@ describe('SettingsService company master data protection', () => {
     expect(response.pricesIncludeTax).toBe(false);
     expect(response.ncfEnabled).toBe(false);
   });
+
+  it('persists measurementUnitsEnabled without touching Company.name', async () => {
+    const tx = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({ name: 'FullPOS Cloud' }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      appConfig: {
+        upsert: jest.fn().mockResolvedValue({
+          companyName: 'FullPOS Cloud',
+          rnc: '',
+          phone: '',
+          phonePreferential: '',
+          address: '',
+          description: '',
+          instagramUrl: '',
+          facebookUrl: '',
+          websiteUrl: '',
+          gpsLocationUrl: '',
+          businessHours: '',
+          bankAccounts: [],
+          legalRepresentativeName: '',
+          legalRepresentativeCedula: '',
+          legalRepresentativeRole: '',
+          legalRepresentativeNationality: '',
+          legalRepresentativeCivilStatus: '',
+          logoBase64: null,
+          openAiApiKey: null,
+          openAiModel: 'gpt-4o-mini',
+          evolutionApiBaseUrl: '',
+          evolutionApiInstanceName: '',
+          evolutionApiApiKey: null,
+          whatsappWebhookEnabled: false,
+          measurementUnitsEnabled: true,
+          adminAuthorizationPinHash: null,
+        }),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback) => callback(tx)),
+    };
+    const service = buildService(prisma);
+
+    const response = await service.updateSettings(
+      { id: 'admin-a', role: Role.ADMIN, companyId: 'company-a' },
+      { measurementUnitsEnabled: true },
+    );
+
+    expect(tx.company.update).not.toHaveBeenCalled();
+    expect(tx.appConfig.upsert.mock.calls[0][0].update).toMatchObject({
+      measurementUnitsEnabled: true,
+    });
+    expect(response.measurementUnitsEnabled).toBe(true);
+  });
 });

@@ -7,9 +7,7 @@ bool areCatalogProductsEquivalent(
   if (identical(previous, next)) return true;
   if (previous.length != next.length) return false;
 
-  final previousById = {
-    for (final item in previous) item.id: item.toJson(),
-  };
+  final previousById = {for (final item in previous) item.id: item.toJson()};
   for (final item in next) {
     final previousJson = previousById[item.id];
     if (previousJson == null || !_mapsEqual(previousJson, item.toJson())) {
@@ -22,11 +20,29 @@ bool areCatalogProductsEquivalent(
 bool _mapsEqual(Map<String, dynamic> left, Map<String, dynamic> right) {
   if (left.length != right.length) return false;
   for (final entry in left.entries) {
-    if (!right.containsKey(entry.key) || right[entry.key] != entry.value) {
+    if (!right.containsKey(entry.key) ||
+        !_valuesEqual(right[entry.key], entry.value)) {
       return false;
     }
   }
   return true;
+}
+
+bool _valuesEqual(dynamic left, dynamic right) {
+  if (left is Map && right is Map) {
+    return _mapsEqual(
+      left.cast<String, dynamic>(),
+      right.cast<String, dynamic>(),
+    );
+  }
+  if (left is List && right is List) {
+    if (left.length != right.length) return false;
+    for (var index = 0; index < left.length; index++) {
+      if (!_valuesEqual(left[index], right[index])) return false;
+    }
+    return true;
+  }
+  return left == right;
 }
 
 List<ProductModel> mergeRecoveredCatalogImages({

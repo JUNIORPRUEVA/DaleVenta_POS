@@ -117,12 +117,14 @@ class TopProduct {
     required this.productName,
     required this.totalSales,
     required this.totalQty,
+    required this.totalQtyLabel,
     required this.totalProfit,
   });
 
   final String productName;
   final double totalSales;
   final double totalQty;
+  final String totalQtyLabel;
   final double totalProfit;
 }
 
@@ -145,6 +147,7 @@ class CategoryProfitData {
     required this.totalCost,
     required this.totalProfit,
     required this.totalQty,
+    required this.totalQtyLabel,
     required this.salesCount,
   });
 
@@ -153,6 +156,7 @@ class CategoryProfitData {
   final double totalCost;
   final double totalProfit;
   final double totalQty;
+  final String totalQtyLabel;
   final int salesCount;
 
   double get margin => totalSales == 0 ? 0 : (totalProfit / totalSales) * 100;
@@ -435,6 +439,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                 totalCost: row.totalCost,
                 totalProfit: row.totalProfit,
                 totalQty: row.totalQty,
+                totalQtyLabel: row.totalQtyLabel,
                 salesCount: row.salesCount,
               ),
             )
@@ -1654,8 +1659,7 @@ class _MobileReportsContent extends StatelessWidget {
               _MobileRankingData(
                 rank: i + 1,
                 title: topProducts[i].productName,
-                subtitle:
-                    '${topProducts[i].totalQty.toStringAsFixed(0)} unidades',
+                subtitle: topProducts[i].totalQtyLabel,
                 value: formatRdCurrencyAccounting(topProducts[i].totalSales),
               ),
           ],
@@ -1929,8 +1933,7 @@ class TopProductsTable extends StatelessWidget {
                   _RankingRow(
                     rank: i + 1,
                     title: products[i].productName,
-                    subtitle:
-                        '${products[i].totalQty.toStringAsFixed(0)} unidades',
+                    subtitle: products[i].totalQtyLabel,
                     trailing: formatRdCurrencyAccounting(
                       products[i].totalSales,
                     ),
@@ -2956,6 +2959,9 @@ List<TopProduct> _parseTopProducts(dynamic raw) {
           productName: (row['productName'] ?? '').toString(),
           totalSales: _toDouble(row['totalSales']),
           totalQty: _toDouble(row['totalQty']),
+          totalQtyLabel:
+              (row['totalQtyLabel'] ?? '${_toDouble(row['totalQty'])}')
+                  .toString(),
           totalProfit: _toDouble(row['totalProfit']),
         ),
       )
@@ -2989,6 +2995,9 @@ List<CategoryProfitData> _parseCategoryProfits(dynamic raw) {
           totalCost: _toDouble(row['totalCost']),
           totalProfit: _toDouble(row['totalProfit']),
           totalQty: _toDouble(row['totalQty']),
+          totalQtyLabel:
+              (row['totalQtyLabel'] ?? '${_toDouble(row['totalQty'])}')
+                  .toString(),
           salesCount: (row['salesCount'] as num?)?.toInt() ?? 0,
         ),
       )

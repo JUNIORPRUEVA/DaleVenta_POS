@@ -52,6 +52,9 @@ class ProductModel {
   final double costo;
   final bool costAvailable;
   final double? stock;
+  final String stockDecimal;
+  final String unitOfMeasureId;
+  final UnitOfMeasureModel unitOfMeasure;
   final String? fotoUrl;
   final String? originalFotoUrl;
   final String? imageKey;
@@ -73,6 +76,9 @@ class ProductModel {
     required this.costo,
     this.costAvailable = true,
     this.stock,
+    String? stockDecimal,
+    String? unitOfMeasureId,
+    UnitOfMeasureModel? unitOfMeasure,
     this.categoria,
     this.fotoUrl,
     this.originalFotoUrl,
@@ -84,7 +90,9 @@ class ProductModel {
     this.taxTreatment = 'INHERIT',
     this.taxRate,
     this.taxPriceMode,
-  });
+  }) : stockDecimal = stockDecimal ?? (stock?.toString() ?? '0'),
+       unitOfMeasureId = unitOfMeasureId ?? UnitOfMeasureModel.unit.id,
+       unitOfMeasure = unitOfMeasure ?? UnitOfMeasureModel.unit;
 
   ProductModel copyWith({
     String? id,
@@ -95,6 +103,9 @@ class ProductModel {
     double? costo,
     bool? costAvailable,
     double? stock,
+    String? stockDecimal,
+    String? unitOfMeasureId,
+    UnitOfMeasureModel? unitOfMeasure,
     String? categoria,
     String? fotoUrl,
     String? originalFotoUrl,
@@ -116,6 +127,9 @@ class ProductModel {
       costo: costo ?? this.costo,
       costAvailable: costAvailable ?? this.costAvailable,
       stock: stock ?? this.stock,
+      stockDecimal: stockDecimal ?? this.stockDecimal,
+      unitOfMeasureId: unitOfMeasureId ?? this.unitOfMeasureId,
+      unitOfMeasure: unitOfMeasure ?? this.unitOfMeasure,
       categoria: categoria ?? this.categoria,
       fotoUrl: fotoUrl ?? this.fotoUrl,
       originalFotoUrl: originalFotoUrl ?? this.originalFotoUrl,
@@ -132,7 +146,16 @@ class ProductModel {
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
     final rawStock =
-        json['stock'] ?? json['cantidadDisponible'] ?? json['cantidad'];
+        json['stockDecimal'] ??
+        json['stock'] ??
+        json['cantidadDisponible'] ??
+        json['cantidad'];
+    final parsedUnit = UnitOfMeasureModel.fromJson(json['unitOfMeasure']);
+    final unitId =
+        _asNullableString(
+          json['unitOfMeasureId'] ?? json['unit_of_measure_id'],
+        ) ??
+        parsedUnit.id;
     final hasCost = json['costAvailable'] is bool
         ? json['costAvailable'] == true
         : json.containsKey('costo');
@@ -206,6 +229,9 @@ class ProductModel {
       costo: _asDouble(json['costo']),
       costAvailable: hasCost,
       stock: _asNullableDouble(rawStock),
+      stockDecimal: _asNullableString(json['stockDecimal']) ?? '$rawStock',
+      unitOfMeasureId: unitId,
+      unitOfMeasure: parsedUnit.copyWith(id: unitId),
       categoria: categoria,
       fotoUrl: normalizedFotoUrl.isEmpty ? null : normalizedFotoUrl,
       originalFotoUrl: foto,
@@ -233,6 +259,9 @@ class ProductModel {
       if (costAvailable) 'costo': costo,
       'costAvailable': costAvailable,
       'stock': stock,
+      'stockDecimal': stockDecimal,
+      'unitOfMeasureId': unitOfMeasureId,
+      'unitOfMeasure': unitOfMeasure.toJson(),
       'categoria': categoria,
       'fotoUrl': fotoUrl,
       'originalFotoUrl': originalFotoUrl,
@@ -260,6 +289,85 @@ class ProductModel {
 
   String get categoriaLabel =>
       (categoria == null || categoria!.isEmpty) ? 'Sin categoría' : categoria!;
+}
+
+class UnitOfMeasureModel {
+  static const unit = UnitOfMeasureModel(
+    id: 'UNIT',
+    code: 'UNIT',
+    name: 'Unidad',
+    symbol: 'u',
+    category: 'COUNT',
+    allowDecimals: false,
+    precision: 0,
+  );
+
+  final String id;
+  final String code;
+  final String name;
+  final String symbol;
+  final String category;
+  final bool allowDecimals;
+  final int precision;
+
+  const UnitOfMeasureModel({
+    required this.id,
+    required this.code,
+    required this.name,
+    required this.symbol,
+    required this.category,
+    required this.allowDecimals,
+    required this.precision,
+  });
+
+  bool get isUnit => code == 'UNIT';
+  bool get isMeasured => !isUnit && allowDecimals;
+
+  UnitOfMeasureModel copyWith({
+    String? id,
+    String? code,
+    String? name,
+    String? symbol,
+    String? category,
+    bool? allowDecimals,
+    int? precision,
+  }) {
+    return UnitOfMeasureModel(
+      id: id ?? this.id,
+      code: code ?? this.code,
+      name: name ?? this.name,
+      symbol: symbol ?? this.symbol,
+      category: category ?? this.category,
+      allowDecimals: allowDecimals ?? this.allowDecimals,
+      precision: precision ?? this.precision,
+    );
+  }
+
+  factory UnitOfMeasureModel.fromJson(dynamic value) {
+    if (value is! Map) return unit;
+    final map = value.cast<String, dynamic>();
+    final code = _asNullableString(map['code']) ?? unit.code;
+    return UnitOfMeasureModel(
+      id: _asNullableString(map['id']) ?? code,
+      code: code,
+      name: _asNullableString(map['name']) ?? unit.name,
+      symbol: _asNullableString(map['symbol']) ?? unit.symbol,
+      category: _asNullableString(map['category']) ?? unit.category,
+      allowDecimals:
+          map['allowDecimals'] == true || map['allow_decimals'] == true,
+      precision: (map['precision'] as num?)?.toInt() ?? unit.precision,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'code': code,
+    'name': name,
+    'symbol': symbol,
+    'category': category,
+    'allowDecimals': allowDecimals,
+    'precision': precision,
+  };
 }
 
 String buildCatalogSyncVersion(List<ProductModel> items) {

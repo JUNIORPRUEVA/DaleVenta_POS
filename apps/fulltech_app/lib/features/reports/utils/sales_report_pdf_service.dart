@@ -35,6 +35,7 @@ class SalesReportPdfCategoryRow {
     required this.totalCost,
     required this.totalProfit,
     required this.totalQty,
+    required this.totalQtyLabel,
     required this.salesCount,
   });
 
@@ -43,6 +44,7 @@ class SalesReportPdfCategoryRow {
   final double totalCost;
   final double totalProfit;
   final double totalQty;
+  final String totalQtyLabel;
   final int salesCount;
 }
 
@@ -56,7 +58,6 @@ Future<Uint8List> buildProfessionalSalesReportPdf({
 }) async {
   final dateFmt = DateFormat('dd/MM/yyyy', 'es_DO');
   final nowFmt = DateFormat('dd/MM/yyyy h:mm a', 'es_DO');
-  final qtyFmt = NumberFormat('#,##0.##', 'es_DO');
   final doc = pw.Document(
     title: 'Reporte profesional de ventas',
     author: 'FullPOS Cloud',
@@ -90,7 +91,7 @@ Future<Uint8List> buildProfessionalSalesReportPdf({
         _kpiGrid(kpis),
         pw.SizedBox(height: 16),
         _sectionTitle('Ganancia por categoria'),
-        _categoryTable(categories, qtyFmt),
+        _categoryTable(categories),
         pw.SizedBox(height: 16),
         _sectionTitle('Ventas incluidas'),
         _salesTable(sales.take(30).toList(growable: false), dateFmt),
@@ -253,10 +254,7 @@ pw.Widget _sectionTitle(String text) {
   );
 }
 
-pw.Widget _categoryTable(
-  List<SalesReportPdfCategoryRow> categories,
-  NumberFormat qtyFmt,
-) {
+pw.Widget _categoryTable(List<SalesReportPdfCategoryRow> categories) {
   if (categories.isEmpty) {
     return _emptyBox('No hay ventas por categoria en este rango.');
   }
@@ -281,7 +279,7 @@ pw.Widget _categoryTable(
             formatRdCurrencyAccounting(row.totalSales),
             formatRdCurrencyAccounting(row.totalCost),
             formatRdCurrencyAccounting(row.totalProfit),
-            qtyFmt.format(row.totalQty),
+            row.totalQtyLabel,
             '${row.salesCount}',
           ],
         )

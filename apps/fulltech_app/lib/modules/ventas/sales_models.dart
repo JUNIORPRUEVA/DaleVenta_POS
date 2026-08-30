@@ -122,6 +122,10 @@ class SaleItemModel {
   final double subtotalCost;
   final double profit;
   final String? category;
+  final String unitCodeSnapshot;
+  final String unitNameSnapshot;
+  final String unitSymbolSnapshot;
+  final int unitPrecisionSnapshot;
   final double grossAmount;
   final double lineDiscountAmount;
   final double taxableBase;
@@ -143,6 +147,10 @@ class SaleItemModel {
     required this.subtotalCost,
     required this.profit,
     required this.category,
+    this.unitCodeSnapshot = 'UNIT',
+    this.unitNameSnapshot = 'Unidad',
+    this.unitSymbolSnapshot = 'u',
+    this.unitPrecisionSnapshot = 0,
     this.grossAmount = 0,
     this.lineDiscountAmount = 0,
     this.taxableBase = 0,
@@ -178,6 +186,18 @@ class SaleItemModel {
       subtotalCost: _toDouble(json['subtotalCost']),
       profit: _toDouble(json['profit']),
       category: category?.trim().isEmpty ?? true ? null : category!.trim(),
+      unitCodeSnapshot:
+          (json['unitCodeSnapshot'] ?? json['unit_code_snapshot'] ?? 'UNIT')
+              .toString(),
+      unitNameSnapshot:
+          (json['unitNameSnapshot'] ?? json['unit_name_snapshot'] ?? 'Unidad')
+              .toString(),
+      unitSymbolSnapshot:
+          (json['unitSymbolSnapshot'] ?? json['unit_symbol_snapshot'] ?? 'u')
+              .toString(),
+      unitPrecisionSnapshot: _toInt(
+        json['unitPrecisionSnapshot'] ?? json['unit_precision_snapshot'],
+      ),
       grossAmount: _toDouble(json['grossAmount']),
       lineDiscountAmount: _toDouble(json['lineDiscountAmount']),
       taxableBase: _toDouble(json['taxableBase']),
@@ -190,6 +210,16 @@ class SaleItemModel {
   }
 
   String get categoryLabel => category ?? 'Sin categoria';
+
+  UnitOfMeasureModel get unitSnapshot => UnitOfMeasureModel(
+    id: unitCodeSnapshot,
+    code: unitCodeSnapshot,
+    name: unitNameSnapshot,
+    symbol: unitSymbolSnapshot,
+    category: unitCodeSnapshot == 'UNIT' ? 'COUNT' : 'MEASURE',
+    allowDecimals: unitPrecisionSnapshot > 0,
+    precision: unitPrecisionSnapshot,
+  );
 }
 
 class SaleModel {
@@ -482,6 +512,12 @@ double _toDouble(dynamic value) {
   if (value is num) return value.toDouble();
   if (value == null) return 0;
   return double.tryParse(value.toString()) ?? 0;
+}
+
+int _toInt(dynamic value) {
+  if (value is num) return value.toInt();
+  if (value == null) return 0;
+  return int.tryParse(value.toString()) ?? 0;
 }
 
 double? _nullableDouble(dynamic value) {

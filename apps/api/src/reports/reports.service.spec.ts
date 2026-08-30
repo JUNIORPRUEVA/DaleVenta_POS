@@ -101,7 +101,13 @@ describe("ReportsService", () => {
       totalCost: decimal(-12),
       totalProfit: decimal(-8),
       commissionAmount: decimal(0),
-      items: [item({ subtotalSold: decimal(-20), subtotalCost: decimal(-12), profit: decimal(-8) })],
+      items: [
+        item({
+          subtotalSold: decimal(-20),
+          subtotalCost: decimal(-12),
+          profit: decimal(-8),
+        }),
+      ],
     });
     const findMany = jest
       .fn()
@@ -228,7 +234,9 @@ describe("ReportsService", () => {
       select: expect.anything(),
     });
     expect(cashFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ companyId: user.companyId }) }),
+      expect.objectContaining({
+        where: expect.objectContaining({ companyId: user.companyId }),
+      }),
     );
   });
 
@@ -250,5 +258,82 @@ describe("ReportsService", () => {
     expect(result.kpis.netSales).toBe(0);
     expect(result.kpis.totalReturns).toBe(1);
     expect(Number.isNaN(result.kpis.netSales)).toBe(false);
+  });
+
+  it("reporta cantidades por unidad cuando hay UoM mixtas", async () => {
+    const invoice = sale({
+      items: [
+        item({
+          id: "unit-1",
+          productId: "p-unit",
+          productNameSnapshot: "Tornillo",
+          qty: decimal(2),
+          unitCodeSnapshot: "UNIT",
+          unitNameSnapshot: "Unidad",
+          unitSymbolSnapshot: "u",
+          unitPrecisionSnapshot: 0,
+          product: { categoria: "Mixto" },
+        }),
+        item({
+          id: "yard-1",
+          productId: "p-yard",
+          productNameSnapshot: "Tela",
+          qty: new Prisma.Decimal("1.500000"),
+          unitCodeSnapshot: "YARD",
+          unitNameSnapshot: "Yarda",
+          unitSymbolSnapshot: "yd",
+          unitPrecisionSnapshot: 3,
+          product: { categoria: "Mixto" },
+        }),
+        item({
+          id: "pound-1",
+          productId: "p-pound",
+          productNameSnapshot: "Cable",
+          qty: new Prisma.Decimal("2.375000"),
+          unitCodeSnapshot: "POUND",
+          unitNameSnapshot: "Libra",
+          unitSymbolSnapshot: "lb",
+          unitPrecisionSnapshot: 3,
+          product: { categoria: "Mixto" },
+        }),
+      ],
+    });
+    const findMany = jest
+      .fn()
+      .mockResolvedValueOnce([invoice])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const service = serviceWith(emptyPrisma(findMany));
+
+    const result = await service.salesOverview(user as never, {
+      from: "2026-08-01",
+      to: "2026-08-22",
+    });
+
+    expect(result.topProducts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          productName: "Tela",
+          unitCode: "YARD",
+          totalQtyLabel: "1.500 yd",
+        }),
+        expect.objectContaining({
+          productName: "Cable",
+          unitCode: "POUND",
+          totalQtyLabel: "2.375 lb",
+        }),
+      ]),
+    );
+    expect(result.categoryProfits[0]).toEqual(
+      expect.objectContaining({
+        category: "Mixto",
+        totalQtyLabel: "2 + 1.500 yd + 2.375 lb",
+        quantityBuckets: expect.arrayContaining([
+          expect.objectContaining({ unitCode: "UNIT", quantity: 2 }),
+          expect.objectContaining({ unitCode: "YARD", quantity: 1.5 }),
+          expect.objectContaining({ unitCode: "POUND", quantity: 2.375 }),
+        ]),
+      }),
+    );
   });
 });
