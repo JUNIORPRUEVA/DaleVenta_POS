@@ -80,7 +80,7 @@ String? _screenNameFromPath(String path) {
     case Routes.profile:
       return 'Perfil';
     case Routes.catalogo:
-      return 'Catálogo';
+      return 'Productos';
     case Routes.contabilidad:
       return 'Contabilidad';
     case Routes.contabilidadCierresDiarios:

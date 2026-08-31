@@ -3,6 +3,7 @@ node_modules/
 dist/
 .DS_Store
 *.log
+*.tar
 
 # env files (keep local only)
 .env

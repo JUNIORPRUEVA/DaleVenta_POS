@@ -1763,6 +1763,7 @@ class _CompanySettingsEditorState
   bool _taxEnabled = false;
   bool _pricesIncludeTax = false;
   bool _ncfEnabled = false;
+  bool _measurementUnitsEnabled = false;
 
   @override
   void initState() {
@@ -1827,6 +1828,7 @@ class _CompanySettingsEditorState
     _taxEnabled = settings.taxEnabled;
     _pricesIncludeTax = settings.pricesIncludeTax;
     _ncfEnabled = settings.ncfEnabled;
+    _measurementUnitsEnabled = settings.measurementUnitsEnabled;
   }
 
   String? _normalizeLogoBase64(String? value) {
@@ -2003,6 +2005,7 @@ class _CompanySettingsEditorState
           : widget.settings.defaultTaxRate,
       pricesIncludeTax: _pricesIncludeTax,
       ncfEnabled: _ncfEnabled,
+      measurementUnitsEnabled: _measurementUnitsEnabled,
       bankAccounts: [
         if (_bankAlias.text.trim().isNotEmpty ||
             _bankType.text.trim().isNotEmpty ||
@@ -2131,6 +2134,12 @@ class _CompanySettingsEditorState
           onPricesIncludeTaxChanged: (value) =>
               setState(() => _pricesIncludeTax = value),
           onNcfEnabledChanged: (value) => setState(() => _ncfEnabled = value),
+        ),
+        const SizedBox(height: 10),
+        _InventorySettingsPanel(
+          measurementUnitsEnabled: _measurementUnitsEnabled,
+          onMeasurementUnitsEnabledChanged: (value) =>
+              setState(() => _measurementUnitsEnabled = value),
         ),
         const SizedBox(height: 10),
         Align(
@@ -2317,6 +2326,47 @@ class _FiscalSettingsPanel extends StatelessWidget {
                 onChanged: onNcfEnabledChanged,
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InventorySettingsPanel extends StatelessWidget {
+  const _InventorySettingsPanel({
+    required this.measurementUnitsEnabled,
+    required this.onMeasurementUnitsEnabledChanged,
+  });
+
+  final bool measurementUnitsEnabled;
+  final ValueChanged<bool> onMeasurementUnitsEnabledChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: Color(0xFFDDE7EE)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Inventario', style: _titleStyle(15)),
+            const SizedBox(height: 6),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Utilizar unidades de medida'),
+              subtitle: const Text(
+                'Muestra unidad de medida en productos, ventas y compras nuevas.',
+              ),
+              value: measurementUnitsEnabled,
+              onChanged: onMeasurementUnitsEnabledChanged,
+            ),
           ],
         ),
       ),

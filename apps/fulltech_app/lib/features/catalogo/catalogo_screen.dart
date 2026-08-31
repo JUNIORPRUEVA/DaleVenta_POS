@@ -483,7 +483,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
       appBar: isModal
           ? null
           : CustomAppBar(
-              title: 'Catálogo',
+              title: 'Productos',
               showLogo: false,
               darkerTone: true,
               highContrast: true,
@@ -1014,14 +1014,14 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            saved ? 'Catálogo exportado para Excel' : 'Exportación cancelada',
+            saved ? 'Productos exportados para Excel' : 'Exportación cancelada',
           ),
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo exportar el catálogo: $e')),
+        SnackBar(content: Text('No se pudieron exportar los productos: $e')),
       );
     }
   }

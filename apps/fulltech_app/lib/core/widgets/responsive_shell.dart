@@ -641,12 +641,26 @@ List<_SidebarMenuGroup> _buildDesktopSidebarGroups(
       ],
     ),
     _SidebarMenuGroup(
-      key: 'operacion_ventas',
-      title: 'Operación',
+      key: 'inventario',
+      title: 'Inventario',
       icon: Icons.inventory_2_outlined,
       items: [
         if (routeToItem.containsKey(Routes.catalogo))
           menuItem(Routes.catalogo, 'Productos', Icons.inventory_2_outlined),
+        if (routeToItem.containsKey(Routes.catalogoStock))
+          menuItem(Routes.catalogoStock, 'Ajuste stock', Icons.tune_outlined),
+        if (routeToItem.containsKey(Routes.catalogoCategorias))
+          menuItem(
+            Routes.catalogoCategorias,
+            'Categorías',
+            Icons.category_outlined,
+          ),
+        if (routeToItem.containsKey(Routes.catalogoConteo))
+          menuItem(
+            Routes.catalogoConteo,
+            'Recuento',
+            Icons.fact_check_outlined,
+          ),
         if (routeToItem.containsKey(Routes.catalogoKardex))
           menuItem(Routes.catalogoKardex, 'Kardex', Icons.history_rounded),
         if (routeToItem.containsKey(Routes.configuracionAlmacenes))
@@ -655,6 +669,13 @@ List<_SidebarMenuGroup> _buildDesktopSidebarGroups(
             'Almacenes',
             Icons.warehouse_outlined,
           ),
+      ],
+    ),
+    _SidebarMenuGroup(
+      key: 'operacion_ventas',
+      title: 'Operación',
+      icon: Icons.work_outline_rounded,
+      items: [
         if (routeToItem.containsKey(Routes.ventasCreditos))
           menuItem(
             Routes.ventasCreditos,

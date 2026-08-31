@@ -269,6 +269,7 @@ class CompanySettingsRepository {
         'defaultTaxRate': settings.defaultTaxRate,
         'pricesIncludeTax': settings.pricesIncludeTax,
         'ncfEnabled': settings.ncfEnabled,
+        'measurementUnitsEnabled': settings.measurementUnitsEnabled,
       };
       if (settings.openAiApiKey.trim().isNotEmpty) {
         payload['openAiApiKey'] = settings.openAiApiKey.trim();

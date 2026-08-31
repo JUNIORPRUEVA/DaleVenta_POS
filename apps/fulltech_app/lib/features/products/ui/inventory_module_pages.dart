@@ -505,7 +505,7 @@ Uint8List _buildInventoryWorkbook({
 }) {
   return buildSimpleXlsx([
     SimpleXlsxSheet(
-      name: 'Catalogo',
+      name: 'Productos',
       rows: [
         const [
           'codigo',
@@ -658,6 +658,7 @@ _CatalogImportBundle _parseCatalogRows(List<List<String>> rows) {
 _CatalogImportBundle _parseCatalogWorkbook(Uint8List bytes) {
   final workbook = readSimpleXlsx(bytes);
   final rows =
+      workbook['Productos'] ??
       workbook['Catalogo'] ??
       workbook['Catálogo'] ??
       workbook['catalogo'] ??
@@ -1076,7 +1077,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
         margin: const pw.EdgeInsets.all(28),
         build: (context) => [
           pw.Text(
-            'Catálogo seleccionado',
+            'Productos seleccionados',
             style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
           ),
           pw.SizedBox(height: 6),
@@ -2749,23 +2750,34 @@ class _CatalogTabState extends State<CatalogTab> {
                   onOpenDetail: _openProductDetail,
                 )
               else
-                _CatalogTable(
-                  products: visible,
-                  selectedIds: _selectedIds,
-                  allSelected: allSelected,
-                  onToggleAll: _selectAllVisible,
-                  onToggle: (product, value) => setState(() {
-                    value
-                        ? _selectedIds.add(product.id)
-                        : _selectedIds.remove(product.id);
-                  }),
-                  onEdit: widget.onEdit,
-                  onSetStock: widget.onSetStock,
-                  canEditProducts: widget.canEditProducts,
-                  canAddStock: widget.canAddStock,
-                  showTaxBadges: widget.showTaxBadges,
-                  taxConfig: widget.taxConfig,
-                  onDelete: _confirmDelete,
+                Consumer(
+                  builder: (context, ref, _) {
+                    final overview = ref.watch(
+                      warehouseInventoryOverviewProvider,
+                    );
+                    final showWarehouseContext =
+                        overview.valueOrNull?.hasMultipleActiveWarehouses ==
+                        true;
+                    return _CatalogTable(
+                      products: visible,
+                      selectedIds: _selectedIds,
+                      allSelected: allSelected,
+                      onToggleAll: _selectAllVisible,
+                      onToggle: (product, value) => setState(() {
+                        value
+                            ? _selectedIds.add(product.id)
+                            : _selectedIds.remove(product.id);
+                      }),
+                      onEdit: widget.onEdit,
+                      onSetStock: widget.onSetStock,
+                      canEditProducts: widget.canEditProducts,
+                      canAddStock: widget.canAddStock,
+                      showTaxBadges: widget.showTaxBadges,
+                      taxConfig: widget.taxConfig,
+                      showWarehouseContext: showWarehouseContext,
+                      onDelete: _confirmDelete,
+                    );
+                  },
                 ),
             ],
           ),
@@ -3123,6 +3135,7 @@ class _CatalogTable extends StatelessWidget {
     required this.canAddStock,
     required this.showTaxBadges,
     required this.taxConfig,
+    required this.showWarehouseContext,
     required this.onDelete,
   });
 
@@ -3137,94 +3150,172 @@ class _CatalogTable extends StatelessWidget {
   final bool canAddStock;
   final bool showTaxBadges;
   final ProductTaxUiConfig? taxConfig;
+  final bool showWarehouseContext;
   final ValueChanged<ProductModel> onDelete;
 
   @override
   Widget build(BuildContext context) {
     return ProductsSurface(
       padding: EdgeInsets.zero,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          columnSpacing: 20,
-          horizontalMargin: 14,
-          checkboxHorizontalMargin: 8,
-          dataRowMinHeight: 46,
-          dataRowMaxHeight: 58,
-          headingRowHeight: 42,
-          headingTextStyle: const TextStyle(
-            fontWeight: FontWeight.w900,
-            color: _textSecondary,
-            fontSize: 12,
-          ),
-          columns: [
-            DataColumn(
-              label: Checkbox(
-                value: allSelected,
-                onChanged: (value) => onToggleAll(value ?? false),
-              ),
-            ),
-            const DataColumn(label: Text('Producto')),
-            const DataColumn(label: Text('Precio'), numeric: true),
-            const DataColumn(label: Text('Stock'), numeric: true),
-            const DataColumn(label: Text('Estado')),
-            const DataColumn(label: Text('Acciones')),
-          ],
-          rows: [
-            for (final product in products)
-              DataRow(
-                selected: selectedIds.contains(product.id),
-                cells: [
-                  DataCell(
-                    Checkbox(
-                      value: selectedIds.contains(product.id),
-                      onChanged: (value) => onToggle(product, value ?? false),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: constraints.maxWidth,
+              child: DataTable(
+                columnSpacing: 20,
+                horizontalMargin: 14,
+                checkboxHorizontalMargin: 8,
+                dataRowMinHeight: 46,
+                dataRowMaxHeight: 58,
+                headingRowHeight: 42,
+                headingTextStyle: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: _textSecondary,
+                  fontSize: 12,
+                ),
+                columns: [
+                  DataColumn(
+                    label: Checkbox(
+                      value: allSelected,
+                      onChanged: (value) => onToggleAll(value ?? false),
                     ),
                   ),
-                  DataCell(_ProductNameCell(product: product)),
-                  DataCell(
-                    _PriceWithTaxBadge(
-                      product: product,
-                      showTaxBadge: showTaxBadges,
-                      taxConfig: taxConfig,
-                    ),
-                  ),
-                  DataCell(_StockBadge(product: product)),
-                  DataCell(_ProductStatusBadge(product: product)),
-                  DataCell(
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          tooltip: 'Editar',
-                          onPressed: canEditProducts
-                              ? () => onEdit(product)
-                              : null,
-                          icon: const Icon(Icons.edit_outlined),
+                  const DataColumn(label: Text('Producto')),
+                  const DataColumn(label: Text('Precio'), numeric: true),
+                  const DataColumn(label: Text('Stock'), numeric: true),
+                  if (showWarehouseContext)
+                    const DataColumn(label: Text('Almacén')),
+                  const DataColumn(label: Text('Estado')),
+                  const DataColumn(label: Text('Acciones')),
+                ],
+                rows: [
+                  for (final product in products)
+                    DataRow(
+                      selected: selectedIds.contains(product.id),
+                      cells: [
+                        DataCell(
+                          Checkbox(
+                            value: selectedIds.contains(product.id),
+                            onChanged: (value) =>
+                                onToggle(product, value ?? false),
+                          ),
                         ),
-                        IconButton(
-                          tooltip: 'Ajustar stock',
-                          onPressed: canAddStock
-                              ? () => _showStockAdjustmentPanel(
-                                  context,
-                                  product: product,
-                                  onSetStock: onSetStock,
-                                )
-                              : null,
-                          icon: const Icon(Icons.tune_outlined),
+                        DataCell(_ProductNameCell(product: product)),
+                        DataCell(
+                          _PriceWithTaxBadge(
+                            product: product,
+                            showTaxBadge: showTaxBadges,
+                            taxConfig: taxConfig,
+                          ),
                         ),
-                        IconButton(
-                          tooltip: 'Eliminar',
-                          onPressed: () => onDelete(product),
-                          icon: const Icon(Icons.delete_outline),
+                        DataCell(_StockBadge(product: product)),
+                        if (showWarehouseContext)
+                          DataCell(
+                            _WarehouseContextBadge(productId: product.id),
+                          ),
+                        DataCell(_ProductStatusBadge(product: product)),
+                        DataCell(
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                tooltip: 'Editar',
+                                onPressed: canEditProducts
+                                    ? () => onEdit(product)
+                                    : null,
+                                icon: const Icon(Icons.edit_outlined),
+                              ),
+                              IconButton(
+                                tooltip: 'Ajustar stock',
+                                onPressed: canAddStock
+                                    ? () => _showStockAdjustmentPanel(
+                                        context,
+                                        product: product,
+                                        onSetStock: onSetStock,
+                                      )
+                                    : null,
+                                icon: const Icon(Icons.tune_outlined),
+                              ),
+                              IconButton(
+                                tooltip: 'Eliminar',
+                                onPressed: () => onDelete(product),
+                                icon: const Icon(Icons.delete_outline),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
-                  ),
                 ],
               ),
-          ],
-        ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _WarehouseContextBadge extends ConsumerWidget {
+  const _WarehouseContextBadge({required this.productId});
+
+  final String productId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final breakdown = ref.watch(productWarehouseStockProvider(productId));
+    return breakdown.maybeWhen(
+      data: (value) {
+        final count = value.warehouses.where((line) => line.isActive).length;
+        if (count <= 1) return const Text('Principal');
+        return _CompactPill(
+          icon: Icons.warehouse_outlined,
+          label: '$count almacenes',
+        );
+      },
+      loading: () => const SizedBox(
+        width: 16,
+        height: 16,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      ),
+      orElse: () => const Text('Ver detalle'),
+    );
+  }
+}
+
+class _CompactPill extends StatelessWidget {
+  const _CompactPill({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.secondary.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: AppColors.secondary),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.secondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0,
+            ),
+          ),
+        ],
       ),
     );
   }

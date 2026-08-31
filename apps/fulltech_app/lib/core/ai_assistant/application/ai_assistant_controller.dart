@@ -83,7 +83,7 @@ class AiAssistantController extends StateNotifier<AiAssistantState> {
       case 'clientes':
         return 'Clientes';
       case 'catalogo':
-        return 'Catálogo';
+        return 'Productos';
       case 'cotizaciones':
         return 'Cotizaciones';
       case 'service-orders':

@@ -552,7 +552,7 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
         return 'Clientes';
       case 'catalogo':
       case 'catálogo':
-        return 'Catálogo';
+        return 'Productos';
       case 'ventas':
         return 'Ventas';
       case 'cotizaciones':

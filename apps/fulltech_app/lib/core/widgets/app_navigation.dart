@@ -106,6 +106,27 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Productos',
             route: Routes.catalogo,
           ),
+        if (canOrAuthorize(AppPermission.viewCatalog))
+          const AppNavigationItem(
+            icon: Icons.tune_outlined,
+            appIcon: AppIcons.inventory,
+            title: 'Ajuste stock',
+            route: Routes.catalogoStock,
+          ),
+        if (canOrAuthorize(AppPermission.viewCatalog))
+          const AppNavigationItem(
+            icon: Icons.category_outlined,
+            appIcon: AppIcons.inventory,
+            title: 'Categorías',
+            route: Routes.catalogoCategorias,
+          ),
+        if (canOrAuthorize(AppPermission.viewCatalog))
+          const AppNavigationItem(
+            icon: Icons.fact_check_outlined,
+            appIcon: AppIcons.inventory,
+            title: 'Recuento',
+            route: Routes.catalogoConteo,
+          ),
         if (canOrAuthorize(AppPermission.viewInventoryHistory))
           const AppNavigationItem(
             icon: Icons.history_rounded,

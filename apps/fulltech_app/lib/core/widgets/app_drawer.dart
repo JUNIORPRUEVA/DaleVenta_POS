@@ -823,6 +823,9 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
 
   final ventasItems = pickItems([Routes.cotizaciones, Routes.ventasLista]);
   final catalogItem = pick(Routes.catalogo);
+  final stockAdjustmentItem = pick(Routes.catalogoStock);
+  final categoriesItem = pick(Routes.catalogoCategorias);
+  final inventoryCountItem = pick(Routes.catalogoConteo);
   final kardexItem = pick(Routes.catalogoKardex);
   final warehousesItem = pick(Routes.configuracionAlmacenes);
   final cashItems = pickItems([
@@ -860,28 +863,30 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
 
   void addInventoryGroup() {
     final items = <AppNavigationItem>[
-      if (catalogItem != null) ...const [
-        AppNavigationItem(
+      if (catalogItem != null)
+        const AppNavigationItem(
           icon: Icons.table_rows_outlined,
           title: 'Productos',
           route: Routes.catalogo,
         ),
-        AppNavigationItem(
+      if (stockAdjustmentItem != null)
+        const AppNavigationItem(
           icon: Icons.tune_outlined,
           title: 'Ajuste stock',
           route: Routes.catalogoStock,
         ),
-        AppNavigationItem(
+      if (categoriesItem != null)
+        const AppNavigationItem(
           icon: Icons.category_outlined,
           title: 'Categorías',
           route: Routes.catalogoCategorias,
         ),
-        AppNavigationItem(
+      if (inventoryCountItem != null)
+        const AppNavigationItem(
           icon: Icons.fact_check_outlined,
           title: 'Recuento',
           route: Routes.catalogoConteo,
         ),
-      ],
       if (kardexItem != null)
         const AppNavigationItem(
           icon: Icons.history_rounded,
