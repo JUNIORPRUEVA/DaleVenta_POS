@@ -4279,6 +4279,14 @@ class _SalesCompanyAccountMenu extends ConsumerWidget {
             ),
             onTap: () => _goAfterMenu(context, Routes.configuracionEmpresa),
           ),
+          PopupMenuItem(
+            value: 'warehouse_settings',
+            child: const _SalesCompanyMenuRow(
+              icon: Icons.warehouse_outlined,
+              label: 'Almacenes',
+            ),
+            onTap: () => _goAfterMenu(context, Routes.configuracionAlmacenes),
+          ),
           if (!kIsWeb)
             PopupMenuItem(
               value: 'printer_settings',

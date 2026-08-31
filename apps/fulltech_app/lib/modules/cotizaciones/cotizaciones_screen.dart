@@ -8389,6 +8389,23 @@ class _CompanyAccountMenu extends ConsumerWidget {
                   'Configura el nombre comercial, RNC, teléfonos, dirección, logo y datos principales usados por la empresa.',
             ),
           ),
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: _CompanyMenuItem(
+              icon: Icons.warehouse_outlined,
+              label: 'Almacenes',
+              onTap: () => _activateProtectedRoute(
+                context,
+                ref,
+                menuContext,
+                route: Routes.configuracionAlmacenes,
+                label: 'Almacenes',
+              ),
+              helpText:
+                  'Administra almacenes activos, predeterminado y terminales.',
+            ),
+          ),
           if (!kIsWeb)
             PopupMenuItem(
               enabled: false,
