@@ -132,18 +132,6 @@ String? _persistentProductImageSource(ProductModel product) {
   return null;
 }
 
-String _profitText(ProductModel product) {
-  return product.costAvailable
-      ? formatRdCurrencyAccounting(_profitOf(product))
-      : 'No disponible';
-}
-
-String _marginText(ProductModel product) {
-  return product.costAvailable
-      ? '${_marginOf(product).toStringAsFixed(1)}%'
-      : '--';
-}
-
 bool _isOutOfStock(ProductModel product) => _stockOf(product) <= 0;
 bool _isLowStock(ProductModel product) {
   final stock = _stockOf(product);
@@ -1540,13 +1528,13 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
       1 => 'Recuento de inventario',
       2 => 'Ajuste stock',
       3 => 'Categorías',
-      _ => 'Catálogo',
+      _ => 'Productos',
     };
     final mobileTitle = switch (initialTabIndex) {
       1 => 'Conteo',
       2 => 'Stock',
       3 => 'Categorías',
-      _ => 'Catálogo',
+      _ => 'Productos',
     };
     final taxConfig = ref.watch(productTaxUiConfigProvider).valueOrNull;
     final showTaxBadges = taxConfig?.settings.taxEnabled == true;
@@ -2562,7 +2550,7 @@ class _CatalogTabState extends State<CatalogTab> {
     final result = await _showInventoryFilterDrawer<_CatalogFilterDraft>(
       context,
       title: 'Filtros',
-      subtitle: 'Catálogo',
+      subtitle: 'Productos',
       child: _CatalogMobileFilterPanel(
         categories: _categories,
         selectedCategory: _validCategory(_categories),
@@ -3158,6 +3146,12 @@ class _CatalogTable extends StatelessWidget {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: DataTable(
+          columnSpacing: 20,
+          horizontalMargin: 14,
+          checkboxHorizontalMargin: 8,
+          dataRowMinHeight: 46,
+          dataRowMaxHeight: 58,
+          headingRowHeight: 42,
           headingTextStyle: const TextStyle(
             fontWeight: FontWeight.w900,
             color: _textSecondary,
@@ -3170,14 +3164,10 @@ class _CatalogTable extends StatelessWidget {
                 onChanged: (value) => onToggleAll(value ?? false),
               ),
             ),
-            const DataColumn(label: Text('Código')),
-            const DataColumn(label: Text('Nombre')),
-            const DataColumn(label: Text('Categoría')),
-            const DataColumn(label: Text('Costo'), numeric: true),
+            const DataColumn(label: Text('Producto')),
             const DataColumn(label: Text('Precio'), numeric: true),
             const DataColumn(label: Text('Stock'), numeric: true),
-            const DataColumn(label: Text('Ganancia'), numeric: true),
-            const DataColumn(label: Text('Margen'), numeric: true),
+            const DataColumn(label: Text('Estado')),
             const DataColumn(label: Text('Acciones')),
           ],
           rows: [
@@ -3191,16 +3181,7 @@ class _CatalogTable extends StatelessWidget {
                       onChanged: (value) => onToggle(product, value ?? false),
                     ),
                   ),
-                  DataCell(
-                    Text(
-                      product.codigo?.trim().isNotEmpty == true
-                          ? product.codigo!.trim()
-                          : 'Sin SKU',
-                    ),
-                  ),
                   DataCell(_ProductNameCell(product: product)),
-                  DataCell(Text(product.categoriaLabel)),
-                  DataCell(Text(_costText(product))),
                   DataCell(
                     _PriceWithTaxBadge(
                       product: product,
@@ -3209,8 +3190,7 @@ class _CatalogTable extends StatelessWidget {
                     ),
                   ),
                   DataCell(_StockBadge(product: product)),
-                  DataCell(Text(_profitText(product))),
-                  DataCell(Text(_marginText(product))),
+                  DataCell(_ProductStatusBadge(product: product)),
                   DataCell(
                     Row(
                       mainAxisSize: MainAxisSize.min,
@@ -6636,6 +6616,42 @@ class _StockBadge extends StatelessWidget {
       child: Text(
         _productStockText(product),
         style: TextStyle(color: color, fontWeight: FontWeight.w900),
+      ),
+    );
+  }
+}
+
+class _ProductStatusBadge extends StatelessWidget {
+  const _ProductStatusBadge({required this.product});
+
+  final ProductModel product;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = !product.activo
+        ? ('Inactivo', _textSecondary)
+        : _isOutOfStock(product)
+        ? ('Agotado', Colors.red)
+        : _isLowStock(product)
+        ? ('Bajo stock', Colors.orange)
+        : ('Activo', const Color(0xFF16A34A));
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0,
+        ),
       ),
     );
   }

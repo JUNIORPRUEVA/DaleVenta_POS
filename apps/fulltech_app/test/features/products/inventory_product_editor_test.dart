@@ -523,7 +523,7 @@ void main() {
     await _pumpMobileInventory(tester, repo: repo);
 
     expect(find.byType(TabBar), findsNothing);
-    expect(find.text('Catálogo'), findsOneWidget);
+    expect(find.text('Productos'), findsOneWidget);
     expect(find.text('Auriculares Pro'), findsOneWidget);
   });
 

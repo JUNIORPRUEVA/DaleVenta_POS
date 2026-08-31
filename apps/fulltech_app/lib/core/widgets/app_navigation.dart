@@ -103,7 +103,7 @@ List<AppNavigationSection> buildAppNavigationSections(
           const AppNavigationItem(
             icon: Icons.inventory_2_outlined,
             appIcon: AppIcons.inventory,
-            title: 'Inventario',
+            title: 'Productos',
             route: Routes.catalogo,
           ),
         if (canOrAuthorize(AppPermission.viewInventoryHistory))

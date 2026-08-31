@@ -863,7 +863,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
       if (catalogItem != null) ...const [
         AppNavigationItem(
           icon: Icons.table_rows_outlined,
-          title: 'Catálogo',
+          title: 'Productos',
           route: Routes.catalogo,
         ),
         AppNavigationItem(
