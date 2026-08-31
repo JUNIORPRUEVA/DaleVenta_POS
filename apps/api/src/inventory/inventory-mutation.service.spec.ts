@@ -13,6 +13,7 @@ function buildService(options: {
   initialProductStock?: Prisma.Decimal.Value;
   warehouseTotal?: Prisma.Decimal.Value;
   movementCreateError?: Error;
+  currentWarehouseQuantity?: Prisma.Decimal.Value;
 } = {}) {
   const productStock = decimal(options.initialProductStock ?? "10");
   const warehouseTotal = decimal(options.warehouseTotal ?? productStock);
@@ -35,8 +36,15 @@ function buildService(options: {
     },
     warehouse: {
       findFirst: jest.fn(async () =>
-        options.warehouseActive === false ? null : { id: "warehouse-a" },
+        options.warehouseActive === false
+          ? null
+          : { id: "warehouse-a", name: "Main Warehouse", code: "MAIN" },
       ),
+    },
+    warehouseStock: {
+      findFirst: jest.fn(async () => ({
+        quantity: decimal(options.currentWarehouseQuantity ?? "10"),
+      })),
     },
     inventoryMovement: {
       create: jest.fn(async ({ data }) => {
@@ -147,6 +155,21 @@ describe("InventoryMutationService", () => {
         quantity: "11",
       }),
     ).rejects.toBeInstanceOf(ConflictException);
+    await expect(
+      service.decreaseStock({
+        ...base,
+        type: InventoryMovementType.ADJUSTMENT_OUT,
+        quantity: "11",
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        errorCode: "INSUFFICIENT_WAREHOUSE_STOCK",
+        details: expect.objectContaining({
+          requestedQuantity: "11.000000",
+          availableQuantity: "10.000000",
+        }),
+      }),
+    });
     expect(tx.product.updateMany).not.toHaveBeenCalled();
     expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
   });

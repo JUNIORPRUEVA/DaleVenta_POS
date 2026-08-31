@@ -1,0 +1,230 @@
+{
+  "capturedAt": "2026-08-31T16:36:20.449Z",
+  "appUrl": "http://127.0.0.1:59397",
+  "results": [
+    {
+      "name": "pos",
+      "viewport": "desktop-1366x768",
+      "route": "/ventas/nueva",
+      "url": "http://127.0.0.1:59397/ventas/nueva",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "warehouse-management",
+      "viewport": "desktop-1366x768",
+      "route": "/configuracion/almacenes",
+      "url": "http://127.0.0.1:59397/configuracion/almacenes",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "product-stock-by-warehouse",
+      "viewport": "desktop-1366x768",
+      "route": "/catalogo/stock",
+      "url": "http://127.0.0.1:59397/catalogo/stock",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "stock-adjustment",
+      "viewport": "desktop-1366x768",
+      "route": "/catalogo/conteo",
+      "url": "http://127.0.0.1:59397/catalogo/conteo",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "terminal",
+      "viewport": "desktop-1366x768",
+      "route": "/configuracion/almacenes",
+      "url": "http://127.0.0.1:59397/configuracion/almacenes",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "transfer",
+      "viewport": "desktop-1366x768",
+      "route": "/configuracion/almacenes",
+      "url": "http://127.0.0.1:59397/configuracion/almacenes",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "kardex-movements",
+      "viewport": "desktop-1366x768",
+      "route": "/catalogo/kardex",
+      "url": "http://127.0.0.1:59397/catalogo/kardex",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "kardex-stock",
+      "viewport": "desktop-1366x768",
+      "route": "/catalogo/kardex",
+      "url": "http://127.0.0.1:59397/catalogo/kardex",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "kardex-reconciliation",
+      "viewport": "desktop-1366x768",
+      "route": "/catalogo/kardex",
+      "url": "http://127.0.0.1:59397/catalogo/kardex",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "permissions-admin-pin",
+      "viewport": "desktop-1366x768",
+      "route": "/users",
+      "url": "http://127.0.0.1:59397/users",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "offline-conflict",
+      "viewport": "desktop-1366x768",
+      "route": "/ventas/nueva",
+      "url": "http://127.0.0.1:59397/ventas/nueva",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "single-warehouse-ux",
+      "viewport": "desktop-1366x768",
+      "route": "/catalogo/stock",
+      "url": "http://127.0.0.1:59397/catalogo/stock",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "zero-config-company-ux",
+      "viewport": "desktop-1366x768",
+      "route": "/catalogo/stock",
+      "url": "http://127.0.0.1:59397/catalogo/stock",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "second-warehouse-ux",
+      "viewport": "desktop-1366x768",
+      "route": "/configuracion/almacenes",
+      "url": "http://127.0.0.1:59397/configuracion/almacenes",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "pos",
+      "viewport": "mobile-390x844",
+      "route": "/ventas/nueva",
+      "url": "http://127.0.0.1:59397/ventas/nueva",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "warehouse-management",
+      "viewport": "mobile-390x844",
+      "route": "/configuracion/almacenes",
+      "url": "http://127.0.0.1:59397/configuracion/almacenes",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "product-stock-by-warehouse",
+      "viewport": "mobile-390x844",
+      "route": "/catalogo/stock",
+      "url": "http://127.0.0.1:59397/catalogo/stock",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "stock-adjustment",
+      "viewport": "mobile-390x844",
+      "route": "/catalogo/conteo",
+      "url": "http://127.0.0.1:59397/catalogo/conteo",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "terminal",
+      "viewport": "mobile-390x844",
+      "route": "/configuracion/almacenes",
+      "url": "http://127.0.0.1:59397/configuracion/almacenes",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "transfer",
+      "viewport": "mobile-390x844",
+      "route": "/configuracion/almacenes",
+      "url": "http://127.0.0.1:59397/configuracion/almacenes",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "kardex-movements",
+      "viewport": "mobile-390x844",
+      "route": "/catalogo/kardex",
+      "url": "http://127.0.0.1:59397/catalogo/kardex",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "kardex-stock",
+      "viewport": "mobile-390x844",
+      "route": "/catalogo/kardex",
+      "url": "http://127.0.0.1:59397/catalogo/kardex",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "kardex-reconciliation",
+      "viewport": "mobile-390x844",
+      "route": "/catalogo/kardex",
+      "url": "http://127.0.0.1:59397/catalogo/kardex",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "permissions-admin-pin",
+      "viewport": "mobile-390x844",
+      "route": "/users",
+      "url": "http://127.0.0.1:59397/users",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "offline-conflict",
+      "viewport": "mobile-390x844",
+      "route": "/ventas/nueva",
+      "url": "http://127.0.0.1:59397/ventas/nueva",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "single-warehouse-ux",
+      "viewport": "mobile-390x844",
+      "route": "/catalogo/stock",
+      "url": "http://127.0.0.1:59397/catalogo/stock",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "zero-config-company-ux",
+      "viewport": "mobile-390x844",
+      "route": "/catalogo/stock",
+      "url": "http://127.0.0.1:59397/catalogo/stock",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    },
+    {
+      "name": "second-warehouse-ux",
+      "viewport": "mobile-390x844",
+      "route": "/configuracion/almacenes",
+      "url": "http://127.0.0.1:59397/configuracion/almacenes",
+      "title": "FullPOS Cloud - Sistema de facturacion",
+      "textSample": ""
+    }
+  ]
+}

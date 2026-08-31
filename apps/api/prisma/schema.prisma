@@ -1993,6 +1993,8 @@ model InventoryMovement {
 
   @@index([companyId, productId, createdAt], map: "inventory_movements_company_product_created_idx")
   @@index([companyId, warehouseId, createdAt], map: "inventory_movements_company_warehouse_created_idx")
+  @@index([companyId, createdAt], map: "inventory_movements_company_created_idx")
+  @@index([companyId, type, createdAt], map: "inventory_movements_company_type_created_idx")
   @@index([companyId, sourceType, sourceId], map: "inventory_movements_company_source_idx")
   @@map("inventory_movements")
 }
@@ -2025,6 +2027,8 @@ model WarehouseTransfer {
   @@unique([companyId, operationId], map: "warehouse_transfers_company_operation_key")
   @@unique([companyId, clientRequestId], map: "warehouse_transfers_company_client_request_key")
   @@index([companyId, status], map: "warehouse_transfers_company_status_idx")
+  @@index([companyId, createdAt], map: "warehouse_transfers_company_created_idx")
+  @@index([companyId, status, createdAt], map: "warehouse_transfers_company_status_created_idx")
   @@index([companyId, sourceWarehouseId], map: "warehouse_transfers_company_source_idx")
   @@index([companyId, destinationWarehouseId], map: "warehouse_transfers_company_destination_idx")
   @@map("warehouse_transfers")

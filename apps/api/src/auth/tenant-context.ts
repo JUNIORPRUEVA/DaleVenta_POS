@@ -23,9 +23,5 @@ export function requireTenant(user: TenantUser | null | undefined): string {
 }
 
 export function isAdminLike(user: TenantUser) {
-  return (
-    user.role === Role.ADMIN ||
-    user.role === Role.ASISTENTE ||
-    user.adminAuthorized === true
-  );
+  return user.role === Role.ADMIN || user.role === Role.ASISTENTE;
 }

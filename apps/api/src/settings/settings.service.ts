@@ -38,7 +38,8 @@ export class SettingsService {
     const companyId = requireTenant(user);
     const config = await this.ensureConfig(companyId);
     const fiscal = await this.taxes.getCompanyFiscalSettings(companyId);
-    const productSource = await this.productSourceResolver.resolveForCompany(companyId);
+    const productSource =
+      await this.productSourceResolver.resolveForCompany(companyId);
     return this.toPublicSettings(config, fiscal, productSource);
   }
 
@@ -101,7 +102,8 @@ export class SettingsService {
       });
     }
     const fiscal = await this.taxes.getCompanyFiscalSettings(companyId);
-    const productSource = await this.productSourceResolver.resolveForCompany(companyId);
+    const productSource =
+      await this.productSourceResolver.resolveForCompany(companyId);
     return this.toPublicSettings(config, fiscal, productSource);
   }
 
@@ -146,7 +148,8 @@ export class SettingsService {
     });
     this.emitCompanyNameUpdated(companyId, companyName);
     const fiscal = await this.taxes.getCompanyFiscalSettings(companyId);
-    const productSource = await this.productSourceResolver.resolveForCompany(companyId);
+    const productSource =
+      await this.productSourceResolver.resolveForCompany(companyId);
     return this.toPublicSettings(config, fiscal, productSource);
   }
 
@@ -181,9 +184,10 @@ export class SettingsService {
     };
   }
 
-  async verifyAdminPin(user: TenantUser, pin: unknown) {
+  async verifyAdminPin(user: TenantUser, pin: unknown, scope: unknown) {
     const companyId = requireTenant(user);
     const normalizedPin = this.normalizePin(pin);
+    const permissionScope = this.normalizeAuthorizationScope(scope);
     const config = await this.prisma.appConfig.findUnique({
       where: { companyId },
       select: { adminAuthorizationPinHash: true },
@@ -204,6 +208,7 @@ export class SettingsService {
         sub: user.id,
         companyId,
         tokenType: "admin-authorization",
+        permissions: [permissionScope],
       },
       { expiresIn: expiresInSeconds },
     );
@@ -211,6 +216,7 @@ export class SettingsService {
       ok: true,
       expiresInSeconds,
       adminAuthorizationToken,
+      permissions: [permissionScope],
     };
   }
 
@@ -227,6 +233,16 @@ export class SettingsService {
     if (!/^\d{4}$/.test(value)) {
       throw new BadRequestException(
         "El PIN administrativo debe tener 4 dígitos",
+      );
+    }
+    return value;
+  }
+
+  private normalizeAuthorizationScope(scope: unknown) {
+    const value = `${scope ?? ""}`.trim();
+    if (!/^[A-Za-z][A-Za-z0-9_.:-]{1,80}$/.test(value)) {
+      throw new BadRequestException(
+        "La autorización administrativa requiere un alcance válido",
       );
     }
     return value;
@@ -313,7 +329,11 @@ export class SettingsService {
     const raw = this.stringValue(dto, "productsSource");
     const source = raw?.toUpperCase();
     if (!source) return undefined;
-    if (source === "LOCAL" || source === "FULLPOS" || source === "FULLPOS_DIRECT") {
+    if (
+      source === "LOCAL" ||
+      source === "FULLPOS" ||
+      source === "FULLPOS_DIRECT"
+    ) {
       return source;
     }
     throw new BadRequestException("Fuente de productos inválida");

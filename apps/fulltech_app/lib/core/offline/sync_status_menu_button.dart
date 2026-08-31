@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/token_storage.dart';
+import 'offline_store.dart';
 import 'sync_queue_service.dart';
 
 enum SyncHeaderStatus { synced, syncing, pending, error }
@@ -30,6 +33,10 @@ class SyncStatusMenuButton extends ConsumerWidget {
     final colors = _SyncStatusColors.forStatus(status);
     final label = _statusLabel(status);
     final isProcessing = state.isProcessing || state.syncingCount > 0;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final menuWidth = screenWidth < 420
+        ? (screenWidth - 24).clamp(284.0, 360.0)
+        : 336.0;
 
     return PopupMenuButton<void>(
       tooltip: 'Estado de sincronización',
@@ -39,7 +46,7 @@ class SyncStatusMenuButton extends ConsumerWidget {
       surfaceTintColor: Colors.white,
       elevation: 8,
       shadowColor: Colors.black.withValues(alpha: 0.10),
-      constraints: const BoxConstraints(minWidth: 284, maxWidth: 284),
+      constraints: BoxConstraints(minWidth: menuWidth, maxWidth: menuWidth),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: BorderSide(color: colors.border),
@@ -52,6 +59,7 @@ class SyncStatusMenuButton extends ConsumerWidget {
             state: state,
             status: status,
             colors: colors,
+            width: menuWidth,
             onSyncNow: isProcessing
                 ? null
                 : () {
@@ -230,12 +238,14 @@ class _SyncStatusPopover extends StatelessWidget {
     required this.state,
     required this.status,
     required this.colors,
+    required this.width,
     required this.onSyncNow,
   });
 
   final SyncQueueState state;
   final SyncHeaderStatus status;
   final _SyncStatusColors colors;
+  final double width;
   final VoidCallback? onSyncNow;
 
   @override
@@ -243,7 +253,7 @@ class _SyncStatusPopover extends StatelessWidget {
     final lastError = (state.lastError ?? '').trim();
 
     return SizedBox(
-      width: 284,
+      width: width,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
         child: Column(
@@ -328,6 +338,22 @@ class _SyncStatusPopover extends StatelessWidget {
                 ),
               ),
             ],
+            if (status == SyncHeaderStatus.error) ...[
+              const SizedBox(height: 8),
+              FutureBuilder<List<_OfflineSaleConflict>>(
+                future: _loadSaleConflicts(),
+                builder: (context, snapshot) {
+                  final conflicts = snapshot.data ?? const [];
+                  if (conflicts.isEmpty) return const SizedBox.shrink();
+                  return Column(
+                    children: [
+                      for (final conflict in conflicts.take(3))
+                        _OfflineConflictRow(conflict: conflict),
+                    ],
+                  );
+                },
+              ),
+            ],
             const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
@@ -360,6 +386,23 @@ class _SyncStatusPopover extends StatelessWidget {
     );
   }
 
+  static Future<List<_OfflineSaleConflict>> _loadSaleConflicts() async {
+    final user = await TokenStorage().getUserSnapshot();
+    final companyId = user?.companyId?.trim();
+    final userId = user?.id.trim();
+    if ((companyId ?? '').isEmpty) return const [];
+    final rows = await OfflineStore.instance.listOfflineSales(
+      companyId: companyId!,
+      userId: (userId ?? '').isEmpty ? null : userId,
+      status: 'conflict',
+      limit: 5,
+    );
+    return rows
+        .map(_OfflineSaleConflict.fromOfflineSale)
+        .whereType<_OfflineSaleConflict>()
+        .toList(growable: false);
+  }
+
   static String _title(SyncHeaderStatus status) {
     return switch (status) {
       SyncHeaderStatus.synced => 'Datos sincronizados',
@@ -376,6 +419,97 @@ class _SyncStatusPopover extends StatelessWidget {
       SyncHeaderStatus.pending => 'Se enviarán al recuperar conexión',
       SyncHeaderStatus.error => 'La app conserva los datos y reintenta',
     };
+  }
+}
+
+class _OfflineConflictRow extends StatelessWidget {
+  const _OfflineConflictRow({required this.conflict});
+
+  final _OfflineSaleConflict conflict;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.all(9),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7ED),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: const Color(0xFFFED7AA)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Venta offline sin sincronizar',
+            style: TextStyle(
+              color: Color(0xFF9A3412),
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            conflict.message,
+            softWrap: true,
+            style: const TextStyle(
+              color: Color(0xFF7C2D12),
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (conflict.productLine.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text(
+              conflict.productLine,
+              softWrap: true,
+              style: const TextStyle(
+                color: Color(0xFF7C2D12),
+                fontSize: 10.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _OfflineSaleConflict {
+  const _OfflineSaleConflict({
+    required this.message,
+    required this.productLine,
+  });
+
+  final String message;
+  final String productLine;
+
+  static _OfflineSaleConflict? fromOfflineSale(Map<String, dynamic> row) {
+    final raw = row['error']?.toString().trim();
+    if (raw == null || raw.isEmpty) return null;
+    Map<String, dynamic> data;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return null;
+      data = decoded.cast<String, dynamic>();
+    } catch (_) {
+      return _OfflineSaleConflict(message: raw, productLine: '');
+    }
+    final details = data['details'] is Map
+        ? (data['details'] as Map).cast<String, dynamic>()
+        : const <String, dynamic>{};
+    final message =
+        data['message']?.toString() ??
+        'Esta venta no pudo sincronizarse porque el stock cambió mientras el dispositivo estaba sin conexión.';
+    final product = (details['productName'] ?? 'Producto').toString();
+    final requested = details['requestedQuantity']?.toString();
+    final available = details['availableQuantity']?.toString();
+    final productLine = requested == null || available == null
+        ? product
+        : '$product: solicitado $requested, disponible $available';
+    return _OfflineSaleConflict(message: message, productLine: productLine);
   }
 }
 

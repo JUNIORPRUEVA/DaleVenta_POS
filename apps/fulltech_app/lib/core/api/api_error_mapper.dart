@@ -24,11 +24,12 @@ class ApiErrorMapper {
     final rawMessage = _extractMessage(error.response?.data, fallbackMessage);
 
     if (status != null) {
+      final machineCode = _extractMachineCode(error.response?.data);
       return ApiException.detailed(
         message: _httpMessage(status, rawMessage, fallbackMessage),
         code: status,
         type: _httpType(status),
-        displayCode: status.toString(),
+        displayCode: machineCode ?? status.toString(),
         technicalDetails: detail,
         responseBody: responseBody,
         method: method,
@@ -223,6 +224,13 @@ class ApiErrorMapper {
       if (error is String && error.trim().isNotEmpty) return error.trim();
     }
     return fallback;
+  }
+
+  static String? _extractMachineCode(dynamic data) {
+    if (data is! Map) return null;
+    final value = data['errorCode'] ?? data['code'];
+    final text = value?.toString().trim();
+    return text == null || text.isEmpty ? null : text;
   }
 
   static String _buildTechnicalDetail(DioException error, {Dio? dio}) {

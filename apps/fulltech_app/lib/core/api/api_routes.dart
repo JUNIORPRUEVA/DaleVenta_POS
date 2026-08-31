@@ -202,6 +202,11 @@ class ApiRoutes {
   static const warehouseTransfers = '/warehouses/transfers';
   static String warehouseTransfer(String id) => '/warehouses/transfers/$id';
 
+  // Inventario / Kardex
+  static const inventoryMovements = '/inventory/movements';
+  static const inventoryStockReport = '/inventory/stock-report';
+  static const inventoryReconciliation = '/inventory/reconciliation';
+
   // Sitio web / tienda publica
   static const websiteProducts = '/website/products';
   static const websiteUpload = '/website/upload';

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
+import '../../../core/cache/local_json_cache.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/models/product_model.dart';
 
@@ -336,9 +337,11 @@ final warehouseInventoryOverviewProvider =
     });
 
 class WarehouseRepository {
-  const WarehouseRepository(this._dio);
+  WarehouseRepository(this._dio);
 
   final Dio _dio;
+  final LocalJsonCache _cache = LocalJsonCache();
+  static const String _terminalsCacheKey = 'warehouses.terminals.v1';
 
   Future<List<WarehouseModel>> fetchWarehouses() async {
     final data = await _getList(ApiRoutes.warehouses);
@@ -350,7 +353,17 @@ class WarehouseRepository {
 
   Future<List<TerminalWarehouseModel>> fetchTerminals() async {
     final data = await _getList(ApiRoutes.warehouseTerminals);
+    await _cache.writeMap(_terminalsCacheKey, {'items': data});
     return data
+        .whereType<Map>()
+        .map((row) => TerminalWarehouseModel.fromJson(row.cast()))
+        .toList(growable: false);
+  }
+
+  Future<List<TerminalWarehouseModel>> cachedTerminals() async {
+    final data = await _cache.readMap(_terminalsCacheKey);
+    final rows = data?['items'] is List ? data!['items'] as List : const [];
+    return rows
         .whereType<Map>()
         .map((row) => TerminalWarehouseModel.fromJson(row.cast()))
         .toList(growable: false);

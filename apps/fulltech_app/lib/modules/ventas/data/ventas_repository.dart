@@ -13,6 +13,8 @@ import '../../../core/models/product_model.dart';
 import '../../../core/offline/offline_store.dart';
 import '../../../core/offline/pending_sync_action.dart';
 import '../../../core/offline/sync_queue_service.dart';
+import '../../../core/usage/client_telemetry_headers.dart';
+import '../../../features/warehouses/data/warehouse_repository.dart';
 import '../../clientes/cliente_model.dart';
 import '../sales_models.dart';
 
@@ -20,6 +22,7 @@ final ventasRepositoryProvider = Provider<VentasRepository>((ref) {
   final repository = VentasRepository(
     ref.watch(dioProvider),
     ref.read(syncQueueServiceProvider.notifier),
+    ref.read(warehouseRepositoryProvider),
   );
   repository.registerSyncHandlers();
   return repository;
@@ -28,6 +31,7 @@ final ventasRepositoryProvider = Provider<VentasRepository>((ref) {
 class VentasRepository {
   final Dio _dio;
   final SyncQueueService _syncQueue;
+  final WarehouseRepository _warehouseRepository;
   final LocalJsonCache _cache = LocalJsonCache();
   final OfflineStore _offlineStore = OfflineStore.instance;
   final TokenStorage _tokenStorage = TokenStorage();
@@ -35,37 +39,58 @@ class VentasRepository {
   static const String _creditsCacheKey = 'sales.credits.v1';
   bool _handlersRegistered = false;
 
-  VentasRepository(this._dio, this._syncQueue);
+  VentasRepository(this._dio, this._syncQueue, this._warehouseRepository);
 
   void registerSyncHandlers() {
     if (_handlersRegistered) return;
     _handlersRegistered = true;
     _syncQueue.registerHandler(_createSaleSyncType, (payload) async {
-      final sale = await _createSaleRemote(
-        customerId: payload['customerId']?.toString(),
-        note: payload['note']?.toString(),
-        paymentMethod: payload['paymentMethod']?.toString(),
-        paymentCashAmount: _nullableDouble(payload['paymentCashAmount']),
-        paymentTransferAmount: _nullableDouble(
-          payload['paymentTransferAmount'],
-        ),
-        creditAmount: _nullableDouble(payload['creditAmount']),
-        expectedTotalSold: _nullableDouble(payload['expectedTotalSold']),
-        globalDiscountAmount: _nullableDouble(payload['globalDiscountAmount']),
-        fiscalVoucherType: payload['fiscalVoucherType']?.toString(),
-        fiscalCustomerTaxId: payload['fiscalCustomerTaxId']?.toString(),
-        fiscalCustomerName: payload['fiscalCustomerName']?.toString(),
-        clientRequestId: payload['clientRequestId']?.toString(),
-        items: ((payload['items'] as List?) ?? const [])
-            .whereType<Map>()
-            .map(
-              (item) => SaleDraftItem.fromPayload(item.cast<String, dynamic>()),
-            )
-            .toList(growable: false),
-      );
       final clientRequestId = payload['clientRequestId']?.toString().trim();
       final user = await _tokenStorage.getUserSnapshot();
       final companyId = user?.companyId?.trim();
+      SaleModel? sale;
+      try {
+        sale = await _createSaleRemote(
+          customerId: payload['customerId']?.toString(),
+          note: payload['note']?.toString(),
+          paymentMethod: payload['paymentMethod']?.toString(),
+          paymentCashAmount: _nullableDouble(payload['paymentCashAmount']),
+          paymentTransferAmount: _nullableDouble(
+            payload['paymentTransferAmount'],
+          ),
+          creditAmount: _nullableDouble(payload['creditAmount']),
+          expectedTotalSold: _nullableDouble(payload['expectedTotalSold']),
+          globalDiscountAmount: _nullableDouble(
+            payload['globalDiscountAmount'],
+          ),
+          fiscalVoucherType: payload['fiscalVoucherType']?.toString(),
+          fiscalCustomerTaxId: payload['fiscalCustomerTaxId']?.toString(),
+          fiscalCustomerName: payload['fiscalCustomerName']?.toString(),
+          clientRequestId: clientRequestId,
+          terminalId: payload['terminalId']?.toString(),
+          warehouseId: payload['warehouseId']?.toString(),
+          deviceFingerprint: payload['deviceFingerprint']?.toString(),
+          saleOccurredAt: payload['saleOccurredAt']?.toString(),
+          items: ((payload['items'] as List?) ?? const [])
+              .whereType<Map>()
+              .map(
+                (item) =>
+                    SaleDraftItem.fromPayload(item.cast<String, dynamic>()),
+              )
+              .toList(growable: false),
+        );
+      } on DioException catch (error) {
+        if (error.response?.statusCode == 409 &&
+            (clientRequestId ?? '').isNotEmpty &&
+            (companyId ?? '').isNotEmpty) {
+          await _offlineStore.markOfflineSaleConflict(
+            companyId: companyId!,
+            clientRequestId: clientRequestId!,
+            conflict: _conflictPayloadFromResponse(error.response?.data),
+          );
+        }
+        rethrow;
+      }
       if (sale != null &&
           (clientRequestId ?? '').isNotEmpty &&
           (companyId ?? '').isNotEmpty) {
@@ -601,8 +626,17 @@ class VentasRepository {
     final normalizedCustomerId = (customerId ?? '').trim();
     final normalizedSourceQuotationId = (sourceQuotationId ?? '').trim();
     final clientRequestId = 'sale_req_${DateTime.now().microsecondsSinceEpoch}';
+    final occurredAt = DateTime.now().toUtc();
+    final syncIdentity = await _resolveSaleSyncIdentity();
     final payload = {
       'clientRequestId': clientRequestId,
+      'saleOccurredAt': occurredAt.toIso8601String(),
+      if ((syncIdentity.deviceFingerprint ?? '').isNotEmpty)
+        'deviceFingerprint': syncIdentity.deviceFingerprint,
+      if ((syncIdentity.terminalId ?? '').isNotEmpty)
+        'terminalId': syncIdentity.terminalId,
+      if ((syncIdentity.warehouseId ?? '').isNotEmpty)
+        'warehouseId': syncIdentity.warehouseId,
       if (normalizedSourceQuotationId.isNotEmpty)
         'sourceQuotationId': normalizedSourceQuotationId,
       if (normalizedCustomerId.isNotEmpty) 'customerId': normalizedCustomerId,
@@ -640,6 +674,10 @@ class VentasRepository {
         fiscalCustomerTaxId: fiscalCustomerTaxId,
         fiscalCustomerName: fiscalCustomerName,
         clientRequestId: clientRequestId,
+        terminalId: syncIdentity.terminalId,
+        warehouseId: syncIdentity.warehouseId,
+        deviceFingerprint: syncIdentity.deviceFingerprint,
+        saleOccurredAt: occurredAt.toIso8601String(),
         items: items,
       );
     } on DioException catch (e) {
@@ -665,7 +703,6 @@ class VentasRepository {
         );
       }
       final localId = 'local_$clientRequestId';
-      final occurredAt = DateTime.now().toUtc();
       final pendingAction = PendingSyncAction(
         id: '$_createSaleSyncType:$localId',
         type: _createSaleSyncType,
@@ -674,6 +711,7 @@ class VentasRepository {
         userId: userId,
         entityType: 'sale',
         entityId: localId,
+        terminalId: syncIdentity.terminalId,
         idempotencyKey: clientRequestId,
         payload: payload,
         status: 'pending',
@@ -732,6 +770,10 @@ class VentasRepository {
     String? fiscalCustomerTaxId,
     String? fiscalCustomerName,
     String? clientRequestId,
+    String? terminalId,
+    String? warehouseId,
+    String? deviceFingerprint,
+    String? saleOccurredAt,
     required List<SaleDraftItem> items,
   }) async {
     final normalizedCustomerId = (customerId ?? '').trim();
@@ -741,6 +783,14 @@ class VentasRepository {
       data: {
         if ((clientRequestId ?? '').trim().isNotEmpty)
           'clientRequestId': clientRequestId!.trim(),
+        if ((saleOccurredAt ?? '').trim().isNotEmpty)
+          'saleOccurredAt': saleOccurredAt!.trim(),
+        if ((deviceFingerprint ?? '').trim().isNotEmpty)
+          'deviceFingerprint': deviceFingerprint!.trim(),
+        if ((terminalId ?? '').trim().isNotEmpty)
+          'terminalId': terminalId!.trim(),
+        if ((warehouseId ?? '').trim().isNotEmpty)
+          'warehouseId': warehouseId!.trim(),
         if (normalizedSourceQuotationId.isNotEmpty)
           'sourceQuotationId': normalizedSourceQuotationId,
         if (normalizedCustomerId.isNotEmpty) 'customerId': normalizedCustomerId,
@@ -772,6 +822,56 @@ class VentasRepository {
   bool _shouldQueueNetworkFailure(DioException error) {
     final status = error.response?.statusCode;
     return status == null || status >= 500;
+  }
+
+  Future<_SaleSyncIdentity> _resolveSaleSyncIdentity() async {
+    String? deviceId;
+    try {
+      final headers = await ClientTelemetryHeaders.instance.headers();
+      deviceId = headers['x-client-device-id']?.trim();
+    } catch (_) {
+      deviceId = null;
+    }
+
+    List<TerminalWarehouseModel> terminals = const [];
+    try {
+      terminals = await _warehouseRepository.fetchTerminals();
+    } on Object {
+      terminals = await _warehouseRepository.cachedTerminals();
+    }
+
+    TerminalWarehouseModel? selected;
+    for (final terminal in terminals) {
+      if (terminal.isActive && terminal.deviceBound) {
+        selected = terminal;
+        break;
+      }
+    }
+    selected ??= terminals
+        .where((terminal) => terminal.isActive && terminal.isDefault)
+        .cast<TerminalWarehouseModel?>()
+        .firstWhere((terminal) => terminal != null, orElse: () => null);
+    selected ??= terminals
+        .where((terminal) => terminal.isActive)
+        .cast<TerminalWarehouseModel?>()
+        .firstWhere((terminal) => terminal != null, orElse: () => null);
+
+    return _SaleSyncIdentity(
+      deviceFingerprint: deviceId,
+      terminalId: selected?.id,
+      warehouseId: selected?.defaultWarehouseId,
+    );
+  }
+
+  Map<String, dynamic> _conflictPayloadFromResponse(dynamic data) {
+    if (data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+    return {
+      'code': 'OFFLINE_SYNC_CONFLICT',
+      'message':
+          'Esta venta no pudo sincronizarse porque el stock cambió mientras el dispositivo estaba sin conexión.',
+    };
   }
 
   SaleModel _optimisticSale({
@@ -1038,10 +1138,7 @@ class VentasRepository {
   /// Escribe en caché sin bloquear/fallar la respuesta de red: un problema
   /// local (p. ej. base SQLite ocupada) NUNCA debe dejar colgada la carga
   /// de ventas recientes.
-  Future<void> _tryWriteCache(
-    String key,
-    Map<String, dynamic> value,
-  ) async {
+  Future<void> _tryWriteCache(String key, Map<String, dynamic> value) async {
     try {
       await _cache.writeMap(key, value);
     } catch (error, stackTrace) {
@@ -1071,7 +1168,8 @@ class VentasRepository {
       'from': _dateOnly(from),
       'to': _dateOnly(to),
       if ((userId ?? '').trim().isNotEmpty) 'userId': userId!.trim(),
-      if ((customerId ?? '').trim().isNotEmpty) 'customerId': customerId!.trim(),
+      if ((customerId ?? '').trim().isNotEmpty)
+        'customerId': customerId!.trim(),
       if (includeDeleted) 'includeDeleted': 'true',
       if (requestedLimit != null) 'limit': requestedLimit,
     };
@@ -1136,7 +1234,7 @@ class VentasRepository {
     TraceLog.log(
       'RECENT_SALES',
       'ERROR $label status=${error.response?.statusCode} '
-      'type=${error.type} message=${error.message ?? ''} body=$bodyPreview',
+          'type=${error.type} message=${error.message ?? ''} body=$bodyPreview',
       error: error,
       stackTrace: stackTrace,
     );
@@ -1156,4 +1254,16 @@ double? _nullableDouble(dynamic value) {
   if (value == null) return null;
   if (value is num) return value.toDouble();
   return double.tryParse(value.toString());
+}
+
+class _SaleSyncIdentity {
+  const _SaleSyncIdentity({
+    this.deviceFingerprint,
+    this.terminalId,
+    this.warehouseId,
+  });
+
+  final String? deviceFingerprint;
+  final String? terminalId;
+  final String? warehouseId;
 }

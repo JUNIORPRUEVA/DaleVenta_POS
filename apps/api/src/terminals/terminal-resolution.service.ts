@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -46,6 +46,7 @@ export class TerminalResolutionService {
       return this.resolveTerminalById(tx, input.companyId, terminalId, {
         requestedWarehouseId,
         resolution: "explicit-terminal",
+        allowCapturedWarehouse: true,
       });
     }
 
@@ -66,7 +67,7 @@ export class TerminalResolutionService {
         );
       }
       if (matches.length === 1) {
-        return this.mapTerminal(matches[0], {
+        return this.mapTerminal(tx, matches[0], {
           requestedWarehouseId,
           resolution: "bound-device",
         });
@@ -79,7 +80,7 @@ export class TerminalResolutionService {
       orderBy: { createdAt: "asc" },
     });
     if (defaultTerminal) {
-      return this.mapTerminal(defaultTerminal, {
+      return this.mapTerminal(tx, defaultTerminal, {
         requestedWarehouseId,
         resolution: "default-terminal",
       });
@@ -92,7 +93,7 @@ export class TerminalResolutionService {
       take: 2,
     });
     if (activeTerminals.length === 1) {
-      return this.mapTerminal(activeTerminals[0], {
+      return this.mapTerminal(tx, activeTerminals[0], {
         requestedWarehouseId,
         resolution: "single-active-terminal",
       });
@@ -112,6 +113,7 @@ export class TerminalResolutionService {
     options: {
       requestedWarehouseId?: string | null;
       resolution: OperationalTerminalContext["resolution"];
+      allowCapturedWarehouse?: boolean;
     },
   ) {
     const terminal = await tx.terminal.findFirst({
@@ -121,10 +123,11 @@ export class TerminalResolutionService {
     if (!terminal) {
       throw new BadRequestException("Terminal activo no encontrado.");
     }
-    return this.mapTerminal(terminal, options);
+    return this.mapTerminal(tx, terminal, options);
   }
 
-  private mapTerminal(
+  private async mapTerminal(
+    tx: Tx,
     terminal: {
       id: string;
       companyId: string;
@@ -143,8 +146,9 @@ export class TerminalResolutionService {
     options: {
       requestedWarehouseId?: string | null;
       resolution: OperationalTerminalContext["resolution"];
+      allowCapturedWarehouse?: boolean;
     },
-  ): OperationalTerminalContext {
+  ): Promise<OperationalTerminalContext> {
     if (!terminal.defaultWarehouse?.isActive) {
       throw new BadRequestException(
         "Terminal activo con almacen predeterminado inactivo.",
@@ -159,9 +163,48 @@ export class TerminalResolutionService {
       options.requestedWarehouseId &&
       options.requestedWarehouseId !== terminal.defaultWarehouseId
     ) {
-      throw new BadRequestException(
-        "El almacen solicitado no coincide con el almacen predeterminado del terminal.",
-      );
+      if (!options.allowCapturedWarehouse) {
+        throw this.conflict(
+          "TERMINAL_WAREHOUSE_CHANGED",
+          "El almacen solicitado no coincide con el almacen predeterminado del terminal.",
+          {
+            terminalId: terminal.id,
+            requestedWarehouseId: options.requestedWarehouseId,
+            currentWarehouseId: terminal.defaultWarehouseId,
+          },
+        );
+      }
+
+      const capturedWarehouse = await tx.warehouse.findFirst({
+        where: {
+          id: options.requestedWarehouseId,
+          companyId: terminal.companyId,
+          isActive: true,
+        },
+        select: { id: true, name: true, code: true },
+      });
+      if (!capturedWarehouse) {
+        throw this.conflict(
+          "WAREHOUSE_INACTIVE",
+          "El almacen capturado para la venta offline ya no esta activo.",
+          {
+            terminalId: terminal.id,
+            requestedWarehouseId: options.requestedWarehouseId,
+            currentWarehouseId: terminal.defaultWarehouseId,
+          },
+        );
+      }
+
+      return {
+        terminal: {
+          id: terminal.id,
+          name: terminal.name,
+          code: terminal.code,
+          deviceFingerprint: terminal.deviceFingerprint,
+        },
+        warehouse: capturedWarehouse,
+        resolution: options.resolution,
+      };
     }
 
     return {
@@ -183,5 +226,18 @@ export class TerminalResolutionService {
   private clean(value?: string | null) {
     const text = value?.trim();
     return text && text.length > 0 ? text : undefined;
+  }
+
+  private conflict(
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+  ) {
+    return new ConflictException({
+      code,
+      errorCode: code,
+      message,
+      details,
+    });
   }
 }

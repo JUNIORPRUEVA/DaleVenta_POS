@@ -19,6 +19,7 @@ import '../../features/contabilidad/factura_fiscal_screen.dart';
 import '../../features/contabilidad/pagos_pendientes_screen.dart';
 import '../../features/products/ui/inventory_module_pages.dart';
 import '../../features/reports/ui/reports_page.dart';
+import '../../features/warehouses/ui/inventory_kardex_screen.dart';
 import '../../features/warehouses/ui/warehouse_settings_screen.dart';
 import '../../modules/clientes/cliente_detail_screen.dart';
 import '../../modules/clientes/clientes_screen.dart';
@@ -204,6 +205,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: Routes.catalogoConteo,
             builder: (context, state) =>
                 const InventoryModulePages(initialMobileTab: 'inventory'),
+          ),
+          GoRoute(
+            path: Routes.catalogoKardex,
+            builder: (context, state) => const InventoryKardexScreen(),
           ),
           GoRoute(
             path: Routes.contabilidad,

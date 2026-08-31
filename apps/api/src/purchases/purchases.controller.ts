@@ -18,7 +18,7 @@ import { AuthGuard } from "@nestjs/passport";
 import { Role } from "@prisma/client";
 import type { Express, Request } from "express";
 import { memoryStorage } from "multer";
-import { Roles } from "../auth/roles.decorator";
+import { Permissions, Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import {
   CreatePurchaseInvoiceDto,
@@ -34,6 +34,7 @@ type RequestUser = { id: string; role: Role; companyId?: string | null };
 
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 @Roles(Role.ADMIN)
+@Permissions("viewPurchases")
 @Controller("purchases")
 export class PurchasesController {
   constructor(private readonly purchases: PurchasesService) {}
@@ -53,12 +54,14 @@ export class PurchasesController {
 
   @Post("suppliers")
   @Roles(Role.ADMIN)
+  @Permissions("manageSuppliers")
   createSupplier(@Req() req: Request, @Body() dto: UpsertSupplierDto) {
     return this.purchases.createSupplier(req.user as RequestUser, dto);
   }
 
   @Patch("suppliers/:id")
   @Roles(Role.ADMIN)
+  @Permissions("manageSuppliers")
   updateSupplier(
     @Req() req: Request,
     @Param("id") id: string,
@@ -69,6 +72,7 @@ export class PurchasesController {
 
   @Delete("suppliers/:id")
   @Roles(Role.ADMIN)
+  @Permissions("manageSuppliers")
   deactivateSupplier(@Req() req: Request, @Param("id") id: string) {
     return this.purchases.deactivateSupplier(req.user as RequestUser, id);
   }
@@ -103,6 +107,7 @@ export class PurchasesController {
 
   @Post("invoices")
   @Roles(Role.ADMIN)
+  @Permissions("editPurchases")
   @UseInterceptors(
     FileInterceptor("file", {
       storage: memoryStorage(),
@@ -156,6 +161,7 @@ export class PurchasesController {
 
   @Delete("invoices/:id")
   @Roles(Role.ADMIN)
+  @Permissions("editPurchases")
   deleteInvoice(@Req() req: Request, @Param("id") id: string) {
     return this.purchases.deleteInvoice(req.user as RequestUser, id);
   }
@@ -167,12 +173,14 @@ export class PurchasesController {
 
   @Post("orders")
   @Roles(Role.ADMIN)
+  @Permissions("createPurchases")
   createOrder(@Req() req: Request, @Body() dto: CreatePurchaseOrderDto) {
     return this.purchases.createOrder(req.user as RequestUser, dto);
   }
 
   @Patch("orders/:id")
   @Roles(Role.ADMIN)
+  @Permissions("editPurchases")
   updateOrder(
     @Req() req: Request,
     @Param("id") id: string,
@@ -183,24 +191,28 @@ export class PurchasesController {
 
   @Post("orders/:id/duplicate")
   @Roles(Role.ADMIN)
+  @Permissions("createPurchases")
   duplicateOrder(@Req() req: Request, @Param("id") id: string) {
     return this.purchases.duplicateOrder(req.user as RequestUser, id);
   }
 
   @Post("orders/:id/approve")
   @Roles(Role.ADMIN)
+  @Permissions("approvePurchases")
   approveOrder(@Req() req: Request, @Param("id") id: string) {
     return this.purchases.approveOrder(req.user as RequestUser, id);
   }
 
   @Post("orders/:id/send")
   @Roles(Role.ADMIN)
+  @Permissions("editPurchases")
   markSent(@Req() req: Request, @Param("id") id: string) {
     return this.purchases.markSent(req.user as RequestUser, id);
   }
 
   @Post("orders/:id/cancel")
   @Roles(Role.ADMIN)
+  @Permissions("cancelPurchases")
   cancelOrder(
     @Req() req: Request,
     @Param("id") id: string,
@@ -211,12 +223,14 @@ export class PurchasesController {
 
   @Delete("orders/:id")
   @Roles(Role.ADMIN)
+  @Permissions("deletePurchaseDrafts")
   deleteDraft(@Req() req: Request, @Param("id") id: string) {
     return this.purchases.deleteDraft(req.user as RequestUser, id);
   }
 
   @Post("orders/:id/receive")
   @Roles(Role.ADMIN)
+  @Permissions("receivePurchases")
   receiveOrder(
     @Req() req: Request,
     @Param("id") id: string,
@@ -232,6 +246,7 @@ export class PurchasesController {
 
   @Post("pdf-share-link")
   @Roles(Role.ADMIN)
+  @Permissions("downloadPurchasePdf")
   createPdfShareLink(
     @Req() req: Request,
     @Body() dto: CreatePurchaseOrderPdfShareLinkDto,

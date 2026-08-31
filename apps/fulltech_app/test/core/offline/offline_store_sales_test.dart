@@ -154,6 +154,56 @@ void main() {
       },
     );
 
+    test('marks local sale and inventory intents as conflict', () async {
+      await OfflineStore.instance.saveOfflineSaleAtomically(
+        localSaleId: 'local_sale_req_conflict',
+        companyId: 'company-a',
+        userId: 'user-a',
+        clientRequestId: 'sale_req_conflict',
+        salePayload: _salePayload('sale_req_conflict'),
+        itemPayloads: [_item('product-a', 7.625)],
+        paymentPayload: {
+          'paymentMethod': 'cash',
+          'paymentCashAmount': 100,
+          'paymentTransferAmount': 0,
+          'creditAmount': 0,
+        },
+        pendingAction: _pendingSaleAction(
+          companyId: 'company-a',
+          userId: 'user-a',
+          localSaleId: 'local_sale_req_conflict',
+          clientRequestId: 'sale_req_conflict',
+        ),
+        totalSold: 100,
+      );
+
+      await OfflineStore.instance.markOfflineSaleConflict(
+        companyId: 'company-a',
+        clientRequestId: 'sale_req_conflict',
+        conflict: {
+          'errorCode': 'INSUFFICIENT_WAREHOUSE_STOCK',
+          'details': {
+            'productId': 'product-a',
+            'requestedQuantity': '7.625000',
+            'availableQuantity': '0.125000',
+          },
+        },
+      );
+
+      final sales = await OfflineStore.instance.listOfflineSales(
+        companyId: 'company-a',
+        status: 'conflict',
+      );
+      final aggregate = await OfflineStore.instance.getOfflineSaleAggregate(
+        companyId: 'company-a',
+        localSaleId: 'local_sale_req_conflict',
+      );
+
+      expect(sales, hasLength(1));
+      expect(sales.single['error'], contains('INSUFFICIENT_WAREHOUSE_STOCK'));
+      expect(aggregate!['inventoryIntents'].single['quantityDelta'], -7.625);
+    });
+
     test('survives store restart with aggregate and pending action', () async {
       await OfflineStore.instance.saveOfflineSaleAtomically(
         localSaleId: 'local_sale_req_restart',

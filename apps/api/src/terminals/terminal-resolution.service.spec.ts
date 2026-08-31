@@ -101,20 +101,37 @@ describe("TerminalResolutionService", () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it("rejects warehouse overrides that do not match terminal default", async () => {
+  it("preserves explicitly captured warehouse when terminal default changed", async () => {
     const tx = {
       terminal: {
         findFirst: jest.fn().mockResolvedValue(terminal()),
       },
+      warehouse: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "warehouse-branch",
+          name: "Branch Warehouse",
+          code: "BRANCH",
+        }),
+      },
     };
 
-    await expect(
-      serviceWith(tx).resolveForSale(tx, {
+    const result = await serviceWith(tx).resolveForSale(tx, {
+      companyId: "company-a",
+      terminalId: "terminal-main",
+      requestedWarehouseId: "warehouse-branch",
+    });
+
+    expect(result.resolution).toBe("explicit-terminal");
+    expect(result.terminal.id).toBe("terminal-main");
+    expect(result.warehouse.id).toBe("warehouse-branch");
+    expect(tx.warehouse.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: "warehouse-branch",
         companyId: "company-a",
-        terminalId: "terminal-main",
-        requestedWarehouseId: "warehouse-branch",
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+        isActive: true,
+      },
+      select: { id: true, name: true, code: true },
+    });
   });
 
   it("does not randomly choose when there is no default and multiple terminals exist", async () => {

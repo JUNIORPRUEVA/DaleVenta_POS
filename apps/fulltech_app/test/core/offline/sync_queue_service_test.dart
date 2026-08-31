@@ -1,6 +1,7 @@
 import 'package:daleventa_pos/core/offline/offline_store.dart';
 import 'package:daleventa_pos/core/offline/pending_sync_action.dart';
 import 'package:daleventa_pos/core/offline/sync_queue_service.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -127,6 +128,53 @@ void main() {
 
     expect(processed, 1);
     expect(remaining, isEmpty);
+    service.dispose();
+  });
+
+  test('marks HTTP 409 as permanent conflict and does not retry', () async {
+    const scope = OfflineSyncScope(
+      companyId: 'company-conflict',
+      userId: 'user-conflict',
+    );
+    await store.putPendingAction(
+      _action(
+        id: 'sales.create:stock-conflict',
+        companyId: 'company-conflict',
+        userId: 'user-conflict',
+        clientRequestId: 'sale-conflict',
+      ),
+    );
+
+    final service = SyncQueueService(store, scopeResolver: () async => scope);
+    var attempts = 0;
+    service.registerHandler('sales.create', (_) async {
+      attempts += 1;
+      final requestOptions = RequestOptions(path: '/sales');
+      throw DioException(
+        requestOptions: requestOptions,
+        response: Response(
+          requestOptions: requestOptions,
+          statusCode: 409,
+          data: const {
+            'code': 'INSUFFICIENT_WAREHOUSE_STOCK',
+            'message': 'Stock insuficiente',
+          },
+        ),
+      );
+    });
+
+    await service.processPending();
+    await service.processPending();
+
+    final actions = await store.listPendingActions(
+      companyId: 'company-conflict',
+      userId: 'user-conflict',
+    );
+    expect(attempts, 1);
+    expect(actions, hasLength(1));
+    expect(actions.single.status, 'conflict');
+    expect(actions.single.permanent, isTrue);
+    expect(actions.single.nextAttemptAt, isNull);
     service.dispose();
   });
 }

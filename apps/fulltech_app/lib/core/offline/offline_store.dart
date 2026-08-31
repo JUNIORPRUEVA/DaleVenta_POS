@@ -731,6 +731,64 @@ class OfflineStore {
     });
   }
 
+  Future<void> markOfflineSaleConflict({
+    required String companyId,
+    required String clientRequestId,
+    required Map<String, dynamic> conflict,
+  }) async {
+    final cleanCompanyId = companyId.trim();
+    final cleanRequestId = clientRequestId.trim();
+    if (cleanCompanyId.isEmpty || cleanRequestId.isEmpty) return;
+    final now = DateTime.now().toUtc();
+    final encoded = jsonEncode(conflict);
+
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_webOfflineSalesKey);
+      if (raw == null || raw.trim().isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return;
+      final nextRows = decoded
+          .map((row) {
+            if (row is! Map) return row;
+            if (row['companyId']?.toString() != cleanCompanyId ||
+                row['clientRequestId']?.toString() != cleanRequestId) {
+              return row;
+            }
+            return {
+              ...row.cast<String, dynamic>(),
+              'status': 'conflict',
+              'error': encoded,
+              'updatedAt': now.toIso8601String(),
+            };
+          })
+          .toList(growable: false);
+      await prefs.setString(_webOfflineSalesKey, jsonEncode(nextRows));
+      return;
+    }
+
+    final db = await _dbOrNull();
+    if (db == null) return;
+    await db.transaction((txn) async {
+      await txn.update(
+        'offline_sales',
+        {
+          'status': 'conflict',
+          'error': encoded,
+          'updated_at': now.millisecondsSinceEpoch,
+        },
+        where: 'company_id = ? AND client_request_id = ?',
+        whereArgs: [cleanCompanyId, cleanRequestId],
+      );
+      await txn.update(
+        'offline_inventory_intents',
+        {'status': 'conflict', 'updated_at': now.millisecondsSinceEpoch},
+        where: 'company_id = ? AND idempotency_key LIKE ? AND status != ?',
+        whereArgs: [cleanCompanyId, '$cleanRequestId:inventory:%', 'synced'],
+      );
+    });
+  }
+
   Future<void> recoverStaleSyncingActions({
     required Duration olderThan,
     String? companyId,

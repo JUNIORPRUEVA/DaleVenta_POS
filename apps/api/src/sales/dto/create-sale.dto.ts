@@ -3,6 +3,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsISO8601,
   IsIn,
   IsNumber,
   IsOptional,
@@ -82,6 +83,10 @@ export class CreateSaleDto {
   @IsOptional()
   @IsString()
   deviceFingerprint?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  saleOccurredAt?: string;
 
   @IsOptional()
   @IsString()

@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daleventa_pos/core/offline/offline_store.dart';
 import 'package:daleventa_pos/core/offline/sync_queue_service.dart';
+import 'package:daleventa_pos/features/warehouses/data/warehouse_repository.dart';
 import 'package:daleventa_pos/modules/ventas/data/ventas_repository.dart';
 import 'package:daleventa_pos/modules/ventas/sales_models.dart';
 
@@ -59,16 +60,21 @@ void main() {
   }
 
   VentasRepository buildRepository() {
+    final dio = Dio()
+      ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
+        captured.add(options);
+        if (options.path.startsWith('/clients')) {
+          return jsonResponse(clientJson());
+        }
+        if (options.path == '/warehouses/terminals') {
+          return jsonResponse(<dynamic>[]);
+        }
+        return jsonResponse(saleJson());
+      });
     return VentasRepository(
-      Dio()
-        ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
-          captured.add(options);
-          if (options.path.startsWith('/clients')) {
-            return jsonResponse(clientJson());
-          }
-          return jsonResponse(saleJson());
-        }),
+      dio,
       SyncQueueService(OfflineStore.instance),
+      WarehouseRepository(dio),
     );
   }
 
@@ -98,7 +104,7 @@ void main() {
         ],
       );
 
-      final request = captured.single;
+      final request = captured.firstWhere((item) => item.path == '/sales');
       expect(request.method, 'POST');
       expect(request.path, '/sales');
       final data = request.data as Map<String, dynamic>;
@@ -106,8 +112,11 @@ void main() {
       expect(data['fiscalVoucherType'], 'B01');
       expect(data['fiscalCustomerTaxId'], '133020253');
       expect(data['fiscalCustomerName'], 'Potatoes Dres, SRL');
-      expect(data.containsKey('saveFiscalCustomer'), isFalse,
-          reason: 'El payload de venta NO debe contener saveFiscalCustomer.');
+      expect(
+        data.containsKey('saveFiscalCustomer'),
+        isFalse,
+        reason: 'El payload de venta NO debe contener saveFiscalCustomer.',
+      );
       expect(data['items'], isA<List<dynamic>>());
     },
   );
@@ -134,7 +143,9 @@ void main() {
         ],
       );
 
-      final data = captured.single.data as Map<String, dynamic>;
+      final data =
+          captured.firstWhere((item) => item.path == '/sales').data
+              as Map<String, dynamic>;
       expect(data.containsKey('fiscalVoucherType'), isFalse);
       expect(data.containsKey('fiscalCustomerTaxId'), isFalse);
       expect(data.containsKey('fiscalCustomerName'), isFalse);
@@ -142,22 +153,25 @@ void main() {
     },
   );
 
-  test('updateClientFiscal PATCHes the CLIENTES endpoint with taxId and nombre', () async {
-    final repository = buildRepository();
+  test(
+    'updateClientFiscal PATCHes the CLIENTES endpoint with taxId and nombre',
+    () async {
+      final repository = buildRepository();
 
-    await repository.updateClientFiscal(
-      id: 'client-1',
-      taxId: '133020253',
-      nombre: 'Potatoes Dres, SRL',
-    );
+      await repository.updateClientFiscal(
+        id: 'client-1',
+        taxId: '133020253',
+        nombre: 'Potatoes Dres, SRL',
+      );
 
-    final request = captured.single;
-    expect(request.method, 'PATCH');
-    expect(request.path, '/clients/client-1');
-    final data = request.data as Map<String, dynamic>;
-    expect(data['taxId'], '133020253');
-    expect(data['nombre'], 'Potatoes Dres, SRL');
-  });
+      final request = captured.single;
+      expect(request.method, 'PATCH');
+      expect(request.path, '/clients/client-1');
+      final data = request.data as Map<String, dynamic>;
+      expect(data['taxId'], '133020253');
+      expect(data['nombre'], 'Potatoes Dres, SRL');
+    },
+  );
 }
 
 class _FakeHttpClientAdapter implements HttpClientAdapter {

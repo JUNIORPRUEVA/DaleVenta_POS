@@ -100,8 +100,9 @@ class _FakeCompanySettingsRepository extends CompanySettingsRepository {
 
   @override
   Future<AdminAuthorizationVerification> verifyAdminAuthorizationPin(
-    String pin,
-  ) {
+    String pin, {
+    required String scope,
+  }) {
     final called = pinCalled;
     if (called != null && !called.isCompleted) called.complete();
     final completer = pinCompleter;
@@ -337,7 +338,7 @@ void main() {
     final source = _readProjectFile('lib/core/auth/admin_authorization.dart');
 
     final verifyIndex = source.indexOf(
-      'await repository.verifyAdminAuthorizationPin(value);',
+      'await repository.verifyAdminAuthorizationPin(',
     );
     final mountedGuardIndex = source.indexOf(
       'if (!mounted) return;',

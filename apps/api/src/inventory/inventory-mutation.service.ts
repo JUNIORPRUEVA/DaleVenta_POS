@@ -55,6 +55,16 @@ type StockUpdateRow = {
   resulting_quantity: string;
 };
 
+type StockConflictDetails = {
+  productId: string;
+  warehouseId: string;
+  requestedQuantity: string;
+  availableQuantity: string;
+  productName?: string;
+  warehouseName?: string;
+  warehouseCode?: string;
+};
+
 @Injectable()
 export class InventoryMutationService {
   constructor(private readonly prisma: PrismaService) {}
@@ -224,6 +234,7 @@ export class InventoryMutationService {
       where: { id: input.productId, companyId: input.companyId },
       select: {
         id: true,
+        nombre: true,
         stock: true,
         unitOfMeasure: {
           select: {
@@ -253,10 +264,12 @@ export class InventoryMutationService {
         companyId: input.companyId,
         isActive: true,
       },
-      select: { id: true },
+      select: { id: true, name: true, code: true },
     });
     if (!warehouse) {
-      throw new NotFoundException("Almacen activo no encontrado");
+      throw this.conflict("WAREHOUSE_INACTIVE", "Almacen activo no encontrado", {
+        warehouseId: input.warehouseId,
+      });
     }
 
     this.validateQuantityForUnit(
@@ -287,10 +300,20 @@ export class InventoryMutationService {
       : await this.updateWarehouseStockByDelta(tx, input);
     const stockRow = stockRows[0];
     if (!stockRow) {
-      throw new ConflictException(
-        input.quantityDelta.lt(0)
-          ? "Stock insuficiente o modificado concurrentemente"
-          : "WarehouseStock no encontrado o modificado concurrentemente",
+      if (input.quantityDelta.lt(0)) {
+        throw await this.insufficientStockConflict(tx, input, {
+          productName: product.nombre,
+          warehouseName: warehouse.name,
+          warehouseCode: warehouse.code,
+        });
+      }
+      throw this.conflict(
+        "WAREHOUSE_STOCK_CONCURRENT_MODIFICATION",
+        "WarehouseStock no encontrado o modificado concurrentemente",
+        {
+          productId: input.productId,
+          warehouseId: input.warehouseId,
+        },
       );
     }
 
@@ -366,6 +389,57 @@ export class InventoryMutationService {
       RETURNING (quantity - ${input.quantityDelta})::text AS previous_quantity,
                 quantity::text AS resulting_quantity
     `;
+  }
+
+  private async insufficientStockConflict(
+    tx: Tx,
+    input: {
+      companyId: string;
+      warehouseId: string;
+      productId: string;
+      quantityDelta: Prisma.Decimal;
+    },
+    snapshots: {
+      productName?: string;
+      warehouseName?: string;
+      warehouseCode?: string;
+    },
+  ) {
+    const row = await tx.warehouseStock.findFirst({
+      where: {
+        companyId: input.companyId,
+        warehouseId: input.warehouseId,
+        productId: input.productId,
+      },
+      select: { quantity: true },
+    });
+    const details: StockConflictDetails = {
+      productId: input.productId,
+      warehouseId: input.warehouseId,
+      requestedQuantity: input.quantityDelta.abs().toFixed(6),
+      availableQuantity: new Prisma.Decimal(row?.quantity ?? 0).toFixed(6),
+      productName: snapshots.productName,
+      warehouseName: snapshots.warehouseName,
+      warehouseCode: snapshots.warehouseCode,
+    };
+    return this.conflict(
+      "INSUFFICIENT_WAREHOUSE_STOCK",
+      "Esta venta no pudo sincronizarse porque el stock cambió mientras el dispositivo estaba sin conexión.",
+      details,
+    );
+  }
+
+  private conflict(
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+  ) {
+    return new ConflictException({
+      code,
+      errorCode: code,
+      message,
+      details,
+    });
   }
 
   private updateWarehouseStockWithExpectedQuantity(

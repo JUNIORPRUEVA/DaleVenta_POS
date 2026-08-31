@@ -63,7 +63,8 @@ void main() {
         'lib/modules/cotizaciones/utils/cotizacion_pdf_service.dart',
       ).readAsStringSync();
       final bottomStart = source.indexOf('pw.Widget _bottomSection');
-      final totalsStart = source.indexOf("pw.Text(\n          'Resumen'");
+      final totalsStart =
+          RegExp(r"pw\.Text\(\s*'Resumen'").firstMatch(source)?.start ?? -1;
 
       expect(bottomStart, isNonNegative);
       expect(totalsStart, greaterThan(bottomStart));

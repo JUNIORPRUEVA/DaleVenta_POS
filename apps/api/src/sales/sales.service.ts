@@ -704,6 +704,7 @@ export class SalesService {
     const customerId =
       dto.customerId?.trim() || sourceQuotation?.customerId || null;
     const clientRequestId = dto.clientRequestId?.trim() || null;
+    const saleOccurredAt = this.resolveSaleOccurredAt(dto.saleOccurredAt);
 
     if (clientRequestId) {
       const existing = await this.prisma.sale.findFirst({
@@ -1136,7 +1137,7 @@ export class SalesService {
             terminalId: operationalContext?.terminal.id ?? null,
             terminalNameSnapshot: operationalContext?.terminal.name ?? null,
             terminalCodeSnapshot: operationalContext?.terminal.code ?? null,
-            saleDate: new Date(),
+            saleDate: saleOccurredAt,
             note: dto.note,
             paymentMethod,
             paymentCashAmount,
@@ -1300,6 +1301,12 @@ export class SalesService {
       });
       return sale;
     } catch (error) {
+      this.logOfflineSyncConflictIfSafe(error, {
+        companyId,
+        clientRequestId,
+        terminalId: dto.terminalId,
+        warehouseId: dto.warehouseId,
+      });
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002" &&
@@ -2262,6 +2269,52 @@ export class SalesService {
   private cleanSourceProductId(value: unknown) {
     const text = String(value ?? "").trim();
     return text.length > 0 ? text : null;
+  }
+
+  private resolveSaleOccurredAt(value?: string | null) {
+    const text = value?.trim();
+    if (!text) return new Date();
+    const parsed = new Date(text);
+    if (Number.isNaN(parsed.getTime())) return new Date();
+    const now = Date.now();
+    if (parsed.getTime() > now + 5 * 60 * 1000) return new Date();
+    return parsed;
+  }
+
+  private logOfflineSyncConflictIfSafe(
+    error: unknown,
+    context: {
+      companyId: string;
+      clientRequestId: string | null;
+      terminalId?: string | null;
+      warehouseId?: string | null;
+    },
+  ) {
+    const response =
+      typeof (error as { getResponse?: unknown }).getResponse === "function"
+        ? (error as { getResponse: () => unknown }).getResponse()
+        : null;
+    const body =
+      response && typeof response === "object"
+        ? (response as Record<string, unknown>)
+        : null;
+    const code = String(body?.errorCode ?? body?.code ?? "").trim();
+    if (!code.includes("STOCK") && !code.includes("WAREHOUSE") && !code.includes("TERMINAL")) {
+      return;
+    }
+    const details =
+      body?.details && typeof body.details === "object"
+        ? (body.details as Record<string, unknown>)
+        : {};
+    // eslint-disable-next-line no-console
+    console.warn("[offline-sync-conflict]", {
+      companyId: context.companyId,
+      clientRequestId: context.clientRequestId,
+      conflictType: code,
+      productId: details.productId,
+      warehouseId: details.warehouseId ?? context.warehouseId,
+      terminalId: context.terminalId,
+    });
   }
 
   private toNumber(

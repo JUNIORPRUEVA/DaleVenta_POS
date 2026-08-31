@@ -104,6 +104,7 @@ async function createTerminal(
   companyId: string,
   code: string,
   defaultWarehouseId: string,
+  options: { deviceFingerprint?: string; isDefault?: boolean } = {},
 ) {
   return prisma.terminal.create({
     data: {
@@ -111,7 +112,8 @@ async function createTerminal(
       name: code,
       code,
       defaultWarehouseId,
-      isDefault: true,
+      deviceFingerprint: options.deviceFingerprint,
+      isDefault: options.isDefault ?? true,
       isActive: true,
     },
   });
@@ -190,36 +192,73 @@ async function main() {
     await openCashSession(company.id, user.id);
     const main = await createWarehouse(company.id, "MAIN", true);
     const branch = await createWarehouse(company.id, "BRANCH");
-    const terminal = await createTerminal(company.id, "T1", branch.id);
-    const product = await createProduct(company.id, "W5 Sale Product", "20");
+    const terminal = await createTerminal(company.id, "T1", main.id, {
+      deviceFingerprint: "w5-sale-device",
+    });
+    const product = await createProduct(company.id, "W5 Sale Product", "10");
     await createStock(company.id, main.id, product.id, "10");
-    await createStock(company.id, branch.id, product.id, "10");
 
     const sale = await service.create(
       { id: user.id, companyId: company.id, role: Role.ADMIN },
       {
-        terminalId: terminal.id,
-        items: [{ productId: product.id, qty: 2.25, priceSoldUnit: 2 }],
+        clientRequestId: "w5-terminal-first-sale",
+        deviceFingerprint: "w5-sale-device",
+        items: [{ productId: product.id, qty: 3, priceSoldUnit: 2 }],
       },
     );
     const saleItem = sale.items[0];
-    const saleState = await state(company.id, product.id, branch.id);
+    const saleState = await state(company.id, product.id, main.id);
+
+    const historyProduct = await createProduct(
+      company.id,
+      "W5 Terminal History Product",
+      "8",
+    );
+    await createStock(company.id, main.id, historyProduct.id, "4");
+    await createStock(company.id, branch.id, historyProduct.id, "4");
+    const historicalSale = await service.create(
+      { id: user.id, companyId: company.id, role: Role.ADMIN },
+      {
+        clientRequestId: "w5-terminal-history-main",
+        terminalId: terminal.id,
+        items: [{ productId: historyProduct.id, qty: 1, priceSoldUnit: 2 }],
+      },
+    );
+    await prisma.terminal.update({
+      where: { id: terminal.id },
+      data: { defaultWarehouseId: branch.id },
+    });
+    const futureSale = await service.create(
+      { id: user.id, companyId: company.id, role: Role.ADMIN },
+      {
+        clientRequestId: "w5-terminal-history-branch",
+        terminalId: terminal.id,
+        items: [{ productId: historyProduct.id, qty: 1, priceSoldUnit: 2 }],
+      },
+    );
 
     const cancelCompany = await createCompany(slugs[1]);
     const cancelUser = await createUser(cancelCompany.id, `${slugs[1]}@example.com`);
     await openCashSession(cancelCompany.id, cancelUser.id);
     const cancelWarehouse = await createWarehouse(cancelCompany.id, "MAIN", true);
+    const cancelTerminal = await createTerminal(
+      cancelCompany.id,
+      "MAIN-POS",
+      cancelWarehouse.id,
+      { deviceFingerprint: "w5-cancel-device" },
+    );
     const cancelProduct = await createProduct(
       cancelCompany.id,
       "W5 Cancel Product",
-      "5",
+      "10",
     );
-    await createStock(cancelCompany.id, cancelWarehouse.id, cancelProduct.id, "5");
+    await createStock(cancelCompany.id, cancelWarehouse.id, cancelProduct.id, "10");
     const saleToCancel = await service.create(
       { id: cancelUser.id, companyId: cancelCompany.id, role: Role.ADMIN },
       {
-        warehouseId: cancelWarehouse.id,
-        items: [{ productId: cancelProduct.id, qty: 1, priceSoldUnit: 2 }],
+        clientRequestId: "w5-cancel-sale",
+        terminalId: cancelTerminal.id,
+        items: [{ productId: cancelProduct.id, qty: 3, priceSoldUnit: 2 }],
       },
     );
     const firstCancel = await service.remove(
@@ -245,6 +284,11 @@ async function main() {
     const refundUser = await createUser(refundCompany.id, `${slugs[2]}@example.com`);
     await openCashSession(refundCompany.id, refundUser.id);
     const refundWarehouse = await createWarehouse(refundCompany.id, "MAIN", true);
+    const refundTerminal = await createTerminal(
+      refundCompany.id,
+      "MAIN-POS",
+      refundWarehouse.id,
+    );
     const refundProduct = await createProduct(
       refundCompany.id,
       "W5 Refund Product",
@@ -254,7 +298,8 @@ async function main() {
     const saleToRefund = await service.create(
       { id: refundUser.id, companyId: refundCompany.id, role: Role.ADMIN },
       {
-        warehouseId: refundWarehouse.id,
+        clientRequestId: "w5-refund-sale",
+        terminalId: refundTerminal.id,
         items: [{ productId: refundProduct.id, qty: 2, priceSoldUnit: 2 }],
       },
     );
@@ -285,11 +330,16 @@ async function main() {
 
     const tenantCompany = await createCompany(slugs[3]);
     const tenantWarehouse = await createWarehouse(tenantCompany.id, "MAIN", true);
+    const tenantTerminal = await createTerminal(
+      tenantCompany.id,
+      "MAIN-POS",
+      tenantWarehouse.id,
+    );
     const crossWarehouseRejected = await service
       .create(
         { id: user.id, companyId: company.id, role: Role.ADMIN },
         {
-          warehouseId: tenantWarehouse.id,
+          terminalId: tenantTerminal.id,
           items: [{ productId: product.id, qty: 1, priceSoldUnit: 2 }],
         },
       )
@@ -308,6 +358,11 @@ async function main() {
       insufficientCompany.id,
       "MAIN",
       true,
+    );
+    const insufficientTerminal = await createTerminal(
+      insufficientCompany.id,
+      "MAIN-POS",
+      insufficientWarehouse.id,
     );
     const insufficientProduct = await createProduct(
       insufficientCompany.id,
@@ -334,7 +389,8 @@ async function main() {
           role: Role.ADMIN,
         },
         {
-          warehouseId: insufficientWarehouse.id,
+          clientRequestId: "w5-insufficient-sale",
+          terminalId: insufficientTerminal.id,
           items: [{ productId: insufficientProduct.id, qty: 2, priceSoldUnit: 2 }],
         },
       )
@@ -354,46 +410,179 @@ async function main() {
       insufficientWarehouse.id,
     );
 
-    console.log(
-      JSON.stringify(
+    const concurrencyCompany = await createCompany(`${marker}-concurrency`);
+    slugs.push(`${marker}-concurrency`);
+    const concurrencyUser = await createUser(
+      concurrencyCompany.id,
+      `${marker}-concurrency@example.com`,
+    );
+    await openCashSession(concurrencyCompany.id, concurrencyUser.id);
+    const concurrencyWarehouse = await createWarehouse(
+      concurrencyCompany.id,
+      "MAIN",
+      true,
+    );
+    const concurrencyTerminal = await createTerminal(
+      concurrencyCompany.id,
+      "MAIN-POS",
+      concurrencyWarehouse.id,
+    );
+    const concurrencyProduct = await createProduct(
+      concurrencyCompany.id,
+      "W5 Last Unit Product",
+      "1",
+    );
+    await createStock(
+      concurrencyCompany.id,
+      concurrencyWarehouse.id,
+      concurrencyProduct.id,
+      "1",
+    );
+    const concurrentResults = await Promise.allSettled([
+      service.create(
+        { id: concurrencyUser.id, companyId: concurrencyCompany.id, role: Role.ADMIN },
         {
-          terminalSale: {
-            saleId: sale.id,
-            saleItemWarehouseId: saleItem.warehouseId,
-            saleItemWarehouseCodeSnapshot: saleItem.warehouseCodeSnapshot,
-            branchState: saleState,
-            movementSourceItemMatches:
-              saleState.movements[0]?.sourceItemId === saleItem.id,
-          },
-          cancellation: {
-            firstCancel,
-            secondCancelRejected,
-            state: cancelState,
-            restoredOnce:
-              cancelState.product === "5.000000" &&
-              cancelState.warehouse === "5.000000" &&
-              cancelState.movements.filter(
-                (movement) =>
-                  movement.type === InventoryMovementType.SALE_CANCELLATION,
-              ).length === 1,
-          },
-          refundInteraction: {
-            refundId: refund.id,
-            cancelAfterRefundBlocked,
-            state: refundState,
-          },
-          tenantSecurity: { crossWarehouseRejected },
-          insufficientStock: {
-            insufficientRejected,
-            noSalePartial: beforeInsufficientSaleCount === afterInsufficientSaleCount,
-            noMovementPartial:
-              beforeInsufficientMovementCount === afterInsufficientMovementCount,
-            state: insufficientState,
-          },
+          clientRequestId: "w5-last-unit-a",
+          terminalId: concurrencyTerminal.id,
+          items: [{ productId: concurrencyProduct.id, qty: 1, priceSoldUnit: 2 }],
         },
-        null,
-        2,
       ),
+      service.create(
+        { id: concurrencyUser.id, companyId: concurrencyCompany.id, role: Role.ADMIN },
+        {
+          clientRequestId: "w5-last-unit-b",
+          terminalId: concurrencyTerminal.id,
+          items: [{ productId: concurrencyProduct.id, qty: 1, priceSoldUnit: 2 }],
+        },
+      ),
+    ]);
+    const concurrencyState = await state(
+      concurrencyCompany.id,
+      concurrencyProduct.id,
+      concurrencyWarehouse.id,
+    );
+    const fixtureCompanyIds = [
+      company.id,
+      cancelCompany.id,
+      refundCompany.id,
+      insufficientCompany.id,
+      concurrencyCompany.id,
+    ];
+    const fixtureProducts = await prisma.product.findMany({
+      where: { companyId: { in: fixtureCompanyIds } },
+      select: { id: true, companyId: true, stock: true },
+    });
+    const fixtureStocks = await prisma.warehouseStock.findMany({
+      where: { companyId: { in: fixtureCompanyIds } },
+      select: { productId: true, companyId: true, quantity: true },
+    });
+    const stockTotals = new Map<string, Prisma.Decimal>();
+    for (const row of fixtureStocks) {
+      const key = `${row.companyId}:${row.productId}`;
+      stockTotals.set(key, (stockTotals.get(key) ?? d(0)).plus(row.quantity));
+    }
+    const driftCount = fixtureProducts.filter((product) => {
+      const key = `${product.companyId}:${product.id}`;
+      return !product.stock.equals(stockTotals.get(key) ?? d(0));
+    }).length;
+    const negativeWarehouseStockCount = await prisma.warehouseStock.count({
+      where: {
+        companyId: { in: fixtureCompanyIds },
+        quantity: { lt: d(0) },
+      },
+    });
+
+    const report = {
+      terminalSale: {
+        saleId: sale.id,
+        terminalId: sale.terminalId,
+        resolvedFromDeviceFingerprint: sale.terminalId === terminal.id,
+        saleItemWarehouseId: saleItem.warehouseId,
+        saleItemWarehouseCodeSnapshot: saleItem.warehouseCodeSnapshot,
+        mainState: saleState,
+        deductedFromMain:
+          saleState.product === "7.000000" &&
+          saleState.warehouse === "7.000000" &&
+          saleItem.warehouseId === main.id &&
+          saleState.movements.some(
+            (movement) =>
+              movement.type === InventoryMovementType.SALE &&
+              movement.quantityDelta === "-3.000000" &&
+              movement.sourceItemId === saleItem.id,
+          ),
+      },
+      terminalReassignmentHistory: {
+        historicalWarehouseId: historicalSale.items[0]?.warehouseId,
+        futureWarehouseId: futureSale.items[0]?.warehouseId,
+        historicalSaleStayedMain: historicalSale.items[0]?.warehouseId === main.id,
+        futureSaleUsedBranch: futureSale.items[0]?.warehouseId === branch.id,
+      },
+      cancellation: {
+        firstCancel,
+        secondCancelRejected,
+        state: cancelState,
+        restoredOnce:
+          cancelState.product === "10.000000" &&
+          cancelState.warehouse === "10.000000" &&
+          cancelState.movements.filter(
+            (movement) =>
+              movement.type === InventoryMovementType.SALE_CANCELLATION,
+          ).length === 1,
+      },
+      refundInteraction: {
+        refundId: refund.id,
+        cancelAfterRefundBlocked,
+        state: refundState,
+      },
+      tenantSecurity: { crossWarehouseRejected },
+      insufficientStock: {
+        insufficientRejected,
+        noSalePartial: beforeInsufficientSaleCount === afterInsufficientSaleCount,
+        noMovementPartial:
+          beforeInsufficientMovementCount === afterInsufficientMovementCount,
+        state: insufficientState,
+      },
+      concurrency: {
+        fulfilled: concurrentResults.filter(
+          (result) => result.status === "fulfilled",
+        ).length,
+        rejected: concurrentResults.filter(
+          (result) => result.status === "rejected",
+        ).length,
+        noNegativeStock: concurrencyState.warehouse === "0.000000",
+        state: concurrencyState,
+      },
+      reconciliation: {
+        driftCount,
+        negativeWarehouseStockCount,
+      },
+    };
+
+    const assertions = [
+      report.terminalSale.resolvedFromDeviceFingerprint,
+      report.terminalSale.deductedFromMain,
+      report.terminalReassignmentHistory.historicalSaleStayedMain,
+      report.terminalReassignmentHistory.futureSaleUsedBranch,
+      report.cancellation.secondCancelRejected,
+      report.cancellation.restoredOnce,
+      report.refundInteraction.cancelAfterRefundBlocked,
+      report.tenantSecurity.crossWarehouseRejected,
+      report.insufficientStock.insufficientRejected,
+      report.insufficientStock.noSalePartial,
+      report.insufficientStock.noMovementPartial,
+      report.concurrency.fulfilled === 1,
+      report.concurrency.rejected === 1,
+      report.concurrency.noNegativeStock,
+      report.reconciliation.driftCount === 0,
+      report.reconciliation.negativeWarehouseStockCount === 0,
+    ];
+
+    if (assertions.some((ok) => !ok)) {
+      throw new Error("W5 terminal-first validation failed");
+    }
+
+    console.log(
+      JSON.stringify(report, null, 2),
     );
   } finally {
     await prisma.user.deleteMany({
