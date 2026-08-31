@@ -41,6 +41,17 @@ void main() {
       );
     });
 
+    test('protects warehouses and Kardex with inventory permissions', () {
+      expect(
+        RouteAccess.permissionForLocation(Routes.configuracionAlmacenes),
+        AppPermission.manageWarehouses,
+      );
+      expect(
+        RouteAccess.permissionForLocation(Routes.catalogoKardex),
+        AppPermission.viewInventoryHistory,
+      );
+    });
+
     test('default home uses effective user permission overrides', () {
       final cashierWithoutQuotes = UserModel(
         id: 'employee-a',

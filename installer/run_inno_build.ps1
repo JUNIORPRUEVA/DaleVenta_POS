@@ -2,27 +2,38 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$ScriptName,
   [Parameter(Mandatory = $true)]
-  [string]$LogName
+  [string]$LogName,
+  [string]$Version = '1.0.3+120',
+  [string]$VersionInfo = '1.0.3.120',
+  [string]$SourceDir = '..\apps\fulltech_app\build\windows\x64\runner\Release'
 )
 
 $ErrorActionPreference = 'Stop'
-$installerDir = 'c:\Users\pc\DEV\PROYECTOS\INTERNO\FULLTECH\installer'
-$iscc = 'c:\Users\pc\AppData\Local\Programs\Inno Setup 6\ISCC.exe'
+$installerDir = $PSScriptRoot
+$isccCandidates = @(
+  "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
+  'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
+  'C:\Program Files\Inno Setup 6\ISCC.exe'
+)
+$iscc = $isccCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 $scriptPath = Join-Path $installerDir $ScriptName
 $logPath = Join-Path $installerDir $LogName
 
-if (-not (Test-Path $iscc)) {
-  throw "ISCC no existe en $iscc"
+if (-not $iscc) {
+  throw 'ISCC.exe no encontrado. Instala Inno Setup 6 o agrega ISCC.exe a una ruta conocida.'
 }
 
-if (-not (Test-Path $scriptPath)) {
+if (-not (Test-Path -LiteralPath $scriptPath)) {
   throw "Script Inno no existe en $scriptPath"
 }
 
 Set-Location $installerDir
-if (Test-Path $logPath) {
-  Remove-Item $logPath -Force
-}
+$args = @(
+  $scriptPath,
+  "/DMyAppVersion=$Version",
+  "/DMyAppVersionInfo=$VersionInfo",
+  "/DMyAppSourceDir=$SourceDir"
+)
 
-$process = Start-Process -FilePath $iscc -ArgumentList $scriptPath -WorkingDirectory $installerDir -Wait -PassThru -NoNewWindow -RedirectStandardOutput $logPath -RedirectStandardError $logPath
-exit $process.ExitCode
+& $iscc @args *> $logPath
+exit $LASTEXITCODE

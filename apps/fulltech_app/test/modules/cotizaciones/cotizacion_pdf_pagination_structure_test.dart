@@ -63,12 +63,14 @@ void main() {
         'lib/modules/cotizaciones/utils/cotizacion_pdf_service.dart',
       ).readAsStringSync();
       final bottomStart = source.indexOf('pw.Widget _bottomSection');
-      final totalsStart = source.indexOf("pw.Text(\n          'Resumen'");
+      final totalsStart = source.indexOf('pw.Widget _totalsPanel');
 
       expect(bottomStart, isNonNegative);
       expect(totalsStart, greaterThan(bottomStart));
       expect(source.substring(bottomStart, totalsStart), contains('pw.Row('));
       expect(source.substring(bottomStart, totalsStart), contains('_panel('));
+      final totalsSource = source.substring(totalsStart).replaceAll('\r\n', '\n');
+      expect(totalsSource, contains("pw.Text(\n          'Resumen'"));
     });
 
     test('footer keeps page X of Y text', () {

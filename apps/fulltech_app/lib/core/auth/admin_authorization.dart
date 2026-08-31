@@ -20,10 +20,12 @@ Future<bool> ensureAdminAuthorization(
   final user = ref.read(authStateProvider).user;
   if (user == null) return false;
   if (user.appRole == AppRole.admin) return true;
+  final requestedScope = permission?.name;
   if (!forceAdminAuthorization) {
     if (permission == null) return true;
     if (hasUserPermission(user, permission)) return true;
   }
+  if (requestedScope == null || requestedScope.isEmpty) return false;
 
   final controller = ref.read(adminAuthorizationProvider.notifier);
   if (!forceAdminAuthorization &&
@@ -35,8 +37,11 @@ Future<bool> ensureAdminAuthorization(
   final granted = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
-    builder: (dialogContext) =>
-        _AdminAuthorizationDialog(reason: reason, routeLocation: routeLocation),
+    builder: (dialogContext) => _AdminAuthorizationDialog(
+      reason: reason,
+      routeLocation: routeLocation,
+      scope: requestedScope,
+    ),
   );
   return granted == true;
 }
@@ -53,9 +58,14 @@ bool hasPermissionOrAdminAuthorization(
 }
 
 class _AdminAuthorizationDialog extends ConsumerStatefulWidget {
-  const _AdminAuthorizationDialog({required this.reason, this.routeLocation});
+  const _AdminAuthorizationDialog({
+    required this.reason,
+    required this.scope,
+    this.routeLocation,
+  });
 
   final String reason;
+  final String scope;
   final String? routeLocation;
 
   @override
@@ -88,7 +98,10 @@ class _AdminAuthorizationDialogState
     try {
       final repository = ref.read(companySettingsRepositoryProvider);
       final controller = ref.read(adminAuthorizationProvider.notifier);
-      final duration = await repository.verifyAdminAuthorizationPin(value);
+      final duration = await repository.verifyAdminAuthorizationPin(
+        value,
+        scope: widget.scope,
+      );
       if (!mounted) return;
       final routeLocation = widget.routeLocation;
       if (routeLocation == null || routeLocation.trim().isEmpty) {

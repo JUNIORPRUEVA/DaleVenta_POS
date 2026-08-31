@@ -22,7 +22,7 @@ import { Role } from "@prisma/client";
 import { memoryStorage } from "multer";
 import { extname, join, posix } from "node:path";
 import type { Express, Request, Response } from "express";
-import { Roles } from "../auth/roles.decorator";
+import { Permissions, Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import { requireTenant, type TenantUser } from "../auth/tenant-context";
 import { AdjustProductStockDto } from "./dto/adjust-product-stock.dto";
@@ -211,6 +211,7 @@ export class ProductsController {
 
   @UseGuards(AuthGuard("jwt"), RolesGuard)
   @Roles(Role.ADMIN, Role.ASISTENTE)
+  @Permissions("editProducts")
   @Post()
   create(@Req() req: Request, @Body() dto: CreateProductDto) {
     return this.products.create(req.user as TenantUser, dto);
@@ -218,6 +219,7 @@ export class ProductsController {
 
   @UseGuards(AuthGuard("jwt"), RolesGuard)
   @Roles(Role.ADMIN, Role.ASISTENTE)
+  @Permissions("editProducts")
   @Post("upload")
   @UseInterceptors(
     FileInterceptor("file", {
@@ -282,6 +284,7 @@ export class ProductsController {
 
   @UseGuards(AuthGuard("jwt"), RolesGuard)
   @Roles(Role.ADMIN, Role.ASISTENTE)
+  @Permissions("editProducts")
   @Post("import-image-url")
   async importImageUrl(
     @Req() req: Request,
@@ -508,6 +511,7 @@ export class ProductsController {
 
   @UseGuards(AuthGuard("jwt"), RolesGuard)
   @Roles(Role.ADMIN, Role.ASISTENTE)
+  @Permissions("addStock")
   @Patch(":id/stock")
   adjustStock(
     @Req() req: Request,
@@ -519,6 +523,7 @@ export class ProductsController {
 
   @UseGuards(AuthGuard("jwt"), RolesGuard)
   @Roles(Role.ADMIN, Role.ASISTENTE)
+  @Permissions("editProducts")
   @Patch(":id")
   update(
     @Req() req: Request,
@@ -530,6 +535,7 @@ export class ProductsController {
 
   @UseGuards(AuthGuard("jwt"), RolesGuard)
   @Roles(Role.ADMIN)
+  @Permissions("editProducts")
   @Delete("debug/purge")
   purgeAllForDebug(@Req() req: Request) {
     return this.products.purgeAllForDebug(req.user as TenantUser);
@@ -537,6 +543,7 @@ export class ProductsController {
 
   @UseGuards(AuthGuard("jwt"), RolesGuard)
   @Roles(Role.ADMIN, Role.ASISTENTE)
+  @Permissions("editProducts")
   @Delete(":id")
   remove(@Req() req: Request, @Param("id") id: string) {
     return this.products.remove(req.user as TenantUser, id);

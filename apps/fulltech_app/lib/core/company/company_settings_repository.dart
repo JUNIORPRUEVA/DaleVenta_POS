@@ -416,14 +416,15 @@ class CompanySettingsRepository {
   }
 
   Future<AdminAuthorizationVerification> verifyAdminAuthorizationPin(
-    String pin,
-  ) async {
+    String pin, {
+    required String scope,
+  }) async {
     try {
       final res = await _dio
           .post(
             ApiRoutes.settingsAdminPinVerify,
             options: Options(extra: const {'skipLoader': true}),
-            data: {'pin': pin},
+            data: {'pin': pin, 'scope': scope},
           )
           .timeout(_settingsTimeout);
       final data = _normalizeMap(

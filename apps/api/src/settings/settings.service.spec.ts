@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { Role } from "@prisma/client";
+import * as bcrypt from "bcryptjs";
 import { SettingsService } from "./settings.service";
 
 describe("SettingsService company master data protection", () => {
@@ -390,5 +391,67 @@ describe("SettingsService company master data protection", () => {
       measurementUnitsEnabled: true,
     });
     expect(response.measurementUnitsEnabled).toBe(true);
+  });
+
+  it("issues tenant-bound admin PIN authorization for the requested scope only", async () => {
+    const signAsync = jest.fn().mockResolvedValue("scoped-token");
+    const prisma = {
+      appConfig: {
+        findUnique: jest.fn().mockResolvedValue({
+          adminAuthorizationPinHash: await bcrypt.hash("1234", 4),
+        }),
+      },
+    };
+    const service = new SettingsService(
+      prisma as any,
+      { signAsync } as any,
+      { emitCompany: jest.fn() } as any,
+      {
+        resolveForCompany: jest.fn(),
+      } as any,
+      {
+        getCompanyFiscalSettings: jest.fn(),
+        updateFiscalSettings: jest.fn(),
+      } as any,
+    );
+
+    const result = await service.verifyAdminPin(
+      { id: "cashier-a", role: Role.CAJERO, companyId: "company-a" },
+      "1234",
+      "addStock",
+    );
+
+    expect(signAsync).toHaveBeenCalledWith(
+      {
+        sub: "cashier-a",
+        companyId: "company-a",
+        tokenType: "admin-authorization",
+        permissions: ["addStock"],
+      },
+      { expiresIn: 600 },
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      adminAuthorizationToken: "scoped-token",
+      permissions: ["addStock"],
+    });
+  });
+
+  it("rejects admin PIN verification without a safe scope", async () => {
+    const prisma = {
+      appConfig: {
+        findUnique: jest.fn(),
+      },
+    };
+    const service = buildService(prisma);
+
+    await expect(
+      service.verifyAdminPin(
+        { id: "cashier-a", role: Role.CAJERO, companyId: "company-a" },
+        "1234",
+        "",
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.appConfig.findUnique).not.toHaveBeenCalled();
   });
 });

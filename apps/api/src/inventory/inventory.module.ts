@@ -1,9 +1,12 @@
 import { Global, Module } from "@nestjs/common";
 import { InventoryMutationService } from "./inventory-mutation.service";
+import { InventoryReportingController } from "./inventory-reporting.controller";
+import { InventoryReportingService } from "./inventory-reporting.service";
 
 @Global()
 @Module({
-  providers: [InventoryMutationService],
-  exports: [InventoryMutationService],
+  controllers: [InventoryReportingController],
+  providers: [InventoryMutationService, InventoryReportingService],
+  exports: [InventoryMutationService, InventoryReportingService],
 })
 export class InventoryModule {}

@@ -647,6 +647,8 @@ List<_SidebarMenuGroup> _buildDesktopSidebarGroups(
       items: [
         if (routeToItem.containsKey(Routes.catalogo))
           menuItem(Routes.catalogo, 'Inventario', Icons.inventory_2_outlined),
+        if (routeToItem.containsKey(Routes.catalogoKardex))
+          menuItem(Routes.catalogoKardex, 'Kardex', Icons.history_rounded),
         if (routeToItem.containsKey(Routes.ventasCreditos))
           menuItem(
             Routes.ventasCreditos,

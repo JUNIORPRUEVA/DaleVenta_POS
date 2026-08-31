@@ -883,6 +883,11 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
             title: 'Recuento',
             route: Routes.catalogoConteo,
           ),
+          AppNavigationItem(
+            icon: Icons.history_rounded,
+            title: 'Kardex',
+            route: Routes.catalogoKardex,
+          ),
         ],
         openOnHover: false,
       ),

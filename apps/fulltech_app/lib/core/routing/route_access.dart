@@ -26,6 +26,8 @@ class RouteAccess {
       case Routes.catalogoCategorias:
       case Routes.catalogoConteo:
         return AppPermission.viewCatalog;
+      case Routes.catalogoKardex:
+        return AppPermission.viewInventoryHistory;
       case Routes.ventasBase:
       case Routes.ventas:
         return AppPermission.viewSalesReports;
@@ -84,8 +86,9 @@ class RouteAccess {
       case Routes.configuracionBackup:
       case Routes.configuracionParametros:
       case Routes.configuracionDocumentos:
-      case Routes.configuracionAlmacenes:
         return AppPermission.manageSettings;
+      case Routes.configuracionAlmacenes:
+        return AppPermission.manageWarehouses;
       case Routes.whatsapp:
         return null;
       case Routes.publicidad:

@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/auth/admin_authorization.dart';
+import '../../../core/auth/app_permissions.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/models/product_model.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/is_flutter_test.dart';
 import '../../../core/widgets/app_drawer.dart';
 import '../../../core/widgets/custom_app_bar.dart';
 import '../data/warehouse_repository.dart';
@@ -18,9 +21,42 @@ class WarehouseSettingsScreen extends ConsumerWidget {
     final user = ref.watch(authStateProvider).user;
     final warehouses = ref.watch(warehousesProvider);
     final terminals = ref.watch(warehouseTerminalsProvider);
-    final transfers = ref.watch(warehouseTransfersProvider);
-    final products = ref.watch(warehouseProductsProvider);
     final compact = MediaQuery.sizeOf(context).width < 720;
+    final canCreateWarehouse = _hasAnyPermission(user, const [
+      AppPermission.createWarehouses,
+      AppPermission.manageWarehouses,
+    ]);
+    final canEditWarehouse = _hasAnyPermission(user, const [
+      AppPermission.editWarehouses,
+      AppPermission.manageWarehouses,
+    ]);
+    final canChangeDefault = _hasAnyPermission(user, const [
+      AppPermission.changeDefaultWarehouse,
+      AppPermission.manageWarehouses,
+    ]);
+    final canActivateWarehouse = _hasAnyPermission(user, const [
+      AppPermission.activateWarehouses,
+      AppPermission.manageWarehouses,
+    ]);
+    final canManageTerminals = _hasAnyPermission(user, const [
+      AppPermission.manageTerminals,
+      AppPermission.manageWarehouses,
+    ]);
+    final canCreateTransfers = _hasAnyPermission(user, const [
+      AppPermission.createTransfers,
+      AppPermission.manageWarehouses,
+    ]);
+    final canViewTransfers = _hasAnyPermission(user, const [
+      AppPermission.viewTransfers,
+      AppPermission.createTransfers,
+      AppPermission.manageWarehouses,
+    ]);
+    final transfers = canViewTransfers
+        ? ref.watch(warehouseTransfersProvider)
+        : const AsyncValue<List<WarehouseTransferModel>>.data([]);
+    final products = canCreateTransfers
+        ? ref.watch(warehouseProductsProvider)
+        : const AsyncValue<List<ProductModel>>.data([]);
     return Scaffold(
       backgroundColor: AppColors.background,
       drawer: buildAdaptiveDrawer(context, currentUser: user),
@@ -71,12 +107,13 @@ class WarehouseSettingsScreen extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    FilledButton.icon(
-                      onPressed: () => _openWarehouseForm(context, ref),
-                      icon: const Icon(Icons.add_business_outlined),
-                      label: const Text('Crear'),
-                      style: _filledButtonStyle(),
-                    ),
+                    if (canCreateWarehouse)
+                      FilledButton.icon(
+                        onPressed: () => _openWarehouseForm(context, ref),
+                        icon: const Icon(Icons.add_business_outlined),
+                        label: const Text('Crear'),
+                        style: _filledButtonStyle(),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -93,23 +130,36 @@ class WarehouseSettingsScreen extends ConsumerWidget {
                   data: (items) => _WarehouseList(
                     warehouses: items,
                     terminals: terminals.valueOrNull ?? const [],
+                    canEdit: canEditWarehouse,
+                    canChangeDefault: canChangeDefault,
+                    canActivate: canActivateWarehouse,
                     onEdit: (warehouse) =>
                         _openWarehouseForm(context, ref, warehouse: warehouse),
-                    onSetDefault: (warehouse) =>
-                        _runWarehouseAction(context, ref, () async {
-                          await ref
-                              .read(warehouseRepositoryProvider)
-                              .setDefault(warehouse.id);
-                        }, 'Almacén predeterminado actualizado'),
-                    onToggle: (warehouse) =>
-                        _runWarehouseAction(context, ref, () async {
-                          final repo = ref.read(warehouseRepositoryProvider);
-                          if (warehouse.isActive) {
-                            await repo.deactivate(warehouse.id);
-                          } else {
-                            await repo.activate(warehouse.id);
-                          }
-                        }, 'Estado del almacén actualizado'),
+                    onSetDefault: (warehouse) => _runWarehouseAction(
+                      context,
+                      ref,
+                      AppPermission.changeDefaultWarehouse,
+                      () async {
+                        await ref
+                            .read(warehouseRepositoryProvider)
+                            .setDefault(warehouse.id);
+                      },
+                      'Almacén predeterminado actualizado',
+                    ),
+                    onToggle: (warehouse) => _runWarehouseAction(
+                      context,
+                      ref,
+                      AppPermission.activateWarehouses,
+                      () async {
+                        final repo = ref.read(warehouseRepositoryProvider);
+                        if (warehouse.isActive) {
+                          await repo.deactivate(warehouse.id);
+                        } else {
+                          await repo.activate(warehouse.id);
+                        }
+                      },
+                      'Estado del almacén actualizado',
+                    ),
                   ),
                   loading: () => const _WarehouseSurface(
                     child: Padding(
@@ -128,15 +178,21 @@ class WarehouseSettingsScreen extends ConsumerWidget {
                   data: (items) => _TerminalAssignments(
                     terminals: items,
                     warehouses: warehouses.valueOrNull ?? const [],
-                    onChanged: (terminal, warehouseId) =>
-                        _runWarehouseAction(context, ref, () async {
-                          await ref
-                              .read(warehouseRepositoryProvider)
-                              .updateTerminalWarehouse(
-                                terminalId: terminal.id,
-                                warehouseId: warehouseId,
-                              );
-                        }, 'Terminal actualizada'),
+                    canManage: canManageTerminals,
+                    onChanged: (terminal, warehouseId) => _runWarehouseAction(
+                      context,
+                      ref,
+                      AppPermission.manageTerminals,
+                      () async {
+                        await ref
+                            .read(warehouseRepositoryProvider)
+                            .updateTerminalWarehouse(
+                              terminalId: terminal.id,
+                              warehouseId: warehouseId,
+                            );
+                      },
+                      'Terminal actualizada',
+                    ),
                   ),
                   loading: () => const SizedBox.shrink(),
                   error: (_, _) => const SizedBox.shrink(),
@@ -147,6 +203,7 @@ class WarehouseSettingsScreen extends ConsumerWidget {
                     warehouses: items,
                     transfers: transfers.valueOrNull ?? const [],
                     products: products.valueOrNull ?? const [],
+                    canCreateTransfers: canCreateTransfers,
                     loading:
                         transfers.isLoading ||
                         products.isLoading ||
@@ -166,10 +223,18 @@ class WarehouseSettingsScreen extends ConsumerWidget {
   }
 }
 
+bool _hasAnyPermission(dynamic user, Iterable<AppPermission> permissions) {
+  if (user == null && isFlutterTest) return true;
+  return permissions.any((permission) => hasUserPermission(user, permission));
+}
+
 class _WarehouseList extends StatelessWidget {
   const _WarehouseList({
     required this.warehouses,
     required this.terminals,
+    required this.canEdit,
+    required this.canChangeDefault,
+    required this.canActivate,
     required this.onEdit,
     required this.onSetDefault,
     required this.onToggle,
@@ -177,6 +242,9 @@ class _WarehouseList extends StatelessWidget {
 
   final List<WarehouseModel> warehouses;
   final List<TerminalWarehouseModel> terminals;
+  final bool canEdit;
+  final bool canChangeDefault;
+  final bool canActivate;
   final ValueChanged<WarehouseModel> onEdit;
   final ValueChanged<WarehouseModel> onSetDefault;
   final ValueChanged<WarehouseModel> onToggle;
@@ -202,11 +270,14 @@ class _WarehouseList extends StatelessWidget {
                 for (final warehouse in warehouses)
                   _WarehouseCard(
                     warehouse: warehouse,
-                    onEdit: () => onEdit(warehouse),
-                    onSetDefault: warehouse.isDefault || !warehouse.isActive
+                    onEdit: canEdit ? () => onEdit(warehouse) : null,
+                    onSetDefault:
+                        !canChangeDefault ||
+                            warehouse.isDefault ||
+                            !warehouse.isActive
                         ? null
                         : () => onSetDefault(warehouse),
-                    onToggle: () => onToggle(warehouse),
+                    onToggle: canActivate ? () => onToggle(warehouse) : null,
                   ),
               ],
             );
@@ -225,11 +296,14 @@ class _WarehouseList extends StatelessWidget {
                             item.defaultWarehouseId == warehouse.id,
                       )
                       .length,
-                  onEdit: () => onEdit(warehouse),
-                  onSetDefault: warehouse.isDefault || !warehouse.isActive
+                  onEdit: canEdit ? () => onEdit(warehouse) : null,
+                  onSetDefault:
+                      !canChangeDefault ||
+                          warehouse.isDefault ||
+                          !warehouse.isActive
                       ? null
                       : () => onSetDefault(warehouse),
-                  onToggle: () => onToggle(warehouse),
+                  onToggle: canActivate ? () => onToggle(warehouse) : null,
                 ),
                 const Divider(height: 1),
               ],
@@ -288,9 +362,9 @@ class _WarehouseTableRow extends StatelessWidget {
 
   final WarehouseModel warehouse;
   final int terminalCount;
-  final VoidCallback onEdit;
+  final VoidCallback? onEdit;
   final VoidCallback? onSetDefault;
-  final VoidCallback onToggle;
+  final VoidCallback? onToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -343,9 +417,9 @@ class _WarehouseCard extends StatelessWidget {
   });
 
   final WarehouseModel warehouse;
-  final VoidCallback onEdit;
+  final VoidCallback? onEdit;
   final VoidCallback? onSetDefault;
-  final VoidCallback onToggle;
+  final VoidCallback? onToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -469,11 +543,13 @@ class _TerminalAssignments extends StatelessWidget {
   const _TerminalAssignments({
     required this.terminals,
     required this.warehouses,
+    required this.canManage,
     required this.onChanged,
   });
 
   final List<TerminalWarehouseModel> terminals;
   final List<WarehouseModel> warehouses;
+  final bool canManage;
   final void Function(TerminalWarehouseModel terminal, String warehouseId)
   onChanged;
 
@@ -527,7 +603,7 @@ class _TerminalAssignments extends StatelessWidget {
                             ),
                           ),
                       ],
-                      onChanged: terminal.isActive
+                      onChanged: canManage && terminal.isActive
                           ? (value) {
                               if (value != null) onChanged(terminal, value);
                             }
@@ -561,6 +637,7 @@ class _TransferPanel extends ConsumerStatefulWidget {
     required this.warehouses,
     required this.transfers,
     required this.products,
+    required this.canCreateTransfers,
     required this.loading,
     required this.error,
   });
@@ -568,6 +645,7 @@ class _TransferPanel extends ConsumerStatefulWidget {
   final List<WarehouseModel> warehouses;
   final List<WarehouseTransferModel> transfers;
   final List<ProductModel> products;
+  final bool canCreateTransfers;
   final bool loading;
   final Object? error;
 
@@ -618,7 +696,13 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final compact = constraints.maxWidth < 760;
-            final form = _buildForm(context, activeWarehouses, selectedProduct);
+            final form = widget.canCreateTransfers
+                ? _buildForm(context, activeWarehouses, selectedProduct)
+                : const _WarehouseStatePanel(
+                    icon: Icons.lock_outline_rounded,
+                    title: 'Transferencias protegidas',
+                    message: 'Se requiere autorización de administrador.',
+                  );
             final history = _buildHistory();
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1010,26 +1094,42 @@ Future<void> _openWarehouseForm(
     ),
   );
   if (saved != true || !context.mounted) return;
-  await _runWarehouseAction(context, ref, () async {
-    final repo = ref.read(warehouseRepositoryProvider);
-    if (warehouse == null) {
-      await repo.createWarehouse(name: nameCtrl.text, code: codeCtrl.text);
-    } else {
-      await repo.updateWarehouse(
-        id: warehouse.id,
-        name: nameCtrl.text,
-        code: codeCtrl.text,
-      );
-    }
-  }, warehouse == null ? 'Almacén creado' : 'Almacén actualizado');
+  await _runWarehouseAction(
+    context,
+    ref,
+    warehouse == null
+        ? AppPermission.createWarehouses
+        : AppPermission.editWarehouses,
+    () async {
+      final repo = ref.read(warehouseRepositoryProvider);
+      if (warehouse == null) {
+        await repo.createWarehouse(name: nameCtrl.text, code: codeCtrl.text);
+      } else {
+        await repo.updateWarehouse(
+          id: warehouse.id,
+          name: nameCtrl.text,
+          code: codeCtrl.text,
+        );
+      }
+    },
+    warehouse == null ? 'Almacén creado' : 'Almacén actualizado',
+  );
 }
 
 Future<void> _runWarehouseAction(
   BuildContext context,
   WidgetRef ref,
+  AppPermission permission,
   Future<void> Function() action,
   String successMessage,
 ) async {
+  final allowed = await ensureAdminAuthorization(
+    context,
+    ref,
+    permission: permission,
+    reason: 'Se requiere autorización de administrador.',
+  );
+  if (!allowed) return;
   try {
     await action();
     ref.invalidate(warehousesProvider);

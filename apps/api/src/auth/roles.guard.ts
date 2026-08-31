@@ -46,11 +46,6 @@ export class RolesGuard implements CanActivate {
           authorizedPermissions?: string[];
         }
       | undefined;
-    const adminAuthorized = this.hasValidAdminAuthorization(request, user);
-    if (adminAuthorized) {
-      this.markAdminAuthorization(request, user);
-    }
-
     if (
       (!requiredRoles || requiredRoles.length === 0) &&
       (!requiredPermissions || requiredPermissions.length === 0)
@@ -65,12 +60,22 @@ export class RolesGuard implements CanActivate {
     if (role === Role.ADMIN) {
       return true;
     }
-    if (adminAuthorized) {
-      return true;
-    }
     if (requiredPermissions?.length) {
-      const granted = await this.hasAnyUserPermission(user, requiredPermissions);
+      const granted = await this.hasAnyUserPermission(
+        user,
+        requiredPermissions,
+      );
       if (granted) {
+        this.markPermissionAuthorization(user, requiredPermissions);
+        return true;
+      }
+      const adminAuthorized = this.hasValidAdminAuthorization(
+        request,
+        user,
+        requiredPermissions,
+      );
+      if (adminAuthorized) {
+        this.markAdminAuthorization(request, user);
         this.markPermissionAuthorization(user, requiredPermissions);
         return true;
       }
@@ -150,10 +155,20 @@ export class RolesGuard implements CanActivate {
   private hasValidAdminAuthorization(
     request: { headers?: Record<string, unknown> },
     user?: { id?: string; companyId?: string | null },
+    requiredPermissions: string[] = [],
   ) {
     const raw = request.headers?.["x-admin-authorization"];
     const token = Array.isArray(raw) ? raw[0] : raw;
-    if (!user?.id || !user.companyId || typeof token !== "string" || !token) {
+    const requested = requiredPermissions
+      .map((permission) => permission.trim())
+      .filter((permission) => permission.length > 0);
+    if (
+      !user?.id ||
+      !user.companyId ||
+      typeof token !== "string" ||
+      !token ||
+      requested.length === 0
+    ) {
       return false;
     }
     try {
@@ -164,11 +179,18 @@ export class RolesGuard implements CanActivate {
         sub?: string;
         companyId?: string;
         tokenType?: string;
+        permissions?: unknown;
       };
+      const tokenPermissions = Array.isArray(payload.permissions)
+        ? payload.permissions
+            .map((permission) => `${permission}`.trim())
+            .filter((permission) => permission.length > 0)
+        : [];
       return (
         payload.tokenType === "admin-authorization" &&
         payload.sub === user.id &&
-        payload.companyId === user.companyId
+        payload.companyId === user.companyId &&
+        requested.some((permission) => tokenPermissions.includes(permission))
       );
     } catch {
       return false;
@@ -184,9 +206,7 @@ export class RolesGuard implements CanActivate {
   }
 
   private markPermissionAuthorization(
-    user:
-      | { authorizedPermissions?: string[] }
-      | undefined,
+    user: { authorizedPermissions?: string[] } | undefined,
     permissions: string[],
   ) {
     if (!user) return;

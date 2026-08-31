@@ -60,12 +60,7 @@ export class SalesController {
   @Get("summary")
   summaryMine(@Req() req: Request, @Query() query: SalesRangeQueryDto) {
     const user = req.user as TenantUser;
-    return this.sales.summaryMine(
-      user,
-      query.from,
-      query.to,
-      query.customerId,
-    );
+    return this.sales.summaryMine(user, query.from, query.to, query.customerId);
   }
 
   @Post()
@@ -104,6 +99,7 @@ export class SalesController {
   }
 
   @Delete(":id")
+  @Permissions("cancelSales")
   remove(@Req() req: Request, @Param("id") id: string) {
     const user = req.user as TenantUser;
     return this.sales.remove(user, id);
