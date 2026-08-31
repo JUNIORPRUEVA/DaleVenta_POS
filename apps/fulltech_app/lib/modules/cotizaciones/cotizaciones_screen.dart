@@ -39,6 +39,7 @@ import '../../core/routing/routes.dart';
 import '../../core/tax/product_tax_preview_calculator.dart';
 import '../../core/tax/product_tax_options_provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/uom/uom_formatters.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -202,6 +203,10 @@ CotizacionItem buildBillingItemFromProduct(ProductModel product) {
     taxTreatment: product.taxTreatment,
     taxRate: product.taxRate ?? 0,
     taxPriceMode: product.taxPriceMode ?? 'NO_TAX',
+    unitCodeSnapshot: product.unitOfMeasure.code,
+    unitNameSnapshot: product.unitOfMeasure.name,
+    unitSymbolSnapshot: product.unitOfMeasure.symbol,
+    unitPrecisionSnapshot: product.unitOfMeasure.precision,
   );
 }
 
@@ -11006,7 +11011,7 @@ class _ProductThumbCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final stockValue = product.stock;
     final outOfStock = stockValue == null || stockValue <= 0;
-    final stockText = _formatProductStock(stockValue);
+    final stockText = _formatProductStock(product);
 
     return Material(
       color: Colors.white,
@@ -15252,7 +15257,7 @@ class _ModernDesktopProductCardState extends State<_ModernDesktopProductCard> {
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            _formatProductStock(stock),
+                            _formatProductStock(product),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -15469,7 +15474,7 @@ class _DesktopProductCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final stock = product.stock;
-    final stockText = _formatProductStock(stock);
+    final stockText = _formatProductStock(product);
     final stockColor = stock == null
         ? const Color(0xFF64748B)
         : stock <= 0
@@ -15645,13 +15650,11 @@ class _DesktopProductCard extends StatelessWidget {
   }
 }
 
-String _formatProductStock(double? stock) {
+String _formatProductStock(ProductModel product) {
+  final stock = product.stock;
   if (stock == null) return 'Disp. --';
   if (stock <= 0) return 'Sin stock';
-  final text = stock % 1 == 0
-      ? stock.toStringAsFixed(0)
-      : stock.toStringAsFixed(2);
-  return 'Disp. $text';
+  return formatStockLabel(product);
 }
 
 String _formatAccountingInput(num value) => formatRdAccountingAmount(value);
@@ -15998,6 +16001,15 @@ class _LineEditDialogState extends State<_LineEditDialog> {
       setState(() => _error = 'La cantidad debe ser mayor que cero.');
       return;
     }
+    final qtyError = validateQuantityForUnit(
+      qty,
+      unit: widget.item.unitSnapshot,
+      label: 'La cantidad',
+    );
+    if (qtyError != null) {
+      setState(() => _error = qtyError);
+      return;
+    }
     if (discount < 0) {
       setState(() => _error = 'El descuento no puede ser negativo.');
       return;
@@ -16090,7 +16102,11 @@ class _LineEditDialogState extends State<_LineEditDialog> {
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
-                          decoration: _lineInputDecoration(),
+                          decoration: _lineInputDecoration().copyWith(
+                            suffixText: item.unitSnapshot.isUnit
+                                ? null
+                                : item.unitSnapshot.symbol,
+                          ),
                           onSubmitted: (_) => _submit(),
                         ),
                       ),
@@ -16309,9 +16325,7 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
     final hasDiscount = item.hasDiscount;
     final outOfStock = widget.outOfStock;
     final discountText = widget.money(item.discountAmount);
-    final qtyText = item.qty % 1 == 0
-        ? item.qty.toStringAsFixed(0)
-        : item.qty.toStringAsFixed(2);
+    final qtyText = formatQuantityWithUnit(item.qty, unit: item.unitSnapshot);
 
     return Material(
       color: Colors.transparent,
@@ -17339,11 +17353,6 @@ class _TicketCompactItemState extends State<_TicketCompactItem> {
     final item = widget.item;
     final editAction = widget.onEdit ?? widget.onEditLine;
 
-    String formatNoDecimals(num value) {
-      final v = value.toDouble();
-      return v % 1 == 0 ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
-    }
-
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(12),
@@ -17458,7 +17467,7 @@ class _TicketCompactItemState extends State<_TicketCompactItem> {
                         ],
                         Flexible(
                           child: Text(
-                            '${formatNoDecimals(item.qty)} x ${widget.money(item.unitPrice)}',
+                            '${formatQuantityWithUnit(item.qty, unit: item.unitSnapshot)} x ${widget.money(item.unitPrice)}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(

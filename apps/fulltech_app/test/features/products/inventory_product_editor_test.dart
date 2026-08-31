@@ -10,6 +10,7 @@ import 'package:daleventa_pos/core/company/company_settings_model.dart';
 import 'package:daleventa_pos/core/company/company_settings_repository.dart';
 import 'package:daleventa_pos/core/models/product_model.dart';
 import 'package:daleventa_pos/core/tax/product_tax_options_provider.dart';
+import 'package:daleventa_pos/core/uom/uom_formatters.dart';
 import 'package:daleventa_pos/core/utils/money_formatters.dart';
 import 'package:daleventa_pos/features/catalogo/data/catalog_repository.dart';
 import 'package:daleventa_pos/features/products/ui/inventory_module_pages.dart';
@@ -24,6 +25,8 @@ class _FakeCatalogRepository extends CatalogRepository {
   double? lastTaxRate;
   String? lastTaxPriceMode;
   String? lastFotoUrl;
+  String? lastUnitOfMeasureId;
+  UnitOfMeasureModel? lastUnitOfMeasure;
   bool dropImageOnUpdateResponse = false;
   Completer<String>? uploadCompleter;
   List<ProductModel> products = [
@@ -51,7 +54,18 @@ class _FakeCatalogRepository extends CatalogRepository {
 
   @override
   Future<List<UnitOfMeasureModel>> fetchUnitOfMeasures() async {
-    return const [UnitOfMeasureModel.unit];
+    return const [
+      UnitOfMeasureModel.unit,
+      UnitOfMeasureModel(
+        id: 'YARD',
+        code: 'YARD',
+        name: 'Yarda',
+        symbol: 'yd',
+        category: 'LENGTH',
+        allowDecimals: true,
+        precision: 3,
+      ),
+    ];
   }
 
   @override
@@ -76,6 +90,8 @@ class _FakeCatalogRepository extends CatalogRepository {
     lastTaxRate = taxRate;
     lastTaxPriceMode = taxPriceMode;
     lastFotoUrl = fotoUrl;
+    lastUnitOfMeasureId = unitOfMeasureId;
+    lastUnitOfMeasure = unitOfMeasure;
     await Future<void>.delayed(const Duration(milliseconds: 20));
     return ProductModel(
       id: 'created-$creates',
@@ -89,6 +105,8 @@ class _FakeCatalogRepository extends CatalogRepository {
       taxTreatment: taxTreatment ?? 'INHERIT',
       taxRate: taxRate,
       taxPriceMode: taxPriceMode,
+      unitOfMeasureId: unitOfMeasureId,
+      unitOfMeasure: unitOfMeasure,
     );
   }
 
@@ -115,6 +133,8 @@ class _FakeCatalogRepository extends CatalogRepository {
     lastTaxRate = taxRate;
     lastTaxPriceMode = taxPriceMode;
     lastFotoUrl = fotoUrl;
+    lastUnitOfMeasureId = unitOfMeasureId;
+    lastUnitOfMeasure = unitOfMeasure;
     await Future<void>.delayed(const Duration(milliseconds: 20));
     return ProductModel(
       id: id,
@@ -128,6 +148,8 @@ class _FakeCatalogRepository extends CatalogRepository {
       taxTreatment: taxTreatment ?? 'INHERIT',
       taxRate: taxRate,
       taxPriceMode: taxPriceMode,
+      unitOfMeasureId: unitOfMeasureId,
+      unitOfMeasure: unitOfMeasure,
     );
   }
 
@@ -188,6 +210,7 @@ Future<ProductFormResult?> _pumpEditor(
   required _FakeCatalogRepository repo,
   ProductModel? product,
   ProductTaxUiConfig? taxConfig,
+  CompanySettings? companySettings,
 }) async {
   ProductFormResult? result;
   await tester.pumpWidget(
@@ -203,7 +226,7 @@ Future<ProductFormResult?> _pumpEditor(
               ),
         ),
         companySettingsProvider.overrideWith(
-          (ref) async => CompanySettings.empty(),
+          (ref) async => companySettings ?? CompanySettings.empty(),
         ),
       ],
       child: MaterialApp(
@@ -270,6 +293,118 @@ Future<void> _pumpMobileInventory(
 }
 
 void main() {
+  test('formatea cantidades UoM sin ceros sobrantes', () {
+    const yard = UnitOfMeasureModel(
+      id: 'YARD',
+      code: 'YARD',
+      name: 'Yarda',
+      symbol: 'yd',
+      category: 'LENGTH',
+      allowDecimals: true,
+      precision: 3,
+    );
+
+    expect(formatQuantityWithUnit(14.5, unit: yard), '14.5 yd');
+    expect(formatQuantityWithUnit(7.625, unit: yard), '7.625 yd');
+    expect(
+      formatQuantityWithUnit(
+        25,
+        unit: UnitOfMeasureModel.unit,
+        includeUnitForUnit: true,
+      ),
+      '25 u',
+    );
+  });
+
+  testWidgets('formulario permite seleccionar unidad de medida decimal', (
+    tester,
+  ) async {
+    final repo = _FakeCatalogRepository();
+    await _pumpEditor(
+      tester,
+      repo: repo,
+      companySettings: CompanySettings.empty().copyWith(
+        measurementUnitsEnabled: true,
+      ),
+    );
+
+    expect(find.text('Unidad de medida'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).at(0), 'Tela azul');
+    await tester.enterText(find.byType(TextField).at(2), '150');
+    await tester.enterText(find.byType(TextField).at(3), '90');
+    await tester.enterText(find.byType(TextField).at(4), '20.5');
+    await tester.tap(find.text('Unidad (u)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Yarda (yd)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('General'));
+    await tester.tap(find.text('Crear producto'));
+    await tester.pumpAndSettle();
+
+    expect(repo.creates, 1);
+    expect(repo.lastUnitOfMeasureId, 'YARD');
+    expect(repo.lastUnitOfMeasure?.symbol, 'yd');
+  });
+
+  testWidgets('formulario rechaza stock decimal para Unidad', (tester) async {
+    final repo = _FakeCatalogRepository();
+    await _pumpEditor(
+      tester,
+      repo: repo,
+      companySettings: CompanySettings.empty().copyWith(
+        measurementUnitsEnabled: true,
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField).at(0), 'Caja');
+    await tester.enterText(find.byType(TextField).at(2), '100');
+    await tester.enterText(find.byType(TextField).at(3), '50');
+    await tester.enterText(find.byType(TextField).at(4), '1.5');
+    await tester.tap(find.text('General'));
+    await tester.tap(find.text('Crear producto'));
+    await tester.pumpAndSettle();
+
+    expect(repo.creates, 0);
+    expect(find.textContaining('debe ser entera'), findsOneWidget);
+  });
+
+  testWidgets('editar producto medido conserva stock decimal en el campo', (
+    tester,
+  ) async {
+    final repo = _FakeCatalogRepository();
+    const yard = UnitOfMeasureModel(
+      id: 'YARD',
+      code: 'YARD',
+      name: 'Yarda',
+      symbol: 'yd',
+      category: 'LENGTH',
+      allowDecimals: true,
+      precision: 3,
+    );
+    final product = ProductModel(
+      id: 'fabric-1',
+      nombre: 'Tela azul',
+      precio: 150,
+      costo: 90,
+      stock: 14.5,
+      categoria: 'General',
+      unitOfMeasureId: yard.id,
+      unitOfMeasure: yard,
+    );
+
+    await _pumpEditor(
+      tester,
+      repo: repo,
+      product: product,
+      companySettings: CompanySettings.empty().copyWith(
+        measurementUnitsEnabled: true,
+      ),
+    );
+
+    expect(find.text('Yarda (yd)'), findsOneWidget);
+    expect(find.widgetWithText(TextField, '14.5'), findsOneWidget);
+  });
+
   testWidgets('inventario móvil no muestra selector superior de tabs', (
     tester,
   ) async {

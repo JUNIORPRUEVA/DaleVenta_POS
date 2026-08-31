@@ -21,13 +21,15 @@ String formatQuantityValue(
   UnitOfMeasureModel unit = UnitOfMeasureModel.unit,
 }) {
   if (value == null) {
-    return unit.allowDecimals ? '0.${'0' * unit.precision}' : '0';
+    return '0';
   }
   final number = value.toDouble();
   if (!unit.allowDecimals || unit.precision <= 0) {
     return number.toStringAsFixed(0);
   }
-  return number.toStringAsFixed(unit.precision);
+  return number
+      .toStringAsFixed(unit.precision)
+      .replaceFirst(RegExp(r'\.?0+$'), '');
 }
 
 String formatQuantityWithUnit(

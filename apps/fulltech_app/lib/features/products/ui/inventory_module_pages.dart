@@ -3777,6 +3777,10 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
 
   double get _quantity => _parseInventoryNumber(_qtyCtrl.text) ?? 0;
 
+  String _quantityWithUnit(num? value, UnitOfMeasureModel unit) {
+    return formatQuantityWithUnit(value, unit: unit, includeUnitForUnit: true);
+  }
+
   double _previewStock(ProductModel product) {
     final stock = _stockOf(product);
     return switch (_mode) {
@@ -3858,6 +3862,12 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
         !_quantity.isFinite) {
       return false;
     }
+    final quantityError = validateQuantityForUnit(
+      _quantity,
+      unit: selected.unitOfMeasure,
+      label: 'La cantidad',
+    );
+    if (quantityError != null) return false;
     return _previewStock(selected) >= 0;
   }
 
@@ -3882,6 +3892,20 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
       );
       return;
     }
+    final quantityError = validateQuantityForUnit(
+      _quantity,
+      unit: selected.unitOfMeasure,
+      label: 'La cantidad',
+    );
+    if (quantityError != null) {
+      _showTopNotice(
+        title: 'Cantidad inválida',
+        message: quantityError,
+        icon: Icons.warning_amber_rounded,
+        accent: const Color(0xFFB45309),
+      );
+      return;
+    }
     final nextStock = _previewStock(selected);
     if (nextStock < 0) {
       _showTopNotice(
@@ -3899,7 +3923,7 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
       _showTopNotice(
         title: 'Stock actualizado',
         message:
-            '${selected.nombre} ahora tiene ${_stockText(nextStock)} unidades.',
+            '${selected.nombre} ahora tiene ${_quantityWithUnit(nextStock, selected.unitOfMeasure)}.',
       );
       _noteCtrl.clear();
       _qtyCtrl.text = '1';
@@ -4130,7 +4154,7 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
                         _InlineInfo(
                           icon: Icons.inventory_2_outlined,
                           message:
-                              'Stock actual: ${_stockText(selected.stock)}   Nuevo stock: ${_stockText(_previewStock(selected))}',
+                              'Stock actual: ${_quantityWithUnit(selected.stock, selected.unitOfMeasure)}   Nuevo stock: ${_quantityWithUnit(_previewStock(selected), selected.unitOfMeasure)}',
                         ),
                       ],
                       const SizedBox(height: 16),
@@ -6613,10 +6637,29 @@ Future<void> _showStockAdjustmentPanel(
     };
   }
 
+  String quantityWithUnit(num? value) {
+    return formatQuantityWithUnit(
+      value,
+      unit: product.unitOfMeasure,
+      includeUnitForUnit: true,
+    );
+  }
+
   Future<void> submit(
     BuildContext dialogContext,
     void Function(void Function()) setPanelState,
   ) async {
+    final quantityError = validateQuantityForUnit(
+      quantity(),
+      unit: product.unitOfMeasure,
+      label: 'La cantidad',
+    );
+    if (quantityError != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(quantityError)));
+      return;
+    }
     final nextStock = preview();
     if (nextStock < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -6708,7 +6751,7 @@ Future<void> _showStockAdjustmentPanel(
                           child: _InlineInfo(
                             icon: Icons.inventory_2_outlined,
                             message:
-                                'Stock actual: ${_stockText(product.stock)} · Valor: ${formatRdCurrencyAccounting(_stockOf(product) * product.precio)}',
+                                'Stock actual: ${quantityWithUnit(product.stock)} · Valor: ${formatRdCurrencyAccounting(_stockOf(product) * product.precio)}',
                           ),
                         ),
                         const SizedBox(height: 14),
@@ -6740,14 +6783,20 @@ Future<void> _showStockAdjustmentPanel(
                             decimal: true,
                           ),
                           onChanged: (_) => setPanelState(() {}),
-                          decoration: _inventoryTextInputDecoration('Cantidad'),
+                          decoration: _inventoryTextInputDecoration(
+                            'Cantidad',
+                            suffixText: product.unitOfMeasure.isUnit
+                                ? null
+                                : product.unitOfMeasure.symbol,
+                          ),
                         ),
                         const SizedBox(height: 14),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: _InlineInfo(
                             icon: Icons.preview_outlined,
-                            message: 'Nuevo stock: ${_stockText(preview())}',
+                            message:
+                                'Nuevo stock: ${quantityWithUnit(preview())}',
                           ),
                         ),
                         const Spacer(),
@@ -7131,7 +7180,9 @@ class _InventoryProductEditorPageState
       text: product == null ? '' : formatRdAccountingAmount(product.costo),
     );
     _stockCtrl = TextEditingController(
-      text: product == null ? '0' : _stockText(product.stock),
+      text: product == null
+          ? '0'
+          : formatQuantityValue(product.stock, unit: product.unitOfMeasure),
     );
     _categoryCtrl = TextEditingController(
       text: product == null || product.categoriaLabel == 'Sin categoría'
@@ -7148,6 +7199,9 @@ class _InventoryProductEditorPageState
     _taxRate = product?.taxRate;
     _taxPriceMode = product?.taxPriceMode;
     _selectedUnit = product?.unitOfMeasure ?? UnitOfMeasureModel.unit;
+    _unitOptions = _selectedUnit.id == UnitOfMeasureModel.unit.id
+        ? const [UnitOfMeasureModel.unit]
+        : [_selectedUnit, UnitOfMeasureModel.unit];
     unawaited(_loadUnitOptions());
     _maybeRecoverLostImage();
   }
@@ -7487,6 +7541,7 @@ class _InventoryProductEditorPageState
     required double cost,
     required double stock,
     required String category,
+    required UnitOfMeasureModel unit,
     required String? taxTreatment,
     required double? taxRate,
     required String? taxPriceMode,
@@ -7509,6 +7564,8 @@ class _InventoryProductEditorPageState
             taxTreatment: taxTreatment,
             taxRate: taxRate,
             taxPriceMode: taxPriceMode,
+            unitOfMeasureId: unit.id,
+            unitOfMeasure: unit,
           );
         } catch (e) {
           // La imagen pendiente no debe revertir ni bloquear el guardado fiscal.
@@ -7724,6 +7781,7 @@ class _InventoryProductEditorPageState
           cost: cost,
           stock: stock,
           category: category,
+          unit: unitForSave,
           taxTreatment: taxTreatmentForSave,
           taxRate: taxRateForSave,
           taxPriceMode: taxPriceModeForSave,
