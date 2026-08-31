@@ -106,12 +106,19 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Inventario',
             route: Routes.catalogo,
           ),
-        if (canOrAuthorize(AppPermission.viewCatalog))
+        if (canOrAuthorize(AppPermission.viewInventoryHistory))
           const AppNavigationItem(
             icon: Icons.history_rounded,
             appIcon: AppIcons.inventory,
             title: 'Kardex',
             route: Routes.catalogoKardex,
+          ),
+        if (canOrAuthorize(AppPermission.manageWarehouses))
+          const AppNavigationItem(
+            icon: Icons.warehouse_outlined,
+            appIcon: AppIcons.inventory,
+            title: 'Almacenes',
+            route: Routes.configuracionAlmacenes,
           ),
         if (canOrAuthorize(AppPermission.viewPurchases))
           const AppNavigationItem(
