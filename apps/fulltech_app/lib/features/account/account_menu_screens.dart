@@ -251,6 +251,13 @@ class AccountSettingsScreen extends ConsumerWidget {
           onTap: () => context.go(Routes.configuracionEmpresa),
         ),
         _SettingsActionCard(
+          icon: Icons.warehouse_outlined,
+          title: 'Almacenes',
+          description: 'Administra locales, estado y almacén predeterminado.',
+          accent: const Color(0xFF0F6170),
+          onTap: () => context.go(Routes.configuracionAlmacenes),
+        ),
+        _SettingsActionCard(
           icon: Icons.cloud_sync_outlined,
           title: 'Backup',
           description: 'Crear, revisar y recuperar respaldos locales.',
@@ -680,6 +687,21 @@ class _SettingsCompanyAccountMenu extends ConsumerWidget {
                   _activate(menuContext, context, Routes.configuracionEmpresa),
               helpText:
                   'Configura datos fiscales, dirección, representante, logo y datos comerciales.',
+            ),
+          ),
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: _SettingsCompanyMenuRow(
+              icon: Icons.warehouse_outlined,
+              label: 'Almacenes',
+              onTap: () => _activate(
+                menuContext,
+                context,
+                Routes.configuracionAlmacenes,
+              ),
+              helpText:
+                  'Administra almacenes activos, predeterminado y terminales.',
             ),
           ),
           if (!kIsWeb)

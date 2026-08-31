@@ -2,6 +2,7 @@ import { Type } from "class-transformer";
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsNumber,
   IsOptional,
@@ -69,6 +70,18 @@ export class CreateSaleDto {
   @IsOptional()
   @IsUUID()
   customerId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  warehouseId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  terminalId?: string;
+
+  @IsOptional()
+  @IsString()
+  deviceFingerprint?: string;
 
   @IsOptional()
   @IsString()
@@ -144,7 +157,16 @@ export class CreateSaleReturnItemDto {
 export class CreateSaleReturnDto {
   @IsOptional()
   @IsString()
+  clientRequestId?: string;
+
+  @IsOptional()
+  @IsString()
   reason?: string;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  restoreInventory?: boolean;
 
   @IsOptional()
   @IsArray()

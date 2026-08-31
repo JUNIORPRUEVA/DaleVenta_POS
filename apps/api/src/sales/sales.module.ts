@@ -5,6 +5,7 @@ import { SalesAdminController } from "./sales-admin.controller";
 import { SalesPublicController } from "./sales-public.controller";
 import { OpenSalesTicketsController } from "./open-sales-tickets.controller";
 import { OpenSalesTicketsService } from "./open-sales-tickets.service";
+import { TerminalResolutionService } from "../terminals/terminal-resolution.service";
 
 @Module({
   controllers: [
@@ -13,6 +14,6 @@ import { OpenSalesTicketsService } from "./open-sales-tickets.service";
     SalesPublicController,
     OpenSalesTicketsController,
   ],
-  providers: [SalesService, OpenSalesTicketsService],
+  providers: [SalesService, OpenSalesTicketsService, TerminalResolutionService],
 })
 export class SalesModule {}

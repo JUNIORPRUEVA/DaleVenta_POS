@@ -23,6 +23,7 @@ import { JwtUser } from "./jwt-user.type";
 import { LicenseService } from "../license/license.service";
 import { RedisService } from "../common/redis/redis.service";
 import { PasswordResetEmailService } from "./password-reset-email.service";
+import { provisionZeroConfigForNewCompany } from "../inventory/zero-config-inventory";
 
 const PASSWORD_RESET_GENERIC_MESSAGE =
   "Si tu cuenta permite recuperación por correo, recibirás las instrucciones correspondientes. De lo contrario, contacta al administrador de tu empresa.";
@@ -678,6 +679,8 @@ export class AuthService {
           businessHours: "",
         },
       });
+
+      await provisionZeroConfigForNewCompany(tx, company.id);
 
       return { company, user };
     });

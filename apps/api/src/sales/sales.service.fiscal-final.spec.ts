@@ -109,10 +109,40 @@ describe("SalesService fiscal closure", () => {
       cashSessionId: "cash-a",
       saleDate: new Date(),
     };
+    let createdItem: Record<string, unknown> | null = null;
+    const saleItemCreate = jest.fn().mockImplementation((args) => {
+      createdItem = { id: "sale-item-a", ...args.data };
+      return Promise.resolve(createdItem);
+    });
     const tx = {
-      product: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      terminal: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "terminal-a",
+          companyId: user.companyId,
+          name: "Caja Principal",
+          code: "MAIN-POS",
+          deviceFingerprint: null,
+          defaultWarehouseId: "warehouse-a",
+          defaultWarehouse: {
+            id: "warehouse-a",
+            companyId: user.companyId,
+            name: "Principal",
+            code: "MAIN",
+            isActive: true,
+          },
+        }),
+      },
+      saleItem: { create: saleItemCreate },
       client: { update: jest.fn() },
-      sale: { create: jest.fn().mockResolvedValue(createdSale) },
+      sale: {
+        create: jest.fn().mockResolvedValue(createdSale),
+        findUniqueOrThrow: jest.fn().mockImplementation(() =>
+          Promise.resolve({
+            ...createdSale,
+            items: [createdItem],
+          }),
+        ),
+      },
     };
     const prisma = {
       cotizacion: {
@@ -206,6 +236,9 @@ describe("SalesService fiscal closure", () => {
         calculatorService,
       } as never,
       ncf as never,
+      {
+        decreaseStockInTransaction: jest.fn().mockResolvedValue({}),
+      } as never,
     );
 
     await service.create(user as never, {
@@ -239,18 +272,21 @@ describe("SalesService fiscal closure", () => {
           issuerPhoneSnapshot: "809-000-0000",
           fiscalCustomerTaxId: "101010101",
           fiscalCustomerName: "Fulltech",
-          items: expect.objectContaining({
-            create: [
-              expect.objectContaining({
-                taxableBase: new Prisma.Decimal("21779.66"),
-                taxAmount: new Prisma.Decimal("3920.34"),
-                subtotalCost: new Prisma.Decimal("18000"),
-                profit: new Prisma.Decimal("3779.66"),
-                commercialProfit: new Prisma.Decimal("3779.66"),
-                netTaxProfit: new Prisma.Decimal("3779.66"),
-              }),
-            ],
-          }),
+        }),
+      }),
+    );
+    expect(tx.saleItem.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          saleId: "sale-a",
+          warehouseId: "warehouse-a",
+          warehouseCodeSnapshot: "MAIN",
+          taxableBase: new Prisma.Decimal("21779.66"),
+          taxAmount: new Prisma.Decimal("3920.34"),
+          subtotalCost: new Prisma.Decimal("18000"),
+          profit: new Prisma.Decimal("3779.66"),
+          commercialProfit: new Prisma.Decimal("3779.66"),
+          netTaxProfit: new Prisma.Decimal("3779.66"),
         }),
       }),
     );
@@ -479,6 +515,31 @@ describe("SalesService fiscal closure", () => {
               _sum: { qty: new Prisma.Decimal("1") },
             },
           ]),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      inventoryMovement: {
+        groupBy: jest.fn().mockResolvedValue([]),
+      },
+      sale: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "sale-a",
+          companyId: user.companyId,
+          userId: user.id,
+          customerId: null,
+          cashSessionId: "cash-a",
+          saleDate: new Date(),
+          note: null,
+          kind: "invoice",
+          isDeleted: false,
+          cancelledAt: null,
+          inventoryRestoredAt: null,
+          fiscalTaxEnabled: true,
+          fiscalPriceMode: "TAX_INCLUDED",
+          fiscalVoucherType: "B01",
+          fiscalCustomerTaxId: "101010101",
+          fiscalCustomerName: "FULLTECH SRL",
+          items: [saleItem],
+        }),
       },
     };
     const prisma = {

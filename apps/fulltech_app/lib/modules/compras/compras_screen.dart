@@ -148,8 +148,6 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       _instructionsCtrl.text.trim().isNotEmpty ||
       _notesCtrl.text.trim().isNotEmpty;
   int get _differentProducts => _cart.length;
-  double get _totalUnits => _cart.fold(0, (sum, item) => sum + item.quantity);
-
   List<String> get _categories =>
       (_products.map((p) => p.categoriaLabel).toSet().toList()..sort());
   List<ProductModel> get _visibleProducts {
@@ -546,7 +544,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             child: _MobileOrderSummary(
               itemCount: _cart.length,
-              units: _qty(_totalUnits),
+              units: _draftUnitsLabel(_cart),
               total: _money(_total),
               onPressed: _openCartSheet,
             ),
@@ -801,7 +799,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                   ),
                 ),
                 Text(
-                  '${_qty(_totalUnits)} uds',
+                  _draftUnitsLabel(_cart),
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontSize: 10.5,
                     fontWeight: FontWeight.w800,
@@ -1114,7 +1112,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                   ],
                   const SizedBox(height: 10),
                   _TotalsPanel(
-                    units: _qty(_totalUnits),
+                    units: _draftUnitsLabel(_cart),
                     products: '$_differentProducts',
                     subtotal: _money(_subtotal),
                     total: _money(_total),
@@ -1600,6 +1598,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                               order: selectedOrder,
                               money: _money,
                               qty: _qty,
+                              qtyLabel: _orderUnitsLabel,
                               onPdf: selectedOrder == null
                                   ? null
                                   : () => _openOrderPdfPreview(selectedOrder),
@@ -1645,7 +1644,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     final title =
         '${order.orderNumber} · ${order.supplier?.commercialName ?? 'Sin suplidor'}';
     final subtitle =
-        '${order.items.length} artículos · ${_qty(order.items.fold(0, (sum, i) => sum + i.quantity))} unidades · ${order.status}';
+        '${order.items.length} artículos · ${_orderUnitsLabel(order.items)} · ${order.status}';
     void open() {
       if (showInlineDetail) {
         setState(() => _selectedOrderDetailId = order.id);
@@ -2387,7 +2386,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                     ),
                   ),
                   subtitle: Text(
-                    '${r.reason} · Stock ${_qty(r.stock)} · Ordenado ${_qty(r.alreadyOrdered)}',
+                    '${r.reason} · Stock ${_recommendationQty(r.stock, r)} · Ordenado ${_recommendationQty(r.alreadyOrdered, r)}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 11),
@@ -2396,7 +2395,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                     width: 42,
                     height: 34,
                     child: IconButton.filledTonal(
-                      tooltip: 'Agregar ${_qty(r.suggestedQuantity)}',
+                      tooltip:
+                          'Agregar ${_recommendationQty(r.suggestedQuantity, r)}',
                       padding: EdgeInsets.zero,
                       onPressed: r.suggestedQuantity <= 0
                           ? null
@@ -2429,7 +2429,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                     style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                   subtitle: Text(
-                    '${r.reason} · Stock ${_qty(r.stock)} · Ordenado ${_qty(r.alreadyOrdered)} · Sugerido ${_qty(r.suggestedQuantity)}',
+                    '${r.reason} · Stock ${_recommendationQty(r.stock, r)} · Ordenado ${_recommendationQty(r.alreadyOrdered, r)} · Sugerido ${_recommendationQty(r.suggestedQuantity, r)}',
                   ),
                   trailing: FilledButton.tonalIcon(
                     onPressed: r.suggestedQuantity <= 0
@@ -3526,6 +3526,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
           order: order,
           money: _money,
           qty: _qty,
+          qtyLabel: _orderUnitsLabel,
           onPdf: () => _openOrderPdfPreview(order),
           onSend: () => _sendOrderPdfToSupplier(order),
           onReceive: () => _receive(order),
@@ -3621,6 +3622,52 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
 
   UnitOfMeasureModel _unitForPurchaseItem(PurchaseDraftItem item) =>
       _unitForPurchaseProduct(item.product);
+
+  String _recommendationQty(num value, PurchaseRecommendationModel row) {
+    return formatQuantityWithUnit(
+      value,
+      unit: _unitForPurchaseProduct(row.product),
+      includeUnitForUnit: true,
+    );
+  }
+
+  String _draftUnitsLabel(Iterable<PurchaseDraftItem> items) {
+    final buckets = <String, ({double quantity, UnitOfMeasureModel unit})>{};
+    for (final item in items) {
+      final unit = _unitForPurchaseItem(item);
+      final key = '${unit.code}|${unit.symbol}|${unit.precision}';
+      final current = buckets[key] ?? (quantity: 0.0, unit: unit);
+      buckets[key] = (quantity: current.quantity + item.quantity, unit: unit);
+    }
+    return buckets.values
+        .map(
+          (bucket) => formatQuantityWithUnit(
+            bucket.quantity,
+            unit: bucket.unit,
+            includeUnitForUnit: true,
+          ),
+        )
+        .join(' · ');
+  }
+
+  String _orderUnitsLabel(Iterable<PurchaseOrderItemModel> items) {
+    final buckets = <String, ({double quantity, UnitOfMeasureModel unit})>{};
+    for (final item in items) {
+      final unit = item.unitSnapshot;
+      final key = '${unit.code}|${unit.symbol}|${unit.precision}';
+      final current = buckets[key] ?? (quantity: 0.0, unit: unit);
+      buckets[key] = (quantity: current.quantity + item.quantity, unit: unit);
+    }
+    return buckets.values
+        .map(
+          (bucket) => formatQuantityWithUnit(
+            bucket.quantity,
+            unit: bucket.unit,
+            includeUnitForUnit: true,
+          ),
+        )
+        .join(' · ');
+  }
 
   double _parseAmount(String value) => parseDecimalInput(value) ?? 0;
   String _dateLabel(DateTime? value) {
@@ -4180,6 +4227,7 @@ class _OrderDetailPanel extends StatelessWidget {
     required this.order,
     required this.money,
     required this.qty,
+    required this.qtyLabel,
     required this.onPdf,
     required this.onSend,
     required this.onReceive,
@@ -4190,6 +4238,7 @@ class _OrderDetailPanel extends StatelessWidget {
   final PurchaseOrderModel? order;
   final String Function(double) money;
   final String Function(num) qty;
+  final String Function(Iterable<PurchaseOrderItemModel>) qtyLabel;
   final VoidCallback? onPdf;
   final VoidCallback? onSend;
   final VoidCallback? onReceive;
@@ -4281,12 +4330,7 @@ class _OrderDetailPanel extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     _TotalsPanel(
-                      units: qty(
-                        selected.items.fold<num>(
-                          0,
-                          (sum, item) => sum + item.quantity,
-                        ),
-                      ),
+                      units: qtyLabel(selected.items),
                       products: '${selected.items.length}',
                       subtotal: money(selected.subtotal),
                       total: money(selected.total),
@@ -4326,6 +4370,34 @@ class _OrderDetailPanel extends StatelessWidget {
                                         overflow: TextOverflow.ellipsis,
                                         style: theme.textTheme.bodySmall,
                                       ),
+                                      const SizedBox(height: 4),
+                                      Wrap(
+                                        spacing: 10,
+                                        runSpacing: 2,
+                                        children: [
+                                          _PurchaseQtyChip(
+                                            label: 'Ordenado',
+                                            value: formatQuantityWithUnit(
+                                              item.quantity,
+                                              unit: item.unitSnapshot,
+                                            ),
+                                          ),
+                                          _PurchaseQtyChip(
+                                            label: 'Recibido',
+                                            value: formatQuantityWithUnit(
+                                              item.receivedQuantity,
+                                              unit: item.unitSnapshot,
+                                            ),
+                                          ),
+                                          _PurchaseQtyChip(
+                                            label: 'Pendiente',
+                                            value: formatQuantityWithUnit(
+                                              item.pendingQuantity,
+                                              unit: item.unitSnapshot,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -4354,6 +4426,32 @@ class _OrderDetailPanel extends StatelessWidget {
                 ),
               ),
             ),
+    );
+  }
+}
+
+class _PurchaseQtyChip extends StatelessWidget {
+  const _PurchaseQtyChip({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(text: '$label: '),
+          TextSpan(
+            text: value,
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+        ],
+      ),
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: AppColors.textSecondary,
+      ),
     );
   }
 }
@@ -4940,7 +5038,7 @@ class _MobileOrderSummary extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  '$itemCount productos · $units unidades',
+                  '$itemCount productos · $units',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontWeight: FontWeight.w700),
@@ -5443,7 +5541,7 @@ class _TotalsPanel extends StatelessWidget {
       ),
       child: Column(
         children: [
-          _totalLine('Unidades', units),
+          _totalLine('Cantidades', units),
           _totalLine('Productos', products),
           _totalLine('Subtotal', subtotal),
           const Divider(height: 14),

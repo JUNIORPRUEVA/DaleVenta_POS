@@ -43,7 +43,10 @@ describe("SalesService UoM decimal foundation", () => {
     };
   }
 
-  function serviceWith(prisma: Record<string, unknown>) {
+  function serviceWith(
+    prisma: Record<string, unknown>,
+    inventory: Record<string, unknown> = {},
+  ) {
     return new SalesService(
       prisma as never,
       { get: jest.fn().mockReturnValue("") } as never,
@@ -63,19 +66,21 @@ describe("SalesService UoM decimal foundation", () => {
         reserveNextNcf: jest.fn(),
         markIssued: jest.fn(),
       } as never,
+      inventory as never,
     );
   }
 
   it("decrements YARD stock exactly and stores unit snapshots", async () => {
-    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
-    const saleCreate = jest.fn().mockImplementation((args) =>
-      Promise.resolve({
-        id: "sale-1",
-        cashSessionId: "cash-1",
-        saleDate: new Date("2026-08-30T12:00:00.000Z"),
-        items: args.data.items.create,
-      }),
-    );
+    let createdItem: Record<string, unknown> | null = null;
+    const saleCreate = jest.fn().mockResolvedValue({
+      id: "sale-1",
+      cashSessionId: "cash-1",
+      saleDate: new Date("2026-08-30T12:00:00.000Z"),
+    });
+    const saleItemCreate = jest.fn().mockImplementation((args) => {
+      createdItem = { id: "item-1", ...args.data };
+      return Promise.resolve(createdItem);
+    });
     const prisma = {
       product: {
         findMany: jest.fn().mockResolvedValue([
@@ -97,7 +102,6 @@ describe("SalesService UoM decimal foundation", () => {
             },
           },
         ]),
-        updateMany,
       },
       company: { findFirst: jest.fn().mockResolvedValue({ name: "Empresa" }) },
       appConfig: { findFirst: jest.fn().mockResolvedValue(null) },
@@ -106,12 +110,42 @@ describe("SalesService UoM decimal foundation", () => {
       },
       $transaction: jest.fn((callback) =>
         callback({
-          product: { updateMany },
-          sale: { create: saleCreate },
+          terminal: {
+            findFirst: jest.fn().mockResolvedValue({
+              id: "terminal-1",
+              companyId: user.companyId,
+              name: "Caja Principal",
+              code: "MAIN-POS",
+              deviceFingerprint: null,
+              defaultWarehouseId: "warehouse-1",
+              defaultWarehouse: {
+                id: "warehouse-1",
+                companyId: user.companyId,
+                name: "Principal",
+                code: "MAIN",
+                isActive: true,
+              },
+            }),
+          },
+          saleItem: { create: saleItemCreate },
+          sale: {
+            create: saleCreate,
+            findUniqueOrThrow: jest.fn().mockImplementation(() =>
+              Promise.resolve({
+                id: "sale-1",
+                cashSessionId: "cash-1",
+                saleDate: new Date("2026-08-30T12:00:00.000Z"),
+                items: [createdItem],
+              }),
+            ),
+          },
         }),
       ),
     };
-    const service = serviceWith(prisma);
+    const inventory = {
+      decreaseStockInTransaction: jest.fn().mockResolvedValue({}),
+    };
+    const service = serviceWith(prisma, inventory);
 
     const sale = await service.create(user as never, {
       items: [
@@ -123,26 +157,42 @@ describe("SalesService UoM decimal foundation", () => {
       ],
     });
 
-    const decrementedBy = updateMany.mock.calls[0][0].data.stock.decrement;
-    expect(decrementedBy.toString()).toBe("5.5");
+    expect(inventory.decreaseStockInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        warehouseId: "warehouse-1",
+        quantity: new Prisma.Decimal("5.5"),
+        sourceType: "SALE",
+        sourceId: "sale-1",
+        sourceItemId: "item-1",
+      }),
+    );
     expect(sale.items[0].unitCodeSnapshot).toBe("YARD");
     expect(sale.items[0].unitSymbolSnapshot).toBe("yd");
     expect(sale.items[0].unitPrecisionSnapshot).toBe(3);
+    expect(sale.items[0].warehouseCodeSnapshot).toBe("MAIN");
   });
 
   it("restores decimal inventory exactly on partial return using original snapshot", async () => {
-    const increment = jest.fn().mockResolvedValue({ count: 1 });
     const refundCreate = jest.fn().mockImplementation((args) =>
       Promise.resolve({
         id: "refund-1",
         cashSessionId: "cash-1",
         saleDate: new Date("2026-08-30T12:05:00.000Z"),
-        items: args.data.items.create,
+        items: args.data.items.create.map((item: any, index: number) => ({
+          id: `refund-item-${index + 1}`,
+          ...item,
+        })),
       }),
     );
     const originalItem = {
       id: "item-1",
       productId: "product-yard",
+      productSource: "LOCAL",
+      sourceProductId: "product-yard",
+      warehouseId: "warehouse-1",
+      warehouseNameSnapshot: "Principal",
+      warehouseCodeSnapshot: "MAIN",
       productNameSnapshot: "Tela azul",
       productImageSnapshot: null,
       qty: new Prisma.Decimal("5.5"),
@@ -195,25 +245,76 @@ describe("SalesService UoM decimal foundation", () => {
         callback({
           saleItem: {
             groupBy: jest.fn().mockResolvedValue([]),
+            findMany: jest.fn().mockResolvedValue([]),
           },
-          product: {
-            updateMany: increment,
+          inventoryMovement: {
+            groupBy: jest.fn().mockResolvedValue([]),
           },
           sale: {
+            findFirst: jest.fn().mockResolvedValue({
+              id: "sale-1",
+              companyId: user.companyId,
+              isDeleted: false,
+              kind: "invoice",
+              cancelledAt: null,
+              inventoryRestoredAt: null,
+              customerId: null,
+              fiscalTaxEnabled: false,
+              fiscalPriceMode: "NO_TAX",
+              fiscalVoucherType: null,
+              issuerNameSnapshot: null,
+              issuerTaxIdSnapshot: null,
+              issuerAddressSnapshot: null,
+              issuerPhoneSnapshot: null,
+              issuerEmailSnapshot: null,
+              fiscalCustomerTaxId: null,
+              fiscalCustomerName: null,
+              customerAddressSnapshot: null,
+              customerPhoneSnapshot: null,
+              items: [originalItem],
+            }),
             create: refundCreate,
+            findUniqueOrThrow: jest.fn().mockImplementation(() =>
+              Promise.resolve({
+                id: "refund-1",
+                cashSessionId: "cash-1",
+                saleDate: new Date("2026-08-30T12:05:00.000Z"),
+                items: [
+                  {
+                    id: "refund-item-1",
+                    refundedSaleItemId: "item-1",
+                    qty: new Prisma.Decimal("1.25"),
+                    unitCodeSnapshot: "YARD",
+                    warehouseCodeSnapshot: "MAIN",
+                  },
+                ],
+              }),
+            ),
           },
         }),
       ),
     };
-    const service = serviceWith(prisma);
+    const inventory = {
+      increaseStockInTransaction: jest.fn().mockResolvedValue({}),
+    };
+    const service = serviceWith(prisma, inventory);
 
     const refund = await service.returnSale(user as never, "sale-1", {
       items: [{ saleItemId: "item-1", qty: 1.25 }],
     });
 
-    const incrementedBy = increment.mock.calls[0][0].data.stock.increment;
-    expect(incrementedBy.toString()).toBe("1.25");
+    expect(inventory.increaseStockInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        warehouseId: "warehouse-1",
+        quantity: new Prisma.Decimal("1.25"),
+        sourceType: "SALE_RETURN",
+        sourceId: "refund-1",
+        sourceItemId: "refund-item-1",
+      }),
+    );
     expect(refund.items[0].qty.toString()).toBe("1.25");
     expect(refund.items[0].unitCodeSnapshot).toBe("YARD");
+    expect(refund.items[0].warehouseCodeSnapshot).toBe("MAIN");
   });
 });

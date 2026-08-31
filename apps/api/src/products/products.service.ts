@@ -4,14 +4,16 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Prisma, Product } from "@prisma/client";
+import { InventoryMovementType, Prisma, Product } from "@prisma/client";
 import { createHash } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { requireTenant, type TenantUser } from "../auth/tenant-context";
 import { LicenseService } from "../license/license.service";
 import { CatalogProductsService } from "./catalog-products.service";
+import { AdjustProductStockDto } from "./dto/adjust-product-stock.dto";
 import { CreateProductDto } from "./dto/create-product.dto";
 import {
   ProductSourceResolver,
@@ -24,6 +26,13 @@ import {
   validateQuantityForUnit,
   type UnitOfMeasureSnapshot,
 } from "./unit-of-measure.util";
+import { InventoryMutationService } from "../inventory/inventory-mutation.service";
+
+type ResolvedProductWarehouse = { id: string; name: string; code: string };
+const PRODUCT_INVENTORY_TRANSACTION_OPTIONS = {
+  maxWait: 10000,
+  timeout: 30000,
+} as const;
 
 @Injectable()
 export class ProductsService {
@@ -37,6 +46,8 @@ export class ProductsService {
     private readonly productSourceResolver: ProductSourceResolver,
     private readonly config: ConfigService,
     private readonly licenses: LicenseService,
+    @Optional()
+    private readonly inventoryMutations?: InventoryMutationService,
   ) {
     const base =
       this.config.get<string>("PUBLIC_BASE_URL") ??
@@ -51,7 +62,6 @@ export class ProductsService {
       .toLowerCase();
     this.allowLocalFallback =
       rawFallback === "1" || rawFallback === "true" || rawFallback === "yes";
-
   }
 
   async isReadOnly(user: TenantUser) {
@@ -68,7 +78,8 @@ export class ProductsService {
 
   async sourceInfo(user: TenantUser) {
     const companyId = requireTenant(user);
-    const context = await this.productSourceResolver.resolveForCompany(companyId);
+    const context =
+      await this.productSourceResolver.resolveForCompany(companyId);
     return {
       source: context.source,
       readOnly: context.readOnly,
@@ -84,13 +95,87 @@ export class ProductsService {
   }
 
   private async assertWritable(companyId: string) {
-    const context = await this.productSourceResolver.resolveForCompany(companyId);
+    const context =
+      await this.productSourceResolver.resolveForCompany(companyId);
     if (context.readOnly) {
       throw new ConflictException(
         "Productos en modo solo-lectura: fuente FULLPOS. Las escrituras, stock decimal y UoM de FULLPOS quedan bloqueadas hasta validar soporte writable en staging.",
       );
     }
     return context;
+  }
+
+  private inventoryMutationService() {
+    return this.inventoryMutations ?? new InventoryMutationService(this.prisma);
+  }
+
+  private async resolveInventoryWarehouse(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    requestedWarehouseId?: string | null,
+    options: { rejectAmbiguousGlobal?: boolean } = {},
+  ): Promise<ResolvedProductWarehouse> {
+    if (requestedWarehouseId) {
+      const warehouse = await tx.warehouse.findFirst({
+        where: { id: requestedWarehouseId, companyId, isActive: true },
+        select: { id: true, name: true, code: true },
+      });
+      if (!warehouse) {
+        throw new BadRequestException("Almacen activo no encontrado.");
+      }
+      return warehouse;
+    }
+
+    const activeWarehouses = await tx.warehouse.findMany({
+      where: { companyId, isActive: true },
+      orderBy: { createdAt: "asc" },
+      take: 2,
+      select: { id: true, name: true, code: true, isDefault: true },
+    });
+
+    if (options.rejectAmbiguousGlobal && activeWarehouses.length > 1) {
+      throw new BadRequestException(
+        "Ajuste de stock ambiguo: selecciona un almacen para companias multi-almacen.",
+      );
+    }
+
+    const defaultWarehouse = await tx.warehouse.findFirst({
+      where: { companyId, isDefault: true, isActive: true },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, name: true, code: true },
+    });
+    if (defaultWarehouse) return defaultWarehouse;
+
+    if (activeWarehouses.length === 1) {
+      const [warehouse] = activeWarehouses;
+      return { id: warehouse.id, name: warehouse.name, code: warehouse.code };
+    }
+
+    throw new BadRequestException(
+      activeWarehouses.length === 0
+        ? "No hay almacenes activos para mutar inventario."
+        : "Hay multiples almacenes activos; selecciona un almacen.",
+    );
+  }
+
+  private async ensureZeroWarehouseStock(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    warehouseId: string,
+    productId: string,
+  ) {
+    await tx.warehouseStock.upsert({
+      where: {
+        companyId_warehouseId_productId: { companyId, warehouseId, productId },
+      },
+      create: {
+        companyId,
+        warehouseId,
+        productId,
+        quantity: new Prisma.Decimal(0),
+      },
+      update: {},
+    });
   }
 
   private async normalizeProductFiscalInput(
@@ -566,9 +651,9 @@ export class ProductsService {
           companyId,
           dto.unitOfMeasureId,
         );
-        const stock = new Prisma.Decimal(dto.stock ?? 0);
+        const initialStock = new Prisma.Decimal(dto.stock ?? 0);
         validateQuantityForUnit({
-          quantity: stock,
+          quantity: initialStock,
           unit: unitOfMeasure,
           label: "stock del producto",
           allowZero: true,
@@ -580,7 +665,7 @@ export class ProductsService {
           categoria: dto.categoria,
           precio: new Prisma.Decimal(dto.precio),
           costo: new Prisma.Decimal(dto.costo),
-          stock,
+          stock: new Prisma.Decimal(0),
           unitOfMeasureId: unitOfMeasure.id,
           ...fiscalData,
           imagen: normalizedImagePath,
@@ -605,7 +690,7 @@ export class ProductsService {
         const equivalentProducts = await this.findEquivalentProducts(
           tx,
           companyId,
-          data,
+          { ...data, stock: initialStock },
         );
         const reusableEquivalent = equivalentProducts.find((product) => {
           const productCode = this.normalizeProductCodeForLookup(
@@ -618,6 +703,7 @@ export class ProductsService {
         if (reusableEquivalent) {
           const updateData = { ...data };
           delete (updateData as { id?: string }).id;
+          delete (updateData as { stock?: Prisma.Decimal }).stock;
           const product = await tx.product.update({
             where: { id: reusableEquivalent.id },
             data: updateData,
@@ -647,6 +733,33 @@ export class ProductsService {
                 update: {},
               })
             : await tx.product.create({ data });
+          const warehouse = await this.resolveInventoryWarehouse(
+            tx,
+            companyId,
+            dto.warehouseId,
+          );
+          await this.ensureZeroWarehouseStock(
+            tx,
+            companyId,
+            warehouse.id,
+            product.id,
+          );
+          if (initialStock.gt(0)) {
+            await this.inventoryMutationService().increaseStockInTransaction(
+              tx,
+              {
+                companyId,
+                productId: product.id,
+                warehouseId: warehouse.id,
+                quantity: initialStock,
+                type: InventoryMovementType.INITIAL_STOCK,
+                sourceType: "PRODUCT_CREATE",
+                sourceId: product.id,
+                reason: "PRODUCT_INITIAL_STOCK",
+                createdByUserId: user.id,
+              },
+            );
+          }
           this.logProductSave({
             action: "create",
             decision: operationProductId ? "upsert-idempotent" : "insert",
@@ -664,10 +777,37 @@ export class ProductsService {
           }
           if (!this.isSchemaMismatch(error)) throw error;
           const product = await tx.product.create({ data });
+          const warehouse = await this.resolveInventoryWarehouse(
+            tx,
+            companyId,
+            dto.warehouseId,
+          );
+          await this.ensureZeroWarehouseStock(
+            tx,
+            companyId,
+            warehouse.id,
+            product.id,
+          );
+          if (initialStock.gt(0)) {
+            await this.inventoryMutationService().increaseStockInTransaction(
+              tx,
+              {
+                companyId,
+                productId: product.id,
+                warehouseId: warehouse.id,
+                quantity: initialStock,
+                type: InventoryMovementType.INITIAL_STOCK,
+                sourceType: "PRODUCT_CREATE",
+                sourceId: product.id,
+                reason: "PRODUCT_INITIAL_STOCK",
+                createdByUserId: user.id,
+              },
+            );
+          }
           await this.pruneSafeDuplicateProducts(tx, companyId, product);
           return this.productResponse(tx, companyId, product.id);
         }
-      });
+      }, PRODUCT_INVENTORY_TRANSACTION_OPTIONS);
     } catch (error) {
       if (this.isUniqueConstraint(error)) {
         if (operationProductIdForRecovery) {
@@ -699,10 +839,12 @@ export class ProductsService {
 
   async findAll(user: TenantUser): Promise<any[]> {
     const companyId = requireTenant(user);
-    const sourceContext = await this.productSourceResolver.resolveForCompany(
-      companyId,
-    );
-    if (sourceContext.source === "FULLPOS" || sourceContext.source === "FULLPOS_DIRECT") {
+    const sourceContext =
+      await this.productSourceResolver.resolveForCompany(companyId);
+    if (
+      sourceContext.source === "FULLPOS" ||
+      sourceContext.source === "FULLPOS_DIRECT"
+    ) {
       try {
         const response = await this.catalogProducts.findAll({
           companyId,
@@ -743,10 +885,12 @@ export class ProductsService {
 
   async findOne(user: TenantUser, id: string): Promise<any> {
     const companyId = requireTenant(user);
-    const sourceContext = await this.productSourceResolver.resolveForCompany(
-      companyId,
-    );
-    if (sourceContext.source === "FULLPOS" || sourceContext.source === "FULLPOS_DIRECT") {
+    const sourceContext =
+      await this.productSourceResolver.resolveForCompany(companyId);
+    if (
+      sourceContext.source === "FULLPOS" ||
+      sourceContext.source === "FULLPOS_DIRECT"
+    ) {
       try {
         return await this.catalogProducts.findOne(id, {
           companyId,
@@ -788,6 +932,7 @@ export class ProductsService {
   ): Promise<any> {
     const companyId = requireTenant(user);
     await this.assertWritable(companyId);
+    const hasLegacyStockEcho = dto.stock !== undefined && dto.stock !== null;
     await this.findOne(user, id);
     return this.prisma.$transaction(async (tx) => {
       const normalizedCodeForLookup = this.hasProductCodeInput(dto)
@@ -850,6 +995,20 @@ export class ProductsService {
       if (!current) {
         throw new NotFoundException("Producto no encontrado");
       }
+      if (hasLegacyStockEcho) {
+        const echoedStock = new Prisma.Decimal(dto.stock ?? 0);
+        validateQuantityForUnit({
+          quantity: echoedStock,
+          unit: this.mapUnitOfMeasure(current.unitOfMeasure),
+          label: "stock del producto",
+          allowZero: true,
+        });
+        if (!echoedStock.equals(new Prisma.Decimal(current.stock ?? 0))) {
+          throw new BadRequestException(
+            "El stock no se puede cambiar desde la edición del producto. Usa ajuste de stock.",
+          );
+        }
+      }
       const unitOfMeasure =
         dto.unitOfMeasureId === undefined
           ? this.mapUnitOfMeasure(current.unitOfMeasure)
@@ -866,16 +1025,6 @@ export class ProductsService {
           );
         }
       }
-      const stock =
-        dto.stock === undefined ? undefined : new Prisma.Decimal(dto.stock);
-      if (stock !== undefined) {
-        validateQuantityForUnit({
-          quantity: stock,
-          unit: unitOfMeasure,
-          label: "stock del producto",
-          allowZero: true,
-        });
-      }
       const data = {
         nombre: dto.nombre,
         codigo: this.hasProductCodeInput(dto)
@@ -886,7 +1035,6 @@ export class ProductsService {
           dto.precio === undefined ? undefined : new Prisma.Decimal(dto.precio),
         costo:
           dto.costo === undefined ? undefined : new Prisma.Decimal(dto.costo),
-        stock,
         unitOfMeasureId:
           dto.unitOfMeasureId === undefined ? undefined : unitOfMeasure.id,
         ...fiscalData,
@@ -965,6 +1113,133 @@ export class ProductsService {
         return this.productResponse(tx, companyId, updated.id);
       }
     });
+  }
+
+  async adjustStock(
+    user: TenantUser,
+    id: string,
+    dto: AdjustProductStockDto,
+  ): Promise<any> {
+    const companyId = requireTenant(user);
+    const source = await this.assertWritable(companyId);
+    if (!source.supportsStockAdjustment) {
+      throw new ConflictException(
+        "La fuente de productos actual no permite ajustes de stock.",
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const current = await tx.product.findFirst({
+        where: { id, companyId },
+        select: {
+          id: true,
+          stock: true,
+          unitOfMeasureId: true,
+          unitOfMeasure: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              symbol: true,
+              category: true,
+              allowDecimals: true,
+              precision: true,
+              active: true,
+            },
+          },
+        },
+      });
+      if (!current) {
+        throw new NotFoundException("Producto no encontrado");
+      }
+
+      const unitOfMeasure = this.mapUnitOfMeasure(current.unitOfMeasure);
+      const hasCountedStock = dto.stock !== undefined && dto.stock !== null;
+      const hasDelta = dto.delta !== undefined && dto.delta !== null;
+      if (hasCountedStock === hasDelta) {
+        throw new BadRequestException(
+          "Indica stock contado o delta, pero no ambos.",
+        );
+      }
+      const warehouse = await this.resolveInventoryWarehouse(
+        tx,
+        companyId,
+        dto.warehouseId,
+        { rejectAmbiguousGlobal: !dto.warehouseId },
+      );
+      if (hasCountedStock) {
+        const countedStock = new Prisma.Decimal(dto.stock ?? 0);
+        const expectedCurrentStock =
+          dto.expectedCurrentStock === undefined ||
+          dto.expectedCurrentStock === null
+            ? new Prisma.Decimal(current.stock ?? 0)
+            : new Prisma.Decimal(dto.expectedCurrentStock);
+        validateQuantityForUnit({
+          quantity: countedStock,
+          unit: unitOfMeasure,
+          label: "stock del producto",
+          allowZero: true,
+        });
+        validateQuantityForUnit({
+          quantity: expectedCurrentStock,
+          unit: unitOfMeasure,
+          label: "stock esperado del producto",
+          allowZero: true,
+        });
+        if (!countedStock.equals(expectedCurrentStock)) {
+          await this.inventoryMutationService().setCountedStockInTransaction(
+            tx,
+            {
+              companyId,
+              productId: id,
+              warehouseId: warehouse.id,
+              countedQuantity: countedStock,
+              expectedCurrentQuantity: expectedCurrentStock,
+              sourceType: "PRODUCT_STOCK_COUNT",
+              sourceId: id,
+              reason: dto.reason?.trim() || "Conteo fisico de stock",
+              createdByUserId: user.id,
+            },
+          );
+        }
+      } else {
+        const delta = new Prisma.Decimal(dto.delta ?? 0);
+        if (delta.equals(0)) {
+          throw new BadRequestException("El delta de stock no puede ser cero.");
+        }
+        validateQuantityForUnit({
+          quantity: delta.abs(),
+          unit: unitOfMeasure,
+          label: "delta de stock",
+        });
+        const input = {
+          companyId,
+          productId: id,
+          warehouseId: warehouse.id,
+          quantity: delta.abs(),
+          type: delta.gt(0)
+            ? InventoryMovementType.ADJUSTMENT_IN
+            : InventoryMovementType.ADJUSTMENT_OUT,
+          sourceType: "PRODUCT_STOCK_ADJUSTMENT",
+          sourceId: id,
+          reason: dto.reason?.trim() || "Ajuste manual de stock",
+          createdByUserId: user.id,
+        };
+        if (delta.gt(0)) {
+          await this.inventoryMutationService().increaseStockInTransaction(
+            tx,
+            input,
+          );
+        } else {
+          await this.inventoryMutationService().decreaseStockInTransaction(
+            tx,
+            input,
+          );
+        }
+      }
+
+      return this.productResponse(tx, companyId, id);
+    }, PRODUCT_INVENTORY_TRANSACTION_OPTIONS);
   }
 
   async remove(user: TenantUser, id: string) {

@@ -568,6 +568,7 @@ class CatalogRepository {
       precio: precio,
       costo: costo,
       stock: stock,
+      includeStock: false,
       fotoUrl: fotoUrl,
       categoria: categoria,
       operationId: operationId,
@@ -655,6 +656,7 @@ class CatalogRepository {
         precio: precio,
         costo: costo,
         stock: stock,
+        includeStock: false,
         fotoUrl: fotoUrl,
         categoria: categoria,
         operationId: operationId,
@@ -663,6 +665,28 @@ class CatalogRepository {
         taxPriceMode: taxPriceMode,
         unitOfMeasureId: unitOfMeasureId,
       ),
+    );
+    return ProductModel.fromJson((res.data as Map).cast<String, dynamic>());
+  }
+
+  Future<ProductModel> adjustProductStock({
+    required String id,
+    double? stock,
+    double? delta,
+    String? warehouseId,
+    String? reason,
+    bool skipLoader = false,
+  }) async {
+    final res = await _dio.patch(
+      ApiRoutes.adjustProductStock(id),
+      options: skipLoader ? Options(extra: const {'skipLoader': true}) : null,
+      data: {
+        if (stock != null) 'stock': stock,
+        if (delta != null) 'delta': delta,
+        if ((warehouseId ?? '').trim().isNotEmpty)
+          'warehouseId': warehouseId!.trim(),
+        if ((reason ?? '').trim().isNotEmpty) 'reason': reason!.trim(),
+      },
     );
     return ProductModel.fromJson((res.data as Map).cast<String, dynamic>());
   }
@@ -701,6 +725,7 @@ class CatalogRepository {
     required double precio,
     required double costo,
     required double stock,
+    bool includeStock = true,
     String? fotoUrl,
     String? categoria,
     String? operationId,
@@ -722,7 +747,7 @@ class CatalogRepository {
       'barcode': safeCode,
       'precio': precio,
       'costo': costo,
-      'stock': stock,
+      if (includeStock) 'stock': stock,
       if ((unitOfMeasureId ?? '').trim().isNotEmpty)
         'unitOfMeasureId': unitOfMeasureId!.trim(),
       if ((operationId ?? '').trim().isNotEmpty)

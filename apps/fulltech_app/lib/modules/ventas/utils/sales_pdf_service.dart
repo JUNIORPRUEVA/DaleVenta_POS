@@ -508,7 +508,11 @@ pw.Widget _invoiceDetailSection(
               isExempt && fiscal ? '$description  [EXENTO]' : description,
             ),
             _bodyCell(
-              formatQuantityWithUnit(item.qty, unit: item.unitSnapshot),
+              formatQuantityWithUnit(
+                item.qty,
+                unit: item.unitSnapshot,
+                includeUnitForUnit: true,
+              ),
               align: pw.TextAlign.center,
             ),
             _bodyCell(

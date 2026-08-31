@@ -284,6 +284,7 @@ bool desktopShellShouldShowOwnAppBar(String location) {
     Routes.configuracionBackup,
     Routes.configuracionParametros,
     Routes.configuracionDocumentos,
+    Routes.configuracionAlmacenes,
   ];
 
   for (final route in routesWithOwnAppBar) {

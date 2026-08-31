@@ -1,0 +1,21 @@
+services:
+  daleventas_uat_postgres:
+    image: postgres:16-alpine
+    container_name: daleventas_uat_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${UAT_DB_NAME:?UAT_DB_NAME is required}
+      POSTGRES_USER: ${UAT_DB_USER:?UAT_DB_USER is required}
+      POSTGRES_PASSWORD: ${UAT_DB_PASSWORD:?UAT_DB_PASSWORD is required}
+    ports:
+      - "127.0.0.1:${UAT_DB_PORT:-55432}:5432"
+    volumes:
+      - daleventas_uat_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${UAT_DB_USER} -d ${UAT_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  daleventas_uat_postgres_data:

@@ -185,7 +185,22 @@ class ApiRoutes {
   static const productUnitOfMeasures = '/products/unit-of-measures';
   static String productDetail(String id) => '/products/$id';
   static String updateProduct(String id) => '/products/$id';
+  static String adjustProductStock(String id) => '/products/$id/stock';
   static String deleteProduct(String id) => '/products/$id';
+
+  // Almacenes
+  static const warehouses = '/warehouses';
+  static const warehouseTerminals = '/warehouses/terminals';
+  static String warehouse(String id) => '/warehouses/$id';
+  static String warehouseDefault(String id) => '/warehouses/$id/default';
+  static String warehouseActivate(String id) => '/warehouses/$id/activate';
+  static String warehouseDeactivate(String id) => '/warehouses/$id/deactivate';
+  static String productWarehouseStock(String productId) =>
+      '/warehouses/products/$productId/stock';
+  static String terminalWarehouse(String terminalId) =>
+      '/warehouses/terminals/$terminalId/default-warehouse';
+  static const warehouseTransfers = '/warehouses/transfers';
+  static String warehouseTransfer(String id) => '/warehouses/transfers/$id';
 
   // Sitio web / tienda publica
   static const websiteProducts = '/website/products';

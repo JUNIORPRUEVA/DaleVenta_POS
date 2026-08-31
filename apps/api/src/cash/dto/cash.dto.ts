@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsIn, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class OpenCashSessionDto {
   @Type(() => Number)
@@ -10,6 +10,14 @@ export class OpenCashSessionDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  @IsOptional()
+  @IsUUID()
+  terminalId?: string;
+
+  @IsOptional()
+  @IsString()
+  deviceFingerprint?: string;
 }
 
 export class CloseCashSessionDto {

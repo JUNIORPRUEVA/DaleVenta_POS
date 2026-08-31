@@ -1,5 +1,4 @@
 import { Prisma } from "@prisma/client";
-import { Prisma } from "@prisma/client";
 import { SalesService } from "./sales.service";
 
 describe("SalesService fiscal print data (cashier + NCF expiration)", () => {
@@ -17,9 +16,23 @@ describe("SalesService fiscal print data (cashier + NCF expiration)", () => {
       saleDate: new Date(),
       userId: user.id,
     };
+    let createdItem: Record<string, unknown> | null = null;
+    const saleItemCreate = jest.fn().mockImplementation((args) => {
+      createdItem = { id: "sale-item-a", ...args.data };
+      return Promise.resolve(createdItem);
+    });
     const tx = {
       client: { update: jest.fn() },
-      sale: { create: jest.fn().mockResolvedValue(createdSale) },
+      saleItem: { create: saleItemCreate },
+      sale: {
+        create: jest.fn().mockResolvedValue(createdSale),
+        findUniqueOrThrow: jest.fn().mockImplementation(() =>
+          Promise.resolve({
+            ...createdSale,
+            items: [createdItem],
+          }),
+        ),
+      },
     };
     const prisma = {
       appConfig: {
@@ -126,6 +139,10 @@ describe("SalesService fiscal print data (cashier + NCF expiration)", () => {
           ncf: "B0100000003",
           ncfExpirationDate: validUntil,
         }),
+      }),
+    );
+    expect(tx.sale.findUniqueOrThrow).toHaveBeenCalledWith(
+      expect.objectContaining({
         include: expect.objectContaining({
           user: expect.objectContaining({
             select: expect.objectContaining({

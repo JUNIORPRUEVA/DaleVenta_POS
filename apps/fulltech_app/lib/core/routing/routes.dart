@@ -65,6 +65,7 @@ class Routes {
   static const configuracionBackup = '/configuracion/backup';
   static const configuracionParametros = '/configuracion/parametros';
   static const configuracionDocumentos = '/configuracion/documentos';
+  static const configuracionAlmacenes = '/configuracion/almacenes';
   static const whatsapp = '/whatsapp';
   static const publicidad = '/publicidad';
   static const publicidadInvestigacion = '/publicidad/investigacion';

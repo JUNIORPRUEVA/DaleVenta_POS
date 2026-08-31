@@ -86,6 +86,9 @@ export class ReceivePurchaseOrderItemDto {
 }
 
 export class ReceivePurchaseOrderDto {
+  @IsOptional() @IsString() clientRequestId?: string;
+  @IsOptional() @IsUUID() warehouseId?: string;
+  @IsOptional() @IsUUID() destinationWarehouseId?: string;
   @IsOptional() @IsString() supplierInvoiceNumber?: string;
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsString() invoiceImage?: string;

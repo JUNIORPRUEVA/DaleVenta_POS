@@ -3,9 +3,16 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Prisma, ProductSource, PurchaseOrderStatus, Role } from "@prisma/client";
+import {
+  InventoryMovementType,
+  Prisma,
+  ProductSource,
+  PurchaseOrderStatus,
+  Role,
+} from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -29,8 +36,11 @@ import {
   ReceivePurchaseOrderDto,
   UpsertSupplierDto,
 } from "./dto/purchases.dto";
+import { InventoryMutationService } from "../inventory/inventory-mutation.service";
 
 type RequestUser = { id: string; role: Role; companyId?: string | null };
+type ResolvedPurchaseWarehouse = { id: string; name: string; code: string };
+const PURCHASE_TRANSACTION_OPTIONS = { maxWait: 10000, timeout: 30000 } as const;
 
 @Injectable()
 export class PurchasesService {
@@ -38,6 +48,8 @@ export class PurchasesService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly r2: R2Service,
+    @Optional()
+    private readonly inventoryMutations?: InventoryMutationService,
   ) {}
 
   private includeOrder() {
@@ -57,6 +69,68 @@ export class PurchasesService {
         },
       },
     } satisfies Prisma.PurchaseOrderInclude;
+  }
+
+  private inventoryMutationService() {
+    return this.inventoryMutations ?? new InventoryMutationService(this.prisma);
+  }
+
+  private async resolveReceiptWarehouse(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    requestedWarehouseId?: string | null,
+  ): Promise<ResolvedPurchaseWarehouse> {
+    if (requestedWarehouseId) {
+      const warehouse = await tx.warehouse.findFirst({
+        where: { id: requestedWarehouseId, companyId, isActive: true },
+        select: { id: true, name: true, code: true },
+      });
+      if (!warehouse) {
+        throw new BadRequestException("Almacen activo no encontrado.");
+      }
+      return warehouse;
+    }
+
+    const defaultWarehouse = await tx.warehouse.findFirst({
+      where: { companyId, isDefault: true, isActive: true },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, name: true, code: true },
+    });
+    if (defaultWarehouse) return defaultWarehouse;
+
+    const activeWarehouses = await tx.warehouse.findMany({
+      where: { companyId, isActive: true },
+      orderBy: { createdAt: "asc" },
+      take: 2,
+      select: { id: true, name: true, code: true },
+    });
+    if (activeWarehouses.length === 1) return activeWarehouses[0];
+
+    throw new BadRequestException(
+      activeWarehouses.length === 0
+        ? "No hay almacenes activos para recibir mercancía."
+        : "Hay multiples almacenes activos; selecciona un almacen destino.",
+    );
+  }
+
+  private async ensureWarehouseStock(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    warehouseId: string,
+    productId: string,
+  ) {
+    await tx.warehouseStock.upsert({
+      where: {
+        companyId_warehouseId_productId: { companyId, warehouseId, productId },
+      },
+      create: {
+        companyId,
+        warehouseId,
+        productId,
+        quantity: new Prisma.Decimal(0),
+      },
+      update: {},
+    });
   }
 
   async listSuppliers(user: RequestUser, q?: string, includeInactive = false) {
@@ -451,6 +525,14 @@ export class PurchasesService {
     dto: ReceivePurchaseOrderDto,
   ) {
     const order = await this.getOrder(user, id);
+    const clientRequestId = this.clean(dto.clientRequestId);
+    if (clientRequestId) {
+      const existingReceipt = await this.prisma.purchaseReceipt.findFirst({
+        where: { purchaseOrderId: id, clientRequestId },
+        include: { items: true },
+      });
+      if (existingReceipt) return { receipt: existingReceipt, order };
+    }
     if (order.status === PurchaseOrderStatus.CANCELLED) {
       throw new BadRequestException(
         "Una orden cancelada no puede recibir mercancía.",
@@ -493,53 +575,70 @@ export class PurchasesService {
       };
     });
 
-    return this.prisma.$transaction(async (tx) => {
+    if (dto.updateInventory) {
+      for (const item of normalized) {
+        if (
+          item.current.productSource &&
+          item.current.productSource !== ProductSource.LOCAL
+        ) {
+          throw new BadRequestException(
+            "Recepciones de productos FULLPOS requieren stock writable validado.",
+          );
+        }
+        if (
+          !item.current.productId &&
+          !item.current.createInventoryProductOnReceipt
+        ) {
+          throw new BadRequestException(
+            "La recepcion requiere producto local o creacion de producto de inventario.",
+          );
+        }
+      }
+    }
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+      const destinationWarehouse = dto.updateInventory
+        ? await this.resolveReceiptWarehouse(
+            tx,
+            order.companyId,
+            dto.destinationWarehouseId ?? dto.warehouseId,
+          )
+        : null;
+
       const receipt = await tx.purchaseReceipt.create({
         data: {
           purchaseOrderId: id,
+          clientRequestId,
           supplierInvoiceNumber: this.clean(dto.supplierInvoiceNumber),
           notes: this.clean(dto.notes),
           invoiceImage: this.clean(dto.invoiceImage),
           receivedById: user.id,
           inventoryUpdated: Boolean(dto.updateInventory),
           inventoryUpdatedAt: dto.updateInventory ? new Date() : null,
-          items: {
-            create: normalized.map((item) => ({
-              purchaseOrderItemId: item.current.id,
-              productSource: item.current.productSource,
-              sourceProductId: item.current.sourceProductId,
-              quantityReceived: item.quantityReceived,
-              unitCodeSnapshot: item.unit.code,
-              unitNameSnapshot: item.unit.name,
-              unitSymbolSnapshot: item.unit.symbol,
-              unitPrecisionSnapshot: item.unit.precision,
-              unitCost: item.unitCost,
-              condition: item.condition,
-              notes: item.notes,
-            })),
-          },
         },
-        include: { items: true },
       });
 
       for (const item of normalized) {
-        const nextReceived = new Prisma.Decimal(
-          item.current.receivedQuantity,
-        ).plus(item.quantityReceived);
-        const nextPending = new Prisma.Decimal(item.current.quantity).minus(
-          nextReceived,
-        );
-        await tx.purchaseOrderItem.update({
-          where: { id: item.current.id },
+        const claimed = await tx.purchaseOrderItem.updateMany({
+          where: {
+            id: item.current.id,
+            purchaseOrderId: id,
+            pendingQuantity: { gte: item.quantityReceived },
+          },
           data: {
-            receivedQuantity: nextReceived,
-            pendingQuantity: nextPending.lessThan(0)
-              ? new Prisma.Decimal(0)
-              : nextPending,
+            receivedQuantity: { increment: item.quantityReceived },
+            pendingQuantity: { decrement: item.quantityReceived },
             actualUnitCost: item.unitCost,
           },
         });
+        if (claimed.count !== 1) {
+          throw new BadRequestException(
+            `La cantidad recibida supera lo pendiente para ${item.current.productNameSnapshot}.`,
+          );
+        }
 
+        let productId = item.current.productId;
         if (dto.updateInventory) {
           if (
             item.current.productSource &&
@@ -549,13 +648,10 @@ export class PurchasesService {
               "Recepciones de productos FULLPOS requieren stock writable validado.",
             );
           }
-          if (item.current.productId) {
+          if (productId) {
             await tx.product.updateMany({
-              where: { id: item.current.productId, companyId: order.companyId },
-              data: {
-                stock: { increment: item.quantityReceived },
-                costo: item.unitCost,
-              },
+              where: { id: productId, companyId: order.companyId },
+              data: { costo: item.unitCost },
             });
           } else if (item.current.createInventoryProductOnReceipt) {
             const created = await tx.product.create({
@@ -567,15 +663,67 @@ export class PurchasesService {
                   "Sin categoría",
                 precio: item.unitCost,
                 costo: item.unitCost,
-                stock: item.quantityReceived,
+                stock: new Prisma.Decimal(0),
                 imagen: item.current.imageSnapshot,
+                unitOfMeasureId: item.unit.code,
               },
             });
             await tx.purchaseOrderItem.update({
               where: { id: item.current.id },
               data: { productId: created.id },
             });
+            productId = created.id;
           }
+        }
+
+        const receiptItem = await tx.purchaseReceiptItem.create({
+          data: {
+            purchaseReceiptId: receipt.id,
+            purchaseOrderItemId: item.current.id,
+            productSource: item.current.productSource,
+            sourceProductId: productId ?? item.current.sourceProductId,
+            destinationWarehouseId: destinationWarehouse?.id ?? null,
+            warehouseNameSnapshot: destinationWarehouse?.name ?? null,
+            warehouseCodeSnapshot: destinationWarehouse?.code ?? null,
+            quantityReceived: item.quantityReceived,
+            unitCodeSnapshot: item.unit.code,
+            unitNameSnapshot: item.unit.name,
+            unitSymbolSnapshot: item.unit.symbol,
+            unitPrecisionSnapshot: item.unit.precision,
+            unitCost: item.unitCost,
+            condition: item.condition,
+            notes: item.notes,
+          },
+        });
+
+        if (dto.updateInventory && productId && destinationWarehouse) {
+          await this.ensureWarehouseStock(
+            tx,
+            order.companyId,
+            destinationWarehouse.id,
+            productId,
+          );
+          const movement =
+            await this.inventoryMutationService().increaseStockInTransaction(tx, {
+              companyId: order.companyId,
+              productId,
+              warehouseId: destinationWarehouse.id,
+              quantity: item.quantityReceived,
+              type: InventoryMovementType.PURCHASE_RECEIPT,
+              sourceType: "PURCHASE_RECEIPT",
+              sourceId: receipt.id,
+              sourceItemId: receiptItem.id,
+              reason: "PURCHASE_RECEIPT",
+              createdByUserId: user.id,
+            });
+          await tx.purchaseReceiptItem.update({
+            where: { id: receiptItem.id },
+            data: { inventoryMovementId: movement.movementId },
+          });
+        } else if (dto.updateInventory && !productId) {
+          throw new BadRequestException(
+            "La recepcion requiere producto local o creacion de producto de inventario.",
+          );
         }
       }
 
@@ -598,8 +746,27 @@ export class PurchasesService {
         data: { status },
         include: this.includeOrder(),
       });
-      return { receipt, order: updated };
-    });
+      const refreshedReceipt = await tx.purchaseReceipt.findUniqueOrThrow({
+        where: { id: receipt.id },
+        include: { items: true },
+      });
+      return { receipt: refreshedReceipt, order: updated };
+    }, PURCHASE_TRANSACTION_OPTIONS);
+    } catch (error) {
+      if (
+        clientRequestId &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        const existingReceipt = await this.prisma.purchaseReceipt.findFirst({
+          where: { purchaseOrderId: id, clientRequestId },
+          include: { items: true },
+        });
+        const updatedOrder = await this.getOrder(user, id);
+        if (existingReceipt) return { receipt: existingReceipt, order: updatedOrder };
+      }
+      throw error;
+    }
   }
 
   async recommendations(user: RequestUser) {

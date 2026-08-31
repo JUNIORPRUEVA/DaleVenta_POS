@@ -239,6 +239,16 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   UnitOfMeasureModel _unitForItem(SaleDraftItem item) =>
       _unitForProduct(item.product);
 
+  void _disposeTextControllersAfterFrame(
+    Iterable<TextEditingController> controllers,
+  ) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final controller in controllers) {
+        controller.dispose();
+      }
+    });
+  }
+
   String _formatItemQty(SaleDraftItem item) {
     return formatQuantityWithUnit(
       item.qty,
@@ -2333,10 +2343,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       ),
     );
 
-    nameCtrl.dispose();
-    qtyCtrl.dispose();
-    priceCtrl.dispose();
-    costCtrl.dispose();
+    _disposeTextControllersAfterFrame([nameCtrl, qtyCtrl, priceCtrl, costCtrl]);
 
     if (item == null || !mounted) return;
     setState(() => _cart = [..._cart, item]);
@@ -2481,7 +2488,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
         },
       ),
     );
-    qtyCtrl.dispose();
+    _disposeTextControllersAfterFrame([qtyCtrl]);
     return quantity;
   }
 
@@ -2607,8 +2614,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       ),
     );
 
-    qtyCtrl.dispose();
-    priceCtrl.dispose();
+    _disposeTextControllersAfterFrame([qtyCtrl, priceCtrl]);
 
     if (updated == null || !mounted) return;
     _updateItem(index, updated);

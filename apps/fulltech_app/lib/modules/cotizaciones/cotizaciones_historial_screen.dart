@@ -16,6 +16,7 @@ import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/uom/uom_formatters.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -1308,9 +1309,8 @@ class _CotizacionesHistorialScreenState
         final quoteCode = item.id.length >= 8
             ? item.id.substring(0, 8).toUpperCase()
             : (item.id.isEmpty ? 'S/N' : item.id.toUpperCase());
-        String qty(double value) => value % 1 == 0
-            ? value.toStringAsFixed(0)
-            : value.toStringAsFixed(2);
+        String qty(CotizacionItem line) =>
+            formatQuantityWithUnit(line.qty, unit: line.unitSnapshot);
         final itbisPct = (item.itbisRate * 100).toStringAsFixed(
           item.itbisRate % 1 == 0 ? 0 : 1,
         );
@@ -1572,7 +1572,7 @@ class _CotizacionesHistorialScreenState
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        '${qty(line.qty)} x ${_money(line.unitPrice)}',
+                                        '${qty(line)} x ${_money(line.unitPrice)}',
                                         style: theme.textTheme.bodySmall
                                             ?.copyWith(
                                               color: theme
@@ -1586,7 +1586,7 @@ class _CotizacionesHistorialScreenState
                                 SizedBox(
                                   width: 84,
                                   child: Text(
-                                    qty(line.qty),
+                                    qty(line),
                                     textAlign: TextAlign.center,
                                     style: theme.textTheme.bodyMedium?.copyWith(
                                       fontWeight: FontWeight.w700,
@@ -2445,8 +2445,8 @@ class _QuotationDetailSidePanel extends StatelessWidget {
   final VoidCallback onPdf;
   final VoidCallback onSalesTicket;
 
-  String _qty(double value) =>
-      value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(2);
+  String _qty(CotizacionItem line) =>
+      formatQuantityWithUnit(line.qty, unit: line.unitSnapshot);
 
   @override
   Widget build(BuildContext context) {
@@ -2489,7 +2489,7 @@ class _QuotationDetailSidePanel extends StatelessWidget {
                   for (final line in item.items)
                     _QuoteTableRow(
                       title: line.nombre,
-                      qty: _qty(line.qty),
+                      qty: _qty(line),
                       unitPrice: money(line.unitPrice),
                       total: money(line.total),
                     ),

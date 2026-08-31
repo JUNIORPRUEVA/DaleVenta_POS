@@ -3,9 +3,10 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Prisma, ProductSource, Role } from "@prisma/client";
+import { InventoryMovementType, Prisma, ProductSource, Role } from "@prisma/client";
 import crypto from "node:crypto";
 import * as fs from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -31,6 +32,11 @@ import {
   CreateSaleReturnDto,
 } from "./dto/create-sale.dto";
 import { CreateSalePdfShareLinkDto } from "./dto/create-sale-pdf-share-link.dto";
+import { InventoryMutationService } from "../inventory/inventory-mutation.service";
+import {
+  TerminalResolutionService,
+  type OperationalTerminalContext,
+} from "../terminals/terminal-resolution.service";
 
 type NormalizedSaleItem = {
   productId: string | null;
@@ -62,7 +68,17 @@ type NormalizedSaleItem = {
   lineTotal?: Prisma.Decimal;
 };
 
+type ResolvedSaleWarehouse = {
+  id: string;
+  name: string;
+  code: string;
+};
+
 const SALE_TRANSACTION_OPTIONS = { maxWait: 10000, timeout: 20000 } as const;
+const SALE_RETURN_TRANSACTION_OPTIONS = {
+  maxWait: 10000,
+  timeout: 30000,
+} as const;
 
 @Injectable()
 export class SalesService {
@@ -72,6 +88,10 @@ export class SalesService {
     private readonly realtime: CatalogRealtimeRelayService,
     private readonly taxes: TaxService,
     private readonly ncf: NcfService,
+    @Optional()
+    private readonly inventoryMutations?: InventoryMutationService,
+    @Optional()
+    private readonly terminalResolution?: TerminalResolutionService,
   ) {}
 
   private saleInclude() {
@@ -185,6 +205,161 @@ export class SalesService {
     }
 
     return false;
+  }
+
+  private inventoryMutationService() {
+    return this.inventoryMutations ?? new InventoryMutationService(this.prisma);
+  }
+
+  private terminalResolutionService() {
+    return this.terminalResolution ?? new TerminalResolutionService(this.prisma);
+  }
+
+  private async resolveLegacyCancellationWarehouse(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+  ): Promise<ResolvedSaleWarehouse> {
+    const zeroConfigState = await tx.inventoryZeroConfigState.findUnique({
+      where: { companyId },
+      select: { status: true, warehouseId: true },
+    });
+    if (zeroConfigState?.status !== "completed") {
+      throw new BadRequestException(
+        "La venta historica no tiene almacen y la compania no tiene backfill W3 completado.",
+      );
+    }
+
+    const warehouse = zeroConfigState.warehouseId
+      ? await tx.warehouse.findFirst({
+          where: { id: zeroConfigState.warehouseId, companyId, isActive: true },
+          select: { id: true, name: true, code: true },
+        })
+      : (
+          await this.terminalResolutionService().resolveForSale(tx, {
+            companyId,
+          })
+        ).warehouse;
+    if (!warehouse) {
+      throw new BadRequestException(
+        "No se encontro el almacen legacy W3 para restaurar la venta.",
+      );
+    }
+    return warehouse;
+  }
+
+  private async returnQuantityMaps(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    saleId: string,
+    originalSaleItemIds: string[],
+  ) {
+    const zero = () => new Prisma.Decimal(0);
+    const financialReturned = new Map<string, Prisma.Decimal>();
+    const inventoryReturned = new Map<string, Prisma.Decimal>();
+    if (originalSaleItemIds.length === 0) {
+      return { financialReturned, inventoryReturned };
+    }
+
+    const financialRows = await tx.saleItem.groupBy({
+      by: ["refundedSaleItemId"],
+      where: {
+        refundedSaleItemId: { in: originalSaleItemIds },
+        sale: {
+          companyId,
+          refundedSaleId: saleId,
+          kind: "refund",
+          isDeleted: false,
+        },
+      },
+      _sum: { qty: true },
+    });
+    for (const row of financialRows) {
+      if (!row.refundedSaleItemId) continue;
+      financialReturned.set(
+        row.refundedSaleItemId,
+        new Prisma.Decimal(row._sum.qty ?? 0),
+      );
+    }
+
+    const refundItems = await tx.saleItem.findMany({
+      where: {
+        refundedSaleItemId: { in: originalSaleItemIds },
+        sale: {
+          companyId,
+          refundedSaleId: saleId,
+          kind: "refund",
+          isDeleted: false,
+        },
+      },
+      select: { id: true, refundedSaleItemId: true },
+    });
+    const refundItemToOriginal = new Map(
+      refundItems
+        .filter((item) => item.refundedSaleItemId)
+        .map((item) => [item.id, item.refundedSaleItemId!]),
+    );
+
+    if (refundItemToOriginal.size > 0) {
+      const movementRows = await tx.inventoryMovement.groupBy({
+        by: ["sourceItemId"],
+        where: {
+          companyId,
+          type: InventoryMovementType.RETURN,
+          sourceItemId: { in: [...refundItemToOriginal.keys()] },
+        },
+        _sum: { quantityDelta: true },
+      });
+      for (const row of movementRows) {
+        if (!row.sourceItemId) continue;
+        const originalItemId = refundItemToOriginal.get(row.sourceItemId);
+        if (!originalItemId) continue;
+        inventoryReturned.set(
+          originalItemId,
+          (inventoryReturned.get(originalItemId) ?? zero()).plus(
+            row._sum.quantityDelta ?? 0,
+          ),
+        );
+      }
+    }
+
+    const legacyMovementRows = await tx.inventoryMovement.groupBy({
+      by: ["sourceItemId"],
+      where: {
+        companyId,
+        type: InventoryMovementType.RETURN,
+        sourceType: "SALE_RETURN",
+        sourceId: saleId,
+        sourceItemId: { in: originalSaleItemIds },
+      },
+      _sum: { quantityDelta: true },
+    });
+    for (const row of legacyMovementRows) {
+      if (!row.sourceItemId) continue;
+      inventoryReturned.set(
+        row.sourceItemId,
+        (inventoryReturned.get(row.sourceItemId) ?? zero()).plus(
+          row._sum.quantityDelta ?? 0,
+        ),
+      );
+    }
+
+    return { financialReturned, inventoryReturned };
+  }
+
+  private async lockReturnableSale(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    saleId: string,
+  ) {
+    const executeRawUnsafe = (tx as unknown as {
+      $executeRawUnsafe?: (query: string, ...values: unknown[]) => Promise<unknown>;
+    }).$executeRawUnsafe;
+    if (!executeRawUnsafe) return;
+    await executeRawUnsafe.call(
+      tx,
+      "SELECT pg_advisory_xact_lock(hashtext($1))",
+      `${companyId}:${saleId}`,
+    );
   }
 
   private resolveUploadDir() {
@@ -930,24 +1105,17 @@ export class SalesService {
 
     try {
       const sale = await this.prisma.$transaction(async (tx) => {
-        for (const item of normalizedItems) {
-          if (!item.productId) continue;
-          const updated = await tx.product.updateMany({
-            where: {
-              id: item.productId,
+        const operationalContext: OperationalTerminalContext | null =
+          normalizedItems.some(
+          (item) => item.productId,
+        )
+          ? await this.terminalResolutionService().resolveForSale(tx, {
               companyId,
-              stock: { gte: item.qty },
-            },
-            data: {
-              stock: { decrement: item.qty },
-            },
-          });
-          if (updated.count !== 1) {
-            throw new BadRequestException(
-              `Stock insuficiente para ${item.productNameSnapshot}`,
-            );
-          }
-        }
+              terminalId: dto.terminalId,
+              deviceFingerprint: dto.deviceFingerprint,
+              requestedWarehouseId: dto.warehouseId,
+            })
+          : null;
 
         const reservedNcf = requestedVoucherType
           ? await this.ncf.reserveNextNcf(tx, {
@@ -965,6 +1133,9 @@ export class SalesService {
             sourceQuotationId,
             customerId,
             cashSessionId: activeSession.id,
+            terminalId: operationalContext?.terminal.id ?? null,
+            terminalNameSnapshot: operationalContext?.terminal.name ?? null,
+            terminalCodeSnapshot: operationalContext?.terminal.code ?? null,
             saleDate: new Date(),
             note: dto.note,
             paymentMethod,
@@ -1021,8 +1192,17 @@ export class SalesService {
             netTaxMargin,
             commissionRate,
             commissionAmount,
-            items: {
-              create: normalizedItems.map((item, index) => ({
+          },
+        });
+
+        for (let index = 0; index < normalizedItems.length; index += 1) {
+          const item = normalizedItems[index];
+          const warehouseSnapshot = item.productId
+            ? operationalContext?.warehouse
+            : null;
+          const saleItem = await tx.saleItem.create({
+            data: {
+              saleId: sale.id,
                 ...(() => {
                   const taxLine = taxCalculation.lines[index];
                   const lineTotal = taxLine?.lineTotal ?? item.subtotalSold;
@@ -1056,6 +1236,9 @@ export class SalesService {
                 productId: item.productId,
                 productSource: item.productSource,
                 sourceProductId: item.sourceProductId,
+                warehouseId: warehouseSnapshot?.id ?? null,
+                warehouseNameSnapshot: warehouseSnapshot?.name ?? null,
+                warehouseCodeSnapshot: warehouseSnapshot?.code ?? null,
                 productNameSnapshot: item.productNameSnapshot,
                 productImageSnapshot: item.productImageSnapshot,
                 qty: item.qty,
@@ -1066,16 +1249,34 @@ export class SalesService {
                 priceSoldUnit: item.priceSoldUnit,
                 costUnitSnapshot: item.costUnitSnapshot,
                 subtotalCost: item.subtotalCost,
-              })),
             },
-          },
+          });
+
+          if (item.productId && operationalContext) {
+            await this.inventoryMutationService().decreaseStockInTransaction(tx, {
+              companyId,
+              productId: item.productId,
+              warehouseId: operationalContext.warehouse.id,
+              quantity: item.qty,
+              type: InventoryMovementType.SALE,
+              sourceType: "SALE",
+              sourceId: sale.id,
+              sourceItemId: saleItem.id,
+              reason: "SALE",
+              createdByUserId: user.id,
+            });
+          }
+        }
+
+        const createdSale = await tx.sale.findUniqueOrThrow({
+          where: { id: sale.id },
           include: this.saleInclude(),
         });
 
         if (customerId) {
           await tx.client.update({
             where: { id: customerId },
-            data: { lastActivityAt: sale.saleDate },
+            data: { lastActivityAt: createdSale.saleDate },
           });
         }
 
@@ -1083,14 +1284,14 @@ export class SalesService {
           await this.ncf.markIssued(tx, {
             companyId,
             sequenceId: reservedNcf.sequenceId,
-            saleId: sale.id,
+            saleId: createdSale.id,
             userId: user.id,
             ncf: reservedNcf.ncf,
             type: reservedNcf.type,
           });
         }
 
-        return sale;
+        return createdSale;
       }, SALE_TRANSACTION_OPTIONS);
       this.emitSaleEvent(companyId, "sale.created", sale.id, {
         userId: user.id,
@@ -1119,7 +1320,6 @@ export class SalesService {
       );
     }
   }
-
   async calculate(user: TenantUser, dto: CreateSaleDto) {
     const companyId = requireTenant(user);
     if (!dto.items.length) {
@@ -1266,10 +1466,23 @@ export class SalesService {
 
   async remove(requestUser: TenantUser, saleId: string) {
     const companyId = requireTenant(requestUser);
-    let sale: { id: string; isDeleted: boolean; userId: string } | null = null;
+    let sale: {
+      id: string;
+      isDeleted: boolean;
+      userId: string;
+      kind: string;
+      inventoryRestoredAt: Date | null;
+    } | null = null;
     try {
       sale = await this.prisma.sale.findFirst({
         where: { id: saleId, companyId },
+        select: {
+          id: true,
+          isDeleted: true,
+          userId: true,
+          kind: true,
+          inventoryRestoredAt: true,
+        },
       });
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
@@ -1282,6 +1495,13 @@ export class SalesService {
     const isAdmin = isAdminLike(requestUser);
     if (!isAdmin && sale.userId !== requestUser.id) {
       throw new ForbiddenException("No puedes eliminar esta venta");
+    }
+
+    if (sale.kind === "invoice") {
+      return this.cancelSaleInventory(requestUser, saleId, {
+        reason: "DELETE_ROUTE_SAFE_CANCELLATION",
+        markDeleted: true,
+      });
     }
 
     try {
@@ -1304,6 +1524,100 @@ export class SalesService {
     return { ok: true };
   }
 
+  private async cancelSaleInventory(
+    requestUser: TenantUser,
+    saleId: string,
+    options: { reason?: string; markDeleted?: boolean } = {},
+  ) {
+    const companyId = requireTenant(requestUser);
+    const now = new Date();
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const sale = await tx.sale.findFirst({
+        where: { id: saleId, companyId },
+        include: { items: true },
+      });
+      if (!sale || sale.isDeleted || sale.kind !== "invoice") {
+        throw new NotFoundException("Venta no encontrada");
+      }
+
+      const refundCount = await tx.sale.count({
+        where: {
+          companyId,
+          refundedSaleId: saleId,
+          kind: "refund",
+          isDeleted: false,
+        },
+      });
+      if (refundCount > 0) {
+        throw new BadRequestException(
+          "No se puede cancelar una venta con devoluciones registradas.",
+        );
+      }
+
+      const claim = await tx.sale.updateMany({
+        where: { id: saleId, companyId, inventoryRestoredAt: null },
+        data: {
+          cancelledAt: now,
+          cancelledById: requestUser.id,
+          cancellationReason: options.reason ?? null,
+          inventoryRestoredAt: now,
+          ...(options.markDeleted
+            ? {
+                isDeleted: true,
+                deletedAt: now,
+                deletedById: requestUser.id,
+              }
+            : {}),
+        },
+      });
+      if (claim.count !== 1) {
+        return { ok: true, alreadyCancelled: true };
+      }
+
+      let legacyWarehouse: ResolvedSaleWarehouse | null = null;
+      for (const item of sale.items) {
+        if (!item.productId) continue;
+        if (item.productSource && item.productSource !== ProductSource.LOCAL) {
+          continue;
+        }
+
+        let warehouseId = item.warehouseId;
+        let reason = options.reason ?? "SALE_CANCELLATION";
+        if (!warehouseId) {
+          legacyWarehouse ??= await this.resolveLegacyCancellationWarehouse(
+            tx,
+            companyId,
+          );
+          warehouseId = legacyWarehouse.id;
+          reason = "LEGACY_MAIN_WAREHOUSE_FALLBACK";
+        }
+
+        await this.inventoryMutationService().increaseStockInTransaction(tx, {
+          companyId,
+          productId: item.productId,
+          warehouseId,
+          quantity: item.qty,
+          type: InventoryMovementType.SALE_CANCELLATION,
+          sourceType: "SALE",
+          sourceId: sale.id,
+          sourceItemId: item.id,
+          reason,
+          createdByUserId: requestUser.id,
+        });
+      }
+
+      return { ok: true, alreadyCancelled: false };
+    }, SALE_TRANSACTION_OPTIONS);
+
+    this.emitSaleEvent(companyId, "sale.deleted", saleId, {
+      userId: requestUser.id,
+      safeCancellation: true,
+      alreadyCancelled: result.alreadyCancelled,
+    });
+    return { ok: true };
+  }
+
   async returnSale(
     requestUser: TenantUser,
     saleId: string,
@@ -1320,25 +1634,16 @@ export class SalesService {
       );
     }
 
-    let sale: Prisma.SaleGetPayload<{
-      include: { items: true };
-    }> | null = null;
-
     try {
-      sale = await this.prisma.sale.findFirst({
-        where: { id: saleId, companyId },
-        include: { items: true },
-      });
-    } catch (error) {
-      if (!this.isSchemaMismatch(error)) throw error;
-      throw new NotFoundException("Venta no encontrada");
-    }
+      const clientRequestId = dto.clientRequestId?.trim() || undefined;
+      if (clientRequestId) {
+        const existing = await this.prisma.sale.findFirst({
+          where: { companyId, clientRequestId, kind: "refund" },
+          include: this.saleInclude(),
+        });
+        if (existing) return existing;
+      }
 
-    if (!sale || sale.isDeleted || sale.kind !== "invoice") {
-      throw new NotFoundException("Venta no encontrada");
-    }
-
-    try {
       const activeSession = await this.prisma.cashSession.findFirst({
         where: {
           openedByUserId: requestUser.id,
@@ -1355,39 +1660,61 @@ export class SalesService {
       }
 
       const returned = await this.prisma.$transaction(async (tx) => {
+        await this.lockReturnableSale(tx, companyId, saleId);
+        const sale = await tx.sale.findFirst({
+          where: { id: saleId, companyId },
+          include: { items: true },
+        });
+        if (!sale || sale.isDeleted || sale.kind !== "invoice") {
+          throw new NotFoundException("Venta no encontrada");
+        }
+        if (sale.cancelledAt || sale.inventoryRestoredAt) {
+          throw new BadRequestException(
+            "No se puede devolver una venta cuyo inventario ya fue restaurado por cancelacion.",
+          );
+        }
+        if (clientRequestId) {
+          const existing = await tx.sale.findFirst({
+            where: { companyId, clientRequestId, kind: "refund" },
+            include: this.saleInclude(),
+          });
+          if (existing) return existing;
+        }
+
         const originalItems = new Map(
-          sale!.items.map((item) => [item.id, item]),
+          sale.items.map((item) => [item.id, item]),
         );
-        const requestedItems =
+        const requestedInput =
           dto.items && dto.items.length
             ? dto.items.map((item) => ({
                 saleItemId: item.saleItemId,
                 qty: new Prisma.Decimal(item.qty),
               }))
-            : sale!.items.map((item) => ({
+            : sale.items.map((item) => ({
                 saleItemId: item.id,
                 qty: new Prisma.Decimal(item.qty),
               }));
 
-        const refundedRows = await tx.saleItem.groupBy({
-          by: ["refundedSaleItemId"],
-          where: {
-            refundedSaleItemId: { in: sale!.items.map((item) => item.id) },
-            sale: {
-              companyId,
-              refundedSaleId: saleId,
-              kind: "refund",
-              isDeleted: false,
-            },
-          },
-          _sum: { qty: true },
-        });
-        const refundedQty = new Map(
-          refundedRows.map((row) => [
-            row.refundedSaleItemId,
-            new Prisma.Decimal(row._sum.qty ?? 0),
-          ]),
+        const requestedByItem = new Map<string, Prisma.Decimal>();
+        for (const item of requestedInput) {
+          requestedByItem.set(
+            item.saleItemId,
+            (requestedByItem.get(item.saleItemId) ?? new Prisma.Decimal(0)).plus(
+              item.qty,
+            ),
+          );
+        }
+        const requestedItems = [...requestedByItem.entries()].map(
+          ([saleItemId, qty]) => ({ saleItemId, qty }),
         );
+        const restoreInventory = dto.restoreInventory !== false;
+        const { financialReturned, inventoryReturned } =
+          await this.returnQuantityMaps(
+            tx,
+            companyId,
+            saleId,
+            sale.items.map((item) => item.id),
+          );
 
         const refundItems = requestedItems.map((request, index) => {
           const original = originalItems.get(request.saleItemId);
@@ -1412,13 +1739,27 @@ export class SalesService {
             },
             label: `devolución #${index + 1}`,
           });
-          const alreadyReturned =
-            refundedQty.get(original.id) ?? new Prisma.Decimal(0);
-          const remainingQty = original.qty.minus(alreadyReturned);
-          if (request.qty.greaterThan(remainingQty)) {
+          const alreadyFinancialReturned =
+            financialReturned.get(original.id) ?? new Prisma.Decimal(0);
+          const remainingFinancialQty = original.qty.minus(
+            alreadyFinancialReturned,
+          );
+          if (request.qty.greaterThan(remainingFinancialQty)) {
             throw new BadRequestException(
               `La devolución de ${original.productNameSnapshot} supera la cantidad disponible.`,
             );
+          }
+          if (restoreInventory) {
+            const alreadyInventoryReturned =
+              inventoryReturned.get(original.id) ?? new Prisma.Decimal(0);
+            const remainingInventoryQty = original.qty.minus(
+              alreadyInventoryReturned,
+            );
+            if (request.qty.greaterThan(remainingInventoryQty)) {
+              throw new BadRequestException(
+                `La devolución de ${original.productNameSnapshot} supera la cantidad disponible para restaurar inventario.`,
+              );
+            }
           }
           const ratio = request.qty.div(original.qty);
           const subtotalCost = original.subtotalCost
@@ -1460,6 +1801,9 @@ export class SalesService {
               productId: original.productId,
               productSource: original.productSource,
               sourceProductId: original.sourceProductId,
+              warehouseId: original.warehouseId,
+              warehouseNameSnapshot: original.warehouseNameSnapshot,
+              warehouseCodeSnapshot: original.warehouseCodeSnapshot,
               productNameSnapshot: original.productNameSnapshot,
               productImageSnapshot: original.productImageSnapshot,
               qty: request.qty,
@@ -1486,17 +1830,27 @@ export class SalesService {
           };
         });
 
+        let legacyWarehouse: ResolvedSaleWarehouse | null = null;
         for (const item of refundItems) {
-          if (item.original.productSource && item.original.productSource !== "LOCAL") {
+          if (!restoreInventory) continue;
+          if (
+            item.original.productSource &&
+            item.original.productSource !== "LOCAL"
+          ) {
             throw new BadRequestException(
               "Las devoluciones de productos FULLPOS requieren integración writable validada.",
             );
           }
-          if (!item.original.productId) continue;
-          await tx.product.updateMany({
-            where: { id: item.original.productId, companyId },
-            data: { stock: { increment: item.data.qty } },
-          });
+          if (!item.original.productId || item.original.warehouseId) continue;
+          {
+            legacyWarehouse ??= await this.resolveLegacyCancellationWarehouse(
+              tx,
+              companyId,
+            );
+            item.data.warehouseId = legacyWarehouse.id;
+            item.data.warehouseNameSnapshot = legacyWarehouse.name;
+            item.data.warehouseCodeSnapshot = legacyWarehouse.code;
+          }
         }
 
         const totalSold = refundItems
@@ -1545,17 +1899,20 @@ export class SalesService {
           ? netTaxProfit.div(netTaxRevenue.abs()).toDecimalPlaces(4)
           : new Prisma.Decimal(0);
 
-        return tx.sale.create({
+        const returned = await tx.sale.create({
           data: {
             userId: requestUser.id,
             companyId,
+            clientRequestId,
             refundedSaleId: saleId,
-            customerId: sale!.customerId,
+            customerId: sale.customerId,
             cashSessionId: activeSession.id,
             saleDate: new Date(),
             note:
               dto.reason?.trim() ||
-              "DEVOLUCION: venta devuelta desde historial.",
+              (restoreInventory
+                ? "DEVOLUCION: venta devuelta desde historial."
+                : "REEMBOLSO FINANCIERO: no restaura inventario."),
             paymentMethod: "refund",
             paymentCashAmount: totalSold,
             paymentTransferAmount: new Prisma.Decimal(0),
@@ -1566,22 +1923,22 @@ export class SalesService {
             kind: "refund",
             status: "RETURNED",
             totalSold,
-            fiscalTaxEnabled: sale!.fiscalTaxEnabled,
-            fiscalPriceMode: sale!.fiscalPriceMode,
+            fiscalTaxEnabled: sale.fiscalTaxEnabled,
+            fiscalPriceMode: sale.fiscalPriceMode,
             taxableBase,
             taxAmount,
             exemptAmount,
             discountAmount,
-            fiscalVoucherType: sale!.fiscalVoucherType,
-            issuerNameSnapshot: sale!.issuerNameSnapshot,
-            issuerTaxIdSnapshot: sale!.issuerTaxIdSnapshot,
-            issuerAddressSnapshot: sale!.issuerAddressSnapshot,
-            issuerPhoneSnapshot: sale!.issuerPhoneSnapshot,
-            issuerEmailSnapshot: sale!.issuerEmailSnapshot,
-            fiscalCustomerTaxId: sale!.fiscalCustomerTaxId,
-            fiscalCustomerName: sale!.fiscalCustomerName,
-            customerAddressSnapshot: sale!.customerAddressSnapshot,
-            customerPhoneSnapshot: sale!.customerPhoneSnapshot,
+            fiscalVoucherType: sale.fiscalVoucherType,
+            issuerNameSnapshot: sale.issuerNameSnapshot,
+            issuerTaxIdSnapshot: sale.issuerTaxIdSnapshot,
+            issuerAddressSnapshot: sale.issuerAddressSnapshot,
+            issuerPhoneSnapshot: sale.issuerPhoneSnapshot,
+            issuerEmailSnapshot: sale.issuerEmailSnapshot,
+            fiscalCustomerTaxId: sale.fiscalCustomerTaxId,
+            fiscalCustomerName: sale.fiscalCustomerName,
+            customerAddressSnapshot: sale.customerAddressSnapshot,
+            customerPhoneSnapshot: sale.customerPhoneSnapshot,
             totalCost,
             totalProfit,
             commercialProfit: totalProfit,
@@ -1596,7 +1953,48 @@ export class SalesService {
           },
           include: this.saleInclude(),
         });
-      }, SALE_TRANSACTION_OPTIONS);
+
+        if (restoreInventory) {
+          for (const refundItem of returned.items) {
+            const item = refundItems.find(
+              (candidate) =>
+                candidate.original.id === refundItem.refundedSaleItemId,
+            );
+            if (!item || !item.original.productId) continue;
+            const warehouseId = item.original.warehouseId ?? item.data.warehouseId;
+            if (!warehouseId) {
+              throw new BadRequestException(
+                "No se pudo resolver el almacen original de la devolucion.",
+              );
+            }
+            const reason =
+              !item.original.warehouseId && item.data.warehouseId
+                ? "LEGACY_MAIN_WAREHOUSE_FALLBACK"
+                : dto.reason?.trim() || "SALE_RETURN";
+
+            await this.inventoryMutationService().increaseStockInTransaction(
+              tx,
+              {
+                companyId,
+                productId: item.original.productId,
+                warehouseId,
+                quantity: refundItem.qty,
+                type: InventoryMovementType.RETURN,
+                sourceType: "SALE_RETURN",
+                sourceId: returned.id,
+                sourceItemId: refundItem.id,
+                reason,
+                createdByUserId: requestUser.id,
+              },
+            );
+          }
+        }
+
+        return tx.sale.findUniqueOrThrow({
+          where: { id: returned.id },
+          include: this.saleInclude(),
+        });
+      }, SALE_RETURN_TRANSACTION_OPTIONS);
       this.emitSaleEvent(companyId, "sale.returned", saleId, {
         userId: requestUser.id,
         cashSessionId: returned.cashSessionId,
@@ -1604,6 +2002,21 @@ export class SalesService {
       });
       return returned;
     } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002" &&
+        dto.clientRequestId
+      ) {
+        const existing = await this.prisma.sale.findFirst({
+          where: {
+            companyId,
+            clientRequestId: dto.clientRequestId.trim(),
+            kind: "refund",
+          },
+          include: this.saleInclude(),
+        });
+        if (existing) return existing;
+      }
       if (!this.isSchemaMismatch(error)) throw error;
       throw new NotFoundException("Venta no encontrada");
     }

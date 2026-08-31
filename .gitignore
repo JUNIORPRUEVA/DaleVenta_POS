@@ -8,6 +8,8 @@ dist/
 .env
 apps/api/.env
 apps/api/.env.docker
+apps/api/.env.uat.local
+.env.uat.local
 
 # local/generated artifacts
 fulltech-pwa/

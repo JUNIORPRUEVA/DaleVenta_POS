@@ -671,10 +671,10 @@ export class ReportsService {
   ) {
     const decimals = code === "UNIT" || precision <= 0 ? 0 : precision;
     const value = quantity.toLocaleString("es-DO", {
-      minimumFractionDigits: decimals,
+      minimumFractionDigits: 0,
       maximumFractionDigits: decimals,
     });
-    return code === "UNIT" ? value : `${value} ${symbol}`;
+    return `${value} ${symbol || (code === "UNIT" ? "u" : code.toLowerCase())}`;
   }
 
   private saleItemsForCategory(

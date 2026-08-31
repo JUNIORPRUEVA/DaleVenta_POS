@@ -1,36 +1,48 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
+import 'package:daleventa_pos/core/auth/token_storage.dart';
 import 'package:daleventa_pos/core/routing/app_router.dart';
 import 'package:daleventa_pos/core/routing/routes.dart';
 import 'package:daleventa_pos/main.dart' as app;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  const email = String.fromEnvironment('UOM_UAT_EMAIL');
-  const password = String.fromEnvironment('UOM_UAT_PASSWORD');
-  const outDir = String.fromEnvironment(
+  final email = const String.fromEnvironment('UOM_UAT_EMAIL').isNotEmpty
+      ? const String.fromEnvironment('UOM_UAT_EMAIL')
+      : (Platform.environment['UOM_UAT_EMAIL'] ?? '');
+  final password = const String.fromEnvironment('UOM_UAT_PASSWORD').isNotEmpty
+      ? const String.fromEnvironment('UOM_UAT_PASSWORD')
+      : (Platform.environment['UOM_UAT_PASSWORD'] ?? '');
+  final outDir = const String.fromEnvironment(
     'UOM_UAT_SCREENSHOT_DIR',
     defaultValue: '../../docs/uom-visual-evidence',
   );
 
   Future<void> settle(WidgetTester tester) async {
-    await tester.pumpAndSettle(const Duration(milliseconds: 300));
-    await Future<void>.delayed(const Duration(milliseconds: 500));
-    await tester.pumpAndSettle(const Duration(milliseconds: 300));
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 250));
+    }
   }
 
   Future<void> shot(WidgetTester tester, String name) async {
     final dir = Directory(outDir);
     if (!dir.existsSync()) dir.createSync(recursive: true);
-    await tester.pumpAndSettle(const Duration(milliseconds: 300));
-    final bytes = await binding.takeScreenshot(name);
-    File('${dir.path}/$name.png').writeAsBytesSync(bytes);
+    await tester.pump(const Duration(milliseconds: 300));
+    final renderView = binding.renderViews.first;
+    // ignore: invalid_use_of_protected_member
+    final layer = renderView.layer! as OffsetLayer;
+    final image = await layer.toImage(renderView.paintBounds);
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    File('${dir.path}/$name.png').writeAsBytesSync(data!.buffer.asUint8List());
   }
 
   Future<void> go(WidgetTester tester, String route) async {
@@ -41,7 +53,7 @@ void main() {
   }
 
   Future<void> login(WidgetTester tester) async {
-    await tester.pumpAndSettle(const Duration(seconds: 2));
+    await settle(tester);
     if (find.text('Iniciar sesion').evaluate().isEmpty) {
       await go(tester, Routes.login);
     }
@@ -72,6 +84,10 @@ void main() {
       isNotEmpty,
       reason: 'Pass UOM_UAT_PASSWORD via --dart-define',
     );
+
+    await TokenStorage().clearTokens();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
 
     app.main();
     await login(tester);
@@ -114,6 +130,16 @@ void main() {
     await shot(tester, '03-product-edit-yard-or-detail');
 
     await go(tester, Routes.catalogoStock);
+    if (find
+        .widgetWithText(TextField, 'Buscar producto')
+        .evaluate()
+        .isNotEmpty) {
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Buscar producto').first,
+        'Tela',
+      );
+      await settle(tester);
+    }
     await shot(tester, '04-stock-adjustment-list');
     await tapIfVisible(tester, find.textContaining('Tela Azul Visual UAT'));
     await shot(tester, '05-stock-adjustment-yard');
@@ -122,13 +148,19 @@ void main() {
     await shot(tester, '06-pos-product-grid');
     await tapIfVisible(tester, find.textContaining('Tela Azul Visual UAT'));
     if (find.widgetWithText(TextField, 'Cantidad').evaluate().isNotEmpty) {
-      await tester.enterText(find.widgetWithText(TextField, 'Cantidad').last, '5.5');
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Cantidad').last,
+        '5.5',
+      );
       await shot(tester, '07-pos-quantity-editor-yard');
       await tapIfVisible(tester, find.text('Agregar'));
     }
     await tapIfVisible(tester, find.textContaining('Carne Visual UAT'));
     if (find.widgetWithText(TextField, 'Cantidad').evaluate().isNotEmpty) {
-      await tester.enterText(find.widgetWithText(TextField, 'Cantidad').last, '2.375');
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Cantidad').last,
+        '2.375',
+      );
       await shot(tester, '08-pos-quantity-editor-pound');
       await tapIfVisible(tester, find.text('Agregar'));
     }
@@ -138,6 +170,7 @@ void main() {
     await shot(tester, '10-quotation-history-uom');
 
     await go(tester, Routes.comprasLista);
+    await tapIfVisible(tester, find.textContaining('OC-000001'));
     await shot(tester, '11-purchase-uom');
 
     await go(tester, Routes.ventasLista);

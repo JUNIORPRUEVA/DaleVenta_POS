@@ -19,6 +19,7 @@ import '../../features/contabilidad/factura_fiscal_screen.dart';
 import '../../features/contabilidad/pagos_pendientes_screen.dart';
 import '../../features/products/ui/inventory_module_pages.dart';
 import '../../features/reports/ui/reports_page.dart';
+import '../../features/warehouses/ui/warehouse_settings_screen.dart';
 import '../../modules/clientes/cliente_detail_screen.dart';
 import '../../modules/clientes/clientes_screen.dart';
 import '../../modules/cash/cash_box_screen.dart';
@@ -169,6 +170,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: Routes.configuracionDocumentos,
             builder: (context, state) => const AccountDocumentsSettingsScreen(),
+          ),
+          GoRoute(
+            path: Routes.configuracionAlmacenes,
+            builder: (context, state) => const WarehouseSettingsScreen(),
           ),
           GoRoute(
             path: Routes.users,

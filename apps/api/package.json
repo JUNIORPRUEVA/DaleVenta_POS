@@ -13,6 +13,8 @@
     "test:integration": "jest --runInBand --testPathPatterns=\\.integration-spec\\.ts$",
     "test:e2e": "jest --runInBand --testPathPatterns=\\.e2e-spec\\.ts$",
     "test:staging:fiscal": "node scripts/fiscal-staging-validation.cjs",
+    "uat:verify-db": "ts-node --transpile-only -P tsconfig.scripts.json scripts/verify-uat-db.ts",
+    "uat:seed": "ts-node --transpile-only -P tsconfig.scripts.json scripts/seed-uat-local.ts",
     "test:security": "jest --runInBand --testPathPatterns=security",
     "test:tenant": "jest --runInBand --testPathPatterns=tenant",
     "test:deletion": "jest --runInBand --testPathPatterns=deletion",

@@ -40,6 +40,7 @@ export class CashController {
 
   @Post('sessions/open')
   open(@Req() req: Request, @Body() dto: OpenCashSessionDto) {
+    dto.deviceFingerprint ??= this.headerValue(req, 'x-client-device-id');
     return this.cash.startSession(req.user as { id: string; role: Role }, dto);
   }
 
@@ -79,5 +80,12 @@ export class CashController {
   @Get('sessions/:id')
   sessionDetail(@Req() req: Request, @Param('id') id: string) {
     return this.cash.sessionDetail(req.user as { id: string; role: Role }, id);
+  }
+
+  private headerValue(req: Request, name: string) {
+    const value = req.headers[name];
+    const text = Array.isArray(value) ? value[0] : value;
+    const trimmed = `${text ?? ''}`.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
   }
 }

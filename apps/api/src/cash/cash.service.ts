@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { Prisma, Role } from "@prisma/client";
 import crypto from "node:crypto";
@@ -16,6 +17,7 @@ import {
   CreateCashMovementDto,
   OpenCashSessionDto,
 } from "./dto/cash.dto";
+import { TerminalResolutionService } from "../terminals/terminal-resolution.service";
 
 type RequestUser = TenantUser;
 
@@ -26,7 +28,13 @@ export class CashService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: CatalogRealtimeRelayService,
+    @Optional()
+    private readonly terminalResolution?: TerminalResolutionService,
   ) {}
+
+  private terminalResolutionService() {
+    return this.terminalResolution ?? new TerminalResolutionService(this.prisma);
+  }
 
   private businessDate(date = new Date()) {
     return date.toISOString().slice(0, 10);
@@ -86,6 +94,14 @@ export class CashService {
     const session = await this.retryOnWriteConflict(() =>
       this.prisma.$transaction(
         async (tx) => {
+          const terminalContext =
+            dto.terminalId || dto.deviceFingerprint
+              ? await this.terminalResolutionService().resolveForSale(tx, {
+                  companyId,
+                  terminalId: dto.terminalId,
+                  deviceFingerprint: dto.deviceFingerprint,
+                })
+              : null;
           const existing = await tx.cashSession.findFirst({
             where: {
               openedByUserId: user.id,
@@ -126,6 +142,9 @@ export class CashService {
             data: {
               companyId,
               openedByUserId: user.id,
+              terminalId: terminalContext?.terminal.id ?? null,
+              terminalNameSnapshot: terminalContext?.terminal.name ?? null,
+              terminalCodeSnapshot: terminalContext?.terminal.code ?? null,
               userName,
               initialAmount: openingAmount,
               cashboxDailyId: cashbox.id,
@@ -414,6 +433,9 @@ export class CashService {
       openedAt: session.openedAt,
       closedAt: session.closedAt,
       status: session.status,
+      terminalId: session.terminalId,
+      terminalName: session.terminalNameSnapshot,
+      terminalCode: session.terminalCodeSnapshot,
       initialAmount: this.toNumber(session.initialAmount),
       closingAmount: this.toNumber(session.closingAmount),
       expectedAmount: this.toNumber(session.expectedAmount),
@@ -618,6 +640,9 @@ export class CashService {
     status: string;
     userName: string | null;
     businessDate: string | null;
+    terminalId?: string | null;
+    terminalNameSnapshot?: string | null;
+    terminalCodeSnapshot?: string | null;
   }) {
     return {
       userId: session.openedByUserId,
@@ -627,6 +652,9 @@ export class CashService {
       status: session.status,
       userName: session.userName ?? "Usuario",
       businessDate: session.businessDate ?? this.businessDate(),
+      terminalId: session.terminalId ?? null,
+      terminalName: session.terminalNameSnapshot ?? null,
+      terminalCode: session.terminalCodeSnapshot ?? null,
     };
   }
 

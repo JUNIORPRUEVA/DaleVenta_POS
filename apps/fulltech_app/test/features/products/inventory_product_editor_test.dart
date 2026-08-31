@@ -14,6 +14,7 @@ import 'package:daleventa_pos/core/uom/uom_formatters.dart';
 import 'package:daleventa_pos/core/utils/money_formatters.dart';
 import 'package:daleventa_pos/features/catalogo/data/catalog_repository.dart';
 import 'package:daleventa_pos/features/products/ui/inventory_module_pages.dart';
+import 'package:daleventa_pos/features/warehouses/data/warehouse_repository.dart';
 
 class _FakeCatalogRepository extends CatalogRepository {
   _FakeCatalogRepository() : super(Dio());
@@ -27,6 +28,7 @@ class _FakeCatalogRepository extends CatalogRepository {
   String? lastFotoUrl;
   String? lastUnitOfMeasureId;
   UnitOfMeasureModel? lastUnitOfMeasure;
+  double? lastAdjustedStock;
   bool dropImageOnUpdateResponse = false;
   Completer<String>? uploadCompleter;
   List<ProductModel> products = [
@@ -154,6 +156,27 @@ class _FakeCatalogRepository extends CatalogRepository {
   }
 
   @override
+  Future<ProductModel> adjustProductStock({
+    required String id,
+    double? stock,
+    double? delta,
+    String? warehouseId,
+    String? reason,
+    bool skipLoader = false,
+  }) async {
+    final current = products.firstWhere((product) => product.id == id);
+    final nextStock = stock ?? ((current.stock ?? 0) + (delta ?? 0));
+    lastAdjustedStock = nextStock;
+    products = products
+        .map(
+          (product) =>
+              product.id == id ? product.copyWith(stock: nextStock) : product,
+        )
+        .toList(growable: false);
+    return products.firstWhere((product) => product.id == id);
+  }
+
+  @override
   Future<String> uploadImage({
     List<int>? bytes,
     String? filePath,
@@ -165,6 +188,46 @@ class _FakeCatalogRepository extends CatalogRepository {
     return '/uploads/$filename';
   }
 }
+
+List<Override> _singleWarehouseOverrides({ProductModel? product}) => [
+  warehouseInventoryOverviewProvider.overrideWith(
+    (ref) async => const WarehouseInventoryOverview(
+      warehouses: [
+        WarehouseModel(
+          id: 'w-default',
+          name: 'Principal',
+          code: 'MAIN',
+          isDefault: true,
+          isActive: true,
+          terminalCount: 0,
+          stockRowCount: 0,
+        ),
+      ],
+      terminals: [],
+    ),
+  ),
+  productWarehouseStockProvider.overrideWith(
+    (ref, productId) async => ProductWarehouseStockBreakdown(
+      productId: productId,
+      source: 'LOCAL',
+      readOnly: false,
+      reconciled: true,
+      total: product?.stock,
+      warehouseTotal: product?.stock,
+      warehouses: [
+        WarehouseStockLine(
+          warehouseId: 'w-default',
+          warehouseName: 'Principal',
+          warehouseCode: 'MAIN',
+          isDefault: true,
+          isActive: true,
+          quantity: product?.stock ?? 0,
+          quantityDecimal: (product?.stock ?? 0).toString(),
+        ),
+      ],
+    ),
+  ),
+];
 
 class _FakeFilePicker extends FilePicker {
   _FakeFilePicker(this.result);
@@ -194,14 +257,18 @@ ProductModel _product({
   required String id,
   required String name,
   required String category,
+  double stock = 1,
+  UnitOfMeasureModel? unitOfMeasure,
 }) {
   return ProductModel(
     id: id,
     nombre: name,
     precio: 100,
     costo: 60,
-    stock: 1,
+    stock: stock,
     categoria: category,
+    unitOfMeasureId: unitOfMeasure?.id,
+    unitOfMeasure: unitOfMeasure,
   );
 }
 
@@ -228,6 +295,7 @@ Future<ProductFormResult?> _pumpEditor(
         companySettingsProvider.overrideWith(
           (ref) async => companySettings ?? CompanySettings.empty(),
         ),
+        ..._singleWarehouseOverrides(product: product),
       ],
       child: MaterialApp(
         home: Builder(
@@ -264,6 +332,7 @@ Future<void> _pumpMobileInventory(
   WidgetTester tester, {
   required _FakeCatalogRepository repo,
   String? initialMobileTab,
+  CompanySettings? companySettings,
 }) async {
   tester.view.physicalSize = const Size(390, 844);
   tester.view.devicePixelRatio = 1;
@@ -276,13 +345,14 @@ Future<void> _pumpMobileInventory(
         catalogRepositoryProvider.overrideWithValue(repo),
         productTaxUiConfigProvider.overrideWith(
           (ref) async => ProductTaxUiConfig(
-            settings: CompanySettings.empty(),
+            settings: companySettings ?? CompanySettings.empty(),
             activeTaxes: const [],
           ),
         ),
         companySettingsProvider.overrideWith(
-          (ref) async => CompanySettings.empty(),
+          (ref) async => companySettings ?? CompanySettings.empty(),
         ),
+        ..._singleWarehouseOverrides(),
       ],
       child: MaterialApp(
         home: InventoryModulePages(initialMobileTab: initialMobileTab),
@@ -368,28 +438,65 @@ void main() {
     expect(find.textContaining('debe ser entera'), findsOneWidget);
   });
 
-  testWidgets('editar producto medido conserva stock decimal en el campo', (
+  testWidgets(
+    'editar producto medido muestra stock con unidad en solo lectura',
+    (tester) async {
+      final repo = _FakeCatalogRepository();
+      const yard = UnitOfMeasureModel(
+        id: 'YARD',
+        code: 'YARD',
+        name: 'Yarda',
+        symbol: 'yd',
+        category: 'LENGTH',
+        allowDecimals: true,
+        precision: 3,
+      );
+      final product = ProductModel(
+        id: 'fabric-1',
+        nombre: 'Tela azul',
+        precio: 150,
+        costo: 90,
+        stock: 14.5,
+        categoria: 'General',
+        unitOfMeasureId: yard.id,
+        unitOfMeasure: yard,
+      );
+
+      await _pumpEditor(
+        tester,
+        repo: repo,
+        product: product,
+        companySettings: CompanySettings.empty().copyWith(
+          measurementUnitsEnabled: true,
+        ),
+      );
+
+      expect(find.text('Yarda (yd)'), findsWidgets);
+      expect(find.text('Stock actual'), findsOneWidget);
+      expect(find.text('14.5 yd'), findsOneWidget);
+      expect(find.text('Ajustar stock'), findsOneWidget);
+      expect(find.widgetWithText(TextField, '14.5'), findsNothing);
+    },
+  );
+
+  testWidgets('editar producto no envia stock como ajuste accidental', (
     tester,
   ) async {
     final repo = _FakeCatalogRepository();
-    const yard = UnitOfMeasureModel(
-      id: 'YARD',
-      code: 'YARD',
-      name: 'Yarda',
-      symbol: 'yd',
-      category: 'LENGTH',
-      allowDecimals: true,
-      precision: 3,
-    );
-    final product = ProductModel(
+    final product = _product(
       id: 'fabric-1',
-      nombre: 'Tela azul',
-      precio: 150,
-      costo: 90,
+      name: 'Tela azul',
+      category: 'General',
       stock: 14.5,
-      categoria: 'General',
-      unitOfMeasureId: yard.id,
-      unitOfMeasure: yard,
+      unitOfMeasure: const UnitOfMeasureModel(
+        id: 'YARD',
+        code: 'YARD',
+        name: 'Yarda',
+        symbol: 'yd',
+        category: 'LENGTH',
+        allowDecimals: true,
+        precision: 3,
+      ),
     );
 
     await _pumpEditor(
@@ -401,8 +508,12 @@ void main() {
       ),
     );
 
-    expect(find.text('Yarda (yd)'), findsOneWidget);
-    expect(find.widgetWithText(TextField, '14.5'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, 'Tela azul fina');
+    await tester.tap(find.text('Guardar cambios'));
+    await tester.pumpAndSettle();
+
+    expect(repo.updates, 1);
+    expect(repo.lastAdjustedStock, isNull);
   });
 
   testWidgets('inventario móvil no muestra selector superior de tabs', (
@@ -425,6 +536,100 @@ void main() {
     expect(find.byType(TabBar), findsNothing);
     expect(find.text('Stock'), findsWidgets);
     expect(find.text('Aplicar ajuste'), findsOneWidget);
+  });
+
+  testWidgets('catálogo muestra stock decimal con unidad por producto', (
+    tester,
+  ) async {
+    const yard = UnitOfMeasureModel(
+      id: 'YARD',
+      code: 'YARD',
+      name: 'Yarda',
+      symbol: 'yd',
+      category: 'LENGTH',
+      allowDecimals: true,
+      precision: 3,
+    );
+    const pound = UnitOfMeasureModel(
+      id: 'POUND',
+      code: 'POUND',
+      name: 'Libra',
+      symbol: 'lb',
+      category: 'WEIGHT',
+      allowDecimals: true,
+      precision: 3,
+    );
+    final repo = _FakeCatalogRepository()
+      ..products = [
+        _product(
+          id: 'unit-1',
+          name: 'Audifonos Visual UAT',
+          category: 'Unidad',
+          stock: 8,
+          unitOfMeasure: UnitOfMeasureModel.unit,
+        ),
+        _product(
+          id: 'lb-1',
+          name: 'Carne Visual UAT',
+          category: 'Peso',
+          stock: 7.625,
+          unitOfMeasure: pound,
+        ),
+        _product(
+          id: 'yd-1',
+          name: 'Tela Azul Visual UAT',
+          category: 'Tela',
+          stock: 14.5,
+          unitOfMeasure: yard,
+        ),
+      ];
+
+    await _pumpMobileInventory(
+      tester,
+      repo: repo,
+      companySettings: CompanySettings.empty().copyWith(
+        measurementUnitsEnabled: true,
+      ),
+    );
+
+    expect(find.text('8 u'), findsOneWidget);
+    expect(find.text('7.625 lb'), findsOneWidget);
+    expect(find.text('14.5 yd'), findsOneWidget);
+    expect(find.text('8'), findsNothing);
+    expect(find.text('15'), findsNothing);
+  });
+
+  testWidgets('ajuste de stock muestra unidad y bloquea decimal para Unidad', (
+    tester,
+  ) async {
+    final repo = _FakeCatalogRepository()
+      ..products = [
+        _product(
+          id: 'unit-1',
+          name: 'Audifonos Visual UAT',
+          category: 'Unidad',
+          stock: 8,
+          unitOfMeasure: UnitOfMeasureModel.unit,
+        ),
+      ];
+
+    await _pumpMobileInventory(
+      tester,
+      repo: repo,
+      initialMobileTab: 'stock',
+      companySettings: CompanySettings.empty().copyWith(
+        measurementUnitsEnabled: true,
+      ),
+    );
+
+    expect(find.textContaining('8 u'), findsWidgets);
+    expect(find.text('u'), findsWidgets);
+    await tester.enterText(find.byType(TextField).at(1), '1.5');
+
+    final apply = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Aplicar ajuste'),
+    );
+    expect(apply.onPressed, isNull);
   });
 
   testWidgets('inventario móvil abre Categorías como pantalla independiente', (
@@ -473,7 +678,8 @@ void main() {
                       onBulkDelete: (_) async {},
                       onBulkChangeCategory: (_, _) async {},
                       onEdit: (_) {},
-                      onSetStock: (_, _) async {},
+                      onSetStock:
+                          (_, _, {warehouseId, currentWarehouseStock}) async {},
                       canEditProducts: true,
                       canAddStock: true,
                       onDelete: (_) async {},
@@ -572,7 +778,7 @@ void main() {
               onBulkDelete: (_) async {},
               onBulkChangeCategory: (_, _) async {},
               onEdit: (_) {},
-              onSetStock: (_, _) async {},
+              onSetStock: (_, _, {warehouseId, currentWarehouseStock}) async {},
               canEditProducts: true,
               canAddStock: true,
               showTaxBadges: true,
@@ -633,7 +839,8 @@ void main() {
                 onBulkDelete: (_) async {},
                 onBulkChangeCategory: (_, _) async {},
                 onEdit: (_) {},
-                onSetStock: (_, _) async {},
+                onSetStock:
+                    (_, _, {warehouseId, currentWarehouseStock}) async {},
                 canEditProducts: true,
                 canAddStock: true,
                 showTaxBadges: true,
@@ -720,7 +927,13 @@ void main() {
                           onBulkDelete: (_) async {},
                           onBulkChangeCategory: (_, _) async {},
                           onEdit: (_) {},
-                          onSetStock: (_, _) async {},
+                          onSetStock:
+                              (
+                                _,
+                                _, {
+                                warehouseId,
+                                currentWarehouseStock,
+                              }) async {},
                           canEditProducts: true,
                           canAddStock: true,
                           showTaxBadges: taxEnabled,
@@ -759,28 +972,37 @@ void main() {
       ];
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: StatefulBuilder(
-            builder: (context, setHostState) {
-              return Scaffold(
-                body: Column(
-                  children: [
-                    ElevatedButton(
-                      onPressed: () => setHostState(() => products = []),
-                      child: const Text('Vaciar categoría'),
-                    ),
-                    Expanded(
-                      child: StockAdjustmentsPage(
-                        products: products,
-                        onRefresh: () async {},
-                        onSetStock: (_, _) async {},
-                        canAddStock: true,
+        ProviderScope(
+          overrides: _singleWarehouseOverrides(),
+          child: MaterialApp(
+            home: StatefulBuilder(
+              builder: (context, setHostState) {
+                return Scaffold(
+                  body: Column(
+                    children: [
+                      ElevatedButton(
+                        onPressed: () => setHostState(() => products = []),
+                        child: const Text('Vaciar categoría'),
                       ),
-                    ),
-                  ],
-                ),
-              );
-            },
+                      Expanded(
+                        child: StockAdjustmentsPage(
+                          products: products,
+                          onRefresh: () async {},
+                          onSetStock:
+                              (
+                                _,
+                                _, {
+                                warehouseId,
+                                currentWarehouseStock,
+                              }) async {},
+                          canAddStock: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
         ),
       );
@@ -912,6 +1134,7 @@ void main() {
           companySettingsProvider.overrideWith(
             (ref) async => CompanySettings.empty(),
           ),
+          ..._singleWarehouseOverrides(product: product),
         ],
         child: MaterialApp(
           home: Builder(
@@ -937,8 +1160,10 @@ void main() {
 
     await tester.tap(find.text('Abrir editor fiscal'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Predeterminado').last);
     await tester.tap(find.text('Predeterminado').last);
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Exento').last);
     await tester.tap(find.text('Exento').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Guardar cambios'));
@@ -988,6 +1213,7 @@ void main() {
           companySettingsProvider.overrideWith(
             (ref) async => CompanySettings.empty(),
           ),
+          ..._singleWarehouseOverrides(product: product),
         ],
         child: MaterialApp(
           home: Builder(
@@ -1013,8 +1239,10 @@ void main() {
 
     await tester.tap(find.text('Abrir editor fiscal'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Exento').last);
     await tester.tap(find.text('Exento').last);
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Predeterminado').last);
     await tester.tap(find.text('Predeterminado').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Guardar cambios'));
@@ -1154,6 +1382,7 @@ void main() {
           companySettingsProvider.overrideWith(
             (ref) async => CompanySettings.empty(),
           ),
+          ..._singleWarehouseOverrides(product: product),
         ],
         child: MaterialApp(
           home: Builder(
@@ -1179,8 +1408,10 @@ void main() {
 
     await tester.tap(find.text('Abrir editor con imagen'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Predeterminado').last);
     await tester.tap(find.text('Predeterminado').last);
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Exento').last);
     await tester.tap(find.text('Exento').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Guardar cambios'));
@@ -1309,6 +1540,7 @@ void main() {
             companySettingsProvider.overrideWith(
               (ref) async => CompanySettings.empty(),
             ),
+            ..._singleWarehouseOverrides(),
           ],
           child: MaterialApp(
             home: Builder(

@@ -21,6 +21,7 @@ import '../../../core/cache/fulltech_cache_manager.dart';
 import '../../../core/cache/local_json_cache.dart';
 import '../../../core/company/company_settings_repository.dart';
 import '../../../core/models/product_model.dart';
+import '../../../core/routing/routes.dart';
 import '../../../core/tax/product_tax_options_provider.dart';
 import '../../../core/tax/product_tax_preview_calculator.dart';
 import '../../../core/theme/app_colors.dart';
@@ -38,6 +39,7 @@ import '../../../core/widgets/fulltech_page_header.dart';
 import '../../../core/widgets/product_network_image.dart';
 import '../../catalogo/application/catalog_controller.dart';
 import '../../catalogo/data/catalog_repository.dart';
+import '../../warehouses/data/warehouse_repository.dart';
 
 const _primaryBlue = AppColors.secondary;
 const _lightBlueHover = AppColors.secondarySoft;
@@ -54,6 +56,14 @@ enum _StockLevel { out, low, high }
 
 enum _StockFilter { all, out, low, high }
 
+typedef SetProductStockCallback =
+    Future<void> Function(
+      ProductModel product,
+      double stock, {
+      String? warehouseId,
+      double? currentWarehouseStock,
+    });
+
 extension on _StockFilter {
   String get label => switch (this) {
     _StockFilter.all => 'Todos',
@@ -68,7 +78,11 @@ String _stockText(double? value) {
 }
 
 String _productStockText(ProductModel product) {
-  return formatQuantityWithUnit(product.stock, unit: product.unitOfMeasure);
+  return formatQuantityWithUnit(
+    product.stock,
+    unit: product.unitOfMeasure,
+    includeUnitForUnit: true,
+  );
 }
 
 double _stockOf(ProductModel product) => product.stock ?? 0;
@@ -939,6 +953,11 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
         categoryState.items,
       ),
     );
+    if (!mounted) return;
+    if (result?.adjustStock == true && result?.product != null) {
+      context.go(Routes.catalogoStock);
+      return;
+    }
     if (!mounted || result?.saved != true) return;
     if (result?.product == null) {
       await ref
@@ -955,7 +974,12 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     );
   }
 
-  Future<void> _setProductStock(ProductModel product, double stock) async {
+  Future<void> _setProductStock(
+    ProductModel product,
+    double stock, {
+    String? warehouseId,
+    double? currentWarehouseStock,
+  }) async {
     final allowed = await ensureAdminAuthorization(
       context,
       ref,
@@ -965,7 +989,13 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     if (!allowed || !mounted) return;
     await ref
         .read(catalogControllerProvider.notifier)
-        .adjustStock(product: product, stock: stock);
+        .adjustStock(
+          product: product,
+          stock: stock,
+          warehouseId: warehouseId,
+          currentWarehouseStock: currentWarehouseStock,
+        );
+    ref.invalidate(productWarehouseStockProvider(product.id));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Stock actualizado: ${product.nombre}')),
@@ -2454,7 +2484,7 @@ class CatalogTab extends StatefulWidget {
   final Future<void> Function(List<ProductModel> products, String category)
   onBulkChangeCategory;
   final ValueChanged<ProductModel> onEdit;
-  final Future<void> Function(ProductModel product, double stock) onSetStock;
+  final SetProductStockCallback onSetStock;
   final bool canEditProducts;
   final bool canAddStock;
   final bool showTaxBadges;
@@ -3114,7 +3144,7 @@ class _CatalogTable extends StatelessWidget {
   final ValueChanged<bool> onToggleAll;
   final void Function(ProductModel product, bool selected) onToggle;
   final ValueChanged<ProductModel> onEdit;
-  final Future<void> Function(ProductModel product, double stock) onSetStock;
+  final SetProductStockCallback onSetStock;
   final bool canEditProducts;
   final bool canAddStock;
   final bool showTaxBadges;
@@ -3239,7 +3269,7 @@ class _CompactCatalogList extends StatelessWidget {
   final Set<String> selectedIds;
   final void Function(ProductModel product, bool selected) onToggle;
   final ValueChanged<ProductModel> onEdit;
-  final Future<void> Function(ProductModel product, double stock) onSetStock;
+  final SetProductStockCallback onSetStock;
   final bool canEditProducts;
   final bool canAddStock;
   final bool showTaxBadges;
@@ -3718,7 +3748,7 @@ class _InventoryStatPill extends StatelessWidget {
   }
 }
 
-class StockAdjustmentsPage extends StatefulWidget {
+class StockAdjustmentsPage extends ConsumerStatefulWidget {
   const StockAdjustmentsPage({
     super.key,
     required this.products,
@@ -3730,15 +3760,16 @@ class StockAdjustmentsPage extends StatefulWidget {
 
   final List<ProductModel> products;
   final Future<void> Function() onRefresh;
-  final Future<void> Function(ProductModel product, double stock) onSetStock;
+  final SetProductStockCallback onSetStock;
   final bool canAddStock;
   final VoidCallback? onClose;
 
   @override
-  State<StockAdjustmentsPage> createState() => _StockAdjustmentsPageState();
+  ConsumerState<StockAdjustmentsPage> createState() =>
+      _StockAdjustmentsPageState();
 }
 
-class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
+class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
   late List<ProductModel> _products;
   ProductModel? _selected;
   String _mode = 'Agregar';
@@ -3747,6 +3778,7 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
   final _searchCtrl = TextEditingController();
   final _qtyCtrl = TextEditingController(text: '1');
   final _noteCtrl = TextEditingController();
+  String? _selectedWarehouseId;
   bool _saving = false;
   OverlayEntry? _noticeEntry;
   Timer? _noticeTimer;
@@ -3781,8 +3813,8 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
     return formatQuantityWithUnit(value, unit: unit, includeUnitForUnit: true);
   }
 
-  double _previewStock(ProductModel product) {
-    final stock = _stockOf(product);
+  double _previewStock(ProductModel product, {double? currentWarehouseStock}) {
+    final stock = currentWarehouseStock ?? _stockOf(product);
     return switch (_mode) {
       'Disminuir' => stock - _quantity,
       _ => stock + _quantity,
@@ -3906,7 +3938,34 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
       );
       return;
     }
-    final nextStock = _previewStock(selected);
+    final overview = ref.read(warehouseInventoryOverviewProvider).valueOrNull;
+    final multipleWarehouses = overview?.hasMultipleActiveWarehouses == true;
+    final stockBreakdown = multipleWarehouses
+        ? ref.read(productWarehouseStockProvider(selected.id)).valueOrNull
+        : null;
+    final warehouseId = multipleWarehouses
+        ? (_selectedWarehouseId ?? stockBreakdown?.warehouses.first.warehouseId)
+        : null;
+    final warehouseLine = warehouseId == null
+        ? null
+        : stockBreakdown?.lineFor(warehouseId);
+    if (multipleWarehouses &&
+        (warehouseId == null ||
+            warehouseLine == null ||
+            !warehouseLine.isActive)) {
+      _showTopNotice(
+        title: 'Selecciona un almacén',
+        message: 'Elige el almacén donde aplicarás el ajuste.',
+        icon: Icons.warehouse_outlined,
+        accent: const Color(0xFFB45309),
+      );
+      return;
+    }
+    final currentWarehouseStock = warehouseLine?.quantity;
+    final nextStock = _previewStock(
+      selected,
+      currentWarehouseStock: currentWarehouseStock,
+    );
     if (nextStock < 0) {
       _showTopNotice(
         title: 'Stock insuficiente',
@@ -3918,16 +3977,25 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
     }
     setState(() => _saving = true);
     try {
-      await widget.onSetStock(selected, nextStock);
+      await widget.onSetStock(
+        selected,
+        nextStock,
+        warehouseId: warehouseId,
+        currentWarehouseStock: currentWarehouseStock,
+      );
       if (!mounted) return;
       _showTopNotice(
         title: 'Stock actualizado',
-        message:
-            '${selected.nombre} ahora tiene ${_quantityWithUnit(nextStock, selected.unitOfMeasure)}.',
+        message: multipleWarehouses
+            ? '${selected.nombre}: ${warehouseLine!.warehouseName} queda en ${_quantityWithUnit(nextStock, selected.unitOfMeasure)}.'
+            : '${selected.nombre} ahora tiene ${_quantityWithUnit(nextStock, selected.unitOfMeasure)}.',
       );
       _noteCtrl.clear();
       _qtyCtrl.text = '1';
-      final updated = selected.copyWith(stock: nextStock);
+      final updatedTotalStock = currentWarehouseStock == null
+          ? nextStock
+          : _stockOf(selected) + (nextStock - currentWarehouseStock);
+      final updated = selected.copyWith(stock: updatedTotalStock);
       setState(() {
         _products = [
           for (final product in _products)
@@ -4005,6 +4073,26 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
         _selected ?? (_products.isNotEmpty ? _products.first : null);
     final filtered = _filteredProductsFor(categoryFilter);
     final mobile = MediaQuery.sizeOf(context).width < 640;
+    final overview = ref.watch(warehouseInventoryOverviewProvider);
+    final multipleWarehouses =
+        overview.valueOrNull?.hasMultipleActiveWarehouses == true;
+    final stockBreakdown = selected == null || !multipleWarehouses
+        ? null
+        : ref.watch(productWarehouseStockProvider(selected.id));
+    final breakdown = stockBreakdown?.valueOrNull;
+    final activeStockLines =
+        breakdown?.warehouses.where((line) => line.isActive).toList() ??
+        const <WarehouseStockLine>[];
+    final selectedWarehouseId =
+        activeStockLines.any((line) => line.warehouseId == _selectedWarehouseId)
+        ? _selectedWarehouseId
+        : (activeStockLines.isNotEmpty
+              ? activeStockLines.first.warehouseId
+              : null);
+    final selectedWarehouseLine = selectedWarehouseId == null
+        ? null
+        : breakdown?.lineFor(selectedWarehouseId);
+    final selectedWarehouseStock = selectedWarehouseLine?.quantity;
 
     Widget content() {
       return Column(
@@ -4096,6 +4184,37 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
                         _SelectedStockProduct(product: selected),
                       if (selected != null) ...[
                         const SizedBox(height: 12),
+                        if (multipleWarehouses) ...[
+                          DropdownButtonFormField<String>(
+                            key: ValueKey(
+                              'warehouse-${selected.id}-$selectedWarehouseId',
+                            ),
+                            initialValue: selectedWarehouseId,
+                            isExpanded: true,
+                            decoration: _inventoryTextInputDecoration(
+                              stockBreakdown?.isLoading == true
+                                  ? 'Cargando almacenes...'
+                                  : 'Almacén del ajuste',
+                              prefixIcon: const Icon(Icons.warehouse_outlined),
+                            ),
+                            items: [
+                              for (final line in activeStockLines)
+                                DropdownMenuItem(
+                                  value: line.warehouseId,
+                                  child: Text(
+                                    '${line.warehouseName} (${_quantityWithUnit(line.quantity, selected.unitOfMeasure)})',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: activeStockLines.isEmpty
+                                ? null
+                                : (value) => setState(
+                                    () => _selectedWarehouseId = value,
+                                  ),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
                         _SquareSegmentedSelector<String>(
                           values: const ['Agregar', 'Disminuir'],
                           selected: _mode,
@@ -4115,6 +4234,7 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
                             onChanged: (_) => setState(() {}),
                             decoration: _inventoryTextInputDecoration(
                               'Cantidad',
+                              suffixText: selected.unitOfMeasure.symbol,
                             ),
                           ),
                           const SizedBox(height: 10),
@@ -4135,6 +4255,7 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
                                   onChanged: (_) => setState(() {}),
                                   decoration: _inventoryTextInputDecoration(
                                     'Cantidad',
+                                    suffixText: selected.unitOfMeasure.symbol,
                                   ),
                                 ),
                               ),
@@ -4154,7 +4275,10 @@ class _StockAdjustmentsPageState extends State<StockAdjustmentsPage> {
                         _InlineInfo(
                           icon: Icons.inventory_2_outlined,
                           message:
-                              'Stock actual: ${_quantityWithUnit(selected.stock, selected.unitOfMeasure)}   Nuevo stock: ${_quantityWithUnit(_previewStock(selected), selected.unitOfMeasure)}',
+                              multipleWarehouses &&
+                                  selectedWarehouseLine != null
+                              ? '${selectedWarehouseLine.warehouseName}: ${_quantityWithUnit(selectedWarehouseStock, selected.unitOfMeasure)}   Nuevo: ${_quantityWithUnit(_previewStock(selected, currentWarehouseStock: selectedWarehouseStock), selected.unitOfMeasure)}'
+                              : 'Stock actual: ${_quantityWithUnit(selected.stock, selected.unitOfMeasure)}   Nuevo stock: ${_quantityWithUnit(_previewStock(selected), selected.unitOfMeasure)}',
                         ),
                       ],
                       const SizedBox(height: 16),
@@ -4418,7 +4542,7 @@ class _SelectedStockProduct extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                _stockText(product.stock),
+                _productStockText(product),
                 style: TextStyle(
                   color: _stockLevelColor(level),
                   fontSize: 13,
@@ -4628,7 +4752,7 @@ class _StockProductRow extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      _stockText(product.stock),
+                      _productStockText(product),
                       style: TextStyle(
                         color: color,
                         fontWeight: FontWeight.w600,
@@ -5777,7 +5901,7 @@ class CompactProductCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 6),
                       _CompactStockCostColumn(
-                        stockText: _stockText(product.stock),
+                        stockText: _productStockText(product),
                         stockColor: statusColor,
                         costText: _costText(product),
                       ),
@@ -5811,7 +5935,7 @@ class CompactProductCard extends StatelessWidget {
                         ),
                         _CompactMetric(
                           label: 'Stock',
-                          value: _stockText(product.stock),
+                          value: _productStockText(product),
                         ),
                         _CompactMetric(
                           label: 'Valor',
@@ -6115,7 +6239,7 @@ class _ProductDetailPage extends StatelessWidget {
                       ? product.codigo!.trim()
                       : 'Sin SKU',
                 ),
-                ('Stock', _stockText(product.stock)),
+                ('Stock', _productStockText(product)),
                 ('Estado', _stockLevelLabel(level)),
                 ('Costo', _costText(product)),
                 ('Precio', formatRdCurrencyAccounting(product.precio)),
@@ -6358,7 +6482,7 @@ class _InventoryBreakdown extends StatelessWidget {
               dense: true,
               contentPadding: EdgeInsets.zero,
               title: Text(row.key),
-              subtitle: Text('${_stockText(row.value.units)} unidades'),
+              subtitle: Text('${_stockText(row.value.units)} existencias'),
               trailing: Text(
                 showCostMetrics
                     ? formatRdCurrencyAccounting(row.value.value)
@@ -6510,7 +6634,7 @@ class _StockBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        _stockText(product.stock),
+        _productStockText(product),
         style: TextStyle(color: color, fontWeight: FontWeight.w900),
       ),
     );
@@ -6622,15 +6746,16 @@ class _InlineInfo extends StatelessWidget {
 Future<void> _showStockAdjustmentPanel(
   BuildContext context, {
   required ProductModel product,
-  required Future<void> Function(ProductModel product, double stock) onSetStock,
+  required SetProductStockCallback onSetStock,
 }) {
   final qtyCtrl = TextEditingController(text: '1');
   var mode = 'Agregar';
   var saving = false;
+  String? selectedWarehouseId;
 
   double quantity() => _parseInventoryNumber(qtyCtrl.text) ?? 0;
-  double preview() {
-    final stock = _stockOf(product);
+  double preview({double? currentWarehouseStock}) {
+    final stock = currentWarehouseStock ?? _stockOf(product);
     return switch (mode) {
       'Disminuir' => stock - quantity(),
       _ => stock + quantity(),
@@ -6648,6 +6773,7 @@ Future<void> _showStockAdjustmentPanel(
   Future<void> submit(
     BuildContext dialogContext,
     void Function(void Function()) setPanelState,
+    WidgetRef ref,
   ) async {
     final quantityError = validateQuantityForUnit(
       quantity(),
@@ -6660,7 +6786,30 @@ Future<void> _showStockAdjustmentPanel(
       ).showSnackBar(SnackBar(content: Text(quantityError)));
       return;
     }
-    final nextStock = preview();
+    final overview = ref.read(warehouseInventoryOverviewProvider).valueOrNull;
+    final multipleWarehouses = overview?.hasMultipleActiveWarehouses == true;
+    final breakdown = multipleWarehouses
+        ? ref.read(productWarehouseStockProvider(product.id)).valueOrNull
+        : null;
+    final lines =
+        breakdown?.warehouses.where((line) => line.isActive).toList() ??
+        const <WarehouseStockLine>[];
+    final warehouseId = multipleWarehouses
+        ? (selectedWarehouseId ??
+              (lines.isNotEmpty ? lines.first.warehouseId : null))
+        : null;
+    final warehouseLine = warehouseId == null
+        ? null
+        : breakdown?.lineFor(warehouseId);
+    if (multipleWarehouses && warehouseLine == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecciona un almacén para ajustar stock'),
+        ),
+      );
+      return;
+    }
+    final nextStock = preview(currentWarehouseStock: warehouseLine?.quantity);
     if (nextStock < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('El stock no puede quedar negativo')),
@@ -6669,7 +6818,12 @@ Future<void> _showStockAdjustmentPanel(
     }
     setPanelState(() => saving = true);
     try {
-      await onSetStock(product, nextStock);
+      await onSetStock(
+        product,
+        nextStock,
+        warehouseId: warehouseId,
+        currentWarehouseStock: warehouseLine?.quantity,
+      );
       if (dialogContext.mounted) Navigator.pop(dialogContext);
     } catch (e) {
       if (context.mounted) {
@@ -6697,136 +6851,216 @@ Future<void> _showStockAdjustmentPanel(
           width: panelWidth,
           height: size.height,
           child: StatefulBuilder(
-            builder: (dialogContext, setPanelState) => CallbackShortcuts(
-              bindings: {
-                if (!saving)
-                  const SingleActivator(LogicalKeyboardKey.enter): () =>
-                      submit(dialogContext, setPanelState),
-                if (!saving)
-                  const SingleActivator(LogicalKeyboardKey.numpadEnter): () =>
-                      submit(dialogContext, setPanelState),
-                const SingleActivator(LogicalKeyboardKey.escape): () =>
-                    Navigator.of(dialogContext).maybePop(),
-              },
-              child: Focus(
-                autofocus: true,
-                child: Material(
-                  color: Colors.white,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(0, 20, 0, 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: Row(
-                            children: [
-                              ProductThumbnail(product: product, size: 56),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      product.nombre,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 18,
-                                      ),
+            builder: (dialogContext, setPanelState) => Consumer(
+              builder: (context, ref, _) {
+                final overview = ref.watch(warehouseInventoryOverviewProvider);
+                final multipleWarehouses =
+                    overview.valueOrNull?.hasMultipleActiveWarehouses == true;
+                final stockBreakdown = multipleWarehouses
+                    ? ref.watch(productWarehouseStockProvider(product.id))
+                    : null;
+                final breakdown = stockBreakdown?.valueOrNull;
+                final lines =
+                    breakdown?.warehouses
+                        .where((line) => line.isActive)
+                        .toList() ??
+                    const <WarehouseStockLine>[];
+                final currentWarehouseId =
+                    lines.any((line) => line.warehouseId == selectedWarehouseId)
+                    ? selectedWarehouseId
+                    : (lines.isNotEmpty ? lines.first.warehouseId : null);
+                final currentLine = currentWarehouseId == null
+                    ? null
+                    : breakdown?.lineFor(currentWarehouseId);
+                return CallbackShortcuts(
+                  bindings: {
+                    if (!saving)
+                      const SingleActivator(LogicalKeyboardKey.enter): () =>
+                          submit(dialogContext, setPanelState, ref),
+                    if (!saving)
+                      const SingleActivator(
+                        LogicalKeyboardKey.numpadEnter,
+                      ): () =>
+                          submit(dialogContext, setPanelState, ref),
+                    const SingleActivator(LogicalKeyboardKey.escape): () =>
+                        Navigator.of(dialogContext).maybePop(),
+                  },
+                  child: Focus(
+                    autofocus: true,
+                    child: Material(
+                      color: Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 20, 0, 20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                              ),
+                              child: Row(
+                                children: [
+                                  ProductThumbnail(product: product, size: 56),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          product.nombre,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 18,
+                                          ),
+                                        ),
+                                        Text(product.categoriaLabel),
+                                      ],
                                     ),
-                                    Text(product.categoriaLabel),
+                                  ),
+                                  IconButton(
+                                    onPressed: () =>
+                                        Navigator.pop(dialogContext),
+                                    icon: const Icon(Icons.close_rounded),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                              ),
+                              child: _InlineInfo(
+                                icon: Icons.inventory_2_outlined,
+                                message:
+                                    'Unidad: ${product.unitOfMeasure.name} (${product.unitOfMeasure.symbol}) · Stock actual: ${quantityWithUnit(product.stock)} · Valor: ${formatRdCurrencyAccounting(_stockOf(product) * product.precio)}',
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            if (multipleWarehouses) ...[
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                ),
+                                child: DropdownButtonFormField<String>(
+                                  key: ValueKey('quick-$currentWarehouseId'),
+                                  initialValue: currentWarehouseId,
+                                  isExpanded: true,
+                                  decoration: _inventoryTextInputDecoration(
+                                    stockBreakdown?.isLoading == true
+                                        ? 'Cargando almacenes...'
+                                        : 'Almacén del ajuste',
+                                    prefixIcon: const Icon(
+                                      Icons.warehouse_outlined,
+                                    ),
+                                  ),
+                                  items: [
+                                    for (final line in lines)
+                                      DropdownMenuItem(
+                                        value: line.warehouseId,
+                                        child: Text(
+                                          '${line.warehouseName} (${quantityWithUnit(line.quantity)})',
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
                                   ],
+                                  onChanged: lines.isEmpty
+                                      ? null
+                                      : (value) => setPanelState(
+                                          () => selectedWarehouseId = value,
+                                        ),
                                 ),
                               ),
-                              IconButton(
-                                onPressed: () => Navigator.pop(dialogContext),
-                                icon: const Icon(Icons.close_rounded),
-                              ),
+                              const SizedBox(height: 14),
                             ],
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: _InlineInfo(
-                            icon: Icons.inventory_2_outlined,
-                            message:
-                                'Stock actual: ${quantityWithUnit(product.stock)} · Valor: ${formatRdCurrencyAccounting(_stockOf(product) * product.precio)}',
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: SegmentedButton<String>(
-                            segments: const [
-                              ButtonSegment(
-                                value: 'Agregar',
-                                label: Text('Agregar stock'),
-                                icon: Icon(Icons.add_rounded),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
                               ),
-                              ButtonSegment(
-                                value: 'Disminuir',
-                                label: Text('Disminuir stock'),
-                                icon: Icon(Icons.remove_rounded),
+                              child: SegmentedButton<String>(
+                                segments: const [
+                                  ButtonSegment(
+                                    value: 'Agregar',
+                                    label: Text('Agregar stock'),
+                                    icon: Icon(Icons.add_rounded),
+                                  ),
+                                  ButtonSegment(
+                                    value: 'Disminuir',
+                                    label: Text('Disminuir stock'),
+                                    icon: Icon(Icons.remove_rounded),
+                                  ),
+                                ],
+                                selected: {mode},
+                                onSelectionChanged: (value) {
+                                  setPanelState(() => mode = value.first);
+                                },
                               ),
-                            ],
-                            selected: {mode},
-                            onSelectionChanged: (value) {
-                              setPanelState(() => mode = value.first);
-                            },
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        TextField(
-                          controller: qtyCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          onChanged: (_) => setPanelState(() {}),
-                          decoration: _inventoryTextInputDecoration(
-                            'Cantidad',
-                            suffixText: product.unitOfMeasure.isUnit
-                                ? null
-                                : product.unitOfMeasure.symbol,
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: _InlineInfo(
-                            icon: Icons.preview_outlined,
-                            message:
-                                'Nuevo stock: ${quantityWithUnit(preview())}',
-                          ),
-                        ),
-                        const Spacer(),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed: saving
-                                  ? null
-                                  : () => submit(dialogContext, setPanelState),
-                              icon: saving
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Icon(Icons.save_outlined),
-                              label: const Text('Guardar ajuste'),
                             ),
-                          ),
+                            const SizedBox(height: 14),
+                            TextField(
+                              controller: qtyCtrl,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              onChanged: (_) => setPanelState(() {}),
+                              decoration: _inventoryTextInputDecoration(
+                                'Cantidad',
+                                suffixText: product.unitOfMeasure.isUnit
+                                    ? product.unitOfMeasure.symbol
+                                    : product.unitOfMeasure.symbol,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                              ),
+                              child: _InlineInfo(
+                                icon: Icons.preview_outlined,
+                                message:
+                                    multipleWarehouses && currentLine != null
+                                    ? '${currentLine.warehouseName}: ${quantityWithUnit(currentLine.quantity)} → ${quantityWithUnit(preview(currentWarehouseStock: currentLine.quantity))}'
+                                    : 'Nuevo stock: ${quantityWithUnit(preview())}',
+                              ),
+                            ),
+                            const Spacer(),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                              ),
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: FilledButton.icon(
+                                  onPressed: saving
+                                      ? null
+                                      : () => submit(
+                                          dialogContext,
+                                          setPanelState,
+                                          ref,
+                                        ),
+                                  icon: saving
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : const Icon(Icons.save_outlined),
+                                  label: const Text('Guardar ajuste'),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ),
         ),
@@ -6836,10 +7070,15 @@ Future<void> _showStockAdjustmentPanel(
 }
 
 class ProductFormResult {
-  const ProductFormResult({required this.saved, this.product});
+  const ProductFormResult({
+    required this.saved,
+    this.product,
+    this.adjustStock = false,
+  });
 
   final bool saved;
   final ProductModel? product;
+  final bool adjustStock;
 }
 
 InputDecoration _inventoryTextInputDecoration(
@@ -6867,6 +7106,197 @@ InputDecoration _inventoryTextInputDecoration(
       borderSide: const BorderSide(color: Color(0xFF1957E6), width: 1.3),
     ),
   );
+}
+
+class _ReadOnlyStockPanel extends StatelessWidget {
+  const _ReadOnlyStockPanel({
+    required this.stockText,
+    required this.unitText,
+    required this.onAdjustStock,
+  });
+
+  final String stockText;
+  final String unitText;
+  final VoidCallback? onAdjustStock;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6FAFD),
+        border: Border.all(color: const Color(0xFFD3E0E7)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Stock actual',
+                    style: TextStyle(
+                      color: Color(0xFF52667C),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    stockText,
+                    style: const TextStyle(
+                      color: Color(0xFF12324A),
+                      fontWeight: FontWeight.w900,
+                      fontSize: 18,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    unitText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF6A7D8F),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            OutlinedButton.icon(
+              onPressed: onAdjustStock,
+              icon: const Icon(Icons.inventory_2_outlined),
+              label: const Text('Ajustar stock'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProductWarehouseBreakdownPanel extends StatelessWidget {
+  const _ProductWarehouseBreakdownPanel({
+    required this.product,
+    required this.breakdown,
+  });
+
+  final ProductModel product;
+  final ProductWarehouseStockBreakdown breakdown;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = breakdown.warehouses
+        .where((warehouse) => warehouse.isActive)
+        .toList(growable: false);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FBFF),
+        border: Border.all(color: const Color(0xFFD3E0E7)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.warehouse_outlined,
+                  size: 18,
+                  color: AppColors.secondary,
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Stock por almacén',
+                    style: TextStyle(
+                      color: Color(0xFF183548),
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                if (!breakdown.reconciled)
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: AppColors.warning,
+                    size: 18,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            for (final line in active)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 7),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        line.isDefault
+                            ? '${line.warehouseName} · default'
+                            : line.warehouseName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF52667C),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      formatQuantityWithUnit(
+                        line.quantity,
+                        unit: product.unitOfMeasure,
+                        includeUnitForUnit: true,
+                      ),
+                      style: const TextStyle(
+                        color: Color(0xFF12324A),
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const Divider(height: 12),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Total',
+                    style: TextStyle(
+                      color: Color(0xFF183548),
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                Text(
+                  formatQuantityWithUnit(
+                    breakdown.total ?? product.stock,
+                    unit: product.unitOfMeasure,
+                    includeUnitForUnit: true,
+                  ),
+                  style: const TextStyle(
+                    color: Color(0xFF12324A),
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _InventorySidePanelScaffold extends StatelessWidget {
@@ -7024,7 +7454,7 @@ Future<void> showInventoryStockAdjustmentsPanel(
   BuildContext context, {
   required List<ProductModel> products,
   required Future<void> Function() onRefresh,
-  required Future<void> Function(ProductModel product, double stock) onSetStock,
+  required SetProductStockCallback onSetStock,
 }) {
   return showGeneralDialog<void>(
     context: context,
@@ -7428,6 +7858,13 @@ class _InventoryProductEditorPageState
     }
   }
 
+  Future<void> _openStockAdjustmentFromEditor(ProductModel product) async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    Navigator.of(
+      context,
+    ).pop(ProductFormResult(saved: false, product: product, adjustStock: true));
+  }
+
   /// Muestra el error de captura móvil en el banner del formulario y, si es
   /// un permiso denegado, ofrece la acción “Configuración” sin forzarla.
   void _showMobileImageError(Object error) {
@@ -7539,7 +7976,6 @@ class _InventoryProductEditorPageState
     required String code,
     required double price,
     required double cost,
-    required double stock,
     required String category,
     required UnitOfMeasureModel unit,
     required String? taxTreatment,
@@ -7557,7 +7993,7 @@ class _InventoryProductEditorPageState
             codigo: code.isEmpty ? null : code,
             precio: price,
             costo: cost,
-            stock: stock,
+            stock: saved.stock ?? 0,
             categoria: category,
             fotoUrl: normalizedPath,
             operationId: _newSaveOperationId(saved),
@@ -7612,7 +8048,11 @@ class _InventoryProductEditorPageState
     final code = _codeCtrl.text.trim();
     final price = _parseInventoryNumber(_priceCtrl.text);
     final cost = _parseInventoryNumber(_costCtrl.text);
-    final stock = _parseInventoryNumber(_stockCtrl.text);
+    final product = _product;
+    final isEditing = product != null;
+    final stock = isEditing
+        ? product.stock ?? 0
+        : _parseInventoryNumber(_stockCtrl.text);
     final category = _categoryCtrl.text.trim();
     final taxConfig = ref.read(productTaxUiConfigProvider).valueOrNull;
     final measurementUnitsEnabled =
@@ -7626,25 +8066,32 @@ class _InventoryProductEditorPageState
         : UnitOfMeasureModel.unit;
     final taxEnabled = taxConfig?.settings.taxEnabled == true;
     final effectiveTaxRate = _effectiveTaxRate(taxConfig);
-    if (name.isEmpty ||
-        price == null ||
-        cost == null ||
-        stock == null ||
-        category.isEmpty) {
+    if (name.isEmpty || price == null || cost == null || category.isEmpty) {
       setState(
-        () => _formError = 'Completa nombre, precio, costo, stock y categoría',
+        () => _formError = isEditing
+            ? 'Completa nombre, precio, costo y categoría'
+            : 'Completa nombre, precio, costo, stock y categoría',
       );
       return;
     }
-    final stockError = validateQuantityForUnit(
-      stock,
-      unit: unitForSave,
-      label: 'El stock',
-      allowZero: true,
-    );
-    if (stockError != null) {
-      setState(() => _formError = stockError);
-      return;
+    if (!isEditing) {
+      if (stock == null) {
+        setState(
+          () =>
+              _formError = 'Completa nombre, precio, costo, stock y categoría',
+        );
+        return;
+      }
+      final stockError = validateQuantityForUnit(
+        stock,
+        unit: unitForSave,
+        label: 'El stock',
+        allowZero: true,
+      );
+      if (stockError != null) {
+        setState(() => _formError = stockError);
+        return;
+      }
     }
     if (taxEnabled && _taxTreatment == 'TAXABLE') {
       final hasActiveRate = (effectiveTaxRate ?? 0) > 0;
@@ -7661,7 +8108,6 @@ class _InventoryProductEditorPageState
       _formError = null;
     });
 
-    final product = _product;
     final operationId = _newSaveOperationId(product);
     try {
       final repo = ref.read(catalogRepositoryProvider);
@@ -7704,7 +8150,7 @@ class _InventoryProductEditorPageState
               codigo: code.isEmpty ? null : code,
               precio: price,
               costo: cost,
-              stock: stock,
+              stock: stock!,
               categoria: category,
               fotoUrl: imagePathForSave,
               operationId: operationId,
@@ -7738,7 +8184,7 @@ class _InventoryProductEditorPageState
               codigo: code.isEmpty ? null : code,
               precio: price,
               costo: cost,
-              stock: stock,
+              stock: product.stock ?? 0,
               categoria: category,
               fotoUrl: imagePathForSave,
               operationId: operationId,
@@ -7754,7 +8200,7 @@ class _InventoryProductEditorPageState
               codigo: code.isEmpty ? null : code,
               precio: price,
               costo: cost,
-              stock: stock,
+              stock: product.stock ?? 0,
               categoria: category,
               fotoUrl: imagePathForSave,
               operationId: operationId,
@@ -7779,7 +8225,6 @@ class _InventoryProductEditorPageState
           code: code,
           price: price,
           cost: cost,
-          stock: stock,
           category: category,
           unit: unitForSave,
           taxTreatment: taxTreatmentForSave,
@@ -7820,7 +8265,11 @@ class _InventoryProductEditorPageState
       return;
     }
     if (_costFocus.hasFocus) {
-      _stockFocus.requestFocus();
+      if (_product == null) {
+        _stockFocus.requestFocus();
+      } else {
+        _categoryFocus.requestFocus();
+      }
       return;
     }
     if (_stockFocus.hasFocus) {
@@ -7915,22 +8364,62 @@ class _InventoryProductEditorPageState
                 ],
               ),
               const SizedBox(height: 10),
-              TextField(
-                controller: _stockCtrl,
-                focusNode: _stockFocus,
-                enabled: !_isSaving,
-                textInputAction: TextInputAction.next,
-                keyboardType: TextInputType.numberWithOptions(
-                  decimal:
-                      measurementUnitsEnabled && _selectedUnit.allowDecimals,
+              if (product == null)
+                TextField(
+                  controller: _stockCtrl,
+                  focusNode: _stockFocus,
+                  enabled: !_isSaving,
+                  textInputAction: TextInputAction.next,
+                  keyboardType: TextInputType.numberWithOptions(
+                    decimal:
+                        measurementUnitsEnabled && _selectedUnit.allowDecimals,
+                  ),
+                  decoration: _inventoryTextInputDecoration(
+                    'Stock disponible',
+                    suffixText: measurementUnitsEnabled && !_selectedUnit.isUnit
+                        ? _selectedUnit.symbol
+                        : null,
+                  ),
+                )
+              else
+                _ReadOnlyStockPanel(
+                  stockText: formatQuantityWithUnit(
+                    product.stock,
+                    unit: product.unitOfMeasure,
+                    includeUnitForUnit: true,
+                  ),
+                  unitText:
+                      '${product.unitOfMeasure.name} (${product.unitOfMeasure.symbol})',
+                  onAdjustStock: _isSaving
+                      ? null
+                      : () => _openStockAdjustmentFromEditor(product),
                 ),
-                decoration: _inventoryTextInputDecoration(
-                  'Stock disponible',
-                  suffixText: measurementUnitsEnabled && !_selectedUnit.isUnit
-                      ? _selectedUnit.symbol
-                      : null,
+              if (product != null) ...[
+                const SizedBox(height: 10),
+                Consumer(
+                  builder: (context, ref, _) {
+                    final breakdownAsync = ref.watch(
+                      productWarehouseStockProvider(product.id),
+                    );
+                    return breakdownAsync.maybeWhen(
+                      data: (breakdown) {
+                        if (!breakdown.hasMultipleActiveWarehouses) {
+                          return const SizedBox.shrink();
+                        }
+                        return _ProductWarehouseBreakdownPanel(
+                          product: product,
+                          breakdown: breakdown,
+                        );
+                      },
+                      loading: () => const _InlineInfo(
+                        icon: Icons.warehouse_outlined,
+                        message: 'Cargando stock por almacén...',
+                      ),
+                      orElse: () => const SizedBox.shrink(),
+                    );
+                  },
                 ),
-              ),
+              ],
               if (measurementUnitsEnabled) ...[
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(

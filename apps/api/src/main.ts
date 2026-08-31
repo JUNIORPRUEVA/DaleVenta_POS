@@ -13,9 +13,16 @@ import {
 } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { assertSafeUatEnvironment, buildSafeUatBanner } from './common/uat-safety';
 import { CatalogRealtimeRelayService } from './products/catalog-realtime-relay.service';
 
 async function bootstrap() {
+  assertSafeUatEnvironment();
+  if ((process.env.APP_ENV ?? '').trim().toLowerCase() === 'uat') {
+    // eslint-disable-next-line no-console
+    console.log(buildSafeUatBanner());
+  }
+
   const app = await NestFactory.create<NestExpressApplication>(
     AppModule,
     new ExpressAdapter(),
@@ -99,7 +106,6 @@ async function bootstrap() {
     origin: true,
     credentials: true,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
   });
 
   const realtimeRelay = app.get(CatalogRealtimeRelayService);

@@ -315,7 +315,7 @@ describe("ReportsService", () => {
         expect.objectContaining({
           productName: "Tela",
           unitCode: "YARD",
-          totalQtyLabel: "1.500 yd",
+          totalQtyLabel: "1.5 yd",
         }),
         expect.objectContaining({
           productName: "Cable",
@@ -327,7 +327,7 @@ describe("ReportsService", () => {
     expect(result.categoryProfits[0]).toEqual(
       expect.objectContaining({
         category: "Mixto",
-        totalQtyLabel: "2 + 1.500 yd + 2.375 lb",
+        totalQtyLabel: "2 u + 1.5 yd + 2.375 lb",
         quantityBuckets: expect.arrayContaining([
           expect.objectContaining({ unitCode: "UNIT", quantity: 2 }),
           expect.objectContaining({ unitCode: "YARD", quantity: 1.5 }),

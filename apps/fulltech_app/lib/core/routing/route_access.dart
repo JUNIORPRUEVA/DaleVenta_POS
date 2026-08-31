@@ -84,6 +84,7 @@ class RouteAccess {
       case Routes.configuracionBackup:
       case Routes.configuracionParametros:
       case Routes.configuracionDocumentos:
+      case Routes.configuracionAlmacenes:
         return AppPermission.manageSettings;
       case Routes.whatsapp:
         return null;

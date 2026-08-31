@@ -4,6 +4,9 @@ import { ProductsService } from "./products.service";
 
 describe("ProductsService fiscal validation", () => {
   function buildService(transactionClient: any) {
+    const inventoryMutations = {
+      increaseStockInTransaction: jest.fn().mockResolvedValue(undefined),
+    };
     const prisma = {
       $transaction: jest.fn(
         (callback: (tx: typeof transactionClient) => unknown) =>
@@ -31,8 +34,9 @@ describe("ProductsService fiscal validation", () => {
       {
         assertCanCreateProduct: jest.fn().mockResolvedValue(undefined),
       } as never,
+      inventoryMutations as never,
     );
-    return { service, prisma };
+    return { service, prisma, inventoryMutations };
   }
 
   it("rejects taxable product rates that are not active in the tenant company", async () => {
@@ -99,6 +103,24 @@ describe("ProductsService fiscal validation", () => {
       tax: {
         findFirst: jest.fn(),
       },
+      warehouse: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: "warehouse-1",
+            name: "Main Warehouse",
+            code: "MAIN",
+            isDefault: true,
+          },
+        ]),
+        findFirst: jest.fn().mockResolvedValue({
+          id: "warehouse-1",
+          name: "Main Warehouse",
+          code: "MAIN",
+        }),
+      },
+      warehouseStock: {
+        upsert: jest.fn().mockResolvedValue({}),
+      },
       saleItem: { count: jest.fn().mockResolvedValue(0) },
       cotizacionItem: { count: jest.fn().mockResolvedValue(0) },
       purchaseOrderItem: { count: jest.fn().mockResolvedValue(0) },
@@ -153,6 +175,24 @@ describe("ProductsService fiscal validation", () => {
       },
       tax: {
         findFirst: jest.fn(),
+      },
+      warehouse: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: "warehouse-1",
+            name: "Main Warehouse",
+            code: "MAIN",
+            isDefault: true,
+          },
+        ]),
+        findFirst: jest.fn().mockResolvedValue({
+          id: "warehouse-1",
+          name: "Main Warehouse",
+          code: "MAIN",
+        }),
+      },
+      warehouseStock: {
+        upsert: jest.fn().mockResolvedValue({}),
       },
       saleItem: { count: jest.fn().mockResolvedValue(0) },
       cotizacionItem: { count: jest.fn().mockResolvedValue(0) },

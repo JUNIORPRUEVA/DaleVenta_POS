@@ -785,19 +785,37 @@ class CatalogController extends StateNotifier<CatalogState> {
   Future<void> adjustStock({
     required ProductModel product,
     required double stock,
+    String? warehouseId,
+    double? currentWarehouseStock,
   }) async {
-    await update(
-      id: product.id,
-      nombre: product.nombre,
-      codigo: product.codigo,
-      precio: product.precio,
-      costo: product.costo,
-      stock: stock,
-      categoria: product.categoriaLabel,
-      taxTreatment: product.taxTreatment,
-      taxRate: product.taxRate,
-      taxPriceMode: product.taxPriceMode,
-    );
+    if (state.saving) return;
+    state = state.copyWith(saving: true, actionError: null);
+    try {
+      final repo = ref.read(catalogRepositoryProvider);
+      final delta = currentWarehouseStock == null
+          ? null
+          : stock - currentWarehouseStock;
+      final updated = await repo.adjustProductStock(
+        id: product.id,
+        stock: delta == null ? stock : null,
+        delta: delta,
+        warehouseId: warehouseId,
+        reason: 'Ajuste manual de stock',
+      );
+      final list = state.items
+          .map((item) => item.id == product.id ? updated : item)
+          .toList(growable: false);
+      _mutationSeq += 1;
+      _rememberConfirmedMutation(updated);
+      state = state.copyWith(items: list, saving: false);
+      unawaited(_saveSnapshotSafely(repo, list));
+    } catch (e) {
+      final message = e is ApiException
+          ? e.message
+          : 'No se pudo ajustar el stock';
+      state = state.copyWith(saving: false, actionError: message);
+      rethrow;
+    }
   }
 
   Future<void> remove(String id) async {

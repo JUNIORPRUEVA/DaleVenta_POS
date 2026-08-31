@@ -71,6 +71,7 @@ export class SalesController {
   @Post()
   create(@Req() req: Request, @Body() dto: CreateSaleDto) {
     const user = req.user as TenantUser;
+    dto.deviceFingerprint ??= this.headerValue(req, "x-client-device-id");
     return this.sales.create(user, dto);
   }
 
@@ -128,5 +129,12 @@ export class SalesController {
   ) {
     const user = req.user as TenantUser;
     return this.sales.returnSale(user, id, dto);
+  }
+
+  private headerValue(req: Request, name: string) {
+    const value = req.headers[name];
+    const text = Array.isArray(value) ? value[0] : value;
+    const trimmed = `${text ?? ""}`.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
   }
 }

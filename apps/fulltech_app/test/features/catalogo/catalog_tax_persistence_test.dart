@@ -134,6 +134,26 @@ class _TaxFakeCatalogRepository extends CatalogRepository {
   }
 
   @override
+  Future<ProductModel> adjustProductStock({
+    required String id,
+    double? stock,
+    double? delta,
+    String? warehouseId,
+    String? reason,
+    bool skipLoader = false,
+  }) async {
+    final current = products.firstWhere((product) => product.id == id);
+    final updated = current.copyWith(
+      stock: stock ?? ((current.stock ?? 0) + (delta ?? 0)),
+    );
+    products = [
+      for (final product in products)
+        if (product.id == id) updated else product,
+    ];
+    return updated;
+  }
+
+  @override
   Future<void> deleteProduct(String id, {bool skipLoader = false}) async {
     deletedIds.add(id);
     products = [
@@ -318,7 +338,7 @@ void main() {
     await controller.adjustStock(product: repo.products.single, stock: 7);
 
     final saved = container.read(catalogControllerProvider).items.single;
-    expect(repo.lastTaxTreatment, 'EXEMPT');
+    expect(repo.lastTaxTreatment, isNull);
     expect(repo.lastTaxRate, isNull);
     expect(repo.lastTaxPriceMode, isNull);
     expect(saved.stock, 7);
@@ -779,11 +799,48 @@ void main() {
       expect(requestPayload, containsPair('taxTreatment', 'EXEMPT'));
       expect(requestPayload, containsPair('taxRate', null));
       expect(requestPayload, containsPair('taxPriceMode', null));
+      expect(requestPayload, isNot(contains('stock')));
       expect(product.taxTreatment, 'EXEMPT');
       expect(product.taxRate, isNull);
       expect(product.taxPriceMode, isNull);
     },
   );
+
+  test('repository envia ajuste de stock solo por endpoint dedicado', () async {
+    Map<String, dynamic>? requestPayload;
+    String? requestPath;
+    final dio = Dio()
+      ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
+        requestPath = options.path;
+        requestPayload = (options.data as Map).cast<String, dynamic>();
+        return ResponseBody.fromString(
+          jsonEncode({
+            'id': 'p-1',
+            'nombre': 'Producto fiscal',
+            'precio': 100,
+            'costo': 60,
+            'stock': 14.5,
+            'categoria': 'General',
+          }),
+          200,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType],
+          },
+        );
+      });
+    final repository = CatalogRepository(dio);
+
+    final product = await repository.adjustProductStock(
+      id: 'p-1',
+      stock: 14.5,
+      reason: 'Inventario fisico',
+    );
+
+    expect(requestPath, '/products/p-1/stock');
+    expect(requestPayload, containsPair('stock', 14.5));
+    expect(requestPayload, containsPair('reason', 'Inventario fisico'));
+    expect(product.stock, 14.5);
+  });
 
   test('repository uploadImage prefiere URL servible sobre key cruda', () async {
     final dio = Dio()

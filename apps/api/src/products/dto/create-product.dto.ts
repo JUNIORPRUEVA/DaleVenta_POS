@@ -1,4 +1,4 @@
-import { IsIn, IsNumber, IsOptional, IsString, Min } from "class-validator";
+import { IsIn, IsNumber, IsOptional, IsString, IsUUID, Min } from "class-validator";
 
 export class CreateProductDto {
   @IsString()
@@ -40,6 +40,10 @@ export class CreateProductDto {
   @IsNumber()
   @Min(0)
   stock?: number;
+
+  @IsOptional()
+  @IsUUID()
+  warehouseId?: string;
 
   @IsOptional()
   @IsIn(["INHERIT", "TAXABLE", "EXEMPT"])

@@ -5152,10 +5152,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       context,
       products: _productos,
       onRefresh: () => _loadProducts(forceRemote: true),
-      onSetStock: (product, stock) async {
+      onSetStock: (product, stock, {warehouseId, currentWarehouseStock}) async {
         await ref
             .read(catalogControllerProvider.notifier)
-            .adjustStock(product: product, stock: stock);
+            .adjustStock(
+              product: product,
+              stock: stock,
+              warehouseId: warehouseId,
+              currentWarehouseStock: currentWarehouseStock,
+            );
         await _loadProducts(forceRemote: true);
       },
     );
@@ -5276,12 +5281,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     return '${id.substring(0, 8)}...';
   }
 
-  String _formatQty(double value) {
-    if (value == value.truncateToDouble()) {
-      return value.toStringAsFixed(0);
-    }
-    return value.toStringAsFixed(2);
-  }
+  String _formatSaleItemQty(SaleItemModel item) =>
+      formatQuantityWithUnit(item.qty, unit: item.unitSnapshot);
 
   Future<void> _openRecentSalesPanel() async {
     final repo = ref.read(ventasRepositoryProvider);
@@ -5493,7 +5494,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                         children: [
                           Expanded(
                             child: Text(
-                              '${item.productNameSnapshot} x${_formatQty(item.qty)}',
+                              '${item.productNameSnapshot} x${_formatSaleItemQty(item)}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
