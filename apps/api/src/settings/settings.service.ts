@@ -125,6 +125,7 @@ export class SettingsService {
     if (this.hasFiscalSettingsData(dto)) {
       await this.taxes.updateFiscalSettings(user, {
         taxEnabled: this.boolValue(dto, "taxEnabled") ?? undefined,
+        defaultTaxId: this.stringValue(dto, "defaultTaxId") ?? undefined,
         defaultTaxRate: this.numberValue(dto, "defaultTaxRate") ?? undefined,
         pricesIncludeTax: this.boolValue(dto, "pricesIncludeTax") ?? undefined,
         ncfEnabled: this.boolValue(dto, "ncfEnabled") ?? undefined,

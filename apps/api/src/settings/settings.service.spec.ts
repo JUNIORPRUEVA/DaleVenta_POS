@@ -12,6 +12,36 @@ describe("SettingsService company master data protection", () => {
     ncfEnabled: false,
   };
 
+  function baseConfig() {
+    return {
+      companyName: "FullPOS Cloud",
+      rnc: "",
+      phone: "",
+      phonePreferential: "",
+      address: "",
+      description: "",
+      instagramUrl: "",
+      facebookUrl: "",
+      websiteUrl: "",
+      gpsLocationUrl: "",
+      businessHours: "",
+      bankAccounts: [],
+      legalRepresentativeName: "",
+      legalRepresentativeCedula: "",
+      legalRepresentativeRole: "",
+      legalRepresentativeNationality: "",
+      legalRepresentativeCivilStatus: "",
+      logoBase64: null,
+      openAiApiKey: null,
+      openAiModel: "gpt-4o-mini",
+      evolutionApiBaseUrl: "",
+      evolutionApiInstanceName: "",
+      evolutionApiApiKey: null,
+      whatsappWebhookEnabled: false,
+      adminAuthorizationPinHash: null,
+    };
+  }
+
   function buildService(prisma: any) {
     const productSourceResolver = {
       resolveForCompany: jest.fn(async (companyId: string) => ({
@@ -322,6 +352,7 @@ describe("SettingsService company master data protection", () => {
       expect.objectContaining({ companyId: "company-a" }),
       {
         taxEnabled: false,
+        defaultTaxId: undefined,
         defaultTaxRate: 0.18,
         pricesIncludeTax: false,
         ncfEnabled: false,
@@ -330,6 +361,73 @@ describe("SettingsService company master data protection", () => {
     expect(response.taxEnabled).toBe(false);
     expect(response.pricesIncludeTax).toBe(false);
     expect(response.ncfEnabled).toBe(false);
+  });
+
+  it("forwards defaultTaxId from generic settings sync to fiscal settings", async () => {
+    let fiscalState = {
+      taxEnabled: true,
+      defaultTaxId: "tax-old",
+      defaultTaxRate: 0.12,
+      pricesIncludeTax: false,
+      ncfEnabled: false,
+    };
+    const taxes = {
+      getCompanyFiscalSettings: jest.fn(async () => fiscalState),
+      updateFiscalSettings: jest.fn(async (_user, dto) => {
+        fiscalState = { ...fiscalState, ...dto };
+        return fiscalState;
+      }),
+    };
+    const tx = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({
+          name: "FullPOS Cloud",
+          measurementUnitsEnabled: false,
+          multiWarehouseEnabled: true,
+        }),
+      },
+      appConfig: {
+        upsert: jest.fn().mockResolvedValue(baseConfig()),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn(async (callback) => callback(tx)),
+    };
+    const service = new SettingsService(
+      prisma as any,
+      { signAsync: jest.fn() } as any,
+      { emitCompany: jest.fn() } as any,
+      {
+        resolveForCompany: jest.fn(async () => ({
+          source: "LOCAL",
+          readOnly: false,
+          resolution: "company",
+        })),
+      } as any,
+      taxes as any,
+    );
+
+    await service.updateSettings(
+      { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+      {
+        taxEnabled: true,
+        defaultTaxId: "tax-new",
+        defaultTaxRate: 0.18,
+        pricesIncludeTax: true,
+        ncfEnabled: true,
+      },
+    );
+
+    expect(taxes.updateFiscalSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ companyId: "company-a" }),
+      {
+        taxEnabled: true,
+        defaultTaxId: "tax-new",
+        defaultTaxRate: 0.18,
+        pricesIncludeTax: true,
+        ncfEnabled: true,
+      },
+    );
   });
 
   it("persists measurementUnitsEnabled on Company without changing Company.name", async () => {

@@ -1282,8 +1282,24 @@ export class ProductsService {
   async remove(user: TenantUser, id: string) {
     const companyId = requireTenant(user);
     await this.assertWritable(companyId);
-    await this.findOne(user, id);
-    await this.prisma.product.deleteMany({ where: { id, companyId } });
+    const existing = await this.prisma.product.findFirst({
+      where: { id, companyId },
+      select: { id: true },
+    });
+    if (!existing) return { ok: true };
+    try {
+      await this.prisma.product.deleteMany({ where: { id, companyId } });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2003"
+      ) {
+        throw new ConflictException(
+          "No se puede eliminar el producto porque tiene historial de inventario o transferencias asociado.",
+        );
+      }
+      throw error;
+    }
     return { ok: true };
   }
 

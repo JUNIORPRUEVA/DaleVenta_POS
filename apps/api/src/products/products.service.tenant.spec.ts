@@ -1,4 +1,6 @@
 import { ConfigService } from "@nestjs/config";
+import { ConflictException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { ProductsService } from "./products.service";
 
 describe("ProductsService tenant isolation (multiempresa)", () => {
@@ -7,10 +9,11 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
     options: {
       config?: Record<string, string>;
       catalogProducts?: { findAll?: jest.Mock };
+      prisma?: any;
       resolveSource?: jest.Mock;
     } = {},
   ) {
-    const prisma = {
+    const prisma = options.prisma ?? {
       product: { findMany },
     };
     const resolveSource =
@@ -159,8 +162,9 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
       companyId: companyA,
     } as never);
 
-    const select = (findMany.mock.calls[0][0] as { select: Record<string, boolean> })
-      .select;
+    const select = (
+      findMany.mock.calls[0][0] as { select: Record<string, boolean> }
+    ).select;
     // Campos que SÍ deben incluirse (consumidos por los clientes).
     for (const field of [
       "id",
@@ -189,7 +193,7 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
   it("falls back to the legacy product select when production has not received UoM columns yet", async () => {
     const schemaMismatch = {
       code: "P2022",
-      message: 'The column `Product.unitOfMeasureId` does not exist',
+      message: "The column `Product.unitOfMeasureId` does not exist",
     };
     const findMany = jest
       .fn()
@@ -385,8 +389,16 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
       resolveSource,
     });
 
-    await service.findAll({ id: "a", role: "ADMIN", companyId: companyA } as never);
-    await service.findAll({ id: "b", role: "ADMIN", companyId: companyB } as never);
+    await service.findAll({
+      id: "a",
+      role: "ADMIN",
+      companyId: companyA,
+    } as never);
+    await service.findAll({
+      id: "b",
+      role: "ADMIN",
+      companyId: companyB,
+    } as never);
 
     expect(catalogFindAll).toHaveBeenNthCalledWith(1, {
       companyId: companyA,
@@ -425,5 +437,66 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
       service.findAll({ id: "a", role: "ADMIN", companyId: companyA } as never),
     ).rejects.toThrow("provider unavailable");
     expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it("treats deleting an absent product in the authenticated tenant as idempotent success", async () => {
+    const prisma = {
+      product: {
+        findMany: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
+        deleteMany: jest.fn(),
+      },
+    };
+    const { service } = buildService(prisma.product.findMany, { prisma });
+
+    await expect(
+      service.remove(
+        {
+          id: "user-a",
+          role: "ADMIN",
+          companyId: companyA,
+        } as never,
+        "01583f95-78c7-4100-887b-7a29480e5d0d",
+      ),
+    ).resolves.toEqual({ ok: true });
+
+    expect(prisma.product.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: "01583f95-78c7-4100-887b-7a29480e5d0d",
+        companyId: companyA,
+      },
+      select: { id: true },
+    });
+    expect(prisma.product.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("returns a controlled conflict when product history prevents physical delete", async () => {
+    const prisma = {
+      product: {
+        findMany: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue({ id: "product-a" }),
+        deleteMany: jest.fn().mockRejectedValue(
+          new Prisma.PrismaClientKnownRequestError(
+            "Foreign key constraint failed",
+            {
+              code: "P2003",
+              clientVersion: "5.22.0",
+            },
+          ),
+        ),
+      },
+    };
+    const { service } = buildService(prisma.product.findMany, { prisma });
+
+    await expect(
+      service.remove(
+        {
+          id: "user-a",
+          role: "ADMIN",
+          companyId: companyA,
+        } as never,
+        "product-a",
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });
