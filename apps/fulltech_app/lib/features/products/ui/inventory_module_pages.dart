@@ -19,9 +19,7 @@ import '../../../core/auth/app_role.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/cache/fulltech_cache_manager.dart';
 import '../../../core/cache/local_json_cache.dart';
-import '../../../core/company/company_settings_repository.dart';
 import '../../../core/models/product_model.dart';
-import '../../../core/routing/routes.dart';
 import '../../../core/tax/product_tax_options_provider.dart';
 import '../../../core/tax/product_tax_preview_calculator.dart';
 import '../../../core/theme/app_colors.dart';
@@ -85,7 +83,33 @@ String _productStockText(ProductModel product) {
   );
 }
 
+String _productStockTextFor(ProductModel product, double? stock) {
+  return formatQuantityWithUnit(
+    stock,
+    unit: product.unitOfMeasure,
+    includeUnitForUnit: true,
+  );
+}
+
+String _productReference(ProductModel product) {
+  final rawReference = (product.codigo ?? '').trim();
+  if (rawReference.toLowerCase() == product.id.trim().toLowerCase()) return '';
+  return _looksLikeInternalProductId(rawReference) ? '' : rawReference;
+}
+
+bool _looksLikeInternalProductId(String value) {
+  if (value.isEmpty) return false;
+  return RegExp(
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+      ).hasMatch(value) ||
+      RegExp(r'^[0-9a-fA-F]{24}$').hasMatch(value) ||
+      RegExp(r'^[0-9A-HJKMNP-TV-Z]{26}$').hasMatch(value) ||
+      RegExp(r'^[a-z][a-z0-9]{20,31}$').hasMatch(value);
+}
+
 double _stockOf(ProductModel product) => product.stock ?? 0;
+double _stockOfValue(ProductModel product, double? stockOverride) =>
+    stockOverride ?? _stockOf(product);
 bool _hasVisibleCost(ProductModel product) => product.costAvailable;
 double _profitOf(ProductModel product) => product.precio - product.costo;
 double _marginOf(ProductModel product) {
@@ -132,9 +156,12 @@ String? _persistentProductImageSource(ProductModel product) {
   return null;
 }
 
-bool _isOutOfStock(ProductModel product) => _stockOf(product) <= 0;
-bool _isLowStock(ProductModel product) {
-  final stock = _stockOf(product);
+bool _isOutOfStock(ProductModel product) => _isOutOfStockValue(product, null);
+bool _isOutOfStockValue(ProductModel product, double? stockOverride) =>
+    _stockOfValue(product, stockOverride) <= 0;
+bool _isLowStock(ProductModel product) => _isLowStockValue(product, null);
+bool _isLowStockValue(ProductModel product, double? stockOverride) {
+  final stock = _stockOfValue(product, stockOverride);
   return stock > 0 && stock <= _stockLowThreshold;
 }
 
@@ -890,6 +917,8 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
   final _categoriesKey = GlobalKey<_CategoriesTabState>();
   final _inventoryKey = GlobalKey<_InventoryTabState>();
   final _mobileSearchCtrl = TextEditingController();
+  OverlayEntry? _noticeEntry;
+  Timer? _noticeTimer;
   bool _mobileSearchOpen = false;
   int _mobileTabIndex = 0;
 
@@ -903,6 +932,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
 
   @override
   void dispose() {
+    _hideTopNotice();
     _mobileSearchCtrl.dispose();
     super.dispose();
   }
@@ -944,7 +974,14 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     );
     if (!mounted) return;
     if (result?.adjustStock == true && result?.product != null) {
-      context.go(Routes.catalogoStock);
+      await showInventoryStockAdjustmentsPanel(
+        context,
+        products: ref.read(catalogControllerProvider).items,
+        onRefresh: _refresh,
+        onSetStock: _setProductStock,
+        canAddStock: ref.read(authStateProvider).user != null,
+        initialProductId: result!.product!.id,
+      );
       return;
     }
     if (!mounted || result?.saved != true) return;
@@ -954,13 +991,52 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
           .load(forceRemote: true, silent: true);
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          product == null ? 'Producto creado' : 'Producto actualizado',
+    _showTopNotice(
+      title: product == null ? 'Producto creado' : 'Producto actualizado',
+      message: result?.product?.nombre.trim().isNotEmpty == true
+          ? result!.product!.nombre
+          : 'El catálogo fue actualizado correctamente.',
+      icon: product == null
+          ? Icons.add_box_outlined
+          : Icons.check_circle_outline_rounded,
+    );
+  }
+
+  void _hideTopNotice() {
+    _noticeTimer?.cancel();
+    _noticeTimer = null;
+    _noticeEntry?.remove();
+    _noticeEntry = null;
+  }
+
+  void _showTopNotice({
+    required String title,
+    required String message,
+    IconData icon = Icons.check_circle_outline_rounded,
+    Color accent = const Color(0xFF059669),
+  }) {
+    if (!mounted) return;
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    if (overlay == null) return;
+    _hideTopNotice();
+    final topPadding = MediaQuery.viewPaddingOf(context).top + 16;
+    late final OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (context) => Positioned(
+        top: topPadding,
+        right: 18,
+        child: _TopNoticeToast(
+          title: title,
+          message: message,
+          icon: icon,
+          accent: accent,
+          onClose: _hideTopNotice,
         ),
       ),
     );
+    _noticeEntry = entry;
+    overlay.insert(entry);
+    _noticeTimer = Timer(const Duration(milliseconds: 3400), _hideTopNotice);
   }
 
   Future<void> _setProductStock(
@@ -985,9 +1061,14 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
           currentWarehouseStock: currentWarehouseStock,
         );
     ref.invalidate(productWarehouseStockProvider(product.id));
+    await ref
+        .read(catalogControllerProvider.notifier)
+        .load(forceRemote: true, silent: true);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Stock actualizado: ${product.nombre}')),
+    _showTopNotice(
+      title: 'Stock actualizado',
+      message: product.nombre,
+      icon: Icons.tune_rounded,
     );
   }
 
@@ -2490,6 +2571,7 @@ class _CatalogTabState extends State<CatalogTab> {
   Timer? _debounce;
   String _query = '';
   String? _category;
+  String? _selectedWarehouseId;
   bool _onlyLowStock = false;
   bool _onlyOutStock = false;
 
@@ -2630,27 +2712,19 @@ class _CatalogTabState extends State<CatalogTab> {
           product: product,
           onEdit: widget.canEditProducts ? () => widget.onEdit(product) : null,
           onStock: widget.canAddStock
-              ? () => _showStockAdjustmentPanel(
+              ? () => showInventoryStockAdjustmentsPanel(
                   context,
-                  product: product,
+                  products: widget.products,
+                  onRefresh: widget.onRefresh,
                   onSetStock: widget.onSetStock,
+                  canAddStock: widget.canAddStock,
+                  initialProductId: product.id,
                 )
               : null,
           onDelete: () => _confirmDelete(product),
         ),
       ),
     );
-  }
-
-  void _selectAllVisible(bool selected) {
-    final visible = _visibleFor(_validCategory(_categories));
-    setState(() {
-      if (selected) {
-        _selectedIds.addAll(visible.map((product) => product.id));
-      } else {
-        _selectedIds.removeAll(visible.map((product) => product.id));
-      }
-    });
   }
 
   Future<void> _confirmDelete(ProductModel product) async {
@@ -2681,88 +2755,82 @@ class _CatalogTabState extends State<CatalogTab> {
       });
     }
     final visible = _visibleFor(selectedCategory);
-    final allSelected =
-        visible.isNotEmpty &&
-        visible.every((product) => _selectedIds.contains(product.id));
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 900;
-        final mobile = constraints.maxWidth < 640;
-        return RefreshIndicator(
-          onRefresh: widget.onRefresh,
-          child: ListView(
-            padding: productsResponsivePagePadding(
-              constraints,
-              top: mobile ? 6 : 14,
-              bottom: mobile ? 96 : 18,
-            ),
-            children: [
-              if (!mobile) ...[
-                _CatalogToolbar(
-                  controller: _searchCtrl,
-                  categories: categories,
-                  selectedCategory: selectedCategory,
-                  onlyLowStock: _onlyLowStock,
-                  onlyOutStock: _onlyOutStock,
-                  selectedCount: _selectedIds.length,
-                  onSearchChanged: _onSearchChanged,
-                  onCategoryChanged: (value) =>
-                      setState(() => _category = value),
-                  onToggleLowStock: (value) =>
-                      setState(() => _onlyLowStock = value),
-                  onToggleOutStock: (value) =>
-                      setState(() => _onlyOutStock = value),
-                  onClearFilters: () => setState(() {
-                    _category = null;
-                    _onlyLowStock = false;
-                    _onlyOutStock = false;
-                    _searchCtrl.clear();
-                    _query = '';
-                  }),
-                  onOpenFilters: openMobileFilters,
-                  onBulkAction: _handleBulkAction,
-                  canEditProducts: widget.canEditProducts,
-                ),
-                const SizedBox(height: 12),
-              ],
-              if (widget.error != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _InlineWarning(message: widget.error!),
-                ),
-              if (compact)
-                _CompactCatalogList(
-                  products: visible,
-                  selectedIds: _selectedIds,
-                  onToggle: (product, value) => setState(() {
-                    value
-                        ? _selectedIds.add(product.id)
-                        : _selectedIds.remove(product.id);
-                  }),
-                  onEdit: widget.onEdit,
-                  onSetStock: widget.onSetStock,
-                  canEditProducts: widget.canEditProducts,
-                  canAddStock: widget.canAddStock,
-                  showTaxBadges: widget.showTaxBadges,
-                  taxConfig: widget.taxConfig,
-                  onDelete: _confirmDelete,
-                  onOpenDetail: _openProductDetail,
+    return Consumer(
+      builder: (context, ref, _) {
+        final warehousesState = ref.watch(warehouseInventoryOverviewProvider);
+        final activeWarehouses =
+            warehousesState.valueOrNull?.activeWarehouses ??
+            const <WarehouseModel>[];
+        final hasMultipleWarehouses = activeWarehouses.length > 1;
+        final selectedWarehouseId =
+            hasMultipleWarehouses &&
+                activeWarehouses.any(
+                  (warehouse) => warehouse.id == _selectedWarehouseId,
                 )
-              else
-                Consumer(
-                  builder: (context, ref, _) {
-                    final overview = ref.watch(
-                      warehouseInventoryOverviewProvider,
-                    );
-                    final showWarehouseContext =
-                        overview.valueOrNull?.hasMultipleActiveWarehouses ==
-                        true;
-                    return _CatalogTable(
+            ? _selectedWarehouseId
+            : null;
+        if (_selectedWarehouseId != selectedWarehouseId) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _selectedWarehouseId != selectedWarehouseId) {
+              setState(() => _selectedWarehouseId = selectedWarehouseId);
+            }
+          });
+        }
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 900;
+            final mobile = constraints.maxWidth < 640;
+            return RefreshIndicator(
+              onRefresh: widget.onRefresh,
+              child: ListView(
+                padding: productsResponsivePagePadding(
+                  constraints,
+                  top: mobile ? 6 : 14,
+                  bottom: mobile ? 96 : 18,
+                ),
+                children: [
+                  if (!mobile) ...[
+                    _CatalogToolbar(
+                      controller: _searchCtrl,
+                      categories: categories,
+                      selectedCategory: selectedCategory,
+                      onlyLowStock: _onlyLowStock,
+                      onlyOutStock: _onlyOutStock,
+                      selectedCount: _selectedIds.length,
+                      warehousesState: warehousesState,
+                      selectedWarehouseId: selectedWarehouseId,
+                      onWarehouseChanged: (value) =>
+                          setState(() => _selectedWarehouseId = value),
+                      onSearchChanged: _onSearchChanged,
+                      onCategoryChanged: (value) =>
+                          setState(() => _category = value),
+                      onToggleLowStock: (value) =>
+                          setState(() => _onlyLowStock = value),
+                      onToggleOutStock: (value) =>
+                          setState(() => _onlyOutStock = value),
+                      onClearFilters: () => setState(() {
+                        _category = null;
+                        _onlyLowStock = false;
+                        _onlyOutStock = false;
+                        _searchCtrl.clear();
+                        _query = '';
+                      }),
+                      onOpenFilters: openMobileFilters,
+                      onBulkAction: _handleBulkAction,
+                      canEditProducts: widget.canEditProducts,
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (widget.error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _InlineWarning(message: widget.error!),
+                    ),
+                  if (compact)
+                    _CompactCatalogList(
                       products: visible,
                       selectedIds: _selectedIds,
-                      allSelected: allSelected,
-                      onToggleAll: _selectAllVisible,
                       onToggle: (product, value) => setState(() {
                         value
                             ? _selectedIds.add(product.id)
@@ -2770,17 +2838,31 @@ class _CatalogTabState extends State<CatalogTab> {
                       }),
                       onEdit: widget.onEdit,
                       onSetStock: widget.onSetStock,
+                      onRefresh: widget.onRefresh,
                       canEditProducts: widget.canEditProducts,
                       canAddStock: widget.canAddStock,
                       showTaxBadges: widget.showTaxBadges,
                       taxConfig: widget.taxConfig,
-                      showWarehouseContext: showWarehouseContext,
                       onDelete: _confirmDelete,
-                    );
-                  },
-                ),
-            ],
-          ),
+                      onOpenDetail: _openProductDetail,
+                    )
+                  else
+                    _CatalogTable(
+                      products: visible,
+                      selectedWarehouseId: selectedWarehouseId,
+                      onEdit: widget.onEdit,
+                      onSetStock: widget.onSetStock,
+                      onRefresh: widget.onRefresh,
+                      canEditProducts: widget.canEditProducts,
+                      canAddStock: widget.canAddStock,
+                      showTaxBadges: widget.showTaxBadges,
+                      taxConfig: widget.taxConfig,
+                      onDelete: _confirmDelete,
+                    ),
+                ],
+              ),
+            );
+          },
         );
       },
     );
@@ -2795,6 +2877,9 @@ class _CatalogToolbar extends StatelessWidget {
     required this.onlyLowStock,
     required this.onlyOutStock,
     required this.selectedCount,
+    required this.warehousesState,
+    required this.selectedWarehouseId,
+    required this.onWarehouseChanged,
     required this.onSearchChanged,
     required this.onCategoryChanged,
     required this.onToggleLowStock,
@@ -2811,6 +2896,9 @@ class _CatalogToolbar extends StatelessWidget {
   final bool onlyLowStock;
   final bool onlyOutStock;
   final int selectedCount;
+  final AsyncValue<WarehouseInventoryOverview> warehousesState;
+  final String? selectedWarehouseId;
+  final ValueChanged<String?> onWarehouseChanged;
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<String?> onCategoryChanged;
   final ValueChanged<bool> onToggleLowStock;
@@ -2876,6 +2964,11 @@ class _CatalogToolbar extends StatelessWidget {
             ),
             label: 'Filtro',
           ),
+          _WarehouseFilterControl(
+            warehousesState: warehousesState,
+            selectedWarehouseId: selectedWarehouseId,
+            onChanged: onWarehouseChanged,
+          ),
           if (selectedCount > 1)
             _CatalogBulkActionsButton(
               selectedCount: selectedCount,
@@ -2886,6 +2979,138 @@ class _CatalogToolbar extends StatelessWidget {
       ),
     );
   }
+}
+
+class _WarehouseFilterControl extends StatelessWidget {
+  const _WarehouseFilterControl({
+    required this.warehousesState,
+    required this.selectedWarehouseId,
+    required this.onChanged,
+  });
+
+  final AsyncValue<WarehouseInventoryOverview> warehousesState;
+  final String? selectedWarehouseId;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final activeWarehouses =
+        warehousesState.valueOrNull?.activeWarehouses ??
+        const <WarehouseModel>[];
+    if (warehousesState.isLoading && activeWarehouses.isEmpty) {
+      return const _WarehouseStaticLabel(label: 'Almacén: cargando...');
+    }
+    if (activeWarehouses.length <= 1) {
+      final warehouse = activeWarehouses.isEmpty
+          ? null
+          : activeWarehouses.first;
+      return _WarehouseStaticLabel(
+        label: 'Almacén: ${_warehouseDisplayName(warehouse)}',
+      );
+    }
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 210, maxWidth: 250),
+      child: DropdownButtonFormField<String>(
+        initialValue: selectedWarehouseId ?? '',
+        isExpanded: true,
+        decoration: InputDecoration(
+          labelText: 'Almacén',
+          prefixIcon: const Icon(Icons.warehouse_outlined, size: 17),
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: AppColors.borderStrong),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: AppColors.borderStrong),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: AppColors.primary, width: 1.2),
+          ),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 10,
+          ),
+        ),
+        items: [
+          const DropdownMenuItem(value: '', child: Text('Todos los almacenes')),
+          for (final warehouse in activeWarehouses)
+            DropdownMenuItem(
+              value: warehouse.id,
+              child: Text(
+                _warehouseDisplayName(warehouse),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+        ],
+        onChanged: (value) => onChanged((value ?? '').isEmpty ? null : value),
+      ),
+    );
+  }
+}
+
+class _WarehouseStaticLabel extends StatelessWidget {
+  const _WarehouseStaticLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 40, maxWidth: 250),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: AppColors.borderStrong),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.warehouse_outlined, size: 17, color: _primaryBlue),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _warehouseDisplayName(WarehouseModel? warehouse) {
+  if (warehouse == null) return 'Principal';
+  final name = warehouse.name.trim();
+  if (warehouse.isDefault) return 'Principal';
+  return name.isEmpty ? 'Almacén' : name;
+}
+
+String _warehouseStockLineDisplayName(WarehouseStockLine? line) {
+  if (line == null) return 'Principal';
+  final name = line.warehouseName.trim();
+  final normalized = name.toLowerCase();
+  if (line.isDefault ||
+      normalized == 'main warehouse' ||
+      normalized == 'default warehouse') {
+    return 'Principal';
+  }
+  return name.isEmpty ? 'Almacén' : name;
 }
 
 class _CatalogToolbarButton extends StatelessWidget {
@@ -3125,36 +3350,34 @@ Future<String?> _showBulkCategoryPicker(
 class _CatalogTable extends StatelessWidget {
   const _CatalogTable({
     required this.products,
-    required this.selectedIds,
-    required this.allSelected,
-    required this.onToggleAll,
-    required this.onToggle,
+    required this.selectedWarehouseId,
     required this.onEdit,
     required this.onSetStock,
+    required this.onRefresh,
     required this.canEditProducts,
     required this.canAddStock,
     required this.showTaxBadges,
     required this.taxConfig,
-    required this.showWarehouseContext,
     required this.onDelete,
   });
 
   final List<ProductModel> products;
-  final Set<String> selectedIds;
-  final bool allSelected;
-  final ValueChanged<bool> onToggleAll;
-  final void Function(ProductModel product, bool selected) onToggle;
+  final String? selectedWarehouseId;
   final ValueChanged<ProductModel> onEdit;
   final SetProductStockCallback onSetStock;
+  final Future<void> Function() onRefresh;
   final bool canEditProducts;
   final bool canAddStock;
   final bool showTaxBadges;
   final ProductTaxUiConfig? taxConfig;
-  final bool showWarehouseContext;
   final ValueChanged<ProductModel> onDelete;
 
   @override
   Widget build(BuildContext context) {
+    final showReferenceColumn = _hasReferenceInCurrentTableView(
+      context,
+      products,
+    );
     return ProductsSurface(
       padding: EdgeInsets.zero,
       child: LayoutBuilder(
@@ -3164,11 +3387,11 @@ class _CatalogTable extends StatelessWidget {
             child: SizedBox(
               width: constraints.maxWidth,
               child: DataTable(
-                columnSpacing: 20,
-                horizontalMargin: 14,
+                columnSpacing: 18,
+                horizontalMargin: 12,
                 checkboxHorizontalMargin: 8,
                 dataRowMinHeight: 46,
-                dataRowMaxHeight: 58,
+                dataRowMaxHeight: 54,
                 headingRowHeight: 42,
                 headingTextStyle: const TextStyle(
                   fontWeight: FontWeight.w900,
@@ -3176,33 +3399,23 @@ class _CatalogTable extends StatelessWidget {
                   fontSize: 12,
                 ),
                 columns: [
-                  DataColumn(
-                    label: Checkbox(
-                      value: allSelected,
-                      onChanged: (value) => onToggleAll(value ?? false),
-                    ),
-                  ),
                   const DataColumn(label: Text('Producto')),
+                  if (showReferenceColumn)
+                    const DataColumn(label: Text('Referencia')),
+                  const DataColumn(label: Text('Costo'), numeric: true),
                   const DataColumn(label: Text('Precio'), numeric: true),
                   const DataColumn(label: Text('Stock'), numeric: true),
-                  if (showWarehouseContext)
-                    const DataColumn(label: Text('Almacén')),
                   const DataColumn(label: Text('Estado')),
                   const DataColumn(label: Text('Acciones')),
                 ],
                 rows: [
                   for (final product in products)
                     DataRow(
-                      selected: selectedIds.contains(product.id),
                       cells: [
-                        DataCell(
-                          Checkbox(
-                            value: selectedIds.contains(product.id),
-                            onChanged: (value) =>
-                                onToggle(product, value ?? false),
-                          ),
-                        ),
                         DataCell(_ProductNameCell(product: product)),
+                        if (showReferenceColumn)
+                          DataCell(_ReferenceCell(product: product)),
+                        DataCell(_CostCell(product: product)),
                         DataCell(
                           _PriceWithTaxBadge(
                             product: product,
@@ -3210,12 +3423,18 @@ class _CatalogTable extends StatelessWidget {
                             taxConfig: taxConfig,
                           ),
                         ),
-                        DataCell(_StockBadge(product: product)),
-                        if (showWarehouseContext)
-                          DataCell(
-                            _WarehouseContextBadge(productId: product.id),
+                        DataCell(
+                          _WarehouseAwareStockBadge(
+                            product: product,
+                            selectedWarehouseId: selectedWarehouseId,
                           ),
-                        DataCell(_ProductStatusBadge(product: product)),
+                        ),
+                        DataCell(
+                          _WarehouseAwareStatusBadge(
+                            product: product,
+                            selectedWarehouseId: selectedWarehouseId,
+                          ),
+                        ),
                         DataCell(
                           Row(
                             mainAxisSize: MainAxisSize.min,
@@ -3230,10 +3449,13 @@ class _CatalogTable extends StatelessWidget {
                               IconButton(
                                 tooltip: 'Ajustar stock',
                                 onPressed: canAddStock
-                                    ? () => _showStockAdjustmentPanel(
+                                    ? () => showInventoryStockAdjustmentsPanel(
                                         context,
-                                        product: product,
+                                        products: products,
+                                        onRefresh: onRefresh,
                                         onSetStock: onSetStock,
+                                        canAddStock: canAddStock,
+                                        initialProductId: product.id,
                                       )
                                     : null,
                                 icon: const Icon(Icons.tune_outlined),
@@ -3258,67 +3480,19 @@ class _CatalogTable extends StatelessWidget {
   }
 }
 
-class _WarehouseContextBadge extends ConsumerWidget {
-  const _WarehouseContextBadge({required this.productId});
-
-  final String productId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final breakdown = ref.watch(productWarehouseStockProvider(productId));
-    return breakdown.maybeWhen(
-      data: (value) {
-        final count = value.warehouses.where((line) => line.isActive).length;
-        if (count <= 1) return const Text('Principal');
-        return _CompactPill(
-          icon: Icons.warehouse_outlined,
-          label: '$count almacenes',
-        );
-      },
-      loading: () => const SizedBox(
-        width: 16,
-        height: 16,
-        child: CircularProgressIndicator(strokeWidth: 2),
-      ),
-      orElse: () => const Text('Ver detalle'),
-    );
-  }
-}
-
-class _CompactPill extends StatelessWidget {
-  const _CompactPill({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.secondary.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: AppColors.secondary),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.secondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+bool _hasReferenceInCurrentTableView(
+  BuildContext context,
+  List<ProductModel> products,
+) {
+  if (products.isEmpty) return false;
+  final screenHeight = MediaQuery.sizeOf(context).height;
+  final estimatedVisibleRows = ((screenHeight - 230) / 54).floor().clamp(
+    1,
+    products.length,
+  );
+  return products
+      .take(estimatedVisibleRows)
+      .any((product) => _productReference(product).isNotEmpty);
 }
 
 class _CompactCatalogList extends StatelessWidget {
@@ -3328,6 +3502,7 @@ class _CompactCatalogList extends StatelessWidget {
     required this.onToggle,
     required this.onEdit,
     required this.onSetStock,
+    required this.onRefresh,
     required this.canEditProducts,
     required this.canAddStock,
     required this.showTaxBadges,
@@ -3341,6 +3516,7 @@ class _CompactCatalogList extends StatelessWidget {
   final void Function(ProductModel product, bool selected) onToggle;
   final ValueChanged<ProductModel> onEdit;
   final SetProductStockCallback onSetStock;
+  final Future<void> Function() onRefresh;
   final bool canEditProducts;
   final bool canAddStock;
   final bool showTaxBadges;
@@ -3366,10 +3542,13 @@ class _CompactCatalogList extends StatelessWidget {
               onTap: () => onOpenDetail(product),
               onEdit: canEditProducts ? () => onEdit(product) : null,
               onStock: canAddStock
-                  ? () => _showStockAdjustmentPanel(
+                  ? () => showInventoryStockAdjustmentsPanel(
                       context,
-                      product: product,
+                      products: products,
+                      onRefresh: onRefresh,
                       onSetStock: onSetStock,
+                      canAddStock: canAddStock,
+                      initialProductId: product.id,
                     )
                   : null,
               onDelete: () => onDelete(product),
@@ -3826,6 +4005,8 @@ class StockAdjustmentsPage extends ConsumerStatefulWidget {
     required this.onRefresh,
     required this.onSetStock,
     required this.canAddStock,
+    this.initialProductId,
+    this.closeAfterSave = false,
     this.onClose,
   });
 
@@ -3833,6 +4014,8 @@ class StockAdjustmentsPage extends ConsumerStatefulWidget {
   final Future<void> Function() onRefresh;
   final SetProductStockCallback onSetStock;
   final bool canAddStock;
+  final String? initialProductId;
+  final bool closeAfterSave;
   final VoidCallback? onClose;
 
   @override
@@ -3858,6 +4041,7 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
   void initState() {
     super.initState();
     _products = List<ProductModel>.of(widget.products);
+    _selected = _productById(widget.initialProductId);
   }
 
   @override
@@ -3866,6 +4050,14 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
     if (!identical(oldWidget.products, widget.products)) {
       _products = List<ProductModel>.of(widget.products);
     }
+    final preferredId = widget.initialProductId != oldWidget.initialProductId
+        ? widget.initialProductId
+        : _selected?.id ?? widget.initialProductId;
+    final updatedSelection = _productById(preferredId);
+    if (updatedSelection != null && updatedSelection.id != _selected?.id) {
+      _selectedWarehouseId = null;
+    }
+    _selected = updatedSelection;
   }
 
   @override
@@ -3879,6 +4071,21 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
   }
 
   double get _quantity => _parseInventoryNumber(_qtyCtrl.text) ?? 0;
+
+  ProductModel? _productById(String? productId) {
+    if (productId == null || productId.isEmpty) return null;
+    for (final product in _products) {
+      if (product.id == productId) return product;
+    }
+    return null;
+  }
+
+  void _selectProduct(ProductModel product) {
+    setState(() {
+      _selected = product;
+      _selectedWarehouseId = null;
+    });
+  }
 
   String _quantityWithUnit(num? value, UnitOfMeasureModel unit) {
     return formatQuantityWithUnit(value, unit: unit, includeUnitForUnit: true);
@@ -4058,7 +4265,7 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
       _showTopNotice(
         title: 'Stock actualizado',
         message: multipleWarehouses
-            ? '${selected.nombre}: ${warehouseLine!.warehouseName} queda en ${_quantityWithUnit(nextStock, selected.unitOfMeasure)}.'
+            ? '${selected.nombre}: ${_warehouseStockLineDisplayName(warehouseLine)} queda en ${_quantityWithUnit(nextStock, selected.unitOfMeasure)}.'
             : '${selected.nombre} ahora tiene ${_quantityWithUnit(nextStock, selected.unitOfMeasure)}.',
       );
       _noteCtrl.clear();
@@ -4074,6 +4281,9 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
         ];
         _selected = updated;
       });
+      if (widget.closeAfterSave && widget.onClose != null) {
+        widget.onClose!();
+      }
     } catch (e) {
       if (!mounted) return;
       _showTopNotice(
@@ -4273,7 +4483,7 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
                                 DropdownMenuItem(
                                   value: line.warehouseId,
                                   child: Text(
-                                    '${line.warehouseName} (${_quantityWithUnit(line.quantity, selected.unitOfMeasure)})',
+                                    '${_warehouseStockLineDisplayName(line)} (${_quantityWithUnit(line.quantity, selected.unitOfMeasure)})',
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
@@ -4348,7 +4558,7 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
                           message:
                               multipleWarehouses &&
                                   selectedWarehouseLine != null
-                              ? '${selectedWarehouseLine.warehouseName}: ${_quantityWithUnit(selectedWarehouseStock, selected.unitOfMeasure)}   Nuevo: ${_quantityWithUnit(_previewStock(selected, currentWarehouseStock: selectedWarehouseStock), selected.unitOfMeasure)}'
+                              ? '${_warehouseStockLineDisplayName(selectedWarehouseLine)}: ${_quantityWithUnit(selectedWarehouseStock, selected.unitOfMeasure)}   Nuevo: ${_quantityWithUnit(_previewStock(selected, currentWarehouseStock: selectedWarehouseStock), selected.unitOfMeasure)}'
                               : 'Stock actual: ${_quantityWithUnit(selected.stock, selected.unitOfMeasure)}   Nuevo stock: ${_quantityWithUnit(_previewStock(selected), selected.unitOfMeasure)}',
                         ),
                       ],
@@ -4386,8 +4596,7 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
                           _StockProductRow(
                             product: product,
                             selected: selected?.id == product.id,
-                            onSelected: () =>
-                                setState(() => _selected = product),
+                            onSelected: () => _selectProduct(product),
                           ),
                     ],
                   ),
@@ -6686,61 +6895,179 @@ class _ProductTaxBadge extends StatelessWidget {
   }
 }
 
-class _StockBadge extends StatelessWidget {
-  const _StockBadge({required this.product});
+class _ReferenceCell extends StatelessWidget {
+  const _ReferenceCell({required this.product});
 
   final ProductModel product;
 
   @override
   Widget build(BuildContext context) {
-    final color = _isOutOfStock(product)
-        ? Colors.red
-        : _isLowStock(product)
-        ? Colors.orange
-        : const Color(0xFF16A34A);
+    final reference = _productReference(product);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 96, maxWidth: 150),
+      child: Text(
+        reference,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          color: _textSecondary,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0,
+        ),
+      ),
+    );
+  }
+}
+
+class _CostCell extends StatelessWidget {
+  const _CostCell({required this.product});
+
+  final ProductModel product;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Text(
+        product.costAvailable
+            ? formatRdCurrencyAccounting(product.costo)
+            : '--',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          color: AppColors.textPrimary,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0,
+        ),
+      ),
+    );
+  }
+}
+
+class _WarehouseAwareStockBadge extends ConsumerWidget {
+  const _WarehouseAwareStockBadge({
+    required this.product,
+    required this.selectedWarehouseId,
+  });
+
+  final ProductModel product;
+  final String? selectedWarehouseId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final warehouseId = selectedWarehouseId;
+    if (warehouseId == null) return _StockBadge(product: product);
+    final breakdown = ref.watch(productWarehouseStockProvider(product.id));
+    return breakdown.maybeWhen(
+      data: (value) => _StockBadge(
+        product: product,
+        stockOverride: value.lineFor(warehouseId)?.quantity ?? 0,
+      ),
+      orElse: () => _StockBadge(product: product),
+    );
+  }
+}
+
+class _WarehouseAwareStatusBadge extends ConsumerWidget {
+  const _WarehouseAwareStatusBadge({
+    required this.product,
+    required this.selectedWarehouseId,
+  });
+
+  final ProductModel product;
+  final String? selectedWarehouseId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final warehouseId = selectedWarehouseId;
+    if (warehouseId == null) return _ProductStatusBadge(product: product);
+    final breakdown = ref.watch(productWarehouseStockProvider(product.id));
+    return breakdown.maybeWhen(
+      data: (value) => _ProductStatusBadge(
+        product: product,
+        stockOverride: value.lineFor(warehouseId)?.quantity ?? 0,
+      ),
+      orElse: () => _ProductStatusBadge(product: product),
+    );
+  }
+}
+
+class _StockBadge extends StatelessWidget {
+  const _StockBadge({required this.product, this.stockOverride});
+
+  final ProductModel product;
+  final double? stockOverride;
+
+  @override
+  Widget build(BuildContext context) {
+    final (
+      foreground,
+      background,
+      border,
+    ) = _isOutOfStockValue(product, stockOverride)
+        ? (
+            const Color(0xFFDC2626),
+            const Color(0xFFFFF1F2),
+            const Color(0xFFFECACA),
+          )
+        : _isLowStockValue(product, stockOverride)
+        ? (
+            const Color(0xFFB45309),
+            const Color(0xFFFFFBEB),
+            const Color(0xFFFDE68A),
+          )
+        : (_primaryBlue, const Color(0xFFEFF6FF), const Color(0xFFBFDBFE));
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(999),
+        color: background,
+        border: Border.all(color: border),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
-        _productStockText(product),
-        style: TextStyle(color: color, fontWeight: FontWeight.w900),
+        _productStockTextFor(product, stockOverride ?? product.stock),
+        style: TextStyle(
+          color: foreground,
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0,
+        ),
       ),
     );
   }
 }
 
 class _ProductStatusBadge extends StatelessWidget {
-  const _ProductStatusBadge({required this.product});
+  const _ProductStatusBadge({required this.product, this.stockOverride});
 
   final ProductModel product;
+  final double? stockOverride;
 
   @override
   Widget build(BuildContext context) {
-    final (label, color) = !product.activo
-        ? ('Inactivo', _textSecondary)
-        : _isOutOfStock(product)
-        ? ('Agotado', Colors.red)
-        : _isLowStock(product)
-        ? ('Bajo stock', Colors.orange)
-        : ('Activo', const Color(0xFF16A34A));
+    final (label, foreground, background) = !product.activo
+        ? ('Inactivo', _textSecondary, const Color(0xFFF1F5F9))
+        : _isOutOfStockValue(product, stockOverride)
+        ? ('Agotado', const Color(0xFFB91C1C), const Color(0xFFFFF1F2))
+        : _isLowStockValue(product, stockOverride)
+        ? ('Bajo stock', const Color(0xFF92400E), const Color(0xFFFFFBEB))
+        : ('Activo', const Color(0xFF166534), const Color(0xFFF0FDF4));
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(999),
+        color: background,
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
         label,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          color: color,
+          color: foreground,
           fontSize: 12,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w800,
           letterSpacing: 0,
         ),
       ),
@@ -6848,332 +7175,6 @@ class _InlineInfo extends StatelessWidget {
       ),
     );
   }
-}
-
-Future<void> _showStockAdjustmentPanel(
-  BuildContext context, {
-  required ProductModel product,
-  required SetProductStockCallback onSetStock,
-}) {
-  final qtyCtrl = TextEditingController(text: '1');
-  var mode = 'Agregar';
-  var saving = false;
-  String? selectedWarehouseId;
-
-  double quantity() => _parseInventoryNumber(qtyCtrl.text) ?? 0;
-  double preview({double? currentWarehouseStock}) {
-    final stock = currentWarehouseStock ?? _stockOf(product);
-    return switch (mode) {
-      'Disminuir' => stock - quantity(),
-      _ => stock + quantity(),
-    };
-  }
-
-  String quantityWithUnit(num? value) {
-    return formatQuantityWithUnit(
-      value,
-      unit: product.unitOfMeasure,
-      includeUnitForUnit: true,
-    );
-  }
-
-  Future<void> submit(
-    BuildContext dialogContext,
-    void Function(void Function()) setPanelState,
-    WidgetRef ref,
-  ) async {
-    final quantityError = validateQuantityForUnit(
-      quantity(),
-      unit: product.unitOfMeasure,
-      label: 'La cantidad',
-    );
-    if (quantityError != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(quantityError)));
-      return;
-    }
-    final overview = ref.read(warehouseInventoryOverviewProvider).valueOrNull;
-    final multipleWarehouses = overview?.hasMultipleActiveWarehouses == true;
-    final breakdown = multipleWarehouses
-        ? ref.read(productWarehouseStockProvider(product.id)).valueOrNull
-        : null;
-    final lines =
-        breakdown?.warehouses.where((line) => line.isActive).toList() ??
-        const <WarehouseStockLine>[];
-    final warehouseId = multipleWarehouses
-        ? (selectedWarehouseId ??
-              (lines.isNotEmpty ? lines.first.warehouseId : null))
-        : null;
-    final warehouseLine = warehouseId == null
-        ? null
-        : breakdown?.lineFor(warehouseId);
-    if (multipleWarehouses && warehouseLine == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Selecciona un almacén para ajustar stock'),
-        ),
-      );
-      return;
-    }
-    final nextStock = preview(currentWarehouseStock: warehouseLine?.quantity);
-    if (nextStock < 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('El stock no puede quedar negativo')),
-      );
-      return;
-    }
-    setPanelState(() => saving = true);
-    try {
-      await onSetStock(
-        product,
-        nextStock,
-        warehouseId: warehouseId,
-        currentWarehouseStock: warehouseLine?.quantity,
-      );
-      if (dialogContext.mounted) Navigator.pop(dialogContext);
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('No se pudo ajustar stock: $e')));
-      }
-    } finally {
-      if (dialogContext.mounted) setPanelState(() => saving = false);
-    }
-  }
-
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    backgroundColor: Colors.transparent,
-    barrierColor: Colors.black45,
-    builder: (sheetContext) {
-      final size = MediaQuery.sizeOf(sheetContext);
-      final panelWidth = size.width >= 640 ? 520.0 : size.width;
-      return Align(
-        alignment: Alignment.centerRight,
-        child: SizedBox(
-          width: panelWidth,
-          height: size.height,
-          child: StatefulBuilder(
-            builder: (dialogContext, setPanelState) => Consumer(
-              builder: (context, ref, _) {
-                final overview = ref.watch(warehouseInventoryOverviewProvider);
-                final multipleWarehouses =
-                    overview.valueOrNull?.hasMultipleActiveWarehouses == true;
-                final stockBreakdown = multipleWarehouses
-                    ? ref.watch(productWarehouseStockProvider(product.id))
-                    : null;
-                final breakdown = stockBreakdown?.valueOrNull;
-                final lines =
-                    breakdown?.warehouses
-                        .where((line) => line.isActive)
-                        .toList() ??
-                    const <WarehouseStockLine>[];
-                final currentWarehouseId =
-                    lines.any((line) => line.warehouseId == selectedWarehouseId)
-                    ? selectedWarehouseId
-                    : (lines.isNotEmpty ? lines.first.warehouseId : null);
-                final currentLine = currentWarehouseId == null
-                    ? null
-                    : breakdown?.lineFor(currentWarehouseId);
-                return CallbackShortcuts(
-                  bindings: {
-                    if (!saving)
-                      const SingleActivator(LogicalKeyboardKey.enter): () =>
-                          submit(dialogContext, setPanelState, ref),
-                    if (!saving)
-                      const SingleActivator(
-                        LogicalKeyboardKey.numpadEnter,
-                      ): () =>
-                          submit(dialogContext, setPanelState, ref),
-                    const SingleActivator(LogicalKeyboardKey.escape): () =>
-                        Navigator.of(dialogContext).maybePop(),
-                  },
-                  child: Focus(
-                    autofocus: true,
-                    child: Material(
-                      color: Colors.white,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(0, 20, 0, 20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                              ),
-                              child: Row(
-                                children: [
-                                  ProductThumbnail(product: product, size: 56),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          product.nombre,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w900,
-                                            fontSize: 18,
-                                          ),
-                                        ),
-                                        Text(product.categoriaLabel),
-                                      ],
-                                    ),
-                                  ),
-                                  IconButton(
-                                    onPressed: () =>
-                                        Navigator.pop(dialogContext),
-                                    icon: const Icon(Icons.close_rounded),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                              ),
-                              child: _InlineInfo(
-                                icon: Icons.inventory_2_outlined,
-                                message:
-                                    'Unidad: ${product.unitOfMeasure.name} (${product.unitOfMeasure.symbol}) · Stock actual: ${quantityWithUnit(product.stock)} · Valor: ${formatRdCurrencyAccounting(_stockOf(product) * product.precio)}',
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            if (multipleWarehouses) ...[
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 20,
-                                ),
-                                child: DropdownButtonFormField<String>(
-                                  key: ValueKey('quick-$currentWarehouseId'),
-                                  initialValue: currentWarehouseId,
-                                  isExpanded: true,
-                                  decoration: _inventoryTextInputDecoration(
-                                    stockBreakdown?.isLoading == true
-                                        ? 'Cargando almacenes...'
-                                        : 'Almacén del ajuste',
-                                    prefixIcon: const Icon(
-                                      Icons.warehouse_outlined,
-                                    ),
-                                  ),
-                                  items: [
-                                    for (final line in lines)
-                                      DropdownMenuItem(
-                                        value: line.warehouseId,
-                                        child: Text(
-                                          '${line.warehouseName} (${quantityWithUnit(line.quantity)})',
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                  ],
-                                  onChanged: lines.isEmpty
-                                      ? null
-                                      : (value) => setPanelState(
-                                          () => selectedWarehouseId = value,
-                                        ),
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                            ],
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                              ),
-                              child: SegmentedButton<String>(
-                                segments: const [
-                                  ButtonSegment(
-                                    value: 'Agregar',
-                                    label: Text('Agregar stock'),
-                                    icon: Icon(Icons.add_rounded),
-                                  ),
-                                  ButtonSegment(
-                                    value: 'Disminuir',
-                                    label: Text('Disminuir stock'),
-                                    icon: Icon(Icons.remove_rounded),
-                                  ),
-                                ],
-                                selected: {mode},
-                                onSelectionChanged: (value) {
-                                  setPanelState(() => mode = value.first);
-                                },
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            TextField(
-                              controller: qtyCtrl,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                    decimal: true,
-                                  ),
-                              onChanged: (_) => setPanelState(() {}),
-                              decoration: _inventoryTextInputDecoration(
-                                'Cantidad',
-                                suffixText: product.unitOfMeasure.isUnit
-                                    ? product.unitOfMeasure.symbol
-                                    : product.unitOfMeasure.symbol,
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                              ),
-                              child: _InlineInfo(
-                                icon: Icons.preview_outlined,
-                                message:
-                                    multipleWarehouses && currentLine != null
-                                    ? '${currentLine.warehouseName}: ${quantityWithUnit(currentLine.quantity)} → ${quantityWithUnit(preview(currentWarehouseStock: currentLine.quantity))}'
-                                    : 'Nuevo stock: ${quantityWithUnit(preview())}',
-                              ),
-                            ),
-                            const Spacer(),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                              ),
-                              child: SizedBox(
-                                width: double.infinity,
-                                child: FilledButton.icon(
-                                  onPressed: saving
-                                      ? null
-                                      : () => submit(
-                                          dialogContext,
-                                          setPanelState,
-                                          ref,
-                                        ),
-                                  icon: saving
-                                      ? const SizedBox(
-                                          width: 16,
-                                          height: 16,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: Colors.white,
-                                          ),
-                                        )
-                                      : const Icon(Icons.save_outlined),
-                                  label: const Text('Guardar ajuste'),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-      );
-    },
-  ).whenComplete(qtyCtrl.dispose);
 }
 
 class ProductFormResult {
@@ -7346,8 +7347,8 @@ class _ProductWarehouseBreakdownPanel extends StatelessWidget {
                     Expanded(
                       child: Text(
                         line.isDefault
-                            ? '${line.warehouseName} · default'
-                            : line.warehouseName,
+                            ? '${_warehouseStockLineDisplayName(line)} · Principal'
+                            : _warehouseStockLineDisplayName(line),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -7562,6 +7563,8 @@ Future<void> showInventoryStockAdjustmentsPanel(
   required List<ProductModel> products,
   required Future<void> Function() onRefresh,
   required SetProductStockCallback onSetStock,
+  required bool canAddStock,
+  String? initialProductId,
 }) {
   return showGeneralDialog<void>(
     context: context,
@@ -7590,7 +7593,9 @@ Future<void> showInventoryStockAdjustmentsPanel(
                   products: products,
                   onRefresh: onRefresh,
                   onSetStock: onSetStock,
-                  canAddStock: true,
+                  canAddStock: canAddStock,
+                  initialProductId: initialProductId,
+                  closeAfterSave: true,
                   onClose: () => Navigator.of(dialogContext).pop(),
                 ),
               ),
@@ -8162,15 +8167,7 @@ class _InventoryProductEditorPageState
         : _parseInventoryNumber(_stockCtrl.text);
     final category = _categoryCtrl.text.trim();
     final taxConfig = ref.read(productTaxUiConfigProvider).valueOrNull;
-    final measurementUnitsEnabled =
-        ref
-            .read(companySettingsProvider)
-            .valueOrNull
-            ?.measurementUnitsEnabled ==
-        true;
-    final unitForSave = measurementUnitsEnabled
-        ? _selectedUnit
-        : UnitOfMeasureModel.unit;
+    final unitForSave = _selectedUnit;
     final taxEnabled = taxConfig?.settings.taxEnabled == true;
     final effectiveTaxRate = _effectiveTaxRate(taxConfig);
     if (name.isEmpty || price == null || cost == null || category.isEmpty) {
@@ -8397,13 +8394,6 @@ class _InventoryProductEditorPageState
     final taxConfigAsync = ref.watch(productTaxUiConfigProvider);
     final taxConfig = taxConfigAsync.valueOrNull;
     final showTaxSection = taxConfig?.settings.taxEnabled == true;
-    final measurementUnitsEnabled =
-        ref
-            .watch(companySettingsProvider)
-            .valueOrNull
-            ?.measurementUnitsEnabled ==
-        true;
-
     return _InventorySidePanelScaffold(
       title: product == null ? 'Nuevo producto' : 'Editar producto',
       icon: product == null ? Icons.add_box_outlined : Icons.edit_outlined,
@@ -8478,14 +8468,13 @@ class _InventoryProductEditorPageState
                   enabled: !_isSaving,
                   textInputAction: TextInputAction.next,
                   keyboardType: TextInputType.numberWithOptions(
-                    decimal:
-                        measurementUnitsEnabled && _selectedUnit.allowDecimals,
+                    decimal: _selectedUnit.allowDecimals,
                   ),
                   decoration: _inventoryTextInputDecoration(
                     'Stock disponible',
-                    suffixText: measurementUnitsEnabled && !_selectedUnit.isUnit
-                        ? _selectedUnit.symbol
-                        : null,
+                    suffixText: _selectedUnit.isUnit
+                        ? null
+                        : _selectedUnit.symbol,
                   ),
                 )
               else
@@ -8527,32 +8516,30 @@ class _InventoryProductEditorPageState
                   },
                 ),
               ],
-              if (measurementUnitsEnabled) ...[
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedUnit.id,
-                  isExpanded: true,
-                  decoration: _inventoryTextInputDecoration(
-                    _loadingUnits ? 'Cargando unidades...' : 'Unidad de medida',
-                  ),
-                  items: [
-                    for (final unit in _unitOptions)
-                      DropdownMenuItem<String>(
-                        value: unit.id,
-                        child: Text('${unit.name} (${unit.symbol})'),
-                      ),
-                  ],
-                  onChanged: _isSaving || _loadingUnits
-                      ? null
-                      : (value) {
-                          final next = _unitOptions.firstWhere(
-                            (unit) => unit.id == value,
-                            orElse: () => UnitOfMeasureModel.unit,
-                          );
-                          setState(() => _selectedUnit = next);
-                        },
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: _selectedUnit.id,
+                isExpanded: true,
+                decoration: _inventoryTextInputDecoration(
+                  _loadingUnits ? 'Cargando unidades...' : 'Unidad de medida',
                 ),
-              ],
+                items: [
+                  for (final unit in _unitOptions)
+                    DropdownMenuItem<String>(
+                      value: unit.id,
+                      child: Text('${unit.name} (${unit.symbol})'),
+                    ),
+                ],
+                onChanged: _isSaving || _loadingUnits
+                    ? null
+                    : (value) {
+                        final next = _unitOptions.firstWhere(
+                          (unit) => unit.id == value,
+                          orElse: () => UnitOfMeasureModel.unit,
+                        );
+                        setState(() => _selectedUnit = next);
+                      },
+              ),
               const SizedBox(height: 10),
               TextField(
                 controller: _categoryCtrl,

@@ -8,6 +8,7 @@ import '../../modules/ventas/application/ventas_controller.dart';
 import '../../modules/ventas/sales_credit_screen.dart';
 import '../auth/auth_provider.dart';
 import '../debug/trace_log.dart';
+import '../../features/catalogo/application/catalog_controller.dart';
 import 'operations_refresh_signals.dart';
 import 'operations_realtime_service.dart';
 
@@ -63,6 +64,11 @@ class OperationsDataRefreshService {
     _ref.read(salesDataRefreshTickProvider.notifier).state++;
     _ref.invalidate(ventasControllerProvider);
     _ref.invalidate(salesCreditsProvider);
+    unawaited(
+      _ref
+          .read(catalogControllerProvider.notifier)
+          .load(forceRemote: true, silent: true),
+    );
     refreshCash(silent: true);
   }
 

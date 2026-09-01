@@ -247,9 +247,7 @@ class CatalogController extends StateNotifier<CatalogState> {
   }
 
   bool _canContinueWithoutUploadedImage(Object error) {
-    if (error is! ApiException) return false;
-    final code = error.code;
-    return code == null || code >= 500;
+    return false;
   }
 
   /// Siembra la caché local de la imagen recién subida usando SIEMPRE la

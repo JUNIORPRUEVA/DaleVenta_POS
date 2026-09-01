@@ -229,6 +229,68 @@ List<Override> _singleWarehouseOverrides({ProductModel? product}) => [
   ),
 ];
 
+List<Override> _multiWarehouseOverrides({
+  required Map<String, Map<String, double>> stockByProductAndWarehouse,
+}) => [
+  warehouseInventoryOverviewProvider.overrideWith(
+    (ref) async => const WarehouseInventoryOverview(
+      warehouses: [
+        WarehouseModel(
+          id: 'w-default',
+          name: 'Almacén Principal',
+          code: 'MAIN',
+          isDefault: true,
+          isActive: true,
+          terminalCount: 0,
+          stockRowCount: 0,
+        ),
+        WarehouseModel(
+          id: 'w-secondary',
+          name: 'Sucursal Norte',
+          code: 'NORTE',
+          isDefault: false,
+          isActive: true,
+          terminalCount: 0,
+          stockRowCount: 0,
+        ),
+      ],
+      terminals: [],
+    ),
+  ),
+  productWarehouseStockProvider.overrideWith((ref, productId) async {
+    final values = stockByProductAndWarehouse[productId] ?? const {};
+    final total = values.values.fold<double>(0, (sum, value) => sum + value);
+    return ProductWarehouseStockBreakdown(
+      productId: productId,
+      source: 'LOCAL',
+      readOnly: false,
+      reconciled: true,
+      total: total,
+      warehouseTotal: total,
+      warehouses: [
+        WarehouseStockLine(
+          warehouseId: 'w-default',
+          warehouseName: 'Almacén Principal',
+          warehouseCode: 'MAIN',
+          isDefault: true,
+          isActive: true,
+          quantity: values['w-default'] ?? 0,
+          quantityDecimal: (values['w-default'] ?? 0).toString(),
+        ),
+        WarehouseStockLine(
+          warehouseId: 'w-secondary',
+          warehouseName: 'Sucursal Norte',
+          warehouseCode: 'NORTE',
+          isDefault: false,
+          isActive: true,
+          quantity: values['w-secondary'] ?? 0,
+          quantityDecimal: (values['w-secondary'] ?? 0).toString(),
+        ),
+      ],
+    );
+  }),
+];
+
 class _FakeFilePicker extends FilePicker {
   _FakeFilePicker(this.result);
 
@@ -257,6 +319,7 @@ ProductModel _product({
   required String id,
   required String name,
   required String category,
+  String? code,
   double stock = 1,
   UnitOfMeasureModel? unitOfMeasure,
 }) {
@@ -266,6 +329,7 @@ ProductModel _product({
     precio: 100,
     costo: 60,
     stock: stock,
+    codigo: code,
     categoria: category,
     unitOfMeasureId: unitOfMeasure?.id,
     unitOfMeasure: unitOfMeasure,
@@ -599,6 +663,343 @@ void main() {
     expect(find.text('15'), findsNothing);
   });
 
+  testWidgets(
+    'catálogo con un almacén muestra almacén principal sin selector',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final product = _product(
+        id: 'unit-1',
+        name: 'Audifonos Visual UAT',
+        category: 'Unidad',
+        stock: 5,
+        unitOfMeasure: UnitOfMeasureModel.unit,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _singleWarehouseOverrides(product: product),
+          child: MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 1100,
+                child: CatalogTab(
+                  products: [product],
+                  loading: false,
+                  error: null,
+                  onRefresh: () async {},
+                  onCreate: () {},
+                  onImport: () async {},
+                  onExport: () async {},
+                  onExportSelection: (_) async {},
+                  onPdfSelection: (_) async {},
+                  onBulkDelete: (_) async {},
+                  onBulkChangeCategory: (_, _) async {},
+                  onEdit: (_) {},
+                  onSetStock:
+                      (_, _, {warehouseId, currentWarehouseStock}) async {},
+                  canEditProducts: true,
+                  canAddStock: true,
+                  onDelete: (_) async {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Almacén: Principal'), findsOneWidget);
+      expect(find.text('Todos los almacenes'), findsNothing);
+      expect(find.text('Almacén por defecto'), findsNothing);
+      expect(find.text('5 u'), findsOneWidget);
+    },
+  );
+
+  testWidgets('catálogo oculta Referencia cuando no hay referencias visibles', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final products = [
+      _product(
+        id: 'unit-1',
+        name: 'Producto sin referencia',
+        category: 'Unidad',
+        stock: 5,
+        unitOfMeasure: UnitOfMeasureModel.unit,
+      ),
+      _product(
+        id: 'uuid-1',
+        name: 'Producto con id interno',
+        category: 'Unidad',
+        code: 'cmf9o7qx0000cb3lkd0vkt6a7',
+        stock: 3,
+        unitOfMeasure: UnitOfMeasureModel.unit,
+      ),
+      _product(
+        id: 'uuid-2',
+        name: 'Producto con uuid interno',
+        category: 'Unidad',
+        code: '923581af-6cc7-4fc3-881d-636c50d585fe',
+        stock: 4,
+        unitOfMeasure: UnitOfMeasureModel.unit,
+      ),
+    ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: _singleWarehouseOverrides(product: products.first),
+        child: MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 1100,
+              child: CatalogTab(
+                products: products,
+                loading: false,
+                error: null,
+                onRefresh: () async {},
+                onCreate: () {},
+                onImport: () async {},
+                onExport: () async {},
+                onExportSelection: (_) async {},
+                onPdfSelection: (_) async {},
+                onBulkDelete: (_) async {},
+                onBulkChangeCategory: (_, _) async {},
+                onEdit: (_) {},
+                onSetStock:
+                    (_, _, {warehouseId, currentWarehouseStock}) async {},
+                canEditProducts: true,
+                canAddStock: true,
+                onDelete: (_) async {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Referencia'), findsNothing);
+    expect(find.text('Sin ref.'), findsNothing);
+    expect(find.text('Producto sin referencia'), findsOneWidget);
+    expect(find.text('Producto con id interno'), findsOneWidget);
+    expect(find.text('Producto con uuid interno'), findsOneWidget);
+  });
+
+  testWidgets('catálogo muestra Referencia cuando al menos una es real', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final products = [
+      _product(
+        id: 'unit-1',
+        name: 'Producto sin referencia',
+        category: 'Unidad',
+        stock: 5,
+        unitOfMeasure: UnitOfMeasureModel.unit,
+      ),
+      _product(
+        id: 'ref-1',
+        name: 'Producto con referencia',
+        category: 'Unidad',
+        code: 'REF-001',
+        stock: 3,
+        unitOfMeasure: UnitOfMeasureModel.unit,
+      ),
+    ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: _singleWarehouseOverrides(product: products.first),
+        child: MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 1100,
+              child: CatalogTab(
+                products: products,
+                loading: false,
+                error: null,
+                onRefresh: () async {},
+                onCreate: () {},
+                onImport: () async {},
+                onExport: () async {},
+                onExportSelection: (_) async {},
+                onPdfSelection: (_) async {},
+                onBulkDelete: (_) async {},
+                onBulkChangeCategory: (_, _) async {},
+                onEdit: (_) {},
+                onSetStock:
+                    (_, _, {warehouseId, currentWarehouseStock}) async {},
+                canEditProducts: true,
+                canAddStock: true,
+                onDelete: (_) async {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Referencia'), findsOneWidget);
+    expect(find.text('REF-001'), findsOneWidget);
+    expect(find.text('Sin ref.'), findsNothing);
+  });
+
+  testWidgets('catálogo filtra stock por almacén sin escrituras', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    var stockWrites = 0;
+    const yard = UnitOfMeasureModel(
+      id: 'YARD',
+      code: 'YARD',
+      name: 'Yarda',
+      symbol: 'yd',
+      category: 'LENGTH',
+      allowDecimals: true,
+      precision: 3,
+    );
+    final product = _product(
+      id: 'yd-1',
+      name: 'Tela Azul Visual UAT',
+      category: 'Tela',
+      stock: 14.5,
+      unitOfMeasure: yard,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: _multiWarehouseOverrides(
+          stockByProductAndWarehouse: {
+            'yd-1': {'w-default': 12.25, 'w-secondary': 2.25},
+          },
+        ),
+        child: MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 1100,
+              child: CatalogTab(
+                products: [product],
+                loading: false,
+                error: null,
+                onRefresh: () async {},
+                onCreate: () {},
+                onImport: () async {},
+                onExport: () async {},
+                onExportSelection: (_) async {},
+                onPdfSelection: (_) async {},
+                onBulkDelete: (_) async {},
+                onBulkChangeCategory: (_, _) async {},
+                onEdit: (_) {},
+                onSetStock: (_, _, {warehouseId, currentWarehouseStock}) async {
+                  stockWrites += 1;
+                },
+                canEditProducts: true,
+                canAddStock: true,
+                onDelete: (_) async {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Todos los almacenes'), findsOneWidget);
+    expect(find.text('14.5 yd'), findsOneWidget);
+    expect(find.text('Almacén por defecto'), findsNothing);
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Principal').last);
+    await tester.pumpAndSettle();
+    expect(find.text('12.25 yd'), findsOneWidget);
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sucursal Norte').last);
+    await tester.pumpAndSettle();
+    expect(find.text('2.25 yd'), findsOneWidget);
+    expect(find.text('Tela Azul Visual UAT'), findsOneWidget);
+    expect(stockWrites, 0);
+  });
+
+  testWidgets('icono de fila abre ajuste de stock del producto correcto', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final product = _product(
+      id: 'unit-1',
+      name: 'Audifonos Visual UAT',
+      category: 'Unidad',
+      stock: 5,
+      unitOfMeasure: UnitOfMeasureModel.unit,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: _singleWarehouseOverrides(product: product),
+        child: MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 1100,
+              child: CatalogTab(
+                products: [product],
+                loading: false,
+                error: null,
+                onRefresh: () async {},
+                onCreate: () {},
+                onImport: () async {},
+                onExport: () async {},
+                onExportSelection: (_) async {},
+                onPdfSelection: (_) async {},
+                onBulkDelete: (_) async {},
+                onBulkChangeCategory: (_, _) async {},
+                onEdit: (_) {},
+                onSetStock:
+                    (_, _, {warehouseId, currentWarehouseStock}) async {},
+                canEditProducts: true,
+                canAddStock: true,
+                onDelete: (_) async {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Ajustar stock'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Audifonos Visual UAT'), findsWidgets);
+    expect(find.text('Agregar stock'), findsOneWidget);
+    expect(find.text('Disminuir stock'), findsOneWidget);
+    expect(find.text('Cantidad'), findsOneWidget);
+    expect(find.textContaining('Stock actual: 5 u'), findsOneWidget);
+    expect(find.textContaining('Nuevo stock: 6 u'), findsOneWidget);
+  });
+
   testWidgets('ajuste de stock muestra unidad y bloquea decimal para Unidad', (
     tester,
   ) async {
@@ -654,41 +1055,49 @@ void main() {
     ];
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: StatefulBuilder(
-          builder: (context, setHostState) {
-            return Scaffold(
-              body: Column(
-                children: [
-                  ElevatedButton(
-                    onPressed: () => setHostState(() => products = []),
-                    child: const Text('Vaciar categoría'),
-                  ),
-                  Expanded(
-                    child: CatalogTab(
-                      products: products,
-                      loading: false,
-                      error: null,
-                      onRefresh: () async {},
-                      onCreate: () {},
-                      onImport: () async {},
-                      onExport: () async {},
-                      onExportSelection: (_) async {},
-                      onPdfSelection: (_) async {},
-                      onBulkDelete: (_) async {},
-                      onBulkChangeCategory: (_, _) async {},
-                      onEdit: (_) {},
-                      onSetStock:
-                          (_, _, {warehouseId, currentWarehouseStock}) async {},
-                      canEditProducts: true,
-                      canAddStock: true,
-                      onDelete: (_) async {},
+      ProviderScope(
+        overrides: _singleWarehouseOverrides(),
+        child: MaterialApp(
+          home: StatefulBuilder(
+            builder: (context, setHostState) {
+              return Scaffold(
+                body: Column(
+                  children: [
+                    ElevatedButton(
+                      onPressed: () => setHostState(() => products = []),
+                      child: const Text('Vaciar categoría'),
                     ),
-                  ),
-                ],
-              ),
-            );
-          },
+                    Expanded(
+                      child: CatalogTab(
+                        products: products,
+                        loading: false,
+                        error: null,
+                        onRefresh: () async {},
+                        onCreate: () {},
+                        onImport: () async {},
+                        onExport: () async {},
+                        onExportSelection: (_) async {},
+                        onPdfSelection: (_) async {},
+                        onBulkDelete: (_) async {},
+                        onBulkChangeCategory: (_, _) async {},
+                        onEdit: (_) {},
+                        onSetStock:
+                            (
+                              _,
+                              _, {
+                              warehouseId,
+                              currentWarehouseStock,
+                            }) async {},
+                        canEditProducts: true,
+                        canAddStock: true,
+                        onDelete: (_) async {},
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -761,29 +1170,33 @@ void main() {
     ];
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 1100,
-            child: CatalogTab(
-              products: products,
-              loading: false,
-              error: null,
-              onRefresh: () async {},
-              onCreate: () {},
-              onImport: () async {},
-              onExport: () async {},
-              onExportSelection: (_) async {},
-              onPdfSelection: (_) async {},
-              onBulkDelete: (_) async {},
-              onBulkChangeCategory: (_, _) async {},
-              onEdit: (_) {},
-              onSetStock: (_, _, {warehouseId, currentWarehouseStock}) async {},
-              canEditProducts: true,
-              canAddStock: true,
-              showTaxBadges: true,
-              taxConfig: taxConfig,
-              onDelete: (_) async {},
+      ProviderScope(
+        overrides: _singleWarehouseOverrides(),
+        child: MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 1100,
+              child: CatalogTab(
+                products: products,
+                loading: false,
+                error: null,
+                onRefresh: () async {},
+                onCreate: () {},
+                onImport: () async {},
+                onExport: () async {},
+                onExportSelection: (_) async {},
+                onPdfSelection: (_) async {},
+                onBulkDelete: (_) async {},
+                onBulkChangeCategory: (_, _) async {},
+                onEdit: (_) {},
+                onSetStock:
+                    (_, _, {warehouseId, currentWarehouseStock}) async {},
+                canEditProducts: true,
+                canAddStock: true,
+                showTaxBadges: true,
+                taxConfig: taxConfig,
+                onDelete: (_) async {},
+              ),
             ),
           ),
         ),
@@ -822,30 +1235,33 @@ void main() {
       ];
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 1100,
-              child: CatalogTab(
-                products: products,
-                loading: false,
-                error: null,
-                onRefresh: () async {},
-                onCreate: () {},
-                onImport: () async {},
-                onExport: () async {},
-                onExportSelection: (_) async {},
-                onPdfSelection: (_) async {},
-                onBulkDelete: (_) async {},
-                onBulkChangeCategory: (_, _) async {},
-                onEdit: (_) {},
-                onSetStock:
-                    (_, _, {warehouseId, currentWarehouseStock}) async {},
-                canEditProducts: true,
-                canAddStock: true,
-                showTaxBadges: true,
-                taxConfig: taxConfig,
-                onDelete: (_) async {},
+        ProviderScope(
+          overrides: _singleWarehouseOverrides(),
+          child: MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 1100,
+                child: CatalogTab(
+                  products: products,
+                  loading: false,
+                  error: null,
+                  onRefresh: () async {},
+                  onCreate: () {},
+                  onImport: () async {},
+                  onExport: () async {},
+                  onExportSelection: (_) async {},
+                  onPdfSelection: (_) async {},
+                  onBulkDelete: (_) async {},
+                  onBulkChangeCategory: (_, _) async {},
+                  onEdit: (_) {},
+                  onSetStock:
+                      (_, _, {warehouseId, currentWarehouseStock}) async {},
+                  canEditProducts: true,
+                  canAddStock: true,
+                  showTaxBadges: true,
+                  taxConfig: taxConfig,
+                  onDelete: (_) async {},
+                ),
               ),
             ),
           ),
@@ -897,55 +1313,58 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: StatefulBuilder(
-            builder: (context, setHostState) {
-              return Scaffold(
-                body: Column(
-                  children: [
-                    ElevatedButton(
-                      onPressed: () => setHostState(() => taxEnabled = false),
-                      child: const Text('Empresa normal'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () => setHostState(() => taxEnabled = true),
-                      child: const Text('Empresa fiscal'),
-                    ),
-                    Expanded(
-                      child: SizedBox(
-                        width: 1100,
-                        child: CatalogTab(
-                          products: products,
-                          loading: false,
-                          error: null,
-                          onRefresh: () async {},
-                          onCreate: () {},
-                          onImport: () async {},
-                          onExport: () async {},
-                          onExportSelection: (_) async {},
-                          onPdfSelection: (_) async {},
-                          onBulkDelete: (_) async {},
-                          onBulkChangeCategory: (_, _) async {},
-                          onEdit: (_) {},
-                          onSetStock:
-                              (
-                                _,
-                                _, {
-                                warehouseId,
-                                currentWarehouseStock,
-                              }) async {},
-                          canEditProducts: true,
-                          canAddStock: true,
-                          showTaxBadges: taxEnabled,
-                          taxConfig: config(),
-                          onDelete: (_) async {},
+        ProviderScope(
+          overrides: _singleWarehouseOverrides(),
+          child: MaterialApp(
+            home: StatefulBuilder(
+              builder: (context, setHostState) {
+                return Scaffold(
+                  body: Column(
+                    children: [
+                      ElevatedButton(
+                        onPressed: () => setHostState(() => taxEnabled = false),
+                        child: const Text('Empresa normal'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => setHostState(() => taxEnabled = true),
+                        child: const Text('Empresa fiscal'),
+                      ),
+                      Expanded(
+                        child: SizedBox(
+                          width: 1100,
+                          child: CatalogTab(
+                            products: products,
+                            loading: false,
+                            error: null,
+                            onRefresh: () async {},
+                            onCreate: () {},
+                            onImport: () async {},
+                            onExport: () async {},
+                            onExportSelection: (_) async {},
+                            onPdfSelection: (_) async {},
+                            onBulkDelete: (_) async {},
+                            onBulkChangeCategory: (_, _) async {},
+                            onEdit: (_) {},
+                            onSetStock:
+                                (
+                                  _,
+                                  _, {
+                                  warehouseId,
+                                  currentWarehouseStock,
+                                }) async {},
+                            canEditProducts: true,
+                            canAddStock: true,
+                            showTaxBadges: taxEnabled,
+                            taxConfig: config(),
+                            onDelete: (_) async {},
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              );
-            },
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
         ),
       );
@@ -1081,6 +1500,8 @@ void main() {
     await tester.enterText(find.byType(TextField).at(3), '700');
     await tester.enterText(find.byType(TextField).at(4), '3');
     await tester.enterText(find.byType(TextField).at(5), 'General');
+    await tester.ensureVisible(find.text('Predeterminado').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Predeterminado').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Gravado').last);
@@ -1572,6 +1993,8 @@ void main() {
       await tester.enterText(find.byType(TextField).at(3), '1300');
       await tester.enterText(find.byType(TextField).at(4), '5');
       await tester.enterText(find.byType(TextField).at(5), 'General');
+      await tester.ensureVisible(find.text('Predeterminado').last);
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Predeterminado').last);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Exento').last);

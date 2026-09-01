@@ -5163,6 +5163,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             );
         await _loadProducts(forceRemote: true);
       },
+      canAddStock: true,
     );
     if (!mounted) return;
     await _loadProducts(forceRemote: true);

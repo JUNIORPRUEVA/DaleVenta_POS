@@ -24,7 +24,9 @@ class _TaxFakeCatalogRepository extends CatalogRepository {
   List<ProductModel> cachedProducts = const [];
   final List<Completer<List<ProductModel>>> fetchCompleters = [];
   int fetchCalls = 0;
+  int createCalls = 0;
   Object? fetchError;
+  Object? uploadError;
   final List<List<ProductModel>> savedSnapshots = [];
   final List<String> deletedIds = [];
 
@@ -71,6 +73,7 @@ class _TaxFakeCatalogRepository extends CatalogRepository {
     UnitOfMeasureModel? unitOfMeasure,
     bool skipLoader = false,
   }) async {
+    createCalls += 1;
     lastTaxTreatment = taxTreatment;
     lastTaxRate = taxRate;
     lastTaxPriceMode = taxPriceMode;
@@ -89,6 +92,17 @@ class _TaxFakeCatalogRepository extends CatalogRepository {
     );
     products = [product, ...products];
     return product;
+  }
+
+  @override
+  Future<String> uploadImage({
+    List<int>? bytes,
+    String? filePath,
+    required String filename,
+  }) async {
+    final error = uploadError;
+    if (error != null) throw error;
+    return '/media/object?key=uploads%2Fcompanies%2Ftest%2Fproducto.png';
   }
 
   @override
@@ -871,4 +885,33 @@ void main() {
     expect(uploaded, startsWith('/media/object?key='));
     expect(uploaded, isNot(startsWith('uploads/companies/')));
   });
+
+  test(
+    'create con imagen seleccionada no continua si falla la subida',
+    () async {
+      final repo = _TaxFakeCatalogRepository([])
+        ..uploadError = ApiException('Error temporal al subir imagen', 500);
+      final container = _containerWith(repo);
+      final controller = container.read(catalogControllerProvider.notifier);
+
+      await expectLater(
+        controller.create(
+          nombre: 'Producto con imagen',
+          precio: 100,
+          costo: 60,
+          stock: 1,
+          categoria: 'General',
+          imageBytes: const [1, 2, 3],
+          filename: 'producto.png',
+          taxTreatment: 'TAXABLE',
+          taxRate: 0.18,
+          taxPriceMode: 'TAX_INCLUDED',
+        ),
+        throwsA(isA<ApiException>()),
+      );
+
+      expect(repo.createCalls, 0);
+      expect(container.read(catalogControllerProvider).items, isEmpty);
+    },
+  );
 }

@@ -14,6 +14,13 @@ function buildService(options: {
   warehouseTotal?: Prisma.Decimal.Value;
   movementCreateError?: Error;
   currentWarehouseQuantity?: Prisma.Decimal.Value;
+  unitOfMeasure?: {
+    code: string;
+    name: string;
+    symbol: string;
+    precision: number;
+    allowDecimals: boolean;
+  };
 } = {}) {
   const productStock = decimal(options.initialProductStock ?? "10");
   const warehouseTotal = decimal(options.warehouseTotal ?? productStock);
@@ -23,7 +30,7 @@ function buildService(options: {
         id: "product-a",
         stock: productStock,
         company: { productSource: options.companyProductSource ?? null },
-        unitOfMeasure: {
+        unitOfMeasure: options.unitOfMeasure ?? {
           code: "YARD",
           name: "Yarda",
           symbol: "yd",
@@ -219,6 +226,99 @@ describe("InventoryMutationService", () => {
     });
 
     expect(result.quantityDelta.toFixed(6)).toBe("-3.000000");
+  });
+
+  it("applies UNIT/YARD/POUND inventory mutations exactly once", async () => {
+    const cases = [
+      {
+        label: "UNIT",
+        method: "increaseStock" as const,
+        type: InventoryMovementType.ADJUSTMENT_IN,
+        quantity: "2",
+        stockRows: [
+          { previous_quantity: "10.000000", resulting_quantity: "12.000000" },
+        ],
+        unitOfMeasure: {
+          code: "UNIT",
+          name: "Unidad",
+          symbol: "u",
+          precision: 0,
+          allowDecimals: false,
+        },
+        expectedDelta: "2.000000",
+        expectedResult: "12.000000",
+      },
+      {
+        label: "YARD",
+        method: "decreaseStock" as const,
+        type: InventoryMovementType.SALE,
+        quantity: "5.5",
+        stockRows: [
+          { previous_quantity: "20.500000", resulting_quantity: "15.000000" },
+        ],
+        initialProductStock: "20.5",
+        unitOfMeasure: {
+          code: "YARD",
+          name: "Yarda",
+          symbol: "yd",
+          precision: 3,
+          allowDecimals: true,
+        },
+        expectedDelta: "-5.500000",
+        expectedResult: "15.000000",
+      },
+      {
+        label: "POUND",
+        method: "decreaseStock" as const,
+        type: InventoryMovementType.SALE,
+        quantity: "2.375",
+        stockRows: [
+          { previous_quantity: "10.000000", resulting_quantity: "7.625000" },
+        ],
+        unitOfMeasure: {
+          code: "POUND",
+          name: "Libra",
+          symbol: "lb",
+          precision: 3,
+          allowDecimals: true,
+        },
+        expectedDelta: "-2.375000",
+        expectedResult: "7.625000",
+      },
+    ];
+
+    for (const testCase of cases) {
+      const { service, tx } = buildService({
+        stockRows: testCase.stockRows,
+        initialProductStock: testCase.initialProductStock,
+        warehouseTotal: testCase.initialProductStock,
+        unitOfMeasure: testCase.unitOfMeasure,
+      });
+
+      const result = await service[testCase.method]({
+        ...base,
+        type: testCase.type,
+        quantity: testCase.quantity,
+        sourceType: "S1_EXACT_ONCE",
+      });
+
+      expect(result.quantityDelta.toFixed(6)).toBe(testCase.expectedDelta);
+      expect(result.resultingQuantity.toFixed(6)).toBe(
+        testCase.expectedResult,
+      );
+      expect(tx.product.updateMany).toHaveBeenCalledTimes(1);
+      expect(tx.inventoryMovement.create).toHaveBeenCalledTimes(1);
+      expect(tx.inventoryMovement.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          type: testCase.type,
+          unitCodeSnapshot: testCase.unitOfMeasure.code,
+          unitSymbolSnapshot: testCase.unitOfMeasure.symbol,
+          quantityDelta: decimal(testCase.expectedDelta),
+          resultingQuantity: decimal(testCase.expectedResult),
+          sourceType: "S1_EXACT_ONCE",
+        }),
+      });
+    }
   });
 
   it("does not update Product.stock when movement creation fails", async () => {
