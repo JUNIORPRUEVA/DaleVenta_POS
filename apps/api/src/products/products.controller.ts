@@ -524,6 +524,14 @@ export class ProductsController {
   @UseGuards(AuthGuard("jwt"), RolesGuard)
   @Roles(Role.ADMIN, Role.ASISTENTE)
   @Permissions("editProducts")
+  @Patch(":id/archive")
+  archive(@Req() req: Request, @Param("id") id: string) {
+    return this.products.archive(req.user as TenantUser, id);
+  }
+
+  @UseGuards(AuthGuard("jwt"), RolesGuard)
+  @Roles(Role.ADMIN, Role.ASISTENTE)
+  @Permissions("editProducts")
   @Patch(":id")
   update(
     @Req() req: Request,

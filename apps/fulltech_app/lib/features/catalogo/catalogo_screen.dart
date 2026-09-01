@@ -981,6 +981,31 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Producto eliminado')));
+    } on ProductDeleteRequiresArchiveException catch (_) {
+      if (!mounted) return;
+      final archive = await FullTechConfirmDialog.show(
+        context,
+        title: 'Archivar producto',
+        message:
+            'Este producto tiene movimientos o historial y no puede eliminarse definitivamente.\n\n¿Deseas archivarlo?',
+        confirmText: 'Archivar producto',
+        cancelText: 'Cancelar',
+        icon: Icons.archive_outlined,
+        iconColor: AppColors.secondary,
+      );
+      if (archive != true) return;
+      try {
+        await controller.archive(product.id);
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Producto archivado')));
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('No se pudo archivar: $e')));
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(

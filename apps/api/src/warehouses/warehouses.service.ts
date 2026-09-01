@@ -347,7 +347,7 @@ export class WarehousesService {
       const items = this.normalizeTransferItems(dto.items);
       const productIds = items.map((item) => item.productId);
       const products = await tx.product.findMany({
-        where: { companyId, id: { in: productIds } },
+        where: { companyId, id: { in: productIds }, archivedAt: null },
         select: {
           id: true,
           nombre: true,

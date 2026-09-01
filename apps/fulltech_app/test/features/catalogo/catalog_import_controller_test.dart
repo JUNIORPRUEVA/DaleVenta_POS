@@ -15,7 +15,9 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
   int creates = 0;
   int updates = 0;
   int deletes = 0;
+  int archives = 0;
   bool failDelete = false;
+  bool requireArchiveOnDelete = false;
   String? lastTaxTreatment;
   double? lastTaxRate;
   String? lastTaxPriceMode;
@@ -111,6 +113,9 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
   @override
   Future<void> deleteProduct(String id, {bool skipLoader = false}) async {
     deletes += 1;
+    if (requireArchiveOnDelete) {
+      throw ProductDeleteRequiresArchiveException(productId: id);
+    }
     if (failDelete) {
       throw ApiException('No se pudo eliminar el producto');
     }
@@ -118,6 +123,23 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
       for (final item in products)
         if (item.id != id) item,
     ];
+  }
+
+  @override
+  Future<ProductModel> archiveProduct(
+    String id, {
+    bool skipLoader = false,
+  }) async {
+    archives += 1;
+    final product = products.firstWhere((item) => item.id == id);
+    products = [
+      for (final item in products)
+        if (item.id != id) item,
+    ];
+    return product.copyWith(
+      archivedAt: DateTime.utc(2026, 9, 1),
+      activo: false,
+    );
   }
 }
 
@@ -329,12 +351,40 @@ void main() {
     final controller = container.read(catalogControllerProvider.notifier);
     await controller.load();
 
-    unawaited(controller.remove('p-1'));
-    expect(container.read(catalogControllerProvider).items, isEmpty);
-    await Future<void>.delayed(Duration.zero);
+    await expectLater(controller.remove('p-1'), throwsA(isA<ApiException>()));
 
     expect(repo.deletes, 1);
     expect(container.read(catalogControllerProvider).items.single.id, 'p-1');
     expect(container.read(catalogControllerProvider).actionError, isNotNull);
+  });
+
+  test('delete con historial restaura y permite archivar producto', () async {
+    final product = ProductModel(
+      id: 'p-1',
+      nombre: 'Mouse USB',
+      precio: 250,
+      costo: 100,
+      stock: 3,
+      categoria: 'COMPUTADORAS Y POS',
+    );
+    final repo = _ImportFakeCatalogRepository([product])
+      ..requireArchiveOnDelete = true;
+    final container = ProviderContainer(
+      overrides: [catalogRepositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+
+    final controller = container.read(catalogControllerProvider.notifier);
+    await controller.load();
+
+    await expectLater(
+      controller.remove('p-1'),
+      throwsA(isA<ProductDeleteRequiresArchiveException>()),
+    );
+    expect(container.read(catalogControllerProvider).items.single.id, 'p-1');
+
+    await controller.archive('p-1');
+    expect(repo.archives, 1);
+    expect(container.read(catalogControllerProvider).items, isEmpty);
   });
 }

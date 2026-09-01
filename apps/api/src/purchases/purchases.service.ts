@@ -650,7 +650,11 @@ export class PurchasesService {
           }
           if (productId) {
             await tx.product.updateMany({
-              where: { id: productId, companyId: order.companyId },
+              where: {
+                id: productId,
+                companyId: order.companyId,
+                archivedAt: null,
+              },
               data: { costo: item.unitCost },
             });
           } else if (item.current.createInventoryProductOnReceipt) {
@@ -959,7 +963,7 @@ export class PurchasesService {
     ];
     const products = productIds.length
       ? await this.prisma.product.findMany({
-          where: { id: { in: productIds }, companyId },
+          where: { id: { in: productIds }, companyId, archivedAt: null },
           include: {
             unitOfMeasure: {
               select: {

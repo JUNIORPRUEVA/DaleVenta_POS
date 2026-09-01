@@ -835,26 +835,58 @@ class CatalogController extends StateNotifier<CatalogState> {
     _markConfirmedDelete(id);
 
     final repo = ref.read(catalogRepositoryProvider);
-    unawaited(
-      repo
-          .deleteProduct(id, skipLoader: true)
-          .then((_) async {
-            await load(forceRemote: true, silent: true);
-          })
-          .catchError((Object e) {
-            final current = state.items;
-            if (current.any((product) => product.id == id)) return;
-            final restored = [...current];
-            final safeIndex = index.clamp(0, restored.length);
-            restored.insert(safeIndex, removed);
-            final message = e is ApiException
-                ? e.message
-                : 'No se pudo eliminar el producto';
-            state = state.copyWith(items: restored, actionError: message);
-            unawaited(_saveSnapshotSafely(repo, restored));
-          }),
-    );
-    unawaited(_saveSnapshotSafely(repo, nextItems));
+    try {
+      await repo.deleteProduct(id, skipLoader: true);
+      unawaited(_saveSnapshotSafely(repo, nextItems));
+      await load(forceRemote: true, silent: true);
+    } catch (e) {
+      final current = state.items;
+      if (!current.any((product) => product.id == id)) {
+        final restored = [...current];
+        final safeIndex = index.clamp(0, restored.length);
+        restored.insert(safeIndex, removed);
+        final message = e is ApiException
+            ? e.message
+            : 'No se pudo eliminar el producto';
+        state = state.copyWith(items: restored, actionError: message);
+        unawaited(_saveSnapshotSafely(repo, restored));
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> archive(String id) async {
+    final currentItems = state.items;
+    final index = currentItems.indexWhere((product) => product.id == id);
+    if (index < 0) return;
+    final nextItems = [
+      for (final product in currentItems)
+        if (product.id != id) product,
+    ];
+    state = state.copyWith(items: nextItems, saving: true, actionError: null);
+    final repo = ref.read(catalogRepositoryProvider);
+    try {
+      final archived = await repo.archiveProduct(id, skipLoader: true);
+      _mutationSeq += 1;
+      _rememberConfirmedMutation(archived);
+      state = state.copyWith(items: nextItems, saving: false, clearError: true);
+      unawaited(_saveSnapshotSafely(repo, nextItems));
+    } catch (e) {
+      final restored = [...state.items];
+      if (!restored.any((product) => product.id == currentItems[index].id)) {
+        restored.insert(index.clamp(0, restored.length), currentItems[index]);
+      }
+      final message = e is ApiException
+          ? e.message
+          : 'No se pudo archivar el producto';
+      state = state.copyWith(
+        items: restored,
+        saving: false,
+        actionError: message,
+      );
+      unawaited(_saveSnapshotSafely(repo, restored));
+      rethrow;
+    }
   }
 
   Future<int> purgeAllDebug() async {

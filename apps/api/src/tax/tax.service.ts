@@ -5,9 +5,16 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { isAdminLike, requireTenant, type TenantUser } from "../auth/tenant-context";
+import {
+  isAdminLike,
+  requireTenant,
+  type TenantUser,
+} from "../auth/tenant-context";
 import { PrismaService } from "../prisma/prisma.service";
-import { TaxCalculationService, type TaxPriceMode } from "./tax-calculation.service";
+import {
+  TaxCalculationService,
+  type TaxPriceMode,
+} from "./tax-calculation.service";
 import { UpdateFiscalSettingsDto, UpsertTaxDto } from "./tax.dto";
 
 @Injectable()
@@ -32,7 +39,10 @@ export class TaxService {
     const rate = this.normalizeRate(dto.rate);
     return this.prisma.$transaction(async (tx) => {
       if (dto.isDefault === true) {
-        await tx.tax.updateMany({ where: { companyId }, data: { isDefault: false } });
+        await tx.tax.updateMany({
+          where: { companyId },
+          data: { isDefault: false },
+        });
       }
       const tax = await tx.tax.create({
         data: {
@@ -56,17 +66,24 @@ export class TaxService {
   async updateTax(user: TenantUser, id: string, dto: Partial<UpsertTaxDto>) {
     this.requireAdmin(user);
     const companyId = requireTenant(user);
-    const existing = await this.prisma.tax.findFirst({ where: { id, companyId } });
+    const existing = await this.prisma.tax.findFirst({
+      where: { id, companyId },
+    });
     if (!existing) throw new NotFoundException("Impuesto no encontrado");
     return this.prisma.$transaction(async (tx) => {
       if (dto.isDefault === true) {
-        await tx.tax.updateMany({ where: { companyId }, data: { isDefault: false } });
+        await tx.tax.updateMany({
+          where: { companyId },
+          data: { isDefault: false },
+        });
       }
       const tax = await tx.tax.update({
         where: { id },
         data: {
           ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
-          ...(dto.rate !== undefined ? { rate: this.normalizeRate(dto.rate) } : {}),
+          ...(dto.rate !== undefined
+            ? { rate: this.normalizeRate(dto.rate) }
+            : {}),
           ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
           ...(dto.isDefault !== undefined ? { isDefault: dto.isDefault } : {}),
         },
@@ -103,25 +120,44 @@ export class TaxService {
         defaultTaxId = tax.id;
         defaultTaxRate = tax.rate;
       } else if (defaultTaxId) {
-        const tax = await tx.tax.findFirst({
+        let tax = await tx.tax.findFirst({
           where: { id: defaultTaxId, companyId, isActive: true },
         });
-        if (!tax) throw new BadRequestException("Impuesto predeterminado invalido");
+        if (!tax && dto.taxEnabled === true && defaultTaxRate !== undefined) {
+          tax = await this.ensureReplayDefaultTax(
+            companyId,
+            defaultTaxRate,
+            tx,
+          );
+        }
+        if (!tax)
+          throw new BadRequestException("Impuesto predeterminado invalido");
+        defaultTaxId = tax.id;
         defaultTaxRate = tax.rate;
-        await tx.tax.updateMany({ where: { companyId }, data: { isDefault: false } });
-        await tx.tax.update({ where: { id: tax.id }, data: { isDefault: true } });
+        await tx.tax.updateMany({
+          where: { companyId },
+          data: { isDefault: false },
+        });
+        await tx.tax.update({
+          where: { id: tax.id },
+          data: { isDefault: true },
+        });
       }
 
       const company = await tx.company.update({
         where: { id: companyId },
         data: {
-          ...(dto.taxEnabled !== undefined ? { taxEnabled: dto.taxEnabled } : {}),
+          ...(dto.taxEnabled !== undefined
+            ? { taxEnabled: dto.taxEnabled }
+            : {}),
           ...(defaultTaxId !== undefined ? { defaultTaxId } : {}),
           ...(defaultTaxRate !== undefined ? { defaultTaxRate } : {}),
           ...(dto.pricesIncludeTax !== undefined
             ? { pricesIncludeTax: dto.pricesIncludeTax }
             : {}),
-          ...(dto.ncfEnabled !== undefined ? { ncfEnabled: dto.ncfEnabled } : {}),
+          ...(dto.ncfEnabled !== undefined
+            ? { ncfEnabled: dto.ncfEnabled }
+            : {}),
         },
         select: this.companyFiscalSelect(),
       });
@@ -138,12 +174,18 @@ export class TaxService {
     return company;
   }
 
-  resolvePriceMode(settings: { taxEnabled: boolean; pricesIncludeTax: boolean }): TaxPriceMode {
+  resolvePriceMode(settings: {
+    taxEnabled: boolean;
+    pricesIncludeTax: boolean;
+  }): TaxPriceMode {
     if (!settings.taxEnabled) return "NO_TAX";
     return settings.pricesIncludeTax ? "TAX_INCLUDED" : "TAX_ADDED";
   }
 
-  async ensureDefaultTaxIfNeeded(companyId: string, tx: Prisma.TransactionClient = this.prisma) {
+  async ensureDefaultTaxIfNeeded(
+    companyId: string,
+    tx: Prisma.TransactionClient = this.prisma,
+  ) {
     const company = await tx.company.findUnique({
       where: { id: companyId },
       select: { taxEnabled: true, defaultTaxId: true },
@@ -175,7 +217,10 @@ export class TaxService {
       where: { companyId, name: "ITBIS" },
     });
     if (existing) {
-      await tx.tax.updateMany({ where: { companyId }, data: { isDefault: false } });
+      await tx.tax.updateMany({
+        where: { companyId },
+        data: { isDefault: false },
+      });
       const updated = await tx.tax.update({
         where: { id: existing.id },
         data: { rate: existing.rate, isActive: true, isDefault: true },
@@ -203,13 +248,40 @@ export class TaxService {
     return tax;
   }
 
+  private async ensureReplayDefaultTax(
+    companyId: string,
+    rate: Prisma.Decimal,
+    tx: Prisma.TransactionClient,
+  ) {
+    const existing = await tx.tax.findFirst({
+      where: { companyId, name: "ITBIS" },
+    });
+    if (existing) {
+      return tx.tax.update({
+        where: { id: existing.id },
+        data: { rate, isActive: true, isDefault: true },
+      });
+    }
+    return tx.tax.create({
+      data: {
+        companyId,
+        name: "ITBIS",
+        rate,
+        isActive: true,
+        isDefault: true,
+      },
+    });
+  }
+
   get calculatorService() {
     return this.calculator;
   }
 
   private requireAdmin(user: TenantUser) {
     if (!isAdminLike(user)) {
-      throw new ForbiddenException("Solo un administrador puede cambiar configuracion fiscal");
+      throw new ForbiddenException(
+        "Solo un administrador puede cambiar configuracion fiscal",
+      );
     }
   }
 
@@ -232,4 +304,3 @@ export class TaxService {
     } satisfies Prisma.CompanySelect;
   }
 }
-

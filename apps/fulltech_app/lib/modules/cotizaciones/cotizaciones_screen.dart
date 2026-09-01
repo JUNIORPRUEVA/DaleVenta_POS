@@ -5164,6 +5164,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         await _loadProducts(forceRemote: true);
       },
       canAddStock: true,
+      showMeasurementUnits:
+          ref
+              .read(companySettingsProvider)
+              .valueOrNull
+              ?.measurementUnitsEnabled ==
+          true,
     );
     if (!mounted) return;
     await _loadProducts(forceRemote: true);
@@ -16348,6 +16354,8 @@ class _DesktopTicketItemState extends ConsumerState<_DesktopTicketItem> {
       showMeasurementUnit: measurementUnitsEnabled,
       includeUnitForUnit: true,
     );
+    final useMeasuredQtyStepper =
+        measurementUnitsEnabled && !item.unitSnapshot.isUnit;
 
     return Material(
       color: Colors.transparent,
@@ -16488,33 +16496,41 @@ class _DesktopTicketItemState extends ConsumerState<_DesktopTicketItem> {
                   ),
                 ),
               const SizedBox(width: 2),
-              _DesktopTicketQtyButton(
-                tooltip: 'Restar unidad',
-                onPressed: widget.onMinus,
-                icon: AppIcons.remove,
-              ),
-              SizedBox(
-                width: 24,
-                height: 28,
-                child: Center(
-                  child: Text(
-                    qtyText,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: const Color(0xFF183548),
-                      fontWeight: FontWeight.w900,
-                      fontSize: 14,
+              if (useMeasuredQtyStepper)
+                _MeasuredDesktopTicketQtyStepper(
+                  qtyText: qtyText,
+                  onMinus: widget.onMinus,
+                  onPlus: widget.onPlus,
+                )
+              else ...[
+                _DesktopTicketQtyButton(
+                  tooltip: 'Restar unidad',
+                  onPressed: widget.onMinus,
+                  icon: AppIcons.remove,
+                ),
+                SizedBox(
+                  width: 24,
+                  height: 28,
+                  child: Center(
+                    child: Text(
+                      qtyText,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: const Color(0xFF183548),
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              _DesktopTicketQtyButton(
-                tooltip: 'Sumar unidad',
-                onPressed: widget.onPlus,
-                icon: AppIcons.add,
-              ),
+                _DesktopTicketQtyButton(
+                  tooltip: 'Sumar unidad',
+                  onPressed: widget.onPlus,
+                  icon: AppIcons.add,
+                ),
+              ],
               const SizedBox(width: 4),
               SizedBox(
                 width: 92,
@@ -16549,24 +16565,89 @@ class _DesktopTicketItemState extends ConsumerState<_DesktopTicketItem> {
   }
 }
 
+class _MeasuredDesktopTicketQtyStepper extends StatelessWidget {
+  const _MeasuredDesktopTicketQtyStepper({
+    required this.qtyText,
+    required this.onMinus,
+    required this.onPlus,
+  });
+
+  final String qtyText;
+  final VoidCallback onMinus;
+  final VoidCallback onPlus;
+
+  @override
+  Widget build(BuildContext context) {
+    final textStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
+      color: const Color(0xFF183548),
+      fontWeight: FontWeight.w900,
+      fontSize: 13,
+      height: 1,
+    );
+
+    return SizedBox(
+      width: 88,
+      height: 28,
+      child: Row(
+        children: [
+          _DesktopTicketQtyButton(
+            tooltip: 'Restar unidad',
+            onPressed: onMinus,
+            icon: AppIcons.remove,
+            size: 22,
+            iconSize: 15,
+          ),
+          const SizedBox(width: 2),
+          Expanded(
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  qtyText,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: textStyle,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 2),
+          _DesktopTicketQtyButton(
+            tooltip: 'Sumar unidad',
+            onPressed: onPlus,
+            icon: AppIcons.add,
+            size: 22,
+            iconSize: 15,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DesktopTicketQtyButton extends StatelessWidget {
   const _DesktopTicketQtyButton({
     required this.tooltip,
     required this.icon,
     required this.onPressed,
+    this.size = 26,
+    this.iconSize = 17.5,
   });
 
   final String tooltip;
   final AppIconData icon;
   final VoidCallback onPressed;
+  final double size;
+  final double iconSize;
 
   @override
   Widget build(BuildContext context) {
     return Tooltip(
       message: tooltip,
       child: SizedBox(
-        width: 26,
-        height: 26,
+        width: size,
+        height: size,
         child: IconButton(
           onPressed: onPressed,
           padding: EdgeInsets.zero,
@@ -16581,7 +16662,7 @@ class _DesktopTicketQtyButton extends StatelessWidget {
               borderRadius: BorderRadius.circular(6),
             ),
           ),
-          icon: AppIcon(icon, size: 17.5, strokeWidth: 2.5),
+          icon: AppIcon(icon, size: iconSize, strokeWidth: 2.5),
         ),
       ),
     );

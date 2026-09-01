@@ -29,6 +29,7 @@ import {
 import { InventoryMutationService } from "../inventory/inventory-mutation.service";
 
 type ResolvedProductWarehouse = { id: string; name: string; code: string };
+const PRODUCT_HAS_HISTORY_CODE = "PRODUCT_HAS_HISTORY";
 const PRODUCT_INVENTORY_TRANSACTION_OPTIONS = {
   maxWait: 10000,
   timeout: 30000,
@@ -134,6 +135,22 @@ export class ProductsService {
     });
 
     if (options.rejectAmbiguousGlobal && activeWarehouses.length > 1) {
+      const company = await tx.company.findUnique({
+        where: { id: companyId },
+        select: { multiWarehouseEnabled: true },
+      });
+      if (company?.multiWarehouseEnabled !== true) {
+        const defaultWarehouse = activeWarehouses.find(
+          (warehouse) => warehouse.isDefault,
+        );
+        if (defaultWarehouse) {
+          return {
+            id: defaultWarehouse.id,
+            name: defaultWarehouse.name,
+            code: defaultWarehouse.code,
+          };
+        }
+      }
       throw new BadRequestException(
         "Ajuste de stock ambiguo: selecciona un almacen para companias multi-almacen.",
       );
@@ -508,6 +525,63 @@ export class ProductsService {
         tx.websiteProductOverride.count({ where: { productId } }),
       ]);
     return saleItems + cotizacionItems + purchaseOrderItems + websiteOverrides;
+  }
+
+  private productHasHistoryConflict(details?: Record<string, number>) {
+    return new ConflictException({
+      code: PRODUCT_HAS_HISTORY_CODE,
+      message:
+        "Este producto tiene historial y no puede eliminarse definitivamente.",
+      canArchive: true,
+      details,
+    });
+  }
+
+  private async protectedProductReferenceCounts(
+    tx: Prisma.TransactionClient | PrismaService,
+    companyId: string,
+    productId: string,
+  ) {
+    const [
+      inventoryMovements,
+      warehouseTransferItems,
+      saleItems,
+      cotizacionItems,
+      purchaseOrderItems,
+      purchaseReceiptItems,
+    ] = await Promise.all([
+      tx.inventoryMovement.count({ where: { companyId, productId } }),
+      tx.warehouseTransferItem.count({ where: { companyId, productId } }),
+      tx.saleItem.count({
+        where: { productId, sale: { companyId } },
+      }),
+      tx.cotizacionItem.count({
+        where: { productId, cotizacion: { companyId } },
+      }),
+      tx.purchaseOrderItem.count({
+        where: { productId, purchaseOrder: { companyId } },
+      }),
+      tx.purchaseReceiptItem.count({
+        where: {
+          orderItem: {
+            productId,
+            purchaseOrder: { companyId },
+          },
+        },
+      }),
+    ]);
+    return {
+      inventoryMovements,
+      warehouseTransferItems,
+      saleItems,
+      cotizacionItems,
+      purchaseOrderItems,
+      purchaseReceiptItems,
+    };
+  }
+
+  private hasProtectedProductHistory(counts: Record<string, number>) {
+    return Object.values(counts).some((count) => count > 0);
   }
 
   private async findEquivalentProducts(
@@ -893,7 +967,7 @@ export class ProductsService {
 
     try {
       const products = await this.prisma.product.findMany({
-        where: { companyId },
+        where: { companyId, archivedAt: null },
         orderBy: { nombre: "asc" },
         select: this.catalogProductSelect(),
       });
@@ -905,7 +979,7 @@ export class ProductsService {
         orderBy: { nombre: "asc" },
         select: this.legacyCatalogProductSelect(),
       });
-      return products.map((p) => this.mapProduct(p));
+      return products.map((p) => this.mapProduct({ ...p, archivedAt: null }));
     }
   }
 
@@ -959,7 +1033,7 @@ export class ProductsService {
     const companyId = requireTenant(user);
     await this.assertWritable(companyId);
     const hasLegacyStockEcho = dto.stock !== undefined && dto.stock !== null;
-    await this.findOne(user, id);
+    await this.assertActiveProduct(companyId, id);
     return this.prisma.$transaction(async (tx) => {
       const normalizedCodeForLookup = this.hasProductCodeInput(dto)
         ? this.normalizeProductCodeForLookup(this.normalizeProductCode(dto))
@@ -1099,14 +1173,14 @@ export class ProductsService {
 
       try {
         const updateResult = await tx.product.updateMany({
-          where: { id, companyId },
+          where: { id, companyId, archivedAt: null },
           data,
         });
         if (updateResult.count !== 1) {
           throw new NotFoundException("Producto no encontrado");
         }
         const updated = await tx.product.findFirst({
-          where: { id, companyId },
+          where: { id, companyId, archivedAt: null },
         });
         if (!updated) {
           throw new NotFoundException("Producto no encontrado");
@@ -1167,7 +1241,7 @@ export class ProductsService {
 
     return this.prisma.$transaction(async (tx) => {
       const current = await tx.product.findFirst({
-        where: { id, companyId },
+        where: { id, companyId, archivedAt: null },
         select: {
           id: true,
           stock: true,
@@ -1187,7 +1261,7 @@ export class ProductsService {
         },
       });
       if (!current) {
-        throw new NotFoundException("Producto no encontrado");
+        throw new NotFoundException("Producto no encontrado o archivado");
       }
 
       const unitOfMeasure = this.mapUnitOfMeasure(current.unitOfMeasure);
@@ -1284,9 +1358,18 @@ export class ProductsService {
     await this.assertWritable(companyId);
     const existing = await this.prisma.product.findFirst({
       where: { id, companyId },
-      select: { id: true },
+      select: { id: true, archivedAt: true },
     });
     if (!existing) return { ok: true };
+    if (existing.archivedAt) return { ok: true, archived: true };
+    const references = await this.protectedProductReferenceCounts(
+      this.prisma,
+      companyId,
+      id,
+    );
+    if (this.hasProtectedProductHistory(references)) {
+      throw this.productHasHistoryConflict(references);
+    }
     try {
       await this.prisma.product.deleteMany({ where: { id, companyId } });
     } catch (error) {
@@ -1294,13 +1377,49 @@ export class ProductsService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2003"
       ) {
-        throw new ConflictException(
-          "No se puede eliminar el producto porque tiene historial de inventario o transferencias asociado.",
-        );
+        throw this.productHasHistoryConflict();
       }
       throw error;
     }
     return { ok: true };
+  }
+
+  private async assertActiveProduct(companyId: string, productId: string) {
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, companyId, archivedAt: null },
+      select: { id: true },
+    });
+    if (!product) {
+      throw new NotFoundException("Producto no encontrado o archivado");
+    }
+  }
+
+  async archive(user: TenantUser, id: string) {
+    const companyId = requireTenant(user);
+    await this.assertWritable(companyId);
+    const existing = await this.prisma.product.findFirst({
+      where: { id, companyId },
+      select: { id: true, archivedAt: true },
+    });
+    if (!existing) {
+      throw new NotFoundException("Producto no encontrado");
+    }
+    if (existing.archivedAt) {
+      return {
+        ok: true,
+        archived: true,
+        product: await this.productResponse(this.prisma, companyId, id),
+      };
+    }
+    await this.prisma.product.updateMany({
+      where: { id, companyId, archivedAt: null },
+      data: { archivedAt: new Date() },
+    });
+    return {
+      ok: true,
+      archived: true,
+      product: await this.productResponse(this.prisma, companyId, id),
+    };
   }
 
   async purgeAllForDebug(user: TenantUser) {
@@ -1340,6 +1459,7 @@ export class ProductsService {
       imagen: true,
       imageKey: true,
       imageUpdatedAt: true,
+      archivedAt: true,
       unitOfMeasureId: true,
       unitOfMeasure: {
         select: {
@@ -1406,6 +1526,10 @@ export class ProductsService {
       taxTreatment: productAny.taxTreatment ?? "INHERIT",
       taxRate: productAny.taxRate == null ? null : Number(productAny.taxRate),
       taxPriceMode: productAny.taxPriceMode ?? null,
+      archivedAt: productAny.archivedAt ?? null,
+      archived: productAny.archivedAt != null,
+      estado: productAny.archivedAt == null ? "activo" : "archivado",
+      activo: productAny.archivedAt == null,
     };
   }
 

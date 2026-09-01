@@ -95,6 +95,7 @@ describe("SalesService tenant isolation", () => {
       where: {
         id: { in: ["22222222-2222-4222-8222-222222222222"] },
         companyId: user.companyId,
+        archivedAt: null,
       },
       select: {
         id: true,

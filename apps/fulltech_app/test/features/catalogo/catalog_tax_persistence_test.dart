@@ -856,6 +856,78 @@ void main() {
     expect(product.stock, 14.5);
   });
 
+  test(
+    'repository convierte PRODUCT_HAS_HISTORY en accion de archivar',
+    () async {
+      final dio = Dio()
+        ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
+          expect(options.method, 'DELETE');
+          expect(options.path, '/products/p-1');
+          return ResponseBody.fromString(
+            jsonEncode({
+              'code': 'PRODUCT_HAS_HISTORY',
+              'message':
+                  'Este producto tiene historial y no puede eliminarse definitivamente.',
+              'canArchive': true,
+            }),
+            409,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        });
+      final repository = CatalogRepository(dio);
+
+      await expectLater(
+        repository.deleteProduct('p-1'),
+        throwsA(
+          isA<ProductDeleteRequiresArchiveException>()
+              .having((e) => e.productId, 'productId', 'p-1')
+              .having(
+                (e) => e.displayCode,
+                'displayCode',
+                'PRODUCT_HAS_HISTORY',
+              ),
+        ),
+      );
+    },
+  );
+
+  test('repository archiva usando endpoint canonico', () async {
+    String? requestPath;
+    final dio = Dio()
+      ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
+        requestPath = options.path;
+        return ResponseBody.fromString(
+          jsonEncode({
+            'ok': true,
+            'archived': true,
+            'product': {
+              'id': 'p-1',
+              'nombre': 'Producto fiscal',
+              'precio': 100,
+              'costo': 60,
+              'stock': 1,
+              'categoria': 'General',
+              'archivedAt': '2026-09-01T12:00:00.000Z',
+              'activo': false,
+            },
+          }),
+          200,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType],
+          },
+        );
+      });
+    final repository = CatalogRepository(dio);
+
+    final archived = await repository.archiveProduct('p-1');
+
+    expect(requestPath, '/products/p-1/archive');
+    expect(archived.activo, isFalse);
+    expect(archived.archivedAt, isNotNull);
+  });
+
   test('repository uploadImage prefiere URL servible sobre key cruda', () async {
     final dio = Dio()
       ..httpClientAdapter = _FakeHttpClientAdapter((options) async {

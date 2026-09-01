@@ -76,7 +76,7 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
 
     // La consulta SIEMPRE filtra por la empresa del usuario autenticado.
     expect(findMany).toHaveBeenCalledWith({
-      where: { companyId: companyA },
+      where: { companyId: companyA, archivedAt: null },
       orderBy: { nombre: "asc" },
       select: expect.any(Object),
     });
@@ -145,11 +145,15 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
     expect(forB[0].id).toBe("pB");
     expect(findMany).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ where: { companyId: companyA } }),
+      expect.objectContaining({
+        where: { companyId: companyA, archivedAt: null },
+      }),
     );
     expect(findMany).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ where: { companyId: companyB } }),
+      expect.objectContaining({
+        where: { companyId: companyB, archivedAt: null },
+      }),
     );
   });
 
@@ -181,6 +185,7 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
       "imagen",
       "imageKey",
       "imageUpdatedAt",
+      "archivedAt",
     ]) {
       expect(select[field]).toBe(true);
     }
@@ -356,7 +361,9 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
     expect(external[0].id).toBe("external-b");
     expect(findMany).toHaveBeenCalledTimes(1);
     expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { companyId: companyA } }),
+      expect.objectContaining({
+        where: { companyId: companyA, archivedAt: null },
+      }),
     );
     expect(catalogFindAll).toHaveBeenCalledWith({
       companyId: companyB,
@@ -446,6 +453,12 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
         findFirst: jest.fn().mockResolvedValue(null),
         deleteMany: jest.fn(),
       },
+      inventoryMovement: { count: jest.fn() },
+      warehouseTransferItem: { count: jest.fn() },
+      saleItem: { count: jest.fn() },
+      cotizacionItem: { count: jest.fn() },
+      purchaseOrderItem: { count: jest.fn() },
+      purchaseReceiptItem: { count: jest.fn() },
     };
     const { service } = buildService(prisma.product.findMany, { prisma });
 
@@ -465,38 +478,221 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
         id: "01583f95-78c7-4100-887b-7a29480e5d0d",
         companyId: companyA,
       },
-      select: { id: true },
+      select: { id: true, archivedAt: true },
     });
     expect(prisma.product.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("physically deletes a product only when the authenticated tenant has no protected history", async () => {
+    const prisma = {
+      product: {
+        findMany: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue({
+          id: "product-a",
+          archivedAt: null,
+        }),
+        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      inventoryMovement: { count: jest.fn().mockResolvedValue(0) },
+      warehouseTransferItem: { count: jest.fn().mockResolvedValue(0) },
+      saleItem: { count: jest.fn().mockResolvedValue(0) },
+      cotizacionItem: { count: jest.fn().mockResolvedValue(0) },
+      purchaseOrderItem: { count: jest.fn().mockResolvedValue(0) },
+      purchaseReceiptItem: { count: jest.fn().mockResolvedValue(0) },
+    };
+    const { service } = buildService(prisma.product.findMany, { prisma });
+
+    await expect(
+      service.remove(
+        { id: "user-a", role: "ADMIN", companyId: companyA } as never,
+        "product-a",
+      ),
+    ).resolves.toEqual({ ok: true });
+
+    expect(prisma.inventoryMovement.count).toHaveBeenCalledWith({
+      where: { companyId: companyA, productId: "product-a" },
+    });
+    expect(prisma.saleItem.count).toHaveBeenCalledWith({
+      where: { productId: "product-a", sale: { companyId: companyA } },
+    });
+    expect(prisma.product.deleteMany).toHaveBeenCalledWith({
+      where: { id: "product-a", companyId: companyA },
+    });
   });
 
   it("returns a controlled conflict when product history prevents physical delete", async () => {
     const prisma = {
       product: {
         findMany: jest.fn(),
-        findFirst: jest.fn().mockResolvedValue({ id: "product-a" }),
-        deleteMany: jest.fn().mockRejectedValue(
-          new Prisma.PrismaClientKnownRequestError(
-            "Foreign key constraint failed",
-            {
-              code: "P2003",
-              clientVersion: "5.22.0",
-            },
-          ),
+        findFirst: jest.fn().mockResolvedValue({
+          id: "product-a",
+          archivedAt: null,
+        }),
+        deleteMany: jest.fn(),
+      },
+      inventoryMovement: { count: jest.fn().mockResolvedValue(2) },
+      warehouseTransferItem: { count: jest.fn().mockResolvedValue(0) },
+      saleItem: { count: jest.fn().mockResolvedValue(1) },
+      cotizacionItem: { count: jest.fn().mockResolvedValue(0) },
+      purchaseOrderItem: { count: jest.fn().mockResolvedValue(0) },
+      purchaseReceiptItem: { count: jest.fn().mockResolvedValue(0) },
+    };
+    const { service } = buildService(prisma.product.findMany, { prisma });
+
+    await expect(async () =>
+      service.remove(
+        { id: "user-a", role: "ADMIN", companyId: companyA } as never,
+        "product-a",
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "PRODUCT_HAS_HISTORY",
+        canArchive: true,
+        details: expect.objectContaining({
+          inventoryMovements: 2,
+          saleItems: 1,
+        }),
+      }),
+    });
+    expect(prisma.product.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["InventoryMovement", "inventoryMovement", "inventoryMovements"],
+    ["SaleItem", "saleItem", "saleItems"],
+    [
+      "WarehouseTransferItem",
+      "warehouseTransferItem",
+      "warehouseTransferItems",
+    ],
+    ["PurchaseOrderItem", "purchaseOrderItem", "purchaseOrderItems"],
+    ["PurchaseReceiptItem", "purchaseReceiptItem", "purchaseReceiptItems"],
+  ])(
+    "blocks physical delete when %s history exists",
+    async (_label, delegateName, detailKey) => {
+      const counts = {
+        inventoryMovement: 0,
+        warehouseTransferItem: 0,
+        saleItem: 0,
+        cotizacionItem: 0,
+        purchaseOrderItem: 0,
+        purchaseReceiptItem: 0,
+        [delegateName]: 1,
+      } as Record<string, number>;
+      const prisma = {
+        product: {
+          findMany: jest.fn(),
+          findFirst: jest.fn().mockResolvedValue({
+            id: "product-a",
+            archivedAt: null,
+          }),
+          deleteMany: jest.fn(),
+        },
+        inventoryMovement: {
+          count: jest.fn().mockResolvedValue(counts.inventoryMovement),
+        },
+        warehouseTransferItem: {
+          count: jest.fn().mockResolvedValue(counts.warehouseTransferItem),
+        },
+        saleItem: { count: jest.fn().mockResolvedValue(counts.saleItem) },
+        cotizacionItem: {
+          count: jest.fn().mockResolvedValue(counts.cotizacionItem),
+        },
+        purchaseOrderItem: {
+          count: jest.fn().mockResolvedValue(counts.purchaseOrderItem),
+        },
+        purchaseReceiptItem: {
+          count: jest.fn().mockResolvedValue(counts.purchaseReceiptItem),
+        },
+      };
+      const { service } = buildService(prisma.product.findMany, { prisma });
+
+      await expect(async () =>
+        service.remove(
+          { id: "user-a", role: "ADMIN", companyId: companyA } as never,
+          "product-a",
         ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "PRODUCT_HAS_HISTORY",
+          canArchive: true,
+          details: expect.objectContaining({ [detailKey]: 1 }),
+        }),
+      });
+      expect(prisma.product.deleteMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it("archives a product idempotently inside the authenticated tenant", async () => {
+    const archivedProduct = {
+      id: "product-a",
+      companyId: companyA,
+      nombre: "Archivado",
+      codigo: null,
+      categoria: "General",
+      costo: 1,
+      precio: 2,
+      stock: 3,
+      taxTreatment: "INHERIT",
+      taxRate: null,
+      taxPriceMode: null,
+      imagen: null,
+      imageKey: null,
+      imageUpdatedAt: null,
+      archivedAt: new Date("2026-09-01T12:00:00Z"),
+    };
+    const prisma = {
+      product: {
+        findMany: jest.fn(),
+        findFirst: jest
+          .fn()
+          .mockResolvedValueOnce({ id: "product-a", archivedAt: null })
+          .mockResolvedValueOnce(archivedProduct),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const { service } = buildService(prisma.product.findMany, { prisma });
+
+    const result = await service.archive(
+      { id: "user-a", role: "ADMIN", companyId: companyA } as never,
+      "product-a",
+    );
+
+    expect(prisma.product.updateMany).toHaveBeenCalledWith({
+      where: { id: "product-a", companyId: companyA, archivedAt: null },
+      data: { archivedAt: expect.any(Date) },
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      archived: true,
+      product: expect.objectContaining({
+        id: "product-a",
+        archived: true,
+        activo: false,
+      }),
+    });
+  });
+
+  it("does not archive a product from another tenant", async () => {
+    const prisma = {
+      product: {
+        findMany: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
+        updateMany: jest.fn(),
       },
     };
     const { service } = buildService(prisma.product.findMany, { prisma });
 
     await expect(
-      service.remove(
-        {
-          id: "user-a",
-          role: "ADMIN",
-          companyId: companyA,
-        } as never,
-        "product-a",
+      service.archive(
+        { id: "user-a", role: "ADMIN", companyId: companyA } as never,
+        "product-b",
       ),
-    ).rejects.toBeInstanceOf(ConflictException);
+    ).rejects.toThrow("Producto no encontrado");
+    expect(prisma.product.findFirst).toHaveBeenCalledWith({
+      where: { id: "product-b", companyId: companyA },
+      select: { id: true, archivedAt: true },
+    });
+    expect(prisma.product.updateMany).not.toHaveBeenCalled();
   });
 });

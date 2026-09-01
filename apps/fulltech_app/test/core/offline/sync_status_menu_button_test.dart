@@ -19,6 +19,12 @@ void main() {
     expect(resolveSyncHeaderStatus(state), SyncHeaderStatus.error);
   });
 
+  test('sync header status reports attention for permanent conflicts', () {
+    final state = const SyncQueueState(conflictCount: 1);
+
+    expect(resolveSyncHeaderStatus(state), SyncHeaderStatus.attention);
+  });
+
   test('sync header status reports pending queue', () {
     final state = const SyncQueueState(pendingCount: 2);
 

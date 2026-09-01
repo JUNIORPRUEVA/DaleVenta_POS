@@ -65,7 +65,10 @@ describe("ProductsService stock hardening", () => {
         }),
       },
     };
-    const prisma = { $transaction: jest.fn((fn) => fn(tx)) };
+    const prisma = {
+      product: { findFirst: jest.fn().mockResolvedValue({ id: "product-1" }) },
+      $transaction: jest.fn((fn) => fn(tx)),
+    };
     const service = buildService(prisma);
     jest.spyOn(service, "findOne").mockResolvedValue({ id: "product-1" });
 
@@ -98,7 +101,10 @@ describe("ProductsService stock hardening", () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
-    const prisma = { $transaction: jest.fn((fn) => fn(tx)) };
+    const prisma = {
+      product: { findFirst: jest.fn().mockResolvedValue({ id: "product-1" }) },
+      $transaction: jest.fn((fn) => fn(tx)),
+    };
     const service = buildService(prisma);
     jest.spyOn(service, "findOne").mockResolvedValue({ id: "product-1" });
 
@@ -110,7 +116,7 @@ describe("ProductsService stock hardening", () => {
     expect(result.stock).toBe(15);
     expect(tx.product.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: "product-1", companyId: companyA },
+        where: { id: "product-1", companyId: companyA, archivedAt: null },
         data: expect.not.objectContaining({ stock: expect.anything() }),
       }),
     );
@@ -137,7 +143,10 @@ describe("ProductsService stock hardening", () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
-    const prisma = { $transaction: jest.fn((fn) => fn(tx)) };
+    const prisma = {
+      product: { findFirst: jest.fn().mockResolvedValue({ id: "product-1" }) },
+      $transaction: jest.fn((fn) => fn(tx)),
+    };
     const service = buildService(prisma);
     jest.spyOn(service, "findOne").mockResolvedValue({ id: "product-1" });
     const dto = {
@@ -172,7 +181,10 @@ describe("ProductsService stock hardening", () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
-    const prisma = { $transaction: jest.fn((fn) => fn(tx)) };
+    const prisma = {
+      product: { findFirst: jest.fn().mockResolvedValue({ id: "product-1" }) },
+      $transaction: jest.fn((fn) => fn(tx)),
+    };
     const service = buildService(prisma);
     jest.spyOn(service, "findOne").mockResolvedValue({ id: "product-1" });
 
@@ -245,6 +257,80 @@ describe("ProductsService stock hardening", () => {
     );
   });
 
+  it("uses the default warehouse for billing stock adjustment when multi-warehouse is disabled", async () => {
+    const tx = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({
+          multiWarehouseEnabled: false,
+        }),
+      },
+      product: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "product-1",
+          stock: new Prisma.Decimal("0"),
+          unitOfMeasureId: "UNIT",
+          unitOfMeasure: {
+            id: "UNIT",
+            code: "UNIT",
+            name: "Unidad",
+            symbol: "u",
+            category: "COUNT",
+            allowDecimals: false,
+            precision: 0,
+            active: true,
+          },
+        }),
+      },
+      warehouse: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: "warehouse-main",
+            name: "Principal",
+            code: "MAIN",
+            isDefault: true,
+          },
+          {
+            id: "warehouse-secondary",
+            name: "Secundario",
+            code: "SEC",
+            isDefault: false,
+          },
+        ]),
+        findFirst: jest.fn().mockResolvedValue({
+          id: "warehouse-main",
+          name: "Principal",
+          code: "MAIN",
+        }),
+      },
+    };
+    const prisma = { $transaction: jest.fn((fn) => fn(tx)) };
+    const inventory = {
+      increaseStockInTransaction: jest.fn().mockResolvedValue({}),
+    };
+    const service = buildService(prisma, inventory);
+
+    await service.adjustStock(userA as never, "product-1", {
+      stock: 1,
+      reason: "Ajuste desde facturacion",
+    });
+
+    expect(tx.company.findUnique).toHaveBeenCalledWith({
+      where: { id: companyA },
+      select: { multiWarehouseEnabled: true },
+    });
+    expect(inventory.increaseStockInTransaction).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        companyId: companyA,
+        productId: "product-1",
+        warehouseId: "warehouse-main",
+        quantity: new Prisma.Decimal("1"),
+        reason: "Ajuste desde facturacion",
+        createdByUserId: "user-a",
+      }),
+    );
+  });
+
   it("keeps tenant isolation on stock adjustment", async () => {
     const tx = {
       product: {
@@ -262,7 +348,11 @@ describe("ProductsService stock hardening", () => {
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(tx.product.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: "other-company-product", companyId: companyA },
+        where: {
+          id: "other-company-product",
+          companyId: companyA,
+          archivedAt: null,
+        },
       }),
     );
     expect(tx.product.updateMany).not.toHaveBeenCalled();

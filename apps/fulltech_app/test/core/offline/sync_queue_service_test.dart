@@ -355,6 +355,70 @@ void main() {
     expect(actions.single.status, 'conflict');
     expect(actions.single.permanent, isTrue);
     expect(actions.single.nextAttemptAt, isNull);
+    final stats = await store.pendingActionStats(
+      companyId: 'company-conflict',
+      userId: 'user-conflict',
+    );
+    expect(stats['error'], 0);
+    expect(stats['conflict'], 1);
+    service.dispose();
+  });
+
+  test('marks product delete history conflict as requires action', () async {
+    const scope = OfflineSyncScope(
+      companyId: 'company-conflict',
+      userId: 'user-conflict',
+    );
+    await store.putPendingAction(
+      _action(
+        id: 'catalog.products.delete:product-history',
+        type: 'catalog.products.delete',
+        entityType: 'product',
+        entityId: 'product-history',
+        companyId: 'company-conflict',
+        userId: 'user-conflict',
+        clientRequestId: 'delete-history',
+        payload: const {'id': 'product-history'},
+      ),
+    );
+
+    final service = SyncQueueService(store, scopeResolver: () async => scope);
+    var attempts = 0;
+    service.registerHandler('catalog.products.delete', (_) async {
+      attempts += 1;
+      final requestOptions = RequestOptions(path: '/products/product-history');
+      throw DioException(
+        requestOptions: requestOptions,
+        response: Response(
+          requestOptions: requestOptions,
+          statusCode: 409,
+          data: const {
+            'code': 'PRODUCT_HAS_HISTORY',
+            'message':
+                'Este producto tiene historial y no puede eliminarse definitivamente.',
+            'canArchive': true,
+          },
+        ),
+      );
+    });
+
+    await service.processPending();
+    await service.processPending();
+
+    final actions = await store.listPendingActions(
+      companyId: 'company-conflict',
+      userId: 'user-conflict',
+    );
+    expect(attempts, 1);
+    expect(actions.single.status, 'requires_action');
+    expect(actions.single.permanent, isTrue);
+    expect(actions.single.nextAttemptAt, isNull);
+    final stats = await store.pendingActionStats(
+      companyId: 'company-conflict',
+      userId: 'user-conflict',
+    );
+    expect(stats['error'], 0);
+    expect(stats['conflict'], 1);
     service.dispose();
   });
 
@@ -399,21 +463,25 @@ void main() {
 
 PendingSyncAction _action({
   required String id,
+  String type = 'sales.create',
+  String entityType = 'sale',
+  String? entityId,
   required String companyId,
   required String userId,
   required String clientRequestId,
+  Map<String, dynamic>? payload,
 }) {
   final now = DateTime.utc(2026, 8, 19, 12);
   return PendingSyncAction(
     id: id,
-    type: 'sales.create',
+    type: type,
     scope: 'sales',
     companyId: companyId,
     userId: userId,
-    entityType: 'sale',
-    entityId: id,
+    entityType: entityType,
+    entityId: entityId ?? id,
     idempotencyKey: clientRequestId,
-    payload: {'clientRequestId': clientRequestId},
+    payload: payload ?? {'clientRequestId': clientRequestId},
     status: 'pending',
     attempts: 0,
     createdAt: now,

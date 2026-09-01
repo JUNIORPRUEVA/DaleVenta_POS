@@ -789,7 +789,7 @@ export class SalesService {
     if (productIds.length) {
       try {
         products = await this.prisma.product.findMany({
-          where: { id: { in: productIds }, companyId },
+          where: { id: { in: productIds }, companyId, archivedAt: null },
           select: {
             id: true,
             nombre: true,
@@ -1342,7 +1342,7 @@ export class SalesService {
     );
     const products = productIds.length
       ? await this.prisma.product.findMany({
-          where: { id: { in: productIds }, companyId },
+          where: { id: { in: productIds }, companyId, archivedAt: null },
           select: {
             id: true,
             nombre: true,

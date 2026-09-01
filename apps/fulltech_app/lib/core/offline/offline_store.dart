@@ -1201,15 +1201,19 @@ class OfflineStore {
     var pending = 0;
     var syncing = 0;
     var error = 0;
+    var conflict = 0;
 
     for (final action in actions) {
       switch (action.status) {
         case 'syncing':
           syncing++;
           break;
+        case 'conflict':
+        case 'requires_action':
+          conflict++;
+          break;
         case 'error':
         case 'failed':
-        case 'conflict':
         case 'auth_blocked':
         case 'tenant_mismatch':
           error++;
@@ -1222,9 +1226,14 @@ class OfflineStore {
 
     TraceLog.log(
       'offline_store',
-      'pending stats pending=$pending syncing=$syncing error=$error',
+      'pending stats pending=$pending syncing=$syncing error=$error conflict=$conflict',
     );
-    return {'pending': pending, 'syncing': syncing, 'error': error};
+    return {
+      'pending': pending,
+      'syncing': syncing,
+      'error': error,
+      'conflict': conflict,
+    };
   }
 
   Map<String, dynamic> _offlineSaleRowToMap(Map<String, Object?> row) {

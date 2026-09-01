@@ -64,6 +64,7 @@ class ProductModel {
   final DateTime? updatedAt;
   final String? categoria;
   final bool activo;
+  final DateTime? archivedAt;
   final String? imageVersion;
   final String taxTreatment;
   final double? taxRate;
@@ -90,6 +91,7 @@ class ProductModel {
     this.createdAt,
     this.updatedAt,
     this.activo = true,
+    this.archivedAt,
     this.imageVersion,
     this.taxTreatment = 'INHERIT',
     this.taxRate,
@@ -121,6 +123,7 @@ class ProductModel {
     DateTime? createdAt,
     DateTime? updatedAt,
     bool? activo,
+    DateTime? archivedAt,
     String? imageVersion,
     String? taxTreatment,
     double? taxRate,
@@ -147,6 +150,7 @@ class ProductModel {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       activo: activo ?? this.activo,
+      archivedAt: archivedAt ?? this.archivedAt,
       imageVersion: imageVersion ?? this.imageVersion,
       taxTreatment: taxTreatment ?? this.taxTreatment,
       taxRate: taxRate ?? this.taxRate,
@@ -205,10 +209,16 @@ class ProductModel {
           json['catalogRefreshVersion'] ??
           json['_catalogSyncVersion'],
     );
+    final archivedAt = _firstParsedDate([
+      json['archivedAt'],
+      json['archived_at'],
+    ]);
     final activoValue = json['activo'];
     final activo = activoValue is bool
         ? activoValue
-        : (json['estado']?.toString().toLowerCase() != 'inactivo');
+        : archivedAt == null &&
+              (json['estado']?.toString().toLowerCase() != 'inactivo' &&
+                  json['estado']?.toString().toLowerCase() != 'archivado');
     final normalizedFotoUrl = normalizeProductImageUrl(
       imageUrl: kIsWeb && imageKey != null ? imageKey : foto,
       baseUrl: Env.apiBaseUrl,
@@ -262,6 +272,7 @@ class ProductModel {
       createdAt: createdAt,
       updatedAt: updatedAt,
       activo: activo,
+      archivedAt: archivedAt,
       imageVersion: imageVersion,
       taxTreatment: _asNullableString(json['taxTreatment']) ?? 'INHERIT',
       taxRate: _asNullableDouble(json['taxRate']),
@@ -294,6 +305,7 @@ class ProductModel {
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
       'activo': activo,
+      'archivedAt': archivedAt?.toIso8601String(),
       'imageVersion': imageVersion,
       'taxTreatment': taxTreatment,
       'taxRate': taxRate,

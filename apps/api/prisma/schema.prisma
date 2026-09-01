@@ -1874,6 +1874,7 @@ model Product {
   imageMimeType         String?             @map("image_mime_type")
   imageOriginalFileName String?             @map("image_original_file_name")
   imageUpdatedAt        DateTime?           @map("image_updated_at")
+  archivedAt            DateTime?           @map("archived_at")
 
   saleItems              SaleItem[]
   cotizacionItems        CotizacionItem[]
@@ -1886,6 +1887,7 @@ model Product {
 
   @@unique([companyId, id], map: "products_company_id_id_key")
   @@index([companyId])
+  @@index([companyId, archivedAt], map: "products_company_archived_idx")
   @@index([unitOfMeasureId])
   @@index([companyId, nombre])
   @@index([companyId, imageKey])

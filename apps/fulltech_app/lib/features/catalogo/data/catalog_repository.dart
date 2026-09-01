@@ -8,6 +8,7 @@ import '../../../core/cache/local_json_cache.dart';
 import '../../../core/debug/trace_log.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/models/product_model.dart';
+import '../../../core/offline/pending_sync_action.dart';
 import '../../../core/offline/sync_queue_service.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/is_flutter_test.dart';
@@ -21,6 +22,21 @@ final catalogRepositoryProvider = Provider<CatalogRepository>((ref) {
   repository.registerSyncHandlers();
   return repository;
 });
+
+class ProductDeleteRequiresArchiveException extends ApiException {
+  ProductDeleteRequiresArchiveException({
+    required this.productId,
+    super.message =
+        'Este producto tiene movimientos o historial y no puede eliminarse definitivamente.',
+  }) : super.detailed(
+         code: 409,
+         type: ApiErrorType.conflict,
+         displayCode: 'PRODUCT_HAS_HISTORY',
+         retryable: false,
+       );
+
+  final String productId;
+}
 
 class CatalogRepository {
   final Dio _dio;
@@ -173,6 +189,12 @@ class CatalogRepository {
       }
     }
     return fallback;
+  }
+
+  bool _isProductHasHistory(dynamic data) {
+    if (data is! Map) return false;
+    return data['code']?.toString() == 'PRODUCT_HAS_HISTORY' &&
+        data['canArchive'] == true;
   }
 
   String _formatDioError(DioException e, String fallback) {
@@ -695,6 +717,15 @@ class CatalogRepository {
     try {
       await _deleteProductRemote(id, skipLoader: skipLoader);
     } on DioException catch (e) {
+      if (_isProductHasHistory(e.response?.data)) {
+        throw ProductDeleteRequiresArchiveException(
+          productId: id,
+          message: _extractMessage(
+            e.response?.data,
+            'Este producto tiene movimientos o historial y no puede eliminarse definitivamente.',
+          ),
+        );
+      }
       final error = ApiException(
         _extractMessage(e.response?.data, 'No se pudo eliminar el producto'),
         e.response?.statusCode,
@@ -709,6 +740,50 @@ class CatalogRepository {
         payload: {'id': id},
       );
     }
+  }
+
+  Future<ProductModel> archiveProduct(
+    String id, {
+    bool skipLoader = false,
+  }) async {
+    try {
+      final res = await _dio.patch(
+        ApiRoutes.archiveProduct(id),
+        options: skipLoader ? Options(extra: const {'skipLoader': true}) : null,
+      );
+      final data = res.data;
+      final rawProduct = data is Map && data['product'] is Map
+          ? data['product']
+          : data;
+      final product = ProductModel.fromJson(
+        (rawProduct as Map).cast<String, dynamic>(),
+      );
+      final products = await getCachedProducts();
+      final next = [
+        for (final item in products)
+          if (item.id != id) item,
+      ];
+      await saveProductsSnapshot(next);
+      return product;
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(e.response?.data, 'No se pudo archivar el producto'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<ProductModel> archivePendingDeleteConflict(
+    PendingSyncAction action, {
+    bool skipLoader = false,
+  }) async {
+    final id = (action.entityId ?? action.payload['id'] ?? '').toString();
+    if (id.trim().isEmpty) {
+      throw ApiException('No se encontró el producto pendiente para archivar');
+    }
+    final product = await archiveProduct(id, skipLoader: skipLoader);
+    await _syncQueue?.remove(action.id);
+    return product;
   }
 
   Future<void> _deleteProductRemote(String id, {bool skipLoader = false}) {

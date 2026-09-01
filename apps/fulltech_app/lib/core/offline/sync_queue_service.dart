@@ -38,6 +38,7 @@ class SyncQueueState {
   final int pendingCount;
   final int syncingCount;
   final int errorCount;
+  final int conflictCount;
   final bool isProcessing;
   final DateTime? lastSyncedAt;
   final DateTime? lastAttemptAt;
@@ -48,6 +49,7 @@ class SyncQueueState {
     this.pendingCount = 0,
     this.syncingCount = 0,
     this.errorCount = 0,
+    this.conflictCount = 0,
     this.isProcessing = false,
     this.lastSyncedAt,
     this.lastAttemptAt,
@@ -59,6 +61,7 @@ class SyncQueueState {
     int? pendingCount,
     int? syncingCount,
     int? errorCount,
+    int? conflictCount,
     bool? isProcessing,
     DateTime? lastSyncedAt,
     DateTime? lastAttemptAt,
@@ -70,6 +73,7 @@ class SyncQueueState {
       pendingCount: pendingCount ?? this.pendingCount,
       syncingCount: syncingCount ?? this.syncingCount,
       errorCount: errorCount ?? this.errorCount,
+      conflictCount: conflictCount ?? this.conflictCount,
       isProcessing: isProcessing ?? this.isProcessing,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
       lastAttemptAt: lastAttemptAt ?? this.lastAttemptAt,
@@ -193,7 +197,7 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
     try {
       final scope = await _resolveScope();
       final stats = scope == null || !scope.hasTenant
-          ? {'pending': 0, 'syncing': 0, 'error': 0}
+          ? {'pending': 0, 'syncing': 0, 'error': 0, 'conflict': 0}
           : await _store.pendingActionStats(
               companyId: scope.companyId,
               userId: scope.userId,
@@ -203,6 +207,7 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
           pendingCount: stats['pending'] ?? 0,
           syncingCount: stats['syncing'] ?? 0,
           errorCount: stats['error'] ?? 0,
+          conflictCount: stats['conflict'] ?? 0,
         ),
       );
     } catch (error, stackTrace) {
@@ -261,6 +266,7 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
         if (action.permanent ||
             action.status == 'failed' ||
             action.status == 'conflict' ||
+            action.status == 'requires_action' ||
             action.status == 'auth_blocked' ||
             action.status == 'tenant_mismatch') {
           continue;
@@ -465,7 +471,22 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
     return false;
   }
 
+  bool _isProductHistoryDecisionRequired(Object error) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      if (data is Map) {
+        return data['code']?.toString() == 'PRODUCT_HAS_HISTORY' &&
+            data['canArchive'] == true;
+      }
+    }
+    if (error is ApiException) {
+      return error.displayCode == 'PRODUCT_HAS_HISTORY';
+    }
+    return false;
+  }
+
   String _failureStatus(Object error, {required bool permanent}) {
+    if (_isProductHistoryDecisionRequired(error)) return 'requires_action';
     if (_isConflictFailure(error)) return 'conflict';
     if (error is ApiException &&
         (error.type == ApiErrorType.unauthorized ||

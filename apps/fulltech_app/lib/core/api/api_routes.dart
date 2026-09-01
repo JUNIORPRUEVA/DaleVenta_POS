@@ -186,6 +186,7 @@ class ApiRoutes {
   static String productDetail(String id) => '/products/$id';
   static String updateProduct(String id) => '/products/$id';
   static String adjustProductStock(String id) => '/products/$id/stock';
+  static String archiveProduct(String id) => '/products/$id/archive';
   static String deleteProduct(String id) => '/products/$id';
 
   // Almacenes

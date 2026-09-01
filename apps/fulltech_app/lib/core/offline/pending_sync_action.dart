@@ -77,7 +77,8 @@ class PendingSyncAction {
           map['permanent'] == true ||
           map['permanent'] == 1 ||
           map['status'] == 'failed' ||
-          map['status'] == 'conflict',
+          map['status'] == 'conflict' ||
+          map['status'] == 'requires_action',
       createdAt:
           DateTime.tryParse('${map['createdAt']}') ?? DateTime.now().toUtc(),
       updatedAt:

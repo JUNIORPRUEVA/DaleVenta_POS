@@ -1681,7 +1681,25 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
             reason: 'Eliminar producto',
           );
           if (!allowed || !context.mounted) return;
-          await ref.read(catalogControllerProvider.notifier).remove(product.id);
+          final controller = ref.read(catalogControllerProvider.notifier);
+          try {
+            await controller.remove(product.id);
+          } on ProductDeleteRequiresArchiveException catch (_) {
+            if (!context.mounted) return;
+            final archive = await FullTechConfirmDialog.show(
+              context,
+              title: 'Archivar producto',
+              message:
+                  'Este producto tiene movimientos o historial y no puede eliminarse definitivamente.\n\n¿Deseas archivarlo?',
+              confirmText: 'Archivar producto',
+              cancelText: 'Cancelar',
+              icon: Icons.archive_outlined,
+              iconColor: AppColors.secondary,
+            );
+            if (archive == true) {
+              await controller.archive(product.id);
+            }
+          }
         },
       ),
       InventoryTab(
